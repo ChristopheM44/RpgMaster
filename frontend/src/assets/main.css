@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+/* === RpgMaster Dark Fantasy Theme === */
+
+@theme {
+  --color-parchment: #f4e8c1;
+  --color-parchment-dark: #d4c89a;
+  --color-ink: #1a1a2e;
+  --color-ink-light: #2a2a4e;
+  --color-blood: #8b0000;
+  --color-blood-light: #b22222;
+  --color-gold: #c9a227;
+  --color-gold-light: #e6c34d;
+  --color-arcane: #6a0dad;
+  --color-arcane-light: #9b30ff;
+  --color-forest: #2d5016;
+  --color-forest-light: #4a8a2a;
+  --color-stone: #4a4a5a;
+  --color-stone-light: #6a6a7a;
+
+  --font-display: "Cinzel", serif;
+  --font-body: "Crimson Text", serif;
+  --font-mono: "Fira Code", monospace;
+}
+
+/* === Base styles === */
+
+body {
+  background-color: var(--color-ink);
+  color: var(--color-parchment);
+  font-family: var(--font-body);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  color: var(--color-gold);
+}
