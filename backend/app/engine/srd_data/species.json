@@ -1,0 +1,130 @@
+{
+  "_license": "D&D SRD 5.2 — CC-BY-4.0 (https://www.dndbeyond.com/srd)",
+  "species": [
+    {
+      "id": "human",
+      "name": "Human",
+      "name_fr": "Humain",
+      "size": "Medium",
+      "speed": 30,
+      "darkvision_ft": 0,
+      "ability_bonuses": {
+        "strength": 1,
+        "dexterity": 1,
+        "constitution": 1,
+        "intelligence": 1,
+        "wisdom": 1,
+        "charisma": 1
+      },
+      "skill_proficiencies": [],
+      "languages": ["common"],
+      "extra_languages": 1,
+      "traits": [
+        {
+          "name": "Versatility",
+          "name_fr": "Versatilité",
+          "description": "Humans gain +1 to all six ability scores, reflecting their adaptability and ambition."
+        },
+        {
+          "name": "Extra Language",
+          "name_fr": "Langue supplémentaire",
+          "description": "You can speak, read, and write one extra language of your choice."
+        }
+      ],
+      "description": "Humans are the most adaptable and ambitious people among the common races. They are short-lived compared to other races, but strive to achieve as much as they can in years they have."
+    },
+    {
+      "id": "elf",
+      "name": "Elf",
+      "name_fr": "Elfe",
+      "subtype": "High Elf",
+      "size": "Medium",
+      "speed": 30,
+      "darkvision_ft": 60,
+      "ability_bonuses": {
+        "dexterity": 2,
+        "intelligence": 1
+      },
+      "skill_proficiencies": ["perception"],
+      "languages": ["common", "elvish"],
+      "extra_languages": 0,
+      "traits": [
+        {
+          "name": "Darkvision",
+          "name_fr": "Vision dans le noir",
+          "description": "You can see in dim light within 60 feet as if it were bright light, and in darkness as if it were dim light. You can't discern color in darkness, only shades of gray."
+        },
+        {
+          "name": "Keen Senses",
+          "name_fr": "Sens aiguisés",
+          "description": "You have proficiency in the Perception skill."
+        },
+        {
+          "name": "Fey Ancestry",
+          "name_fr": "Ascendance féerique",
+          "description": "You have advantage on saving throws against being charmed, and magic can't put you to sleep."
+        },
+        {
+          "name": "Trance",
+          "name_fr": "Transe",
+          "description": "Elves don't sleep. Instead, they meditate deeply, remaining semiconscious, for 4 hours a day. This gives the same benefit as 8 hours of sleep."
+        },
+        {
+          "name": "Elf Weapon Training",
+          "name_fr": "Entraînement aux armes elfes",
+          "description": "You have proficiency with the longsword, shortsword, shortbow, and longbow."
+        },
+        {
+          "name": "Cantrip",
+          "name_fr": "Sort mineur",
+          "description": "You know one cantrip of your choice from the wizard spell list. Intelligence is your spellcasting ability for it."
+        }
+      ],
+      "description": "Elves are a magical people of otherworldly grace, living in places of ethereal beauty. High elves have a sharp mind and a mastery of at least the basics of magic."
+    },
+    {
+      "id": "dwarf",
+      "name": "Dwarf",
+      "name_fr": "Nain",
+      "subtype": "Mountain Dwarf",
+      "size": "Medium",
+      "speed": 25,
+      "darkvision_ft": 60,
+      "ability_bonuses": {
+        "constitution": 2,
+        "strength": 2
+      },
+      "skill_proficiencies": [],
+      "languages": ["common", "dwarvish"],
+      "extra_languages": 0,
+      "traits": [
+        {
+          "name": "Darkvision",
+          "name_fr": "Vision dans le noir",
+          "description": "You can see in dim light within 60 feet as if it were bright light, and in darkness as if it were dim light. You can't discern color in darkness, only shades of gray."
+        },
+        {
+          "name": "Dwarven Resilience",
+          "name_fr": "Résilience naine",
+          "description": "You have advantage on saving throws against poison, and you have resistance against poison damage."
+        },
+        {
+          "name": "Dwarven Combat Training",
+          "name_fr": "Entraînement au combat nain",
+          "description": "You have proficiency with the battleaxe, handaxe, light hammer, and warhammer."
+        },
+        {
+          "name": "Tool Proficiency",
+          "name_fr": "Maîtrise d'outils",
+          "description": "You gain proficiency with the artisan's tools of your choice: smith's tools, brewer's supplies, or mason's tools."
+        },
+        {
+          "name": "Stonecunning",
+          "name_fr": "Sens de la pierre",
+          "description": "Whenever you make an Intelligence (History) check related to the origin of stonework, you are considered proficient and add double your proficiency bonus."
+        }
+      ],
+      "description": "Dwarves are bold and hardy, known as skilled warriors, miners, and workers of stone and metal. Mountain dwarves are strong and hardy, accustomed to a difficult life in rugged terrain."
+    }
+  ]
+}

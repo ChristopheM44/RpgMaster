@@ -1,0 +1,239 @@
+{
+  "_license": "D&D SRD 5.2 — CC-BY-4.0 (https://www.dndbeyond.com/srd)",
+  "classes": [
+    {
+      "id": "fighter",
+      "name": "Fighter",
+      "name_fr": "Guerrier",
+      "hit_die": 10,
+      "primary_abilities": ["strength", "dexterity"],
+      "saving_throw_proficiencies": ["strength", "constitution"],
+      "armor_proficiencies": ["light", "medium", "heavy", "shields"],
+      "weapon_proficiencies": ["simple", "martial"],
+      "tool_proficiencies": [],
+      "skill_choices": [
+        "acrobatics", "animal_handling", "athletics", "history",
+        "insight", "intimidation", "perception", "survival"
+      ],
+      "num_skill_choices": 2,
+      "spellcasting_ability": null,
+      "caster_type": null,
+      "level_1_features": [
+        {
+          "name": "Fighting Style",
+          "name_fr": "Style de combat",
+          "description": "You adopt a particular style of fighting as your specialty. Choose one: Archery, Defense, Dueling, Great Weapon Fighting, Protection, or Two-Weapon Fighting."
+        },
+        {
+          "name": "Second Wind",
+          "name_fr": "Second souffle",
+          "description": "You can use a bonus action to regain 1d10 + fighter level HP. Usable once per short or long rest."
+        }
+      ],
+      "starting_equipment": [
+        {
+          "choice": [
+            ["chain_mail"],
+            ["leather", "longbow", "20 arrows"]
+          ]
+        },
+        {
+          "choice": [
+            ["martial_weapon", "shield"],
+            ["martial_weapon", "martial_weapon"]
+          ]
+        },
+        {
+          "choice": [
+            ["light_crossbow", "20 bolts"],
+            ["handaxe", "handaxe"]
+          ]
+        },
+        {
+          "choice": [
+            ["dungeoneer_pack"],
+            ["explorer_pack"]
+          ]
+        }
+      ],
+      "description": "A master of martial combat, skilled with a variety of weapons and armor."
+    },
+    {
+      "id": "wizard",
+      "name": "Wizard",
+      "name_fr": "Magicien",
+      "hit_die": 6,
+      "primary_abilities": ["intelligence"],
+      "saving_throw_proficiencies": ["intelligence", "wisdom"],
+      "armor_proficiencies": [],
+      "weapon_proficiencies": ["daggers", "darts", "slings", "quarterstaffs", "light_crossbows"],
+      "tool_proficiencies": [],
+      "skill_choices": [
+        "arcana", "history", "insight", "investigation", "medicine", "religion"
+      ],
+      "num_skill_choices": 2,
+      "spellcasting_ability": "intelligence",
+      "caster_type": "full",
+      "level_1_features": [
+        {
+          "name": "Spellcasting",
+          "name_fr": "Incantation",
+          "description": "You have a spellbook with 6 1st-level spells. You prepare INT modifier + wizard level spells per day. Spell save DC = 8 + prof + INT mod. Spell attack = prof + INT mod."
+        },
+        {
+          "name": "Arcane Recovery",
+          "name_fr": "Récupération arcanique",
+          "description": "Once per long rest, during a short rest, you can recover spell slots with a combined level up to half your wizard level (rounded up)."
+        }
+      ],
+      "starting_equipment": [
+        {
+          "choice": [
+            ["quarterstaff"],
+            ["dagger"]
+          ]
+        },
+        {
+          "choice": [
+            ["component_pouch"],
+            ["arcane_focus"]
+          ]
+        },
+        {
+          "choice": [
+            ["scholar_pack"],
+            ["explorer_pack"]
+          ]
+        },
+        {
+          "fixed": ["spellbook"]
+        }
+      ],
+      "description": "A scholarly magic-user capable of manipulating the structures of reality."
+    },
+    {
+      "id": "rogue",
+      "name": "Rogue",
+      "name_fr": "Roublard",
+      "hit_die": 8,
+      "primary_abilities": ["dexterity"],
+      "saving_throw_proficiencies": ["dexterity", "intelligence"],
+      "armor_proficiencies": ["light"],
+      "weapon_proficiencies": ["simple", "hand_crossbows", "longswords", "rapiers", "shortswords"],
+      "tool_proficiencies": ["thieves_tools"],
+      "skill_choices": [
+        "acrobatics", "athletics", "deception", "insight", "intimidation",
+        "investigation", "perception", "performance", "persuasion",
+        "sleight_of_hand", "stealth"
+      ],
+      "num_skill_choices": 4,
+      "spellcasting_ability": null,
+      "caster_type": null,
+      "level_1_features": [
+        {
+          "name": "Expertise",
+          "name_fr": "Expertise",
+          "description": "Choose two skill proficiencies or one skill and thieves' tools. Your proficiency bonus is doubled for those skills."
+        },
+        {
+          "name": "Sneak Attack",
+          "name_fr": "Attaque sournoise",
+          "description": "Once per turn, deal 1d6 extra damage if you have advantage on the attack roll, or an ally is within 5 ft of the target. Requires a finesse or ranged weapon."
+        },
+        {
+          "name": "Thieves' Cant",
+          "name_fr": "Argot des voleurs",
+          "description": "You understand thieves' cant, a secret language of the criminal underworld, including signs and symbols used to convey messages."
+        }
+      ],
+      "starting_equipment": [
+        {
+          "choice": [
+            ["rapier"],
+            ["shortsword"]
+          ]
+        },
+        {
+          "choice": [
+            ["shortbow", "quiver", "20 arrows"],
+            ["shortsword"]
+          ]
+        },
+        {
+          "choice": [
+            ["burglar_pack"],
+            ["dungeoneer_pack"],
+            ["explorer_pack"]
+          ]
+        },
+        {
+          "fixed": ["leather", "two_daggers", "thieves_tools"]
+        }
+      ],
+      "description": "A scoundrel who uses stealth and trickery to overcome obstacles and enemies."
+    },
+    {
+      "id": "cleric",
+      "name": "Cleric",
+      "name_fr": "Clerc",
+      "hit_die": 8,
+      "primary_abilities": ["wisdom"],
+      "saving_throw_proficiencies": ["wisdom", "charisma"],
+      "armor_proficiencies": ["light", "medium", "shields"],
+      "weapon_proficiencies": ["simple"],
+      "tool_proficiencies": [],
+      "skill_choices": ["history", "insight", "medicine", "persuasion", "religion"],
+      "num_skill_choices": 2,
+      "spellcasting_ability": "wisdom",
+      "caster_type": "full",
+      "level_1_features": [
+        {
+          "name": "Spellcasting",
+          "name_fr": "Incantation",
+          "description": "Wisdom is your spellcasting ability. Spell save DC = 8 + prof + WIS mod. Spell attack = prof + WIS mod. You prepare WIS modifier + cleric level spells from the cleric list."
+        },
+        {
+          "name": "Divine Domain",
+          "name_fr": "Domaine divin",
+          "description": "Choose a domain — Life, Light, Trickery, or War. You gain domain spells and features depending on your choice."
+        },
+        {
+          "name": "Channel Divinity",
+          "name_fr": "Conduit divin",
+          "description": "Once per short or long rest, you can channel divine energy. Turn Undead: undead within 30 ft must succeed on a WIS saving throw or be turned for 1 minute."
+        }
+      ],
+      "starting_equipment": [
+        {
+          "choice": [
+            ["mace"],
+            ["warhammer"]
+          ]
+        },
+        {
+          "choice": [
+            ["scale_mail"],
+            ["leather"],
+            ["chain_mail"]
+          ]
+        },
+        {
+          "choice": [
+            ["light_crossbow", "20 bolts"],
+            ["simple_weapon"]
+          ]
+        },
+        {
+          "choice": [
+            ["priest_pack"],
+            ["explorer_pack"]
+          ]
+        },
+        {
+          "fixed": ["shield", "holy_symbol"]
+        }
+      ],
+      "description": "A priestly champion who wields divine magic in service of a higher power."
+    }
+  ]
+}

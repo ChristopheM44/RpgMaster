@@ -1,0 +1,580 @@
+{
+  "_license": "D&D SRD 5.2 — CC-BY-4.0 (https://www.dndbeyond.com/srd)",
+  "_note": "Subset of 10 monsters CR 0-5 for MVP. Stats include all fields needed by the combat engine.",
+  "monsters": [
+    {
+      "id": "rat",
+      "name": "Rat",
+      "name_fr": "Rat",
+      "cr": 0,
+      "xp": 10,
+      "size": "Tiny",
+      "type": "beast",
+      "alignment": "unaligned",
+      "ac": 10,
+      "ac_source": "natural armor",
+      "hp": 1,
+      "hit_dice": "1d4-1",
+      "speed": {"walk": 20, "climb": 20},
+      "ability_scores": {
+        "strength": 2,
+        "dexterity": 11,
+        "constitution": 9,
+        "intelligence": 2,
+        "wisdom": 10,
+        "charisma": 4
+      },
+      "saving_throws": {},
+      "skills": {},
+      "damage_immunities": [],
+      "damage_resistances": [],
+      "condition_immunities": [],
+      "senses": {"darkvision_ft": 30, "passive_perception": 10},
+      "languages": [],
+      "proficiency_bonus": 2,
+      "traits": [
+        {
+          "name": "Keen Smell",
+          "description": "The rat has advantage on Wisdom (Perception) checks that rely on smell."
+        }
+      ],
+      "actions": [
+        {
+          "name": "Bite",
+          "type": "melee_attack",
+          "attack_bonus": 0,
+          "reach_ft": 5,
+          "targets": 1,
+          "damage_dice": "1",
+          "damage_type": "piercing"
+        }
+      ],
+      "legendary_actions": []
+    },
+    {
+      "id": "poisonous_snake",
+      "name": "Poisonous Snake",
+      "name_fr": "Serpent venimeux",
+      "cr": 0.125,
+      "xp": 25,
+      "size": "Tiny",
+      "type": "beast",
+      "alignment": "unaligned",
+      "ac": 13,
+      "ac_source": "natural armor",
+      "hp": 2,
+      "hit_dice": "1d4",
+      "speed": {"walk": 30, "swim": 30},
+      "ability_scores": {
+        "strength": 2,
+        "dexterity": 16,
+        "constitution": 11,
+        "intelligence": 1,
+        "wisdom": 10,
+        "charisma": 3
+      },
+      "saving_throws": {},
+      "skills": {},
+      "damage_immunities": [],
+      "damage_resistances": [],
+      "condition_immunities": [],
+      "senses": {"blindsight_ft": 10, "passive_perception": 10},
+      "languages": [],
+      "proficiency_bonus": 2,
+      "traits": [],
+      "actions": [
+        {
+          "name": "Bite",
+          "type": "melee_attack",
+          "attack_bonus": 5,
+          "reach_ft": 5,
+          "targets": 1,
+          "damage_dice": "1",
+          "damage_type": "piercing",
+          "secondary_effect": {
+            "type": "save",
+            "ability": "constitution",
+            "dc": 10,
+            "on_fail": {"damage_dice": "2d4", "damage_type": "poison"}
+          }
+        }
+      ],
+      "legendary_actions": []
+    },
+    {
+      "id": "goblin",
+      "name": "Goblin",
+      "name_fr": "Gobelin",
+      "cr": 0.25,
+      "xp": 50,
+      "size": "Small",
+      "type": "humanoid",
+      "subtype": "goblinoid",
+      "alignment": "neutral evil",
+      "ac": 15,
+      "ac_source": "leather armor, shield",
+      "hp": 7,
+      "hit_dice": "2d6",
+      "speed": {"walk": 30},
+      "ability_scores": {
+        "strength": 8,
+        "dexterity": 14,
+        "constitution": 10,
+        "intelligence": 10,
+        "wisdom": 8,
+        "charisma": 8
+      },
+      "saving_throws": {},
+      "skills": {"stealth": 6},
+      "damage_immunities": [],
+      "damage_resistances": [],
+      "condition_immunities": [],
+      "senses": {"darkvision_ft": 60, "passive_perception": 9},
+      "languages": ["common", "goblin"],
+      "proficiency_bonus": 2,
+      "traits": [
+        {
+          "name": "Nimble Escape",
+          "description": "The goblin can take the Disengage or Hide action as a bonus action on each of its turns."
+        }
+      ],
+      "actions": [
+        {
+          "name": "Scimitar",
+          "type": "melee_attack",
+          "attack_bonus": 4,
+          "reach_ft": 5,
+          "targets": 1,
+          "damage_dice": "1d6+2",
+          "damage_type": "slashing"
+        },
+        {
+          "name": "Shortbow",
+          "type": "ranged_attack",
+          "attack_bonus": 4,
+          "range_normal_ft": 80,
+          "range_long_ft": 320,
+          "targets": 1,
+          "damage_dice": "1d6+2",
+          "damage_type": "piercing"
+        }
+      ],
+      "legendary_actions": []
+    },
+    {
+      "id": "skeleton",
+      "name": "Skeleton",
+      "name_fr": "Squelette",
+      "cr": 0.25,
+      "xp": 50,
+      "size": "Medium",
+      "type": "undead",
+      "alignment": "lawful evil",
+      "ac": 13,
+      "ac_source": "armor scraps",
+      "hp": 13,
+      "hit_dice": "2d8+4",
+      "speed": {"walk": 30},
+      "ability_scores": {
+        "strength": 10,
+        "dexterity": 14,
+        "constitution": 15,
+        "intelligence": 6,
+        "wisdom": 8,
+        "charisma": 5
+      },
+      "saving_throws": {},
+      "skills": {},
+      "damage_immunities": ["poison"],
+      "damage_resistances": [],
+      "damage_vulnerabilities": ["bludgeoning"],
+      "condition_immunities": ["exhaustion", "poisoned"],
+      "senses": {"darkvision_ft": 60, "passive_perception": 9},
+      "languages": ["understands all languages it knew in life but can't speak"],
+      "proficiency_bonus": 2,
+      "traits": [],
+      "actions": [
+        {
+          "name": "Shortsword",
+          "type": "melee_attack",
+          "attack_bonus": 4,
+          "reach_ft": 5,
+          "targets": 1,
+          "damage_dice": "1d6+2",
+          "damage_type": "piercing"
+        },
+        {
+          "name": "Shortbow",
+          "type": "ranged_attack",
+          "attack_bonus": 4,
+          "range_normal_ft": 80,
+          "range_long_ft": 320,
+          "targets": 1,
+          "damage_dice": "1d6+2",
+          "damage_type": "piercing"
+        }
+      ],
+      "legendary_actions": []
+    },
+    {
+      "id": "hobgoblin",
+      "name": "Hobgoblin",
+      "name_fr": "Hobgobelin",
+      "cr": 0.5,
+      "xp": 100,
+      "size": "Medium",
+      "type": "humanoid",
+      "subtype": "goblinoid",
+      "alignment": "lawful evil",
+      "ac": 18,
+      "ac_source": "chain mail, shield",
+      "hp": 11,
+      "hit_dice": "2d8+2",
+      "speed": {"walk": 30},
+      "ability_scores": {
+        "strength": 13,
+        "dexterity": 12,
+        "constitution": 12,
+        "intelligence": 10,
+        "wisdom": 10,
+        "charisma": 9
+      },
+      "saving_throws": {},
+      "skills": {},
+      "damage_immunities": [],
+      "damage_resistances": [],
+      "condition_immunities": [],
+      "senses": {"darkvision_ft": 60, "passive_perception": 10},
+      "languages": ["common", "goblin"],
+      "proficiency_bonus": 2,
+      "traits": [
+        {
+          "name": "Martial Advantage",
+          "description": "Once per turn, the hobgoblin can deal an extra 2d6 damage to a creature it hits with a weapon attack if that creature is within 5 feet of an ally of the hobgoblin that isn't incapacitated."
+        }
+      ],
+      "actions": [
+        {
+          "name": "Longsword",
+          "type": "melee_attack",
+          "attack_bonus": 3,
+          "reach_ft": 5,
+          "targets": 1,
+          "damage_dice": "1d8+1",
+          "damage_type": "slashing",
+          "versatile_damage_dice": "1d10+1"
+        },
+        {
+          "name": "Longbow",
+          "type": "ranged_attack",
+          "attack_bonus": 3,
+          "range_normal_ft": 150,
+          "range_long_ft": 600,
+          "targets": 1,
+          "damage_dice": "1d8+1",
+          "damage_type": "piercing"
+        }
+      ],
+      "legendary_actions": []
+    },
+    {
+      "id": "zombie",
+      "name": "Zombie",
+      "name_fr": "Zombie",
+      "cr": 0.25,
+      "xp": 50,
+      "size": "Medium",
+      "type": "undead",
+      "alignment": "neutral evil",
+      "ac": 8,
+      "ac_source": "natural armor",
+      "hp": 22,
+      "hit_dice": "3d8+9",
+      "speed": {"walk": 20},
+      "ability_scores": {
+        "strength": 13,
+        "dexterity": 6,
+        "constitution": 16,
+        "intelligence": 3,
+        "wisdom": 6,
+        "charisma": 5
+      },
+      "saving_throws": {"wisdom": 0},
+      "skills": {},
+      "damage_immunities": ["poison"],
+      "damage_resistances": [],
+      "condition_immunities": ["poisoned"],
+      "senses": {"darkvision_ft": 60, "passive_perception": 8},
+      "languages": ["understands the languages it knew in life but can't speak"],
+      "proficiency_bonus": 2,
+      "traits": [
+        {
+          "name": "Undead Fortitude",
+          "description": "If damage reduces the zombie to 0 HP, it must make a CON saving throw with a DC of 5 + the damage taken, unless the damage is radiant or from a critical hit. On a success, the zombie drops to 1 HP instead."
+        }
+      ],
+      "actions": [
+        {
+          "name": "Slam",
+          "type": "melee_attack",
+          "attack_bonus": 3,
+          "reach_ft": 5,
+          "targets": 1,
+          "damage_dice": "1d6+1",
+          "damage_type": "bludgeoning"
+        }
+      ],
+      "legendary_actions": []
+    },
+    {
+      "id": "bugbear",
+      "name": "Bugbear",
+      "name_fr": "Croque-mitaine",
+      "cr": 1,
+      "xp": 200,
+      "size": "Medium",
+      "type": "humanoid",
+      "subtype": "goblinoid",
+      "alignment": "chaotic evil",
+      "ac": 16,
+      "ac_source": "hide armor, shield",
+      "hp": 27,
+      "hit_dice": "5d8+5",
+      "speed": {"walk": 30},
+      "ability_scores": {
+        "strength": 15,
+        "dexterity": 14,
+        "constitution": 13,
+        "intelligence": 8,
+        "wisdom": 11,
+        "charisma": 9
+      },
+      "saving_throws": {},
+      "skills": {"stealth": 6, "survival": 2},
+      "damage_immunities": [],
+      "damage_resistances": [],
+      "condition_immunities": [],
+      "senses": {"darkvision_ft": 60, "passive_perception": 10},
+      "languages": ["common", "goblin"],
+      "proficiency_bonus": 2,
+      "traits": [
+        {
+          "name": "Brute",
+          "description": "A melee weapon deals one extra die of its damage when the bugbear hits with it (included in the attack)."
+        },
+        {
+          "name": "Surprise Attack",
+          "description": "If the bugbear surprises a creature and hits it with an attack during the first round of combat, the target takes an extra 2d6 damage from the attack."
+        }
+      ],
+      "actions": [
+        {
+          "name": "Morningstar",
+          "type": "melee_attack",
+          "attack_bonus": 4,
+          "reach_ft": 5,
+          "targets": 1,
+          "damage_dice": "2d8+2",
+          "damage_type": "piercing"
+        },
+        {
+          "name": "Javelin",
+          "type": "melee_or_ranged_attack",
+          "attack_bonus": 4,
+          "reach_ft": 5,
+          "range_normal_ft": 30,
+          "range_long_ft": 120,
+          "targets": 1,
+          "damage_dice": "2d6+2",
+          "damage_type": "piercing"
+        }
+      ],
+      "legendary_actions": []
+    },
+    {
+      "id": "ogre",
+      "name": "Ogre",
+      "name_fr": "Ogre",
+      "cr": 2,
+      "xp": 450,
+      "size": "Large",
+      "type": "giant",
+      "alignment": "chaotic evil",
+      "ac": 11,
+      "ac_source": "hide armor",
+      "hp": 59,
+      "hit_dice": "7d10+21",
+      "speed": {"walk": 40},
+      "ability_scores": {
+        "strength": 19,
+        "dexterity": 8,
+        "constitution": 16,
+        "intelligence": 5,
+        "wisdom": 7,
+        "charisma": 7
+      },
+      "saving_throws": {},
+      "skills": {},
+      "damage_immunities": [],
+      "damage_resistances": [],
+      "condition_immunities": [],
+      "senses": {"darkvision_ft": 60, "passive_perception": 8},
+      "languages": ["common", "giant"],
+      "proficiency_bonus": 2,
+      "traits": [],
+      "actions": [
+        {
+          "name": "Greatclub",
+          "type": "melee_attack",
+          "attack_bonus": 6,
+          "reach_ft": 5,
+          "targets": 1,
+          "damage_dice": "2d8+4",
+          "damage_type": "bludgeoning"
+        },
+        {
+          "name": "Javelin",
+          "type": "melee_or_ranged_attack",
+          "attack_bonus": 6,
+          "reach_ft": 5,
+          "range_normal_ft": 30,
+          "range_long_ft": 120,
+          "targets": 1,
+          "damage_dice": "2d6+4",
+          "damage_type": "piercing"
+        }
+      ],
+      "legendary_actions": []
+    },
+    {
+      "id": "owlbear",
+      "name": "Owlbear",
+      "name_fr": "Owlbear",
+      "cr": 3,
+      "xp": 700,
+      "size": "Large",
+      "type": "monstrosity",
+      "alignment": "unaligned",
+      "ac": 13,
+      "ac_source": "natural armor",
+      "hp": 59,
+      "hit_dice": "7d10+21",
+      "speed": {"walk": 40},
+      "ability_scores": {
+        "strength": 20,
+        "dexterity": 12,
+        "constitution": 17,
+        "intelligence": 3,
+        "wisdom": 12,
+        "charisma": 7
+      },
+      "saving_throws": {},
+      "skills": {"perception": 3},
+      "damage_immunities": [],
+      "damage_resistances": [],
+      "condition_immunities": [],
+      "senses": {"darkvision_ft": 60, "passive_perception": 13},
+      "languages": [],
+      "proficiency_bonus": 2,
+      "traits": [
+        {
+          "name": "Keen Sight and Smell",
+          "description": "The owlbear has advantage on Wisdom (Perception) checks that rely on sight or smell."
+        }
+      ],
+      "actions": [
+        {
+          "name": "Multiattack",
+          "type": "multiattack",
+          "attacks": ["beak", "claws"]
+        },
+        {
+          "name": "Beak",
+          "type": "melee_attack",
+          "attack_bonus": 7,
+          "reach_ft": 5,
+          "targets": 1,
+          "damage_dice": "1d10+5",
+          "damage_type": "piercing"
+        },
+        {
+          "name": "Claws",
+          "type": "melee_attack",
+          "attack_bonus": 7,
+          "reach_ft": 5,
+          "targets": 1,
+          "damage_dice": "2d8+5",
+          "damage_type": "slashing"
+        }
+      ],
+      "legendary_actions": []
+    },
+    {
+      "id": "troll",
+      "name": "Troll",
+      "name_fr": "Troll",
+      "cr": 5,
+      "xp": 1800,
+      "size": "Large",
+      "type": "giant",
+      "alignment": "chaotic evil",
+      "ac": 15,
+      "ac_source": "natural armor",
+      "hp": 84,
+      "hit_dice": "8d10+40",
+      "speed": {"walk": 30},
+      "ability_scores": {
+        "strength": 18,
+        "dexterity": 13,
+        "constitution": 20,
+        "intelligence": 7,
+        "wisdom": 9,
+        "charisma": 7
+      },
+      "saving_throws": {},
+      "skills": {"perception": 2},
+      "damage_immunities": [],
+      "damage_resistances": [],
+      "condition_immunities": [],
+      "senses": {"darkvision_ft": 60, "passive_perception": 12},
+      "languages": ["giant"],
+      "proficiency_bonus": 3,
+      "traits": [
+        {
+          "name": "Keen Smell",
+          "description": "The troll has advantage on Wisdom (Perception) checks that rely on smell."
+        },
+        {
+          "name": "Regeneration",
+          "description": "The troll regains 10 HP at the start of its turn. If the troll takes acid or fire damage, this trait doesn't function at the start of the troll's next turn. The troll dies only if it starts its turn with 0 HP and doesn't regenerate."
+        }
+      ],
+      "actions": [
+        {
+          "name": "Multiattack",
+          "type": "multiattack",
+          "attacks": ["bite", "claw", "claw"]
+        },
+        {
+          "name": "Bite",
+          "type": "melee_attack",
+          "attack_bonus": 7,
+          "reach_ft": 5,
+          "targets": 1,
+          "damage_dice": "1d6+4",
+          "damage_type": "piercing"
+        },
+        {
+          "name": "Claw",
+          "type": "melee_attack",
+          "attack_bonus": 7,
+          "reach_ft": 5,
+          "targets": 1,
+          "damage_dice": "2d6+4",
+          "damage_type": "slashing"
+        }
+      ],
+      "legendary_actions": []
+    }
+  ]
+}

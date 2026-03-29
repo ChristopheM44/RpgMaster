@@ -37,6 +37,9 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]
+# UP045: SQLAlchemy 2.0 evalue les annotations ORM via eval() au runtime.
+# Sur Python 3.9, X | None n'est pas supporté dans ce contexte — Optional[X] est requis.
+ignore = ["UP045"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

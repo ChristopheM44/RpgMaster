@@ -12,21 +12,21 @@
 ## Sprint 1 : Moteur de regles D&D SRD 5.2
 - [x] `engine/dice.py` : Jets de des (d4-d100, avantage/desavantage, notations type "2d6+3", "4d6kh3")
 - [x] `engine/ability_checks.py` : Tests de caracteristiques, competences, jets de sauvegarde, bonus de maitrise
-- [ ] `engine/combat.py` : Initiative, jets d'attaque, degats, jets de mort, economie d'action
-- [ ] `engine/conditions.py` : Conditions SRD 5.2 (a terre, etourdi, empoisonne, etc.)
-- [ ] `engine/spells.py` : Resolution de sorts, emplacements, concentration
-- [ ] `engine/character_creation.py` : Achat de points, traits d'espece, capacites de classe (niveau 1)
-- [ ] `engine/equipment.py` : Armes, armures, calcul de CA
-- [ ] `engine/srd_data/` : Extraction des donnees SRD 5.2 en JSON (subset minimal)
-  - [ ] `classes.json` (4 classes : Guerrier, Magicien, Roublard, Clerc)
-  - [ ] `species.json` (3 especes : Humain, Elfe, Nain)
-  - [ ] `spells.json` (20 sorts niveaux 0-3)
-  - [ ] `monsters.json` (10 monstres CR 0-5)
-  - [ ] `equipment.json` (armes, armures, kit d'aventurier)
-- [ ] Tests unitaires complets du moteur (`tests/test_engine/`)
+- [x] `engine/combat.py` : Initiative, jets d'attaque, degats, jets de mort, economie d'action
+- [x] `engine/conditions.py` : Conditions SRD 5.2 (a terre, etourdi, empoisonne, etc.)
+- [x] `engine/spells.py` : Resolution de sorts, emplacements, concentration
+- [x] `engine/character_creation.py` : Achat de points, traits d'espece, capacites de classe (niveau 1)
+- [x] `engine/equipment.py` : Armes, armures, calcul de CA
+- [x] `engine/srd_data/` : Extraction des donnees SRD 5.2 en JSON (subset minimal)
+  - [x] `classes.json` (4 classes : Guerrier, Magicien, Roublard, Clerc)
+  - [x] `species.json` (3 especes : Humain, Elfe, Nain)
+  - [x] `spells.json` (20 sorts niveaux 0-3)
+  - [x] `monsters.json` (10 monstres CR 0-5)
+  - [x] `equipment.json` (armes, armures, kit d'aventurier)
+- [x] Tests unitaires complets du moteur (`tests/test_engine/`)
 
 ## Sprint 2 : Couche donnees + API REST
-- [ ] Modeles SQLAlchemy : Character, Session, GameState, Message
+- [x] Modeles SQLAlchemy : Character, Session, GameState, Message
 - [ ] Schemas Pydantic : request/response pour chaque endpoint
 - [ ] Alembic : configuration + migration initiale
 - [ ] API CRUD Sessions (create, list, get, update, save, load)
