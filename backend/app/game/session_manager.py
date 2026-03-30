@@ -47,6 +47,8 @@ class ActiveSession:
         turn_number: Monotonic counter incremented on every turn.
         round_number: Combat/exploration round counter (reset on new encounter).
         is_dirty: True when ``state_data`` has unsaved changes.
+        ai_players: Registry of AI-controlled PlayerAgent instances, keyed by combatant_id.
+            Populated by the caller (e.g. ws_game or a test) before combat starts.
     """
 
     session_id: str
@@ -57,6 +59,9 @@ class ActiveSession:
     turn_number: int = 0
     round_number: int = 0
     is_dirty: bool = False
+    # Maps combatant_id → PlayerAgent for AI-controlled companion players.
+    # Type is Any to avoid circular imports; callers should use PlayerAgent instances.
+    ai_players: Dict[str, Any] = field(default_factory=dict)
 
     def mark_dirty(self) -> None:
         self.is_dirty = True

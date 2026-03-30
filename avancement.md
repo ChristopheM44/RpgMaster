@@ -1,6 +1,6 @@
 # RpgMaster — Avancement du projet
 
-> Derniere mise a jour : 2026-03-30 (Sprint 4 termine)
+> Derniere mise a jour : 2026-03-30 (Sprint 6 en cours — 2/11 taches)
 
 ---
 
@@ -13,8 +13,8 @@
 | Sprint 2 | Couche donnees + API REST | ✅ Termine |
 | Sprint 3 | Integration LLM | ✅ Termine |
 | Sprint 4 | Game Loop + WebSocket | ✅ Termine |
-| Sprint 5 | Agents joueurs IA | 🔲 A faire |
-| Sprint 6 | Frontend MVP | 🔲 A faire |
+| Sprint 5 | Agents joueurs IA | ✅ Termine |
+| Sprint 6 | Frontend MVP | 🔄 En cours (2/11) |
 | Sprint 7 | Integration + Voix | 🔲 A faire |
 | Sprint 8 | Polish + Playtest | 🔲 A faire |
 
@@ -222,7 +222,7 @@ RpgMaster/
 │   ├── models/          ✅ Session, Character, GameState, Message
 │   ├── schemas/         ✅ Session, Character (request/response Pydantic)
 │   ├── services/        🔲 Vide — a creer (Sprint 2+)
-│   ├── agents/          ✅ schemas, base_agent, context_manager, gm_agent + prompts/
+│   ├── agents/          🔄 schemas, base_agent, context_manager, gm_agent, player_agent + prompts/
 │   ├── llm/             ✅ ollama_client, model_router
 │   └── game/            ✅ game_loop, turn_manager, session_manager, event_bus, action_resolver
 ├── frontend/src/
@@ -238,8 +238,140 @@ RpgMaster/
     ├── test_engine/     ✅ 2 439 lignes, couverture complete du moteur
     ├── test_api/        ✅ 50 tests (sessions 13, characters 17, srd 20) — 50/50
     ├── test_agents/     ✅ 36 tests (ollama_client 10, context_manager 13, gm_agent 13)
-    └── test_game/       ✅ 88 tests (game_loop, turn_manager, session_manager, event_bus, ws_game, integration)
+    ├── test_agents/     ✅ 59 tests (ollama_client, context_manager, gm_agent, player_agent)
+    └── test_game/       ✅ 98 tests (game_loop, turn_manager, session_manager, event_bus, ws_game, integration, ai_player_combat)
 ```
+
+---
+
+## Sprint 6 — Frontend MVP [EN COURS — 2/11]
+
+### Tâches accomplies
+
+#### Shell app + navigation (`src/App.vue`, `src/components/common/AppNav.vue`)
+
+- `AppNav.vue` : barre de navigation fixe (header), affichée sur toutes les routes sauf l'accueil
+- Logo "⚔ RpgMaster" avec lien vers `/`, nom de la session courante si active, lien Lobby
+- `App.vue` : shell avec `AppNav` conditionnel + `pt-14` pour compenser la hauteur du header
+
+#### LobbyView (`src/views/LobbyView.vue`)
+
+- **Créer une session** : champ texte (nom) + bouton → `POST /api/sessions` → redirige vers création de personnage
+- **Sessions sauvegardées** : liste des sessions avec nom, badge de statut coloré, date de modification
+- **Rejoindre** : redirige vers la bonne vue selon le statut (character_creation ou game-session)
+- **Supprimer** : double confirmation inline avant suppression (`DELETE /api/sessions/:id`)
+- Gestion des états : chargement, vide, erreur
+
+#### Fondations frontend
+
+- `src/types/index.ts` : interfaces TypeScript (`Session`, `SessionCreate`, `SessionUpdate`, `SessionStatus`)
+- `src/services/api.ts` : client REST générique avec gestion d'erreur + `sessionApi` (list, create, get, update, delete)
+- `src/stores/session.ts` : store Pinia (`sessions`, `currentSession`, `loading`, `error`, `fetchSessions`, `createSession`, `deleteSession`, `setCurrentSession`)
+
+---
+
+## Sprint 5 — Agents joueurs IA [TERMINÉ — 7/7]
+
+### Taches accomplies
+
+#### `agents/player_agent.py` — Agent joueur IA
+
+- Hérite de `BaseAgent` (même pipeline Jinja2 + extraction JSON que `GMAgent`)
+- **`decide_action()`** : choix tactique en combat → prompt `player_decide.txt`
+- **`roleplay()`** : réaction narrative hors combat → prompt `player_roleplay.txt`
+- **`validate_action()`** : garde-fou pré-moteur — vérifie emplacements de sorts, inventaire, PV > 0
+- Système de personnalité injectable via `PlayerPersonality` (1 à 3 traits)
+- Fallback safe si LLM indisponible (action `wait`)
+
+#### Système de personnalité (8 traits)
+
+| Trait | Comportement |
+|-------|-------------|
+| `brave` | Attaque les ennemis les plus dangereux, ne recule jamais |
+| `cautious` | Conserve les ressources, préfère soins/soutien |
+| `greedy` | Cible les ennemis portant des richesses |
+| `noble` | Protège les alliés blessés, interpose |
+| `vengeful` | Concentre sur l'ennemi qui a blessé un allié |
+| `arcane` | Préfère systématiquement les sorts |
+| `reckless` | Attaque sans calculer les risques |
+| `protective` | Reste aux côtés des alliés vulnérables, Help/Dodge |
+
+#### `agents/prompts/player_decide.txt` — Prompt de décision (combat)
+
+- Contexte : données personnage + game_state + actions disponibles + personnalité
+- Priorités tactiques : PV < 25% → survie, sorts disponibles, cible selon trait
+- Réponse JSON : `action_type`, `target`, `params`, `roleplay_text`, `inner_reasoning`
+
+#### `agents/prompts/player_roleplay.txt` — Prompt de roleplay (exploration)
+
+- Contexte narratif : scène en cours + messages récents + background
+- Actions possibles : parler, examiner, interagir avec PNJ, exprimer une émotion
+- Même schéma JSON que `player_decide.txt`
+
+#### Nouveaux schémas Pydantic (`agents/schemas.py`)
+
+- `PlayerActionChoice` : action choisie avec `action_type`, `target`, `params`, `roleplay_text`
+- `PlayerPersonality` : traits + backstory_hook + speech_style
+- Constantes `PLAYER_ACTION_TYPES` (12 actions) et `PERSONALITY_TRAITS` (8 traits)
+
+### Ce qui peut etre utilise des maintenant
+
+```python
+from app.agents.player_agent import PlayerAgent
+from app.agents.schemas import PlayerPersonality
+
+# Creer un agent joueur IA avec personnalite
+agent = PlayerAgent(
+    character_id="thorin_1",
+    character_name="Thorin",
+    personality=PlayerPersonality(
+        traits=["brave", "noble"],
+        backstory_hook="Cherche a venger son clan detruit",
+        speech_style="gruff",
+    )
+)
+
+# Decision tactique en combat
+action = await agent.decide_action(game_state=current_state)
+print(action.action_type)    # "attack"
+print(action.roleplay_text)  # "Thorin charge avec un cri de guerre !"
+
+# Validation avant de passer au moteur
+is_valid, reason = agent.validate_action(action, current_state)
+
+# Roleplay en exploration
+reaction = await agent.roleplay(game_state=current_state, scene_context="Le groupe arrive en ville")
+```
+
+#### `game/turn_manager.py` — Champ `is_ai_controlled`
+
+- `CombatantInfo.is_ai_controlled: bool = False` — marque les compagnons IA
+- `TurnEntry.is_ai_controlled: bool = False` — propagé lors du `setup_combat()`
+- Sérialisation/désérialisation complète (`to_dict()` / `from_dict()`)
+
+#### `game/session_manager.py` — Registre des agents IA
+
+- `ActiveSession.ai_players: Dict[str, Any]` — mappe `combatant_id → PlayerAgent`
+- Populé par l'appelant (ws_game ou test) avant le début du combat
+
+#### `game/ai_player_manager.py` — Orchestrateur des tours IA
+
+- `AIPlayerManager.process_ai_turns(session_id, active, action_resolver)` :
+  - Parcourt les tours consécutifs IA depuis la position courante
+  - S'arrête dès qu'un combattant non-IA est atteint
+  - Pour chaque IA : appel `decide_action()` / `roleplay()` → `validate_action()` → `ActionResolver.resolve()`
+  - Si l'action est invalide : fallback vers `wait` (personnage inconscient, sorts épuisés, etc.)
+  - Si aucun agent enregistré : saute le tour (log warning)
+  - Retourne le nombre d'actions IA déclenchées
+
+#### Tests Sprint 5 — 33 nouveaux tests
+
+| Fichier | Tests | Couverture |
+|---------|-------|------------|
+| `tests/test_agents/test_player_agent.py` | 23 | Personnalité, validate_action (7 cas), decide_action, roleplay, think() |
+| `tests/test_game/test_ai_player_combat.py` | 10 | Sérialisation TurnEntry, setup_combat, AIPlayerManager (5 scénarios), round complet |
+
+**Total tests : 611/611 passants**
 
 ---
 

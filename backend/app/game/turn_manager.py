@@ -32,6 +32,7 @@ class CombatantInfo:
     dex_score: int
     is_player: bool
     speed: int = 30  # walking speed in feet
+    is_ai_controlled: bool = False  # True for AI companion players
 
 
 @dataclass
@@ -42,6 +43,7 @@ class TurnEntry:
     name: str
     initiative_total: int  # 0 for exploration (order is positional)
     is_player: bool
+    is_ai_controlled: bool = False  # True for AI companion players
     action_economy: ActionEconomy = field(default_factory=ActionEconomy)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -50,6 +52,7 @@ class TurnEntry:
             "name": self.name,
             "initiative_total": self.initiative_total,
             "is_player": self.is_player,
+            "is_ai_controlled": self.is_ai_controlled,
             "action_economy": asdict(self.action_economy),
         }
 
@@ -67,6 +70,7 @@ class TurnEntry:
             name=data["name"],
             initiative_total=data.get("initiative_total", 0),
             is_player=data.get("is_player", True),
+            is_ai_controlled=data.get("is_ai_controlled", False),
             action_economy=ae,
         )
 
@@ -142,6 +146,7 @@ class TurnManager:
                 name=combatant_by_id[r.combatant_id].name,
                 initiative_total=r.total,
                 is_player=combatant_by_id[r.combatant_id].is_player,
+                is_ai_controlled=combatant_by_id[r.combatant_id].is_ai_controlled,
                 action_economy=new_turn_economy(combatant_by_id[r.combatant_id].speed),
             )
             for r in sorted_results
@@ -171,6 +176,7 @@ class TurnManager:
                 name=p.name,
                 initiative_total=0,
                 is_player=p.is_player,
+                is_ai_controlled=p.is_ai_controlled,
                 action_economy=new_turn_economy(p.speed),
             )
             for p in participants

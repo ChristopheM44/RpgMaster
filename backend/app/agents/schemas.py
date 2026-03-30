@@ -64,3 +64,76 @@ class AgentResponse(BaseModel):
     raw_llm_output: Optional[str] = Field(
         None, description="Sortie brute du LLM avant parsing"
     )
+
+
+# ---------------------------------------------------------------------------
+# Schémas pour les agents joueurs IA (Sprint 5)
+# ---------------------------------------------------------------------------
+
+PERSONALITY_TRAITS = (
+    "brave",
+    "cautious",
+    "greedy",
+    "noble",
+    "vengeful",
+    "arcane",
+    "reckless",
+    "protective",
+)
+
+PLAYER_ACTION_TYPES = (
+    "attack",
+    "cast_spell",
+    "dash",
+    "dodge",
+    "help",
+    "use_item",
+    "move",
+    "talk",
+    "wait",
+    "disengage",
+    "hide",
+    "shove",
+)
+
+
+class PlayerActionChoice(BaseModel):
+    """Action mécanique choisie par un joueur IA après réflexion."""
+
+    action_type: str = Field(
+        ...,
+        description=(
+            "Type d'action : attack | cast_spell | dash | dodge | help | "
+            "use_item | move | talk | wait | disengage | hide | shove"
+        ),
+    )
+    action_description: str = Field(
+        ..., description="Description courte de l'action dans le contexte narratif"
+    )
+    target: Optional[str] = Field(None, description="ID de la cible, ou null")
+    params: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Paramètres : weapon, spell_name, item_name, move_to…",
+    )
+    roleplay_text: str = Field(
+        ..., description="Ce que le personnage dit ou fait (texte narratif, en français)"
+    )
+    inner_reasoning: Optional[str] = Field(
+        None, description="Réflexion interne du personnage (non affichée aux autres)"
+    )
+
+
+class PlayerPersonality(BaseModel):
+    """Profil de personnalité d'un joueur IA."""
+
+    traits: list[str] = Field(
+        default_factory=list,
+        description=f"1 à 3 traits parmi : {', '.join(PERSONALITY_TRAITS)}",
+    )
+    backstory_hook: Optional[str] = Field(
+        None, description="Élément de background influençant les décisions (1 phrase)"
+    )
+    speech_style: Optional[str] = Field(
+        None,
+        description="Style de discours : formal | casual | gruff | cheerful | mysterious",
+    )

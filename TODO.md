@@ -55,18 +55,18 @@
 - [x] Integration bout-en-bout : action joueur -> moteur -> GM -> broadcast
 - [x] Tests integration
 
-## Sprint 5 : Agents joueurs IA
-- [ ] `agents/player_agent.py` : Prise de decision basee sur personnalite et capacites
-- [ ] `agents/prompts/player_decide.txt` : Prompt de decision
-- [ ] `agents/prompts/player_roleplay.txt` : Prompt de roleplay
-- [ ] Systeme de personnalite (brave, prudent, cupide, noble, etc.)
-- [ ] Validation des actions IA (respect des capacites du personnage)
-- [ ] Integration avec le turn manager
-- [ ] Test : combat 1 humain + 2 IA compagnons vs gobelins
+## Sprint 5 : Agents joueurs IA [TERMINE]
+- [x] `agents/player_agent.py` : Prise de decision basee sur personnalite et capacites
+- [x] `agents/prompts/player_decide.txt` : Prompt de decision
+- [x] `agents/prompts/player_roleplay.txt` : Prompt de roleplay
+- [x] Systeme de personnalite (brave, prudent, cupide, noble, etc.)
+- [x] Validation des actions IA (respect des capacites du personnage)
+- [x] Integration avec le turn manager (`is_ai_controlled` sur TurnEntry + `AIPlayerManager`)
+- [x] Test : combat 1 humain + 2 IA compagnons vs gobelins
 
 ## Sprint 6 : Frontend MVP
-- [ ] Shell app + navigation complete
-- [ ] LobbyView : creer/charger session, voir les sessions sauvegardees
+- [x] Shell app + navigation complete
+- [x] LobbyView : creer/charger session, voir les sessions sauvegardees
 - [ ] CharacterCreationView : wizard etape par etape (espece, classe, background, stats, skills, equip, nom)
 - [ ] GameSessionView : layout 3 panneaux (NarrativeLog 60% | CombatTracker + CharacterSummary 40% | ActionBar bas)
 - [ ] Composant NarrativeLog : scroll de narration, dialogue, resultats de des
