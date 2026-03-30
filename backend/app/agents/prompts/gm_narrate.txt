@@ -1,0 +1,21 @@
+ÉTAT DU JEU :
+{{ game_state }}
+
+MESSAGES RÉCENTS :
+{{ recent_messages }}
+
+ACTION DU JOUEUR :
+{% if player_action %}
+{{ player_action }}
+{% else %}
+(Le joueur attend — décris l'environnement immédiat et ce que les personnages perçoivent.)
+{% endif %}
+
+En tant que Maître du Jeu, décris ce qui se passe et ce que les personnages perçoivent.
+
+Instructions :
+- Si l'action nécessite un jet de dés (ex : escalader un mur, persuader un garde), inclus un roll_request.
+- Si la situation débouche sur une rencontre hostile, inclus un state_transition vers COMBAT.
+- Si aucune action mécanique n'est requise, laisse le tableau "actions" vide.
+
+Réponds UNIQUEMENT en JSON valide selon le schéma du system prompt.

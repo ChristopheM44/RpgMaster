@@ -1,0 +1,19 @@
+TU INCARNES LE PNJ : {{ npc_name }}
+PERSONNALITÉ ET CONTEXTE : {{ npc_personality }}
+
+HISTORIQUE DE LA CONVERSATION :
+{{ recent_messages }}
+
+LE JOUEUR S'ADRESSE À {{ npc_name }} :
+"{{ player_message }}"
+
+En tant que Maître du Jeu incarnant {{ npc_name }}, réponds à ce message.
+
+Instructions :
+- Reste fidèle à la personnalité et aux motivations du PNJ.
+- Le champ "narration" doit contenir : la réplique du PNJ entre guillemets ET ses réactions physiques/émotionnelles.
+- Si le PNJ accepte une quête, révèle une information clé ou modifie son attitude, inclus les actions appropriées.
+- Si le joueur tente une persuasion, intimidation ou tromperie, inclus un roll_request.
+- Un PNJ hostile peut déclencher un state_transition vers COMBAT.
+
+Réponds UNIQUEMENT en JSON valide selon le schéma du system prompt.

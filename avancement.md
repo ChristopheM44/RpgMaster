@@ -1,6 +1,6 @@
 # RpgMaster — Avancement du projet
 
-> Derniere mise a jour : 2026-03-29 (Sprint 2 en cours)
+> Derniere mise a jour : 2026-03-30 (Sprint 4 termine)
 
 ---
 
@@ -10,9 +10,9 @@
 |--------|-------|--------|
 | Sprint 0 | Bootstrap | ✅ Termine |
 | Sprint 1 | Moteur de regles D&D SRD 5.2 | ✅ Termine |
-| Sprint 2 | Couche donnees + API REST | 🔄 En cours |
-| Sprint 3 | Integration LLM | 🔲 A faire |
-| Sprint 4 | Game Loop + WebSocket | 🔲 A faire |
+| Sprint 2 | Couche donnees + API REST | ✅ Termine |
+| Sprint 3 | Integration LLM | ✅ Termine |
+| Sprint 4 | Game Loop + WebSocket | ✅ Termine |
 | Sprint 5 | Agents joueurs IA | 🔲 A faire |
 | Sprint 6 | Frontend MVP | 🔲 A faire |
 | Sprint 7 | Integration + Voix | 🔲 A faire |
@@ -204,10 +204,11 @@ RpgMaster/
 │   ├── main.py          ✅ FastAPI app factory, CORS, routeurs, lifespan
 │   ├── config.py        ✅ Pydantic Settings (.env)
 │   ├── api/
-│   │   ├── routes_session.py    🔲 Stubs CRUD sessions
-│   │   ├── routes_character.py  🔲 Stub CRUD personnages
+│   │   ├── routes_session.py    ✅ CRUD sessions (list, create, get, update, delete)
+│   │   ├── routes_character.py  ✅ CRUD personnages (list, create, get, update, delete)
+│   │   ├── routes_srd.py        ✅ Reference SRD (classes, species, spells, monsters, equipment)
 │   │   ├── routes_game.py       🔲 Stub endpoints jeu
-│   │   └── ws_game.py           🔲 Echo WebSocket (pas encore de logique)
+│   │   └── ws_game.py           ✅ Protocole WebSocket complet + dispatch actions
 │   ├── engine/          ✅ COMPLET — Moteur de regles D&D pur, sans I/O
 │   │   ├── dice.py
 │   │   ├── ability_checks.py
@@ -219,11 +220,11 @@ RpgMaster/
 │   │   └── srd_data/    ✅ JSON SRD 5.2
 │   ├── db/database.py   ✅ Moteur SQLAlchemy async
 │   ├── models/          ✅ Session, Character, GameState, Message
-│   ├── schemas/         🔲 Vide — a creer (Sprint 2)
+│   ├── schemas/         ✅ Session, Character (request/response Pydantic)
 │   ├── services/        🔲 Vide — a creer (Sprint 2+)
-│   ├── agents/          🔲 Vide — a creer (Sprint 3+)
-│   ├── llm/             🔲 Vide — a creer (Sprint 3)
-│   └── game/            🔲 Vide — a creer (Sprint 4)
+│   ├── agents/          ✅ schemas, base_agent, context_manager, gm_agent + prompts/
+│   ├── llm/             ✅ ollama_client, model_router
+│   └── game/            ✅ game_loop, turn_manager, session_manager, event_bus, action_resolver
 ├── frontend/src/
 │   ├── router/index.ts  ✅ 4 routes lazy-loaded
 │   ├── views/           🔲 Vues placeholder (Home fonctionnelle, reste = stub)
@@ -235,17 +236,170 @@ RpgMaster/
 │   └── types/           🔲 Vide — a creer (Sprint 6)
 └── tests/
     ├── test_engine/     ✅ 2 439 lignes, couverture complete du moteur
-    ├── test_api/        🔲 Vide — a creer (Sprint 2)
-    └── test_agents/     🔲 Vide — a creer (Sprint 3)
+    ├── test_api/        ✅ 50 tests (sessions 13, characters 17, srd 20) — 50/50
+    ├── test_agents/     ✅ 36 tests (ollama_client 10, context_manager 13, gm_agent 13)
+    └── test_game/       ✅ 88 tests (game_loop, turn_manager, session_manager, event_bus, ws_game, integration)
 ```
 
 ---
 
-## Sprint 2 — Couche données + API REST (en cours)
+## Sprint 4 — Game Loop + WebSocket [TERMINÉ]
 
-### ✅ Modèles SQLAlchemy (`backend/app/models/`)
+### Machine à états (`backend/app/game/game_loop.py`)
 
-Quatre modèles ORM créés et validés :
+- Table de transitions valides entre toutes les phases (`LOBBY → CHARACTER_CREATION → EXPLORATION → COMBAT → …`)
+- `GameLoop.validate_transition()` lève `InvalidTransitionError` si la transition est interdite
+- Helpers : `can_transition()`, `get_valid_transitions()`, `is_terminal()`, `is_combat_phase()`
+
+### Gestionnaire de tours (`backend/app/game/turn_manager.py`)
+
+- Mode **combat** : jet d'initiative via `engine/combat.py`, tri du plus haut au plus bas
+- Mode **exploration** : round-robin dans l'ordre d'ajout
+- `next_turn()` avance et réinitialise l'économie d'action du nouveau combattant
+- `remove_combatant()` retire un combattant sans sauter de tour
+- Sérialisation/désérialisation complète (`to_dict()` / `load_dict()`) pour persistance dans `GameState`
+
+### Gestionnaire de sessions (`backend/app/game/session_manager.py`)
+
+- `ActiveSession` dataclass : état en mémoire (phase, turn_manager, state_data, dirty flag)
+- `open_session()` : charge depuis la DB ou retourne l'instance existante (idempotent)
+- `close_session()` : persiste et retire de la mémoire
+- `transition_phase()` : valide via `GameLoop` puis sauvegarde
+- `save_state()` : synchronise `Session.status` + `GameState.state_data` en DB
+
+### Bus d'événements (`backend/app/game/event_bus.py`)
+
+- Une `asyncio.Queue` par abonné → pas de head-of-line blocking
+- `publish()` broadcast à tous les abonnés d'une session
+- `publish_to_session()` helper pour construire et publier en une ligne
+- Conçu pour être remplacé par Redis pub/sub en Phase 2 (multijoueur réseau)
+
+### WebSocket (`backend/app/api/ws_game.py`)
+
+Protocole complet :
+
+| Message client | Effet |
+|---------------|-------|
+| `{"type": "join", "character_id": "..."}` | Broadcast `player_joined` |
+| `{"type": "action", ...}` | Pipeline complet → événements broadcastés |
+| `{"type": "ping"}` | Réponse `pong` |
+
+Gestion du cycle de vie : connexion → session ouverte → `session_state` envoyé → boucle de réception → déconnexion → `player_left` → session fermée si dernier client.
+
+### Résolveur d'actions (`backend/app/game/action_resolver.py`)
+
+Pipeline bout-en-bout :
+
+```
+action joueur
+      │
+      ▼
+résolution mécanique (engine/)
+  ├── attack   → roll_attack() + roll_damage() → ROLL_RESULT event
+  ├── cast_spell → roll("d20") → ROLL_RESULT event
+  └── autres   → pas de jet de dé
+      │
+      ▼
+AgentContext → GMAgent.think()   ← narration LLM (ou fallback)
+      │
+      ▼
+NARRATION event
+      │
+      ▼
+actions GM (damage_apply, condition_add/remove)
+  └── HP_CHANGED / CONDITION_CHANGED events
+      │
+      ▼
+TURN_END event (incrémente turn_number)
+```
+
+### Tests (`tests/test_game/`) — **88/88 passants**
+
+| Fichier | Tests | Couverture |
+|---------|-------|------------|
+| `test_game_loop.py` | ~20 | Transitions valides/invalides, helpers |
+| `test_turn_manager.py` | ~20 | Setup combat/exploration, next_turn, remove, sérialisation |
+| `test_session_manager.py` | ~18 | Lifecycle, transitions, persistance |
+| `test_event_bus.py` | ~10 | Subscribe/unsubscribe, publish, broadcast |
+| `test_ws_game.py` | ~10 | Protocole WS (connect, join, ping, action, erreurs) |
+| `test_integration.py` | 10 | Pipeline complet action→moteur→GM→broadcast |
+
+---
+
+## Sprint 3 — Intégration LLM [TERMINÉ]
+
+### Client Ollama (`backend/app/llm/`)
+
+| Fichier | Rôle |
+|---------|------|
+| `ollama_client.py` | Client async Ollama : `chat()`, `generate()`, `stream_chat()`, `is_available()` |
+| `model_router.py` | Fabrique les clients LLM selon le rôle (MJ vs joueur IA) |
+
+Fonctionnalités clés :
+- Retry avec backoff exponentiel (3 tentatives, délai doublé) sur `ConnectError`, `TimeoutException`, `ResponseError`
+- `OllamaError` comme exception unifiée levée après épuisement des tentatives
+- Streaming via `AsyncIterator[str]` (chunks texte) pour les futures intégrations WebSocket
+
+### Agents (`backend/app/agents/`)
+
+| Fichier | Rôle |
+|---------|------|
+| `schemas.py` | Modèles Pydantic : `GMAction`, `GMResponse`, `ContextMessage`, `AgentContext`, `AgentResponse` |
+| `base_agent.py` | Classe abstraite : rendu Jinja2, extraction JSON robuste (3 stratégies de fallback) |
+| `context_manager.py` | Fenêtre glissante (`deque(maxlen=N)`) avec conversion format Ollama |
+| `gm_agent.py` | Agent MJ complet : narrate, run_combat_turn, run_npc_dialogue |
+
+### Templates de prompts (`backend/app/agents/prompts/`)
+
+| Fichier | Usage |
+|---------|-------|
+| `gm_system.txt` | System prompt statique — règles absolues + schéma JSON obligatoire |
+| `gm_narrate.txt` | Narration d'exploration (Jinja2 : game_state, player_action, recent_messages) |
+| `gm_combat.txt` | Tour de combat (Jinja2 : + roll_results) |
+| `gm_npc_dialogue.txt` | Dialogue PNJ (Jinja2 : npc_name, npc_personality, player_message) |
+
+### Pipeline MJ
+
+```
+player_action + game_state
+       │
+       ▼
+  ContextManager.to_ollama_messages()   ← fenêtre glissante N derniers messages
+       │
+       ▼
+  Jinja2 template (gm_narrate / gm_combat / gm_npc_dialogue)
+       │
+       ▼
+  OllamaClient.chat()   ← avec retry automatique
+       │
+       ▼
+  BaseAgent._extract_json()   ← parse JSON, markdown block, ou texte brut
+       │
+       ▼
+  GMResponse (Pydantic)   ← narration + actions mécaniques + mood
+```
+
+### Robustesse
+
+- Si Ollama est injoignable → narration de fallback, pas d'exception propagée
+- Si le LLM ne retourne pas du JSON → texte brut utilisé comme narration
+- Actions malformées → filtrées silencieusement (seuls les `dict` sont acceptés)
+
+### Tests agents (`tests/test_agents/`) — **36/36 passants**
+
+| Fichier | Tests | Couverture |
+|---------|-------|------------|
+| `test_ollama_client.py` | 10 | chat, generate, retry, is_available |
+| `test_context_manager.py` | 13 | fenêtre glissante, format Ollama, metadata |
+| `test_gm_agent.py` | 13 | narrate, combat, NPC, fallbacks, think() |
+
+**Total tests : 578/578 passants** (moteur + API + agents + game loop + intégration)
+
+---
+
+## Sprint 2 — Couche données + API REST [TERMINÉ]
+
+### Modèles SQLAlchemy (`backend/app/models/`)
 
 | Modèle | Table | Description |
 |--------|-------|-------------|
@@ -254,35 +408,34 @@ Quatre modèles ORM créés et validés :
 | `GameState` | `game_states` | Blob JSON one-to-one avec Session, contient l'état complet du jeu |
 | `Message` | `messages` | Entrée du journal de partie (narration, dialogue, jet de dés, système) |
 
-**Points notables :**
-- `SessionStatus` enum couvre toute la machine à états du jeu
-- `Character.ability_scores`, `.equipment`, `.spell_slots`, `.conditions` sont des JSON blobs
-- `GameState.state_data` est le blob autoritatif de l'état (initiative, PNJs, environnement…)
-- `Message` supporte `role` (gm/player/system) + `message_type` + `metadata_` JSON pour les résultats de jets
-- `Character.session_id` est nullable (FK avec `SET NULL`) : un personnage peut exister sans session
-- Correction Python 3.9 : utilisation de `Optional[X]` car SQLAlchemy évalue les annotations via `eval()` au runtime — `X | None` n'est pas supporté sur Python 3.9 dans ce contexte
-- `UP045` exclu de ruff pour les modèles SQLAlchemy
+### Schemas Pydantic (`backend/app/schemas/`)
 
----
+- `SessionCreate`, `SessionUpdate`, `SessionResponse`, `SessionListResponse`
+- `CharacterCreate`, `CharacterUpdate`, `CharacterResponse`, `CharacterListResponse`
 
-## Prochaines etapes (Sprint 2 suite)
+### Alembic
 
-2. **Schemas Pydantic** dans `backend/app/schemas/` :
-   - Requetes et reponses pour chaque endpoint REST
+- Configuration + migration initiale générée (`alembic init` + `alembic revision --autogenerate`)
 
-3. **Migration Alembic** initiale :
-   ```bash
-   alembic init alembic
-   alembic revision --autogenerate -m "initial"
-   alembic upgrade head
-   ```
+### API REST
 
-4. **Implementer les routes REST** :
-   - `POST /sessions`, `GET /sessions`, `GET /sessions/{id}`, `DELETE /sessions/{id}`
-   - `POST /characters`, `GET /characters/{id}`, `PUT /characters/{id}`
-   - `GET /srd/classes`, `GET /srd/species`, `GET /srd/spells`, `GET /srd/monsters`
+| Endpoints | Description |
+|-----------|-------------|
+| `GET/POST /api/sessions/` | Liste paginée + création |
+| `GET/PUT/DELETE /api/sessions/{id}` | Détail, mise à jour, suppression |
+| `GET/POST /api/characters/` | Liste avec filtre session_id + création |
+| `GET/PUT/DELETE /api/characters/{id}` | Détail, mise à jour, suppression |
+| `GET /api/srd/classes\|species\|spells\|monsters\|equipment` | Référence SRD (lecture seule, filtres) |
 
-5. **Tests API** dans `tests/test_api/` avec client de test FastAPI
+### Tests API (`tests/test_api/`) — **50/50 passants**
+
+| Fichier | Tests | Couverture |
+|---------|-------|------------|
+| `test_sessions.py` | 13 | CRUD complet, validation, pagination |
+| `test_characters.py` | 17 | CRUD complet, filtrage par session, validation |
+| `test_srd.py` | 20 | Toutes les ressources SRD, filtres (niveau, classe, CR, catégorie) |
+
+**Bugfix découvert via les tests** : `routes_srd.py` — l'endpoint `/equipment` ne gérait pas la structure imbriquée de `equipment.json` (`weapons` et `armor` sont des dicts de listes, pas des listes plates). Corrigé avec `_flatten_equipment()`.
 
 ---
 

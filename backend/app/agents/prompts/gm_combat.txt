@@ -1,0 +1,26 @@
+ÉTAT DU COMBAT :
+{{ game_state }}
+
+MESSAGES RÉCENTS :
+{{ recent_messages }}
+
+ACTION EFFECTUÉE :
+{% if player_action %}
+{{ player_action }}
+{% else %}
+(Tour d'un adversaire ou d'un allié IA — narre son action.)
+{% endif %}
+
+RÉSULTATS DES JETS (calculés par le moteur, non modifiables) :
+{{ roll_results }}
+
+En tant que Maître du Jeu, narre ce tour de combat de façon dynamique et tendue.
+
+Instructions :
+- Intègre les résultats des jets dans ta narration de façon naturelle (ne répète pas les chiffres bruts).
+- Si des dégâts ont été infligés, inclus un damage_apply pour chaque cible touchée.
+- Si un personnage atteint 0 PV, inclus un roll_request pour ses jets de mort (death saving throw).
+- Si le combat est terminé (tous les adversaires vaincus ou en fuite), inclus un state_transition vers EXPLORATION.
+- Décris les positions, les émotions et l'ambiance pour maintenir la tension.
+
+Réponds UNIQUEMENT en JSON valide selon le schéma du system prompt.

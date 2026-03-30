@@ -27,33 +27,33 @@
 
 ## Sprint 2 : Couche donnees + API REST
 - [x] Modeles SQLAlchemy : Character, Session, GameState, Message
-- [ ] Schemas Pydantic : request/response pour chaque endpoint
-- [ ] Alembic : configuration + migration initiale
-- [ ] API CRUD Sessions (create, list, get, update, save, load)
-- [ ] API CRUD Characters (create, list, get, update)
-- [ ] API SRD reference data (classes, especes, sorts, monstres, equipement)
-- [ ] Tests API (`tests/test_api/`)
+- [x] Schemas Pydantic : request/response pour chaque endpoint
+- [x] Alembic : configuration + migration initiale
+- [x] API CRUD Sessions (create, list, get, update, save, load)
+- [x] API CRUD Characters (create, list, get, update)
+- [x] API SRD reference data (classes, especes, sorts, monstres, equipement)
+- [x] Tests API (`tests/test_api/`)
 
-## Sprint 3 : Integration LLM
-- [ ] `llm/ollama_client.py` : Client async Ollama avec retry et gestion d'erreur
-- [ ] `llm/model_router.py` : Routage des requetes vers le bon backend LLM
-- [ ] `agents/context_manager.py` : Fenetre glissante de contexte + summarization
-- [ ] `agents/base_agent.py` : Interface abstraite d'agent
-- [ ] `agents/gm_agent.py` : Agent MJ avec pipeline (contexte -> prompt -> LLM -> parse -> validate)
-- [ ] `agents/prompts/gm_system.txt` : System prompt du MJ
-- [ ] `agents/prompts/gm_narrate.txt` : Prompt de narration
-- [ ] `agents/prompts/gm_combat.txt` : Prompt de combat
-- [ ] `agents/prompts/gm_npc_dialogue.txt` : Prompt de dialogue PNJ
-- [ ] Tests agents (`tests/test_agents/`)
+## Sprint 3 : Integration LLM [TERMINE]
+- [x] `llm/ollama_client.py` : Client async Ollama avec retry et gestion d'erreur
+- [x] `llm/model_router.py` : Routage des requetes vers le bon backend LLM
+- [x] `agents/context_manager.py` : Fenetre glissante de contexte + summarization
+- [x] `agents/base_agent.py` : Interface abstraite d'agent
+- [x] `agents/gm_agent.py` : Agent MJ avec pipeline (contexte -> prompt -> LLM -> parse -> validate)
+- [x] `agents/prompts/gm_system.txt` : System prompt du MJ
+- [x] `agents/prompts/gm_narrate.txt` : Prompt de narration
+- [x] `agents/prompts/gm_combat.txt` : Prompt de combat
+- [x] `agents/prompts/gm_npc_dialogue.txt` : Prompt de dialogue PNJ
+- [x] Tests agents (`tests/test_agents/`)
 
 ## Sprint 4 : Game Loop + WebSocket
-- [ ] `game/game_loop.py` : Machine a etats (phases LOBBY -> EXPLORATION -> COMBAT -> ...)
-- [ ] `game/turn_manager.py` : Gestion de l'ordre des tours (initiative en combat, round-robin en exploration)
-- [ ] `game/session_manager.py` : Cycle de vie des sessions actives
-- [ ] `game/event_bus.py` : Bus d'evenements in-process (asyncio.Queue)
-- [ ] `api/ws_game.py` : Implementation complete du protocole WebSocket
-- [ ] Integration bout-en-bout : action joueur -> moteur -> GM -> broadcast
-- [ ] Tests integration
+- [x] `game/game_loop.py` : Machine a etats (phases LOBBY -> EXPLORATION -> COMBAT -> ...)
+- [x] `game/turn_manager.py` : Gestion de l'ordre des tours (initiative en combat, round-robin en exploration)
+- [x] `game/session_manager.py` : Cycle de vie des sessions actives
+- [x] `game/event_bus.py` : Bus d'evenements in-process (asyncio.Queue)
+- [x] `api/ws_game.py` : Implementation complete du protocole WebSocket
+- [x] Integration bout-en-bout : action joueur -> moteur -> GM -> broadcast
+- [x] Tests integration
 
 ## Sprint 5 : Agents joueurs IA
 - [ ] `agents/player_agent.py` : Prise de decision basee sur personnalite et capacites
