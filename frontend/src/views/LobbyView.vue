@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSessionStore } from '../stores/session'
+import { characterApi } from '../services/api'
 import type { Session } from '../types'
 
 const router = useRouter()
@@ -48,13 +49,17 @@ async function handleCreate() {
   }
 }
 
-function handleJoin(session: Session) {
+async function handleJoin(session: Session) {
   sessionStore.setCurrentSession(session)
   if (session.status === 'lobby' || session.status === 'character_creation') {
-    router.push({ name: 'character-creation', params: { id: session.id } })
-  } else {
-    router.push({ name: 'game-session', params: { id: session.id } })
+    // Redirect to character creation only if no characters exist yet
+    const { characters } = await characterApi.list(session.id)
+    if (characters.length === 0) {
+      router.push({ name: 'character-creation', params: { id: session.id } })
+      return
+    }
   }
+  router.push({ name: 'game-session', params: { id: session.id } })
 }
 
 async function handleDelete(id: string) {

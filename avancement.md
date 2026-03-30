@@ -1,6 +1,6 @@
 # RpgMaster — Avancement du projet
 
-> Derniere mise a jour : 2026-03-30 (Sprint 6 en cours — 2/11 taches)
+> Derniere mise a jour : 2026-03-30 (Sprint 7 en cours — 1/6 taches)
 
 ---
 
@@ -14,8 +14,8 @@
 | Sprint 3 | Integration LLM | ✅ Termine |
 | Sprint 4 | Game Loop + WebSocket | ✅ Termine |
 | Sprint 5 | Agents joueurs IA | ✅ Termine |
-| Sprint 6 | Frontend MVP | 🔄 En cours (2/11) |
-| Sprint 7 | Integration + Voix | 🔲 A faire |
+| Sprint 6 | Frontend MVP | ✅ Termine |
+| Sprint 7 | Integration + Voix | 🔄 En cours |
 | Sprint 8 | Polish + Playtest | 🔲 A faire |
 
 ---
@@ -194,6 +194,41 @@ ruff format app/     # Formatage auto
 npm run type-check   # (dans frontend/) Verification TypeScript
 ```
 
+### Sprint 7 — Integration (en cours, 2026-03-30)
+
+#### Flow end-to-end (1ere tache terminee)
+
+**Backend — `routes_game.py`** completement reimplemente :
+- `POST /api/game/{id}/start` : charge les personnages, ouvre la session, force la
+  transition EXPLORATION, set up TurnManager en mode exploration, broadcast
+  phase_change + session_state + narration initiale du MJ.
+- `GET /api/game/{id}/state` : retourne l'etat reel (depuis session_manager en memoire
+  ou DB si session non active).
+
+**Backend — `ws_game.py`** — nouveaux handlers :
+- `start_combat` : spawn d'un monstre aleatoire (CR 0-1 depuis monsters.json), roll
+  initiative, transition vers phase COMBAT, broadcast `combat_start` avec liste
+  complete des combattants (HP, initiative, etc.) et `turn_start` pour le premier.
+- `end_turn` : avance TurnManager, verifie les PNJ morts (HP <= 0), fin de combat
+  automatique si tous les PNJ sont vaincus, broadcast `turn_start` + `session_state`.
+- `take_rest` : repos long — restaure HP complet (memoire + DB), transition
+  EXPLORATION, broadcast narration + session_state.
+- Correction : `_build_session_state_payload` mappe les champs TurnEntry vers le
+  format attendu par le frontend (`combatant_id` → `id`, `initiative_total` →
+  `initiative`, `is_ai_controlled` → `is_ai`).
+
+**Frontend** :
+- `types/index.ts` : ajout de `combat_start`, `combat_end`, `hp_changed` dans
+  `WsEventType` ; nouveaux types `HpChangedPayload` et `CombatStartPayload`.
+- `stores/game.ts` : `setCombatants()`, `applyHpChanged()` ; `applySessionState()`
+  ne log plus que sur changement de phase (evite spam dans le log narratif).
+- `composables/useWebSocket.ts` : gestion des evenements `combat_start`,
+  `hp_changed`, `combat_end` ; mise a jour simultanee de `gameStore` et `charStore`.
+- `views/GameSessionView.vue` : 3 boutons contextuels dans le header :
+  - "Demarrer la partie" (phase lobby/character_creation)
+  - "Combat" (phase exploration)
+  - "Repos" (phase exploration/encounter_end)
+
 ---
 
 ## Architecture actuelle en un coup d'oeil
@@ -207,8 +242,8 @@ RpgMaster/
 │   │   ├── routes_session.py    ✅ CRUD sessions (list, create, get, update, delete)
 │   │   ├── routes_character.py  ✅ CRUD personnages (list, create, get, update, delete)
 │   │   ├── routes_srd.py        ✅ Reference SRD (classes, species, spells, monsters, equipment)
-│   │   ├── routes_game.py       🔲 Stub endpoints jeu
-│   │   └── ws_game.py           ✅ Protocole WebSocket complet + dispatch actions
+│   │   ├── routes_game.py       ✅ start_game + get_game_state implementes
+│   │   └── ws_game.py           ✅ WS + start_combat + end_turn + take_rest + fix TurnEntry
 │   ├── engine/          ✅ COMPLET — Moteur de regles D&D pur, sans I/O
 │   │   ├── dice.py
 │   │   ├── ability_checks.py
@@ -227,13 +262,17 @@ RpgMaster/
 │   └── game/            ✅ game_loop, turn_manager, session_manager, event_bus, action_resolver
 ├── frontend/src/
 │   ├── router/index.ts  ✅ 4 routes lazy-loaded
-│   ├── views/           🔲 Vues placeholder (Home fonctionnelle, reste = stub)
+│   ├── views/           🔄 Home ✅ Lobby ✅ CharacterCreation ✅ GameSession ✅
 │   ├── assets/main.css  ✅ Theme dark fantasy TailwindCSS v4
-│   ├── components/      🔲 Vide — a creer (Sprint 6)
-│   ├── composables/     🔲 Vide — a creer (Sprint 6)
-│   ├── services/        🔲 Vide — a creer (Sprint 6)
-│   ├── stores/          🔲 Placeholder counter (a remplacer, Sprint 6)
-│   └── types/           🔲 Vide — a creer (Sprint 6)
+│   ├── components/
+│   │   ├── narrative/   ✅ NarrativeLog.vue, DiceRollResult.vue
+│   │   ├── combat/      ✅ CombatTracker.vue
+│   │   ├── character/   ✅ CharacterSummary.vue
+│   │   └── common/      ✅ AppNav.vue, ActionBar.vue
+│   ├── composables/     ✅ useWebSocket.ts
+│   ├── services/        ✅ api.ts (sessions, SRD complet, characters, game)
+│   ├── stores/          ✅ session.ts, game.ts, character.ts
+│   └── types/           ✅ Session, Character, SRD, WS events, game UI
 └── tests/
     ├── test_engine/     ✅ 2 439 lignes, couverture complete du moteur
     ├── test_api/        ✅ 50 tests (sessions 13, characters 17, srd 20) — 50/50
@@ -244,9 +283,82 @@ RpgMaster/
 
 ---
 
-## Sprint 6 — Frontend MVP [EN COURS — 2/11]
+## Sprint 6 — Frontend MVP [TERMINÉ — 11/11]
 
 ### Tâches accomplies
+
+#### GameSessionView — Layout 3 panneaux (`src/views/GameSessionView.vue`)
+
+Architecture complète de la vue de jeu avec layout responsive.
+
+**Layout** :
+- Header fixe : nom de session + phase courante + bouton retour Lobby
+- Panneau gauche 60% : `NarrativeLog` (scroll automatique)
+- Panneau droit 40% divisé en 2 : `CombatTracker` (haut) + `CharacterSummary` (bas)
+- `ActionBar` épinglée en bas, pleine largeur
+
+**Nouveaux composants** (`src/components/`) :
+
+| Composant | Fichier | Rôle |
+|-----------|---------|------|
+| `NarrativeLog` | `narrative/NarrativeLog.vue` | Scroll de narration (4 types : narration MJ, action joueur, jet de dés, système) avec auto-scroll |
+| `DiceRollResult` | `narrative/DiceRollResult.vue` | Affichage structuré d'un jet : notation, dés individuels (rouge/doré sur 1/20), modificateur, total coloré succès/échec |
+| `CombatTracker` | `combat/CombatTracker.vue` | Liste d'initiative triée, barre de PV colorée (vert→jaune→rouge), badge conditions, indicateur tour actif |
+| `CharacterSummary` | `character/CharacterSummary.vue` | Fiche condensée : identité, barre PV, grille 6 caractéristiques avec modificateurs, badges conditions |
+| `ActionBar` | `common/ActionBar.vue` | Boutons contextuels combat (Attaquer/Sort/Objet/Dash/Fin de tour) désactivés hors tour, textarea texte libre, indicateur connexion |
+
+**Nouveaux stores Pinia** :
+
+- `stores/game.ts` : phase, narrative log, combattants, connexion — gère tous les events WS entrants
+- `stores/character.ts` : personnage du joueur + personnages de session, modificateurs calculés
+
+**Composable** `src/composables/useWebSocket.ts` :
+- Connexion `ws://localhost:8000/ws/game/{id}`
+- Reconnexion automatique (max 5 tentatives, délai 3s)
+- Ping keepalive toutes les 25s
+- Dispatch des events → `gameStore` (session_state, narration, roll_result, turn_start, phase_change, error)
+- `sendAction(type, content, characterId, targetId)` pour envoyer au backend
+
+**Nouveaux types** (`src/types/index.ts`) : `WsEvent`, `WsEventType`, `SessionStatePayload`, `TurnEntry`, `NarrationPayload`, `RollResultPayload`, `PhaseChangePayload`, `TurnStartPayload`, `NarrativeEntry`, `NarrativeEntryType`, `CombatantState`
+
+---
+
+#### CharacterCreationView (`src/views/CharacterCreationView.vue`)
+
+Wizard complet en 7 étapes avec validation par étape et indicateur visuel de progression.
+
+| Étape | Contenu |
+|-------|---------|
+| 1 — Espèce | Grille de cartes (données SRD), badges bonus de caract./vision dans le noir, panneau de détail des traits |
+| 2 — Classe | Grille de cartes (données SRD), badges dé de vie/incantateur/nb compétences, panneau capacités niv. 1 |
+| 3 — Background | 6 backgrounds hardcodés (Acolyte, Criminel, Héros du Peuple, Noble, Sage, Soldat), badges compétences |
+| 4 — Caractéristiques | Tableau standard [15,14,13,12,10,8], sélecteurs par stat, scores finaux avec bonus d'espèce, aperçu PV max |
+| 5 — Compétences | Choix parmi les compétences de classe, compteur, affichage des compétences bonus (background + espèce) |
+| 6 — Équipement | Groupes de choix mutuellement exclusifs + équipement fixe automatique (données SRD `starting_equipment`) |
+| 7 — Nom | Input texte + récapitulatif complet (espèce, classe, background, PV, caract., compétences maîtrisées) |
+
+**Soumission** : `POST /api/characters` avec scores finaux (base + bonus espèce), maîtrises fusionnées (classe + background + espèce), équipement, puis redirection vers `game-session`.
+
+**Nouvelles interfaces TypeScript** (`src/types/index.ts`) : `SrdSpecies`, `SrdClass`, `SrdFeature`, `SrdTrait`, `SrdEquipmentEntry`, `Character`, `CharacterCreate`, `CharacterListResponse`.
+
+**Nouveaux endpoints** (`src/services/api.ts`) : `srdApi.listSpecies()`, `srdApi.listClasses()`, `characterApi.create()`, `characterApi.list()`, `characterApi.get()`, `characterApi.delete()`.
+
+---
+
+#### Service `api.ts` — Client REST complet (`src/services/api.ts`)
+
+Couvre l'intégralité des endpoints backend. Fonction générique `request<T>()` avec gestion d'erreur uniforme (status HTTP + texte d'erreur) et 204 No Content.
+
+| Namespace | Méthodes ajoutées |
+|-----------|-------------------|
+| `sessionApi` | `list`, `create`, `get`, `update`, `delete` |
+| `srdApi` | `listSpecies`, `getSpecies`, `listClasses`, `getClass`, `listSpells` (filtres `level`/`charClass`), `getSpell`, `listMonsters` (filtre `maxCr`), `getMonster`, `listEquipment` (filtre `category`), `getEquipment` |
+| `characterApi` | `list`, `create`, `get`, `update`, `delete` |
+| `gameApi` | `getState`, `start` |
+
+**Nouveaux types** (`src/types/index.ts`) : `CharacterUpdate`, `SrdSpell`, `SrdMonster`, `SrdMonsterAction`, `SrdEquipmentItem`, `GameStateResponse`.
+
+---
 
 #### Shell app + navigation (`src/App.vue`, `src/components/common/AppNav.vue`)
 
@@ -267,6 +379,40 @@ RpgMaster/
 - `src/types/index.ts` : interfaces TypeScript (`Session`, `SessionCreate`, `SessionUpdate`, `SessionStatus`)
 - `src/services/api.ts` : client REST générique avec gestion d'erreur + `sessionApi` (list, create, get, update, delete)
 - `src/stores/session.ts` : store Pinia (`sessions`, `currentSession`, `loading`, `error`, `fetchSessions`, `createSession`, `deleteSession`, `setCurrentSession`)
+
+### Ce qui peut être utilisé dès maintenant
+
+```typescript
+import { sessionApi, characterApi, srdApi, gameApi } from './services/api'
+
+// Lister et créer une session
+const { sessions } = await sessionApi.list()
+const session = await sessionApi.create({ name: 'Campagne des Ombres' })
+
+// Récupérer les données SRD pour la création de personnage
+const { species } = await srdApi.listSpecies()
+const { classes } = await srdApi.listClasses()
+const { spells } = await srdApi.listSpells({ level: 1, charClass: 'wizard' })
+const { monsters } = await srdApi.listMonsters(2)       // CR <= 2
+const { equipment } = await srdApi.listEquipment('simple') // catégorie
+
+// Créer et mettre à jour un personnage
+const character = await characterApi.create({ name: 'Aria', ... })
+await characterApi.update(character.id, { hp_current: 8, conditions: ['poisoned'] })
+
+// État de jeu
+const state = await gameApi.getState(session.id)  // { session_id, phase }
+await gameApi.start(session.id)
+```
+
+**Stores Pinia disponibles** :
+- `useSessionStore` — sessions, currentSession, fetchSessions, createSession, deleteSession
+- `useGameStore` — phase, narrativeLog, combatants, connexion WS, applySessionState, addNarration…
+- `useCharacterStore` — myCharacter, sessionCharacters, loadCharacter, loadSessionCharacters, updateHp
+
+**Composable** `useWebSocket(sessionId)` — connexion WS avec reconnexion auto, ping keepalive, dispatch vers stores.
+
+**Vues complètes** : Home → Lobby → CharacterCreation (wizard 7 étapes) → GameSession (3 panneaux).
 
 ---
 

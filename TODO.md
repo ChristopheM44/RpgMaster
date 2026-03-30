@@ -67,18 +67,18 @@
 ## Sprint 6 : Frontend MVP
 - [x] Shell app + navigation complete
 - [x] LobbyView : creer/charger session, voir les sessions sauvegardees
-- [ ] CharacterCreationView : wizard etape par etape (espece, classe, background, stats, skills, equip, nom)
-- [ ] GameSessionView : layout 3 panneaux (NarrativeLog 60% | CombatTracker + CharacterSummary 40% | ActionBar bas)
-- [ ] Composant NarrativeLog : scroll de narration, dialogue, resultats de des
-- [ ] Composant CombatTracker : ordre d'initiative, barres de PV, conditions
-- [ ] Composant ActionBar : input texte libre + boutons contextuels (combat : Attaquer, Sort, Objet, Dash...)
-- [ ] Composant DiceRollResult : affichage anime des jets de des
-- [ ] Composable `useWebSocket.ts` : connexion, envoi, reception, dispatch vers stores Pinia
-- [ ] Stores Pinia : session, game, character, chat
-- [ ] Service `api.ts` : client REST (fetch/axios)
+- [x] CharacterCreationView : wizard etape par etape (espece, classe, background, stats, skills, equip, nom)
+- [x] GameSessionView : layout 3 panneaux (NarrativeLog 60% | CombatTracker + CharacterSummary 40% | ActionBar bas)
+- [x] Composant NarrativeLog : scroll de narration, dialogue, resultats de des
+- [x] Composant CombatTracker : ordre d'initiative, barres de PV, conditions
+- [x] Composant ActionBar : input texte libre + boutons contextuels (combat : Attaquer, Sort, Objet, Dash...)
+- [x] Composant DiceRollResult : affichage anime des jets de des
+- [x] Composable `useWebSocket.ts` : connexion, envoi, reception, dispatch vers stores Pinia
+- [x] Stores Pinia : session, game, character, chat
+- [x] Service `api.ts` : client REST (fetch/axios)
 
 ## Sprint 7 : Integration + Voix
-- [ ] Flow end-to-end complet : creation session -> personnage -> jeu -> combat -> repos
+- [x] Flow end-to-end complet : creation session -> personnage -> jeu -> combat -> repos
 - [ ] `llm/voxtral_client.py` : Client HTTP pour vLLM-Omni
 - [ ] Composable `useAudio.ts` : lecture audio des narrations
 - [ ] Mapping voix : 1 voix MJ narration, voix distinctes par PNJ
