@@ -45,6 +45,7 @@ class GMAgent(BaseAgent):
                 context_manager=None,
                 player_action=context.player_action,
                 messages=context.messages,
+                roll_results=context.roll_results or None,
             )
         else:
             gm_resp = await self.narrate(

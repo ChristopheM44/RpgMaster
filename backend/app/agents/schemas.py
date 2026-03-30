@@ -54,6 +54,7 @@ class AgentContext(BaseModel):
     messages: list[ContextMessage] = Field(default_factory=list)
     game_state: dict[str, Any] = Field(default_factory=dict)
     player_action: Optional[str] = None
+    roll_results: dict[str, Any] = Field(default_factory=dict)
 
 
 class AgentResponse(BaseModel):

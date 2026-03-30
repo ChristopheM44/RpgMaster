@@ -13,6 +13,9 @@ import type {
   CharacterUpdate,
   CharacterListResponse,
   GameStateResponse,
+  TtsSettings,
+  TtsHealthResponse,
+  OllamaHealthResponse,
 } from '../types'
 
 const BASE_URL = 'http://localhost:8000/api'
@@ -128,4 +131,20 @@ export const gameApi = {
       `/game/${sessionId}/start`,
       { method: 'POST' },
     ),
+}
+
+// ─── Admin ─────────────────────────────────────────────────────────────────────
+
+export const adminApi = {
+  getSettings: () => request<TtsSettings>('/admin/settings'),
+
+  updateSettings: (data: Partial<TtsSettings>) =>
+    request<TtsSettings>('/admin/settings', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  getTtsHealth: () => request<TtsHealthResponse>('/admin/tts/health'),
+
+  getLlmHealth: () => request<OllamaHealthResponse>('/admin/llm/health'),
 }

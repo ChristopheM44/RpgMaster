@@ -13,21 +13,25 @@ services:
               count: all
               capabilities: [gpu]
 
-  # Voxtral TTS via vLLM-Omni (optional, enable when needed)
-  # voxtral:
-  #   image: vllm/vllm-omni:latest
-  #   ports:
-  #     - "8091:8091"
-  #   command: >
-  #     --model mistralai/Voxtral-4B-TTS-2603
-  #     --port 8091
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - driver: nvidia
-  #             count: all
-  #             capabilities: [gpu]
+  voxtral:
+    image: vllm/vllm-omni:latest
+    ports:
+      - "8091:8091"
+    ipc: host # ⚠️ Obligatoire pour partager la mémoire système (Tensor Parallelism)
+    volumes:
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    # L'entrypoint doit être surchargé pour lancer le mode --omni
+    entrypoint: ["python3", "-m", "vllm.entrypoints.openai.api_server", "--omni"]
+    command: >
+      --model mistralai/Voxtral-4B-TTS-2603
+      --port 8091
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
 volumes:
   ollama_data:

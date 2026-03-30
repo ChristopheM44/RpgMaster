@@ -1,6 +1,7 @@
 import { ref, onUnmounted } from 'vue'
 import { useGameStore } from '../stores/game'
 import { useCharacterStore } from '../stores/character'
+import { useAudio } from './useAudio'
 import type {
   WsEvent,
   SessionStatePayload,
@@ -10,6 +11,7 @@ import type {
   PhaseChangePayload,
   CombatStartPayload,
   HpChangedPayload,
+  AudioPayload,
 } from '../types'
 
 const WS_BASE = 'ws://localhost:8000'
@@ -20,6 +22,7 @@ const MAX_RECONNECTS = 5
 export function useWebSocket(sessionId: string) {
   const gameStore = useGameStore()
   const charStore = useCharacterStore()
+  const audio = useAudio()
   const ws = ref<WebSocket | null>(null)
   const reconnectCount = ref(0)
   let pingTimer: ReturnType<typeof setInterval> | null = null
@@ -93,6 +96,9 @@ export function useWebSocket(sessionId: string) {
       }
       case 'combat_end':
         gameStore.setCombatants([])
+        break
+      case 'audio':
+        audio.playAudioB64((msg.payload as AudioPayload).audio_b64)
         break
       case 'error':
         gameStore.setError((msg.payload as { message: string }).message)

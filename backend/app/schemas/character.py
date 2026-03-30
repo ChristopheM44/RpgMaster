@@ -69,6 +69,7 @@ class CharacterUpdate(BaseModel):
 
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     player_name: Optional[str] = Field(None, max_length=100)
+    is_ai: Optional[bool] = None
     level: Optional[int] = Field(None, ge=1, le=20)
     background: Optional[str] = Field(None, max_length=50)
 

@@ -30,6 +30,14 @@ const sessionStore = useSessionStore()
           Lobby
         </router-link>
 
+        <router-link
+          to="/admin"
+          class="transition hover:text-parchment"
+          active-class="text-parchment"
+        >
+          Admin
+        </router-link>
+
         <button
           v-if="router.currentRoute.value.name !== 'lobby'"
           class="rounded border border-stone px-3 py-1 transition hover:border-gold hover:text-gold"

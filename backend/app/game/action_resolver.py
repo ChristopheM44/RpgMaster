@@ -9,7 +9,9 @@ Pure orchestration : ce module ne contient pas de logique de règles.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
+import uuid
 from typing import Any, Dict, Optional
 
 from app.agents.gm_agent import GMAgent
@@ -18,6 +20,7 @@ from app.engine import combat as combat_engine
 from app.engine.dice import roll
 from app.game.event_bus import EventType, event_bus
 from app.game.session_manager import ActiveSession
+from app.llm.voxtral_client import tts_router
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +102,7 @@ class ActionResolver:
             game_phase=active.phase.value.upper(),
             game_state=active.state_data,
             player_action=player_action_text,
+            roll_results=roll_results or {},
         )
 
         gm_response: Optional[AgentResponse] = None
@@ -119,11 +123,17 @@ class ActionResolver:
             )
 
         narration_text = gm_response.content if gm_response else _FALLBACK_NARRATION
+        narration_id = str(uuid.uuid4())
         await event_bus.publish_to_session(
             session_id,
             EventType.NARRATION,
-            {"text": narration_text, "speaker": "Maître du Jeu"},
+            {"text": narration_text, "speaker": "Maître du Jeu", "narration_id": narration_id},
             source="action_resolver",
+        )
+
+        # TTS fire-and-forget : ne bloque jamais le game loop
+        asyncio.create_task(
+            tts_router.synthesize_and_broadcast(narration_text, session_id, narration_id)
         )
 
         # ----------------------------------------------------------------

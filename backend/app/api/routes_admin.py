@@ -1,0 +1,112 @@
+"""Routes d'administration — configuration TTS runtime + état LLM Ollama.
+
+Endpoints :
+    GET  /api/admin/settings      → paramètres TTS courants
+    PUT  /api/admin/settings      → mise à jour partielle
+    GET  /api/admin/tts/health    → disponibilité de chaque backend TTS
+    GET  /api/admin/llm/health    → état Ollama (disponibilité + modèles)
+"""
+from __future__ import annotations
+
+from typing import List, Optional
+
+import httpx
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, field_validator
+
+from app.config import settings
+from app.llm.voxtral_client import tts_router
+
+router = APIRouter()
+
+
+# ---------------------------------------------------------------------------
+# Schemas
+# ---------------------------------------------------------------------------
+
+
+class TtsSettingsResponse(BaseModel):
+    tts_enabled: bool
+    tts_backend: str
+    tts_async: bool
+    voxtral_base_url: str
+    voxtral_model: str
+
+
+class TtsSettingsUpdate(BaseModel):
+    tts_enabled: Optional[bool] = None
+    tts_backend: Optional[str] = None
+
+    @field_validator("tts_backend")
+    @classmethod
+    def validate_backend(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in ("kokoro", "vllm"):
+            raise ValueError("tts_backend doit être 'kokoro' ou 'vllm'")
+        return v
+
+
+class TtsHealthResponse(BaseModel):
+    kokoro: bool
+    vllm: bool
+
+
+class OllamaHealthResponse(BaseModel):
+    available: bool
+    models: List[str]
+    gm_model: str
+    player_model: str
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get("/settings", response_model=TtsSettingsResponse)
+async def get_settings() -> TtsSettingsResponse:
+    """Retourne les paramètres TTS courants (en mémoire + runtime_settings.json)."""
+    return TtsSettingsResponse(**tts_router.get_settings())
+
+
+@router.put("/settings", response_model=TtsSettingsResponse)
+async def update_settings(body: TtsSettingsUpdate) -> TtsSettingsResponse:
+    """Met à jour les paramètres TTS en mémoire et les persiste."""
+    try:
+        tts_router.configure(
+            enabled=body.tts_enabled,
+            backend=body.tts_backend,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return TtsSettingsResponse(**tts_router.get_settings())
+
+
+@router.get("/tts/health", response_model=TtsHealthResponse)
+async def get_tts_health() -> TtsHealthResponse:
+    """Vérifie la disponibilité de chaque backend TTS."""
+    result = await tts_router.health()
+    return TtsHealthResponse(**result)
+
+
+@router.get("/llm/health", response_model=OllamaHealthResponse)
+async def get_llm_health() -> OllamaHealthResponse:
+    """Vérifie la disponibilité d'Ollama et retourne la liste des modèles installés."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{settings.ollama_base_url}/api/tags")
+            resp.raise_for_status()
+            data = resp.json()
+            models = [m["name"] for m in data.get("models", [])]
+        return OllamaHealthResponse(
+            available=True,
+            models=models,
+            gm_model=settings.gm_model,
+            player_model=settings.player_model,
+        )
+    except Exception:
+        return OllamaHealthResponse(
+            available=False,
+            models=[],
+            gm_model=settings.gm_model,
+            player_model=settings.player_model,
+        )

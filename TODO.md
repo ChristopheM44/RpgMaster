@@ -79,8 +79,16 @@
 
 ## Sprint 7 : Integration + Voix
 - [x] Flow end-to-end complet : creation session -> personnage -> jeu -> combat -> repos
-- [ ] `llm/voxtral_client.py` : Client HTTP pour vLLM-Omni
-- [ ] Composable `useAudio.ts` : lecture audio des narrations
+- [x] `tts_service/synthesize.py` : Script CLI Kokoro-ONNX (micro-service isole Python 3.11)
+- [x] `llm/voxtral_client.py` : Client TTS dual-backend (Kokoro subprocess + vLLM-Omni HTTP)
+- [x] `api/routes_admin.py` : API admin — GET/PUT settings TTS, GET health backends
+- [x] `game/event_bus.py` : Ajout EventType.AUDIO pour diffusion audio WebSocket
+- [x] `game/action_resolver.py` : Hook TTS fire-and-forget apres chaque narration GM
+- [x] Composable `useAudio.ts` : lecture audio WAV via Web Audio API
+- [x] Composable `useWebSocket.ts` : handler evenement audio -> playAudioB64
+- [x] Store `settings.ts` : gestion Pinia des parametres TTS (fetch/update)
+- [x] Vue `AdminView.vue` + composant `TtsSettingsPanel.vue` : menu admin configurable
+- [x] Composant `OllamaStatusPanel.vue` : etat Ollama (connexion, modeles disponibles, modeles configures MJ/IA)
 - [ ] Mapping voix : 1 voix MJ narration, voix distinctes par PNJ
 - [ ] Save/Load : serialisation et restauration complete du game state
 - [ ] Gestion de deconnexion et reconnexion WebSocket

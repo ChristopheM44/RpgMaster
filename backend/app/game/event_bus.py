@@ -59,6 +59,9 @@ class EventType(str):
     PLAYER_JOINED = "player_joined"
     PLAYER_LEFT = "player_left"
 
+    # Audio TTS
+    AUDIO = "audio"
+
     # Errors
     ERROR = "error"
 

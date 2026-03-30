@@ -24,6 +24,11 @@ const router = createRouter({
       name: 'game-session',
       component: () => import('../views/GameSessionView.vue'),
     },
+    {
+      path: '/admin',
+      name: 'admin',
+      component: () => import('../views/AdminView.vue'),
+    },
   ],
 })
 

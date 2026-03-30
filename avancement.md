@@ -1,6 +1,6 @@
 # RpgMaster — Avancement du projet
 
-> Derniere mise a jour : 2026-03-30 (Sprint 7 en cours — 1/6 taches)
+> Derniere mise a jour : 2026-03-30 (Sprint 7 en cours — 11/13 taches)
 
 ---
 
@@ -229,6 +229,66 @@ npm run type-check   # (dans frontend/) Verification TypeScript
   - "Combat" (phase exploration)
   - "Repos" (phase exploration/encounter_end)
 
+#### Module TTS dual-backend (2026-03-30)
+
+**Contexte et decisions techniques :**
+
+Le modele Voxtral-4B de Mistral (cible initiale) necessite vLLM-Omni ET des conversions MLX
+qui produisent actuellement des poids corrompus sur Mac (bug Mars 2026, non resolu).
+La version PyTorch de Kokoro v0.4 souffre d'un bug sur les phonemes francais (fichiers vides).
+
+**Solution retenue : Kokoro-ONNX v1.0** en micro-service isole.
+- Modele ONNX 82M parametres, ultra-optimise Apple Silicon M4.
+- Voix francaise : `ff_siwis`, `lang="fr-fr"`, `speed=1.0`
+- Isole dans `tts_service/` avec son propre venv Python 3.11 (incompatible avec le backend Python 3.9).
+- Modeles telecharges automatiquement : `kokoro-v1.0.onnx` + `voices-v1.0.bin` (~313 Mo total).
+
+**Architecture micro-service subprocess :**
+Le backend principal (Python 3.9) ne peut pas importer `kokoro_onnx`.
+`KokoroClient.synthesize()` lance `tts_service/.venv/bin/python tts_service/synthesize.py --text "..."`,
+recupere les bytes WAV sur stdout. Async via `asyncio.create_subprocess_exec`.
+Semaphore(1) pour serialiser les appels ONNX concurrents.
+
+**Integration complete backend :**
+- `tts_service/synthesize.py` : script CLI Kokoro, auto-telechargement modeles dans `tts_service/models/`
+- `llm/voxtral_client.py` : KokoroClient (subprocess) + VLLMVoxtralClient (httpx/OpenAI-compat) + TtsRouter singleton
+- `config.py` : champ `tts_backend` ("kokoro" par defaut, "vllm" alternatif)
+- `game/event_bus.py` : EventType.AUDIO ("audio")
+- `game/action_resolver.py` : `asyncio.create_task(tts_router.synthesize_and_broadcast(...))` apres chaque NARRATION
+- `api/routes_admin.py` : GET/PUT `/api/admin/settings`, GET `/api/admin/tts/health`
+- `main.py` : router admin enregistre + lifespan charge `runtime_settings.json`
+
+**Integration complete frontend :**
+- `types/index.ts` : TtsBackend, TtsSettings, TtsHealthResponse, AudioPayload, 'audio' dans WsEventType
+- `services/api.ts` : adminApi (getSettings, updateSettings, getTtsHealth)
+- `stores/settings.ts` : Pinia store TTS
+- `composables/useAudio.ts` : Web Audio API, file d'attente, decode WAV base64
+- `composables/useWebSocket.ts` : case 'audio' → useAudio().playAudioB64()
+- `components/ui/TtsSettingsPanel.vue` : toggle activation, radio backend, badges health
+- `views/AdminView.vue` : page `/admin`
+- `router/index.ts` + `AppNav.vue` : route et lien Admin
+
+**Flux audio :**
+Texte narration → browser immediatement (WebSocket "narration")
+→ asyncio.create_task TTS (fire-and-forget, jamais bloquant)
+→ WAV bytes → base64 → WebSocket "audio" → useAudio.playAudioB64() → AudioContext
+
+#### Panel état LLM Ollama dans l'Admin (2026-03-30)
+
+Ajout d'un panneau de monitoring Ollama dans la page `/admin`, au-dessus du panneau TTS.
+
+**Backend — `api/routes_admin.py` :**
+- Nouveau endpoint `GET /api/admin/llm/health`
+- Appelle `ollama_base_url/api/tags` via httpx (timeout 5s)
+- Retourne `{ available, models[], gm_model, player_model }`
+- Retourne `available: false` sans lever d'exception si Ollama est inaccessible
+
+**Frontend :**
+- `OllamaHealthResponse` interface dans `types/index.ts`
+- `adminApi.getLlmHealth()` dans `services/api.ts`
+- `components/ui/OllamaStatusPanel.vue` : badge connexion, cards modèles MJ/Joueurs IA avec statut Installé/Non installé, liste des modèles disponibles, bouton Rafraîchir
+- `views/AdminView.vue` : panel Ollama en premier, TTS en dessous
+
 ---
 
 ## Architecture actuelle en un coup d'oeil
@@ -243,7 +303,8 @@ RpgMaster/
 │   │   ├── routes_character.py  ✅ CRUD personnages (list, create, get, update, delete)
 │   │   ├── routes_srd.py        ✅ Reference SRD (classes, species, spells, monsters, equipment)
 │   │   ├── routes_game.py       ✅ start_game + get_game_state implementes
-│   │   └── ws_game.py           ✅ WS + start_combat + end_turn + take_rest + fix TurnEntry
+│   │   ├── ws_game.py           ✅ WS + start_combat + end_turn + take_rest + fix TurnEntry
+│   │   └── routes_admin.py      ✅ GET/PUT settings TTS, GET tts/health, GET llm/health
 │   ├── engine/          ✅ COMPLET — Moteur de regles D&D pur, sans I/O
 │   │   ├── dice.py
 │   │   ├── ability_checks.py
@@ -262,13 +323,14 @@ RpgMaster/
 │   └── game/            ✅ game_loop, turn_manager, session_manager, event_bus, action_resolver
 ├── frontend/src/
 │   ├── router/index.ts  ✅ 4 routes lazy-loaded
-│   ├── views/           🔄 Home ✅ Lobby ✅ CharacterCreation ✅ GameSession ✅
+│   ├── views/           🔄 Home ✅ Lobby ✅ CharacterCreation ✅ GameSession ✅ Admin ✅
 │   ├── assets/main.css  ✅ Theme dark fantasy TailwindCSS v4
 │   ├── components/
 │   │   ├── narrative/   ✅ NarrativeLog.vue, DiceRollResult.vue
 │   │   ├── combat/      ✅ CombatTracker.vue
 │   │   ├── character/   ✅ CharacterSummary.vue
-│   │   └── common/      ✅ AppNav.vue, ActionBar.vue
+│   │   ├── common/      ✅ AppNav.vue, ActionBar.vue
+│   │   └── ui/          ✅ TtsSettingsPanel.vue, OllamaStatusPanel.vue
 │   ├── composables/     ✅ useWebSocket.ts
 │   ├── services/        ✅ api.ts (sessions, SRD complet, characters, game)
 │   ├── stores/          ✅ session.ts, game.ts, character.ts

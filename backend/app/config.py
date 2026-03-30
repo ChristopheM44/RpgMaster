@@ -9,7 +9,8 @@ class Settings(BaseSettings):
     gm_model: str = "mistral:7b"
     player_model: str = "mistral:7b"
 
-    # Voxtral TTS (vLLM-Omni)
+    # TTS — backends disponibles : "kokoro" (local ONNX) ou "vllm" (vLLM-Omni)
+    tts_backend: str = "kokoro"
     voxtral_base_url: str = "http://localhost:8091"
     voxtral_model: str = "mistralai/Voxtral-4B-TTS-2603"
     voxtral_enabled: bool = False

@@ -5,16 +5,19 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routes_admin import router as admin_router
 from app.api.routes_session import router as session_router
 from app.api.routes_character import router as character_router
 from app.api.routes_game import router as game_router
 from app.api.routes_srd import router as srd_router
 from app.api.ws_game import router as ws_router
+from app.llm.voxtral_client import tts_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: init DB, warm up resources
+    # Startup: charger les paramètres TTS persistés
+    tts_router._runtime = tts_router._load_runtime()
     yield
     # Shutdown: cleanup
 
@@ -35,6 +38,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
     app.include_router(session_router, prefix="/api/sessions", tags=["sessions"])
     app.include_router(character_router, prefix="/api/characters", tags=["characters"])
     app.include_router(game_router, prefix="/api/game", tags=["game"])

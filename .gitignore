@@ -10,7 +10,8 @@ build/
 .venv/
 venv/
 env/
-
+vllm_env
+.vllm_env
 # IDE
 .vscode/
 .idea/
@@ -50,3 +51,12 @@ alembic/versions/__pycache__/
 *.wav
 *.mp3
 audio_cache/
+
+# TTS service — modèles lourds (téléchargés automatiquement)
+tts_service/models/
+tts_service/*.onnx
+tts_service/*.bin
+tts_service/.venv/
+
+# Runtime settings (config dynamique TTS)
+backend/runtime_settings.json

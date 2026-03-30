@@ -45,6 +45,7 @@ from pydantic import BaseModel, ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.schemas import AgentContext
 from app.db.database import get_db
 from app.game.action_resolver import ActionResolver
 from app.game.event_bus import EventType, GameEvent, event_bus
@@ -375,16 +376,7 @@ async def _handle_start_combat(session_id: str, active: Any, db: AsyncSession) -
         source="ws_game",
     )
 
-    # Announce first turn
-    first = active.turn_manager.current_turn
-    if first:
-        await event_bus.publish_to_session(
-            session_id,
-            EventType.TURN_START,
-            {"combatant_id": first.combatant_id, "combatant_name": first.name},
-            source="ws_game",
-        )
-
+    # Narration d'introduction
     await event_bus.publish_to_session(
         session_id,
         EventType.NARRATION,
@@ -397,6 +389,19 @@ async def _handle_start_combat(session_id: str, active: Any, db: AsyncSession) -
         },
         source="ws_game",
     )
+
+    # Announce first turn (or trigger AI turns if monster goes first)
+    first = active.turn_manager.current_turn
+    if first:
+        if first.is_ai_controlled:
+            await _handle_ai_turns(session_id, active, db)
+        else:
+            await event_bus.publish_to_session(
+                session_id,
+                EventType.TURN_START,
+                {"combatant_id": first.combatant_id, "combatant_name": first.name},
+                source="ws_game",
+            )
 
 
 async def _handle_end_turn(session_id: str, active: Any, db: AsyncSession) -> None:
@@ -417,6 +422,11 @@ async def _handle_end_turn(session_id: str, active: Any, db: AsyncSession) -> No
     active.mark_dirty()
     await session_manager.save_state(session_id, db)
 
+    if next_entry and next_entry.is_ai_controlled:
+        # Next combatant is AI: delegate to _handle_ai_turns (emits TURN_START + SESSION_STATE)
+        await _handle_ai_turns(session_id, active, db)
+        return
+
     if next_entry:
         await event_bus.publish_to_session(
             session_id,
@@ -425,6 +435,89 @@ async def _handle_end_turn(session_id: str, active: Any, db: AsyncSession) -> No
             source="ws_game",
         )
 
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.SESSION_STATE,
+        _build_session_state_payload(session_id),
+        source="ws_game",
+    )
+
+
+async def _handle_ai_turns(session_id: str, active: Any, db: AsyncSession) -> None:
+    """Trigger all consecutive AI-controlled turns, then emit TURN_START for the next human."""
+    while True:
+        current = active.turn_manager.current_turn
+        if current is None or not current.is_ai_controlled:
+            break
+
+        # Announce this AI combatant's turn to the frontend
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.TURN_START,
+            {"combatant_id": current.combatant_id, "combatant_name": current.name},
+            source="ws_game",
+        )
+
+        agent = active.ai_players.get(current.combatant_id)
+        if agent is not None:
+            # AI companion: delegate to AIPlayerManager (handles its own next_turn() loop)
+            from app.game.ai_player_manager import AIPlayerManager
+            ai_manager = AIPlayerManager()
+            await ai_manager.process_ai_turns(session_id, active, action_resolver)
+            # process_ai_turns already stopped at a non-AI turn — fall through to broadcast
+            break
+
+        # Enemy monster: GM narrates the monster's action directly
+        context = AgentContext(
+            session_id=session_id,
+            game_phase=active.phase.value.upper(),
+            game_state=active.state_data,
+            player_action=f"[Tour du monstre] {current.name} agit.",
+        )
+        try:
+            gm_response = await action_resolver._gm.think(context)
+            narration_text = gm_response.content
+            for gm_action in gm_response.actions:
+                merged_params: dict[str, Any] = dict(gm_action.params)
+                if gm_action.target and "target" not in merged_params:
+                    merged_params["target"] = gm_action.target
+                await action_resolver._apply_gm_action(
+                    session_id, gm_action.type, merged_params, active
+                )
+        except Exception as exc:
+            logger.error("_handle_ai_turns: GM agent failed for '%s': %s", current.name, exc)
+            narration_text = f"{current.name} se prépare à attaquer…"
+
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.NARRATION,
+            {"text": narration_text, "speaker": current.name},
+            source="ws_game",
+        )
+
+        # Check for newly dead combatants after monster action
+        await _remove_dead_combatants(session_id, active)
+        if active.turn_manager.all_npcs_removed():
+            await _handle_combat_end(session_id, active, db)
+            return
+
+        # Advance past the monster's turn
+        active.turn_manager.next_turn()
+        active.turn_number += 1
+        active.round_number = active.turn_manager.round_number
+
+    # Save state and announce the next (human) combatant
+    active.mark_dirty()
+    await session_manager.save_state(session_id, db)
+
+    current = active.turn_manager.current_turn
+    if current:
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.TURN_START,
+            {"combatant_id": current.combatant_id, "combatant_name": current.name},
+            source="ws_game",
+        )
     await event_bus.publish_to_session(
         session_id,
         EventType.SESSION_STATE,
@@ -534,17 +627,17 @@ async def _dispatch_action(
         if active.turn_manager.all_npcs_removed():
             await _handle_combat_end(session_id, active, db)
             return
-
-    # Advance turn counter
-    active.turn_number += 1
-    active.mark_dirty()
-
-    await event_bus.publish_to_session(
-        session_id,
-        EventType.TURN_END,
-        {"turn_number": active.turn_number},
-        source="ws_game",
-    )
+        # Auto-advance turn: one action = end of turn
+        await _handle_end_turn(session_id, active, db)
+    else:
+        active.turn_number += 1
+        active.mark_dirty()
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.TURN_END,
+            {"turn_number": active.turn_number},
+            source="ws_game",
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -251,6 +251,7 @@ export type WsEventType =
   | 'hp_changed'
   | 'player_joined'
   | 'player_left'
+  | 'audio'
   | 'error'
   | 'pong'
 
@@ -335,4 +336,35 @@ export interface HpChangedPayload {
 
 export interface CombatStartPayload {
   combatants: CombatantState[]
+}
+
+// ─── TTS / Audio ──────────────────────────────────────────────────────────────
+
+export type TtsBackend = 'kokoro' | 'vllm'
+
+export interface TtsSettings {
+  tts_enabled: boolean
+  tts_backend: TtsBackend
+  tts_async: boolean
+  voxtral_base_url: string
+  voxtral_model: string
+}
+
+export interface TtsHealthResponse {
+  kokoro: boolean
+  vllm: boolean
+}
+
+export interface AudioPayload {
+  audio_b64: string
+  narration_id: string
+}
+
+// ─── LLM / Ollama ─────────────────────────────────────────────────────────────
+
+export interface OllamaHealthResponse {
+  available: boolean
+  models: string[]
+  gm_model: string
+  player_model: string
 }
