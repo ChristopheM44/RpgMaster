@@ -13,6 +13,9 @@ import type {
   CharacterUpdate,
   CharacterListResponse,
   GameStateResponse,
+  SaveSlot,
+  SaveSlotListResponse,
+  HistoryResponse,
   TtsSettings,
   TtsHealthResponse,
   OllamaHealthResponse,
@@ -131,6 +134,31 @@ export const gameApi = {
       `/game/${sessionId}/start`,
       { method: 'POST' },
     ),
+
+  getHistory: (sessionId: string, limit = 100) =>
+    request<HistoryResponse>(`/game/${sessionId}/history?limit=${limit}`),
+}
+
+// ─── Save / Load ───────────────────────────────────────────────────────────────
+
+export const saveApi = {
+  list: (sessionId: string) =>
+    request<SaveSlotListResponse>(`/game/${sessionId}/saves`),
+
+  create: (sessionId: string, name: string) =>
+    request<SaveSlot>(`/game/${sessionId}/saves`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
+
+  load: (sessionId: string, saveId: string) =>
+    request<{ status: string; save_id: string; phase: string; session_id: string }>(
+      `/game/${sessionId}/saves/${saveId}/load`,
+      { method: 'POST' },
+    ),
+
+  delete: (sessionId: string, saveId: string) =>
+    request<void>(`/game/${sessionId}/saves/${saveId}`, { method: 'DELETE' }),
 }
 
 // ─── Admin ─────────────────────────────────────────────────────────────────────

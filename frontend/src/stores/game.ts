@@ -8,6 +8,7 @@ import type {
   RollResultPayload,
   TurnStartPayload,
   HpChangedPayload,
+  HistoryMessage,
 } from '../types'
 
 export const useGameStore = defineStore('game', () => {
@@ -138,6 +139,40 @@ export const useGameStore = defineStore('game', () => {
     if (msg) addSystemEntry(`Erreur : ${msg}`)
   }
 
+  function restoreHistory(messages: HistoryMessage[]) {
+    narrativeLog.value = messages.map((m) => {
+      if (m.message_type === 'roll_result' && m.metadata) {
+        return {
+          id: m.id,
+          type: 'roll' as const,
+          roll: {
+            dice_notation: String(m.metadata.dice ?? ''),
+            rolls: (m.metadata.rolls as number[]) ?? [],
+            total: Number(m.metadata.total ?? 0),
+            modifier: Number(m.metadata.modifier ?? 0),
+            label: m.content,
+            success: m.metadata.success as boolean | undefined,
+            character_name: m.speaker,
+          },
+          timestamp: m.created_at,
+        }
+      }
+      const type =
+        m.role === 'system'
+          ? ('system' as const)
+          : m.role === 'player'
+            ? ('player' as const)
+            : ('narration' as const)
+      return {
+        id: m.id,
+        type,
+        text: m.content,
+        speaker: m.speaker,
+        timestamp: m.created_at,
+      }
+    })
+  }
+
   function reset() {
     narrativeLog.value = []
     combatants.value = []
@@ -172,6 +207,7 @@ export const useGameStore = defineStore('game', () => {
     applyHpChanged,
     setConnected,
     setError,
+    restoreHistory,
     reset,
   }
 })

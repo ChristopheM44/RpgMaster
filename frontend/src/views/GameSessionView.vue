@@ -10,6 +10,7 @@ import NarrativeLog from '../components/narrative/NarrativeLog.vue'
 import CombatTracker from '../components/combat/CombatTracker.vue'
 import CharacterSummary from '../components/character/CharacterSummary.vue'
 import ActionBar from '../components/common/ActionBar.vue'
+import SaveLoadPanel from '../components/ui/SaveLoadPanel.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -22,6 +23,7 @@ const sessionStore = useSessionStore()
 const { connect, disconnect, sendAction } = useWebSocket(sessionId)
 
 const startingGame = ref(false)
+const showSaveLoad = ref(false)
 
 // Phase-based UI flags
 const needsStart = computed(() =>
@@ -32,14 +34,19 @@ const canRest = computed(() =>
   ['exploration', 'encounter_end'].includes(gameStore.phase),
 )
 
-function handleAction(actionType: string, content?: string, targetId?: string) {
+function handleAction(
+  actionType: string,
+  content?: string,
+  targetId?: string,
+  extra?: Record<string, unknown>,
+) {
   const charId = charStore.myCharacter?.id
 
   if (actionType === 'free_text' && content) {
     gameStore.addPlayerEntry(content, charStore.myCharacter?.name)
   }
 
-  sendAction(actionType, content, charId, targetId)
+  sendAction(actionType, content, charId, targetId, extra)
 }
 
 async function startGame() {
@@ -81,6 +88,16 @@ onMounted(async () => {
   const humanChar = charStore.sessionCharacters.find((c) => !c.is_ai)
   if (humanChar) charStore.setMyCharacter(humanChar)
 
+  // Restaurer l'historique narratif depuis la DB avant d'ouvrir le WebSocket
+  try {
+    const history = await gameApi.getHistory(sessionId)
+    if (history.messages.length > 0) {
+      gameStore.restoreHistory(history.messages)
+    }
+  } catch {
+    // L'historique est facultatif — ne pas bloquer la connexion
+  }
+
   connect(charStore.myCharacter?.id)
 })
 
@@ -90,7 +107,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex h-screen flex-col overflow-hidden bg-ink text-parchment">
+  <div class="relative flex h-screen flex-col overflow-hidden bg-ink text-parchment">
 
     <!-- Top bar -->
     <header class="flex items-center justify-between border-b border-gold/20 bg-ink/90 px-6 py-2 shrink-0 gap-4">
@@ -136,11 +153,26 @@ onUnmounted(() => {
         </button>
       </div>
 
-      <div class="flex items-center gap-2 text-sm shrink-0">
+      <div class="flex items-center gap-3 text-sm shrink-0">
         <span class="text-parchment/40">Phase :</span>
         <span class="font-semibold text-gold capitalize">{{ gameStore.phase }}</span>
+        <button
+          class="ml-2 rounded border border-parchment/20 bg-parchment/5 px-3 py-1 text-xs text-parchment/60 hover:text-parchment hover:border-parchment/40 transition-colors"
+          @click="showSaveLoad = !showSaveLoad"
+        >
+          {{ showSaveLoad ? '✕ Fermer' : '💾 Sauvegardes' }}
+        </button>
       </div>
     </header>
+
+    <!-- Save/Load panel (slide-in overlay) -->
+    <div
+      v-if="showSaveLoad"
+      class="absolute top-12 right-0 z-50 w-80 border border-gold/30 bg-ink shadow-lg rounded-bl-lg p-4"
+    >
+      <h2 class="mb-3 text-sm font-semibold text-gold">Sauvegardes</h2>
+      <SaveLoadPanel :session-id="sessionId" />
+    </div>
 
     <!-- Main layout: grows to fill remaining height -->
     <div class="flex flex-1 overflow-hidden">

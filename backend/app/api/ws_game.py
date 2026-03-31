@@ -87,6 +87,8 @@ class PlayerActionMessage(BaseModel):
     content: Optional[str] = None
     target_id: Optional[str] = None
     character_id: Optional[str] = None
+    spell_id: Optional[str] = None    # cast_spell only
+    slot_level: Optional[int] = None  # cast_spell only
 
 
 class PingMessage(BaseModel):
@@ -619,6 +621,9 @@ async def _dispatch_action(
         character_id=action.character_id,
         target_id=action.target_id,
         active=active,
+        db=db,
+        spell_id=action.spell_id,
+        slot_level=action.slot_level,
     )
 
     # After resolution: check for dead NPC combatants

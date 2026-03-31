@@ -62,6 +62,9 @@ class EventType(str):
     # Audio TTS
     AUDIO = "audio"
 
+    # Character updates
+    SPELL_SLOT_UPDATED = "spell_slot_updated"
+
     # Errors
     ERROR = "error"
 

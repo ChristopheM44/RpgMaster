@@ -58,12 +58,43 @@ export const useCharacterStore = defineStore('character', () => {
     }
   }
 
+  function updateSpellSlots(
+    characterId: string,
+    spellSlots: Record<string, { total: number; used: number }>,
+  ) {
+    if (myCharacter.value?.id === characterId) {
+      myCharacter.value = { ...myCharacter.value, spell_slots: spellSlots }
+    }
+    const idx = sessionCharacters.value.findIndex((c) => c.id === characterId)
+    if (idx !== -1) {
+      sessionCharacters.value[idx] = {
+        ...sessionCharacters.value[idx],
+        spell_slots: spellSlots,
+      } as Character
+    }
+  }
+
   function setMyCharacter(character: Character) {
     myCharacter.value = character
   }
 
   function setSelectedCharacter(character: Character) {
     selectedCharacter.value = character
+  }
+
+  async function toggleAiControl(characterId: string) {
+    const char = sessionCharacters.value.find((c) => c.id === characterId)
+    if (!char) return
+    const newValue = !char.is_ai
+    try {
+      const updated = await characterApi.update(characterId, { is_ai: newValue })
+      const idx = sessionCharacters.value.findIndex((c) => c.id === characterId)
+      if (idx !== -1) sessionCharacters.value[idx] = updated
+      if (selectedCharacter.value?.id === characterId) selectedCharacter.value = updated
+      if (myCharacter.value?.id === characterId) myCharacter.value = updated
+    } catch {
+      error.value = 'Impossible de modifier le contrôle du personnage.'
+    }
   }
 
   return {
@@ -77,7 +108,9 @@ export const useCharacterStore = defineStore('character', () => {
     loadCharacter,
     loadSessionCharacters,
     updateHp,
+    updateSpellSlots,
     setMyCharacter,
     setSelectedCharacter,
+    toggleAiControl,
   }
 })

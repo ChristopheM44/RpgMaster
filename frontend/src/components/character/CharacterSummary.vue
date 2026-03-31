@@ -1,9 +1,22 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useCharacterStore } from '../../stores/character'
 import type { Character } from '../../types'
 
 const charStore = useCharacterStore()
+const router = useRouter()
+const route = useRoute()
+
+const sessionId = computed(() => route.params.id as string | undefined)
+
+function openSheet(c: Character) {
+  router.push({
+    name: 'character-sheet',
+    params: { charId: c.id },
+    query: sessionId.value ? { session: sessionId.value } : {},
+  })
+}
 
 const ABILITY_ABBR: Record<string, string> = {
   str: 'FOR', dex: 'DEX', con: 'CON', int: 'INT', wis: 'SAG', cha: 'CHA',
@@ -86,6 +99,26 @@ const selectedMods = computed(() => {
             Niv. {{ selected.level }} {{ selected.char_class }} · {{ selected.species }}
           </p>
         </div>
+
+        <!-- Lien fiche complète -->
+        <button
+          class="w-full rounded border border-gold/30 px-3 py-1.5 text-xs text-gold/70 transition hover:border-gold/60 hover:text-gold text-center"
+          @click="openSheet(selected)"
+        >
+          Fiche complète →
+        </button>
+
+        <!-- Contrôle IA -->
+        <button
+          class="w-full rounded border px-3 py-2 text-left text-xs transition-colors"
+          :class="selected.is_ai
+            ? 'border-arcane/50 bg-arcane/10 text-arcane hover:bg-arcane/20'
+            : 'border-gold/20 bg-ink/40 text-parchment/60 hover:border-gold/40 hover:text-parchment'"
+          @click="charStore.toggleAiControl(selected.id)"
+        >
+          <span class="font-semibold">{{ selected.is_ai ? '🤖 Géré par l\'IA' : '👤 Joueur humain' }}</span>
+          <span class="ml-2 opacity-60">— {{ selected.is_ai ? 'cliquer pour reprendre le contrôle' : 'cliquer pour confier à l\'IA' }}</span>
+        </button>
 
         <!-- HP -->
         <div>

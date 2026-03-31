@@ -90,12 +90,12 @@
 - [x] Vue `AdminView.vue` + composant `TtsSettingsPanel.vue` : menu admin configurable
 - [x] Composant `OllamaStatusPanel.vue` : etat Ollama (connexion, modeles disponibles, modeles configures MJ/IA)
 - [ ] Mapping voix : 1 voix MJ narration, voix distinctes par PNJ
-- [ ] Save/Load : serialisation et restauration complete du game state
+- [x] Save/Load : serialisation et restauration complete du game state
 - [ ] Gestion de deconnexion et reconnexion WebSocket
 
 ## Sprint 8 : Polish + Playtest
-- [ ] CharacterSheetView : fiche de personnage complete et detaillee
-- [ ] Flow de lancement de sorts : selection, cible, emplacement
+- [x] CharacterSheetView : fiche de personnage complete et detaillee
+- [x] Flow de lancement de sorts : selection, cible, emplacement
 - [ ] Gestion d'inventaire : equiper, utiliser, lacher
 - [ ] Variete de rencontres : pre-construites + generation dynamique
 - [ ] Tuning des prompts GM et joueurs IA (iterations basees sur le playtesting)

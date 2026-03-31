@@ -131,6 +131,7 @@ export interface Character {
 export interface CharacterUpdate {
   name?: string
   player_name?: string
+  is_ai?: boolean
   level?: number
   background?: string
   ability_scores?: Record<string, number>
@@ -249,6 +250,7 @@ export type WsEventType =
   | 'combat_start'
   | 'combat_end'
   | 'hp_changed'
+  | 'spell_slot_updated'
   | 'player_joined'
   | 'player_left'
   | 'audio'
@@ -334,6 +336,11 @@ export interface HpChangedPayload {
   delta: number
 }
 
+export interface SpellSlotUpdatedPayload {
+  character_id: string
+  spell_slots: Record<string, { total: number; used: number }>
+}
+
 export interface CombatStartPayload {
   combatants: CombatantState[]
 }
@@ -358,6 +365,39 @@ export interface TtsHealthResponse {
 export interface AudioPayload {
   audio_b64: string
   narration_id: string
+}
+
+// ─── Save / Load ──────────────────────────────────────────────────────────────
+
+export interface SaveSlot {
+  id: string
+  session_id: string
+  name: string
+  phase: string
+  turn_number: number
+  round_number: number
+  characters_count: number
+  created_at: string
+}
+
+export interface SaveSlotListResponse {
+  saves: SaveSlot[]
+  total: number
+}
+
+export interface HistoryMessage {
+  id: string
+  role: 'gm' | 'player' | 'system'
+  speaker: string
+  message_type: 'narration' | 'dialogue' | 'action' | 'roll_result' | 'system'
+  content: string
+  metadata: Record<string, unknown> | null
+  created_at: string
+}
+
+export interface HistoryResponse {
+  messages: HistoryMessage[]
+  total: number
 }
 
 // ─── LLM / Ollama ─────────────────────────────────────────────────────────────

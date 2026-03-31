@@ -141,6 +141,7 @@ const equipmentChoices = ref<Record<number, number>>({})
 
 // Step 7: Nom
 const characterName = ref('')
+const isAi = ref(false)
 
 // ─── Derived State ────────────────────────────────────────────────────────────
 
@@ -326,7 +327,7 @@ async function handleCreate() {
   try {
     await characterApi.create({
       name: characterName.value.trim(),
-      is_ai: false,
+      is_ai: isAi.value,
       species: selectedSpeciesId.value!,
       char_class: selectedClassId.value!,
       level: 1,
@@ -732,8 +733,17 @@ async function handleCreate() {
             type="text"
             placeholder="Entrez un nom..."
             maxlength="100"
-            class="mb-8 w-full rounded border border-stone bg-ink px-4 py-3 font-display text-xl text-parchment outline-none transition focus:border-gold"
+            class="mb-4 w-full rounded border border-stone bg-ink px-4 py-3 font-display text-xl text-parchment outline-none transition focus:border-gold"
           />
+
+          <!-- Compagnon IA -->
+          <label class="mb-8 flex cursor-pointer items-center gap-3 rounded border border-stone bg-ink px-4 py-3">
+            <input v-model="isAi" type="checkbox" class="h-4 w-4 accent-arcane" />
+            <span class="text-parchment">Personnage géré par l'IA</span>
+            <span class="ml-auto text-xs text-parchment-dark">
+              {{ isAi ? 'L\'IA jouera ce personnage automatiquement' : 'Joueur humain' }}
+            </span>
+          </label>
 
           <!-- Résumé -->
           <h3 class="mb-3 font-display text-lg font-semibold text-parchment">Récapitulatif</h3>

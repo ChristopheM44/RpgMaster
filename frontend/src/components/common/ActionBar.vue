@@ -2,15 +2,17 @@
 import { ref, computed } from 'vue'
 import { useGameStore } from '../../stores/game'
 import { useCharacterStore } from '../../stores/character'
+import SpellCastPanel from '../ui/SpellCastPanel.vue'
 
 const emit = defineEmits<{
-  action: [actionType: string, content?: string, targetId?: string]
+  action: [actionType: string, content?: string, targetId?: string, extra?: Record<string, unknown>]
 }>()
 
 const gameStore = useGameStore()
 const charStore = useCharacterStore()
 
 const input = ref('')
+const showSpellPanel = ref(false)
 const isMyTurn = computed(
   () => gameStore.currentTurnId === charStore.myCharacter?.id,
 )
@@ -36,9 +38,32 @@ function onKeydown(e: KeyboardEvent) {
     submitText()
   }
 }
+
+function onCombatAction(actionType: string) {
+  if (actionType === 'cast_spell') {
+    showSpellPanel.value = true
+  } else {
+    emit('action', actionType)
+  }
+}
+
+function onSpellConfirm(spellId: string, slotLevel: number, targetId: string | undefined) {
+  showSpellPanel.value = false
+  emit('action', 'cast_spell', undefined, targetId, {
+    spell_id: spellId,
+    slot_level: slotLevel,
+  })
+}
 </script>
 
 <template>
+  <!-- Spell Cast Panel (overlay) -->
+  <SpellCastPanel
+    v-if="showSpellPanel"
+    @confirm="onSpellConfirm"
+    @cancel="showSpellPanel = false"
+  />
+
   <div class="border-t border-gold/20 bg-ink/80 px-4 py-3 space-y-2">
     <!-- Combat action buttons (visible only in combat + my turn) -->
     <div v-if="gameStore.isInCombat" class="flex flex-wrap gap-2">
@@ -50,7 +75,7 @@ function onKeydown(e: KeyboardEvent) {
           ? 'border-gold/40 text-parchment hover:bg-gold/10 hover:border-gold cursor-pointer'
           : 'border-gold/10 text-parchment/30 cursor-not-allowed'"
         :disabled="!isMyTurn"
-        @click="emit('action', action.type)"
+        @click="onCombatAction(action.type)"
       >
         <span>{{ action.icon }}</span>
         <span>{{ action.label }}</span>

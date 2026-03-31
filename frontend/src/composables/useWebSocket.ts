@@ -11,6 +11,7 @@ import type {
   PhaseChangePayload,
   CombatStartPayload,
   HpChangedPayload,
+  SpellSlotUpdatedPayload,
   AudioPayload,
 } from '../types'
 
@@ -94,6 +95,11 @@ export function useWebSocket(sessionId: string) {
         charStore.updateHp(p.combatant_id, p.hp)
         break
       }
+      case 'spell_slot_updated': {
+        const p = msg.payload as SpellSlotUpdatedPayload
+        charStore.updateSpellSlots(p.character_id, p.spell_slots)
+        break
+      }
       case 'combat_end':
         gameStore.setCombatants([])
         break
@@ -119,8 +125,16 @@ export function useWebSocket(sessionId: string) {
     content?: string,
     characterId?: string,
     targetId?: string,
+    extra?: Record<string, unknown>,
   ) {
-    send({ type: 'action', action_type: actionType, content, character_id: characterId, target_id: targetId })
+    send({
+      type: 'action',
+      action_type: actionType,
+      content,
+      character_id: characterId,
+      target_id: targetId,
+      ...extra,
+    })
   }
 
   function disconnect() {

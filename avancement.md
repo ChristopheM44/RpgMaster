@@ -1,6 +1,6 @@
 # RpgMaster — Avancement du projet
 
-> Derniere mise a jour : 2026-03-30 (Sprint 7 en cours — 11/13 taches)
+> Derniere mise a jour : 2026-03-31 (Sprint 7 : 12/14 taches — Sprint 8 : 2/7 taches)
 
 ---
 
@@ -16,7 +16,7 @@
 | Sprint 5 | Agents joueurs IA | ✅ Termine |
 | Sprint 6 | Frontend MVP | ✅ Termine |
 | Sprint 7 | Integration + Voix | 🔄 En cours |
-| Sprint 8 | Polish + Playtest | 🔲 A faire |
+| Sprint 8 | Polish + Playtest | 🔄 En cours |
 
 ---
 
@@ -272,6 +272,40 @@ Semaphore(1) pour serialiser les appels ONNX concurrents.
 Texte narration → browser immediatement (WebSocket "narration")
 → asyncio.create_task TTS (fire-and-forget, jamais bloquant)
 → WAV bytes → base64 → WebSocket "audio" → useAudio.playAudioB64() → AudioContext
+
+#### Save/Load — Sérialisation et restauration complète du game state (2026-03-31)
+
+Implémentation d'un système de points de sauvegarde nommés, plus la restauration automatique de l'historique narratif à la reconnexion.
+
+**Backend — nouveau modèle `models/save_slot.py` :**
+- Table `save_slots` : snapshot nommé de l'état complet (phase, turn/round number, `state_data` du GameState, snapshot JSON de tous les personnages avec leurs stats)
+- Relation cascade depuis `Session` (suppression automatique si session supprimée)
+- Migration Alembic `a1b2c3d4e5f6_add_save_slots.py`
+
+**Backend — `api/routes_game.py` — 5 nouveaux endpoints :**
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/game/{id}/saves` | Crée un point de sauvegarde nommé (snapshot état + personnages) |
+| `GET /api/game/{id}/saves` | Liste les sauvegardes triées par date desc |
+| `DELETE /api/game/{id}/saves/{save_id}` | Supprime une sauvegarde |
+| `POST /api/game/{id}/saves/{save_id}/load` | Restaure session + personnages + recharge SessionManager |
+| `GET /api/game/{id}/history?limit=100` | Retourne les derniers messages narratifs pour restaurer le journal |
+
+**Logique de restauration (`load`) :**
+1. Restaure `Session.status` vers la phase sauvegardée
+2. Écrase `GameState.state_data`, `turn_number`, `round_number`
+3. Remet les stats des personnages (HP, sorts, conditions, équipement) depuis le snapshot
+4. Si la session est active en mémoire : `close_session()` puis `open_session()` (recharge TurnManager)
+5. Broadcast `phase_change` via EventBus aux clients WebSocket connectés
+
+**Frontend :**
+- `types/index.ts` : `SaveSlot`, `SaveSlotListResponse`, `HistoryMessage`, `HistoryResponse`
+- `services/api.ts` : `gameApi.getHistory()` + nouveau `saveApi` (list, create, load, delete)
+- `stores/game.ts` : action `restoreHistory(messages)` — convertit les messages DB en `NarrativeEntry` (narration, roll_result, player, system)
+- `views/GameSessionView.vue` : restauration auto de l'historique au `onMounted` (avant la connexion WebSocket) + bouton "💾 Sauvegardes" dans le header
+- `components/ui/SaveLoadPanel.vue` : panneau complet — champ de nom, bouton Sauvegarder, liste des saves avec boutons Charger / Supprimer
+
+---
 
 #### Panel état LLM Ollama dans l'Admin (2026-03-30)
 
@@ -776,6 +810,74 @@ player_action + game_state
 | `test_srd.py` | 20 | Toutes les ressources SRD, filtres (niveau, classe, CR, catégorie) |
 
 **Bugfix découvert via les tests** : `routes_srd.py` — l'endpoint `/equipment` ne gérait pas la structure imbriquée de `equipment.json` (`weapons` et `armor` sont des dicts de listes, pas des listes plates). Corrigé avec `_flatten_equipment()`.
+
+---
+
+### Sprint 8 — Polish + Playtest (en cours)
+
+#### Flow de lancement de sorts (2026-03-31)
+
+Implémentation complète du flux de sélection de sort, choix de l'emplacement et désignation de la cible.
+
+**Backend — `game/action_resolver.py`** :
+- `_load_spells()` : cache module-level des données SRD `spells.json`
+- `_SPELLCASTING_ABILITIES` : table classe → attribut d'incantation (INT/SAG/CHA)
+- `_resolve_cast_spell()` : méthode async complète —
+  - Charge le personnage depuis DB, lit ses emplacements de sorts `{"1": {"total": 2, "used": 1}}`
+  - Consomme l'emplacement (commit DB) puis broadcast `spell_slot_updated` via EventBus
+  - **Sorts d'attaque** (`ranged_spell`, `melee_spell`) : jet d'attaque de sort avec bonus incantation + maîtrise vs CA de la cible, dégâts upcasted si applicable
+  - **Auto-hit** (Projectile magique) : N fléchettes × dégâts, N augmente avec l'emplacement
+  - **Sorts avec JS** : calcul du DD (8 + bonus prof + mod incantation), dégâts + type de sauvegarde
+  - **Sorts utilitaires** : résumé texte sans mécanique de jet
+- `resolve()` : signature étendue avec `db`, `spell_id`, `slot_level` optionnels
+
+**Backend — `api/ws_game.py`** :
+- `PlayerActionMessage` : ajout de `spell_id: Optional[str]` et `slot_level: Optional[int]`
+- `_dispatch_action` : passe `db`, `spell_id`, `slot_level` à `resolve()`
+
+**Backend — `game/event_bus.py`** :
+- Nouvel événement `SPELL_SLOT_UPDATED = "spell_slot_updated"`
+
+**Frontend — `components/ui/SpellCastPanel.vue`** (nouveau) :
+- Modale overlay 3 étapes avec barre de progression
+- Étape 1 — Sorts : liste filtrée sur `known_spells`, triée niv./nom, affichage école colorée + dés de dégâts + concentration ; sorts sans emplacement grisés avec tooltip
+- Étape 2 — Emplacement : boutons pour chaque niveau disponible (remaining = total − used), indication "surpuissant" si niveau > minimum du sort ; cantrips sautent cette étape
+- Étape 3 — Cible : liste des combattants en combat (hors soi-même) + option "sans cible" ; sautée pour les sorts non ciblés (area, utilitaires)
+
+**Frontend — `components/common/ActionBar.vue`** :
+- Bouton "Sort" ouvre `SpellCastPanel` au lieu d'émettre directement
+- `onSpellConfirm(spellId, slotLevel, targetId)` : ferme le panel et émet l'action `cast_spell` avec `extra: { spell_id, slot_level }`
+
+**Frontend — `composables/useWebSocket.ts`** :
+- `sendAction()` : paramètre `extra?: Record<string, unknown>` spreadé dans le message WS
+- Gestionnaire `spell_slot_updated` → `charStore.updateSpellSlots()`
+
+**Frontend — `stores/character.ts`** :
+- `updateSpellSlots(characterId, spellSlots)` : met à jour `myCharacter` et `sessionCharacters` (affichage immédiat sans rechargement API)
+
+**Frontend — `types/index.ts`** :
+- `WsEventType` : ajout de `'spell_slot_updated'`
+- `SpellSlotUpdatedPayload` interface
+
+---
+
+#### CharacterSheetView — Fiche de personnage complete
+
+Nouvelle vue `CharacterSheetView.vue` accessible depuis le panneau `CharacterSummary` via le bouton "Fiche complete".
+
+- **Route** : `/character/:charId?session=<sessionId>` (nom : `character-sheet`)
+- **Sections** :
+  - Identite complete (nom, classe, niveau, espece, background, bonus de maitrise)
+  - Stats de combat (PV avec barre, CA calculee depuis l'armure equipee, Initiative, De de Vie)
+  - Les 6 caracteristiques avec scores et modificateurs
+  - Jets de sauvegarde (6 valeurs + indicateurs de maitrise)
+  - 18 competences (valeur calculee = mod carac + bonus maitrise si proficient)
+  - Section Magie (emplacements visuels + sorts connus avec details) — affichee uniquement si lanceur de sorts
+  - Equipement (liste avec indicateur equipe/sac)
+  - Aptitudes de classe niveau 1 (chargees via SRD API)
+  - Traits de personnalite (pour les PJ IA : traits, liens, defauts)
+- **Navigation** : bouton "Retour" retourne a la session ou a la page precedente
+- **Donnees** : chargement de l'API character + SRD class + SRD spells en parallele
 
 ---
 

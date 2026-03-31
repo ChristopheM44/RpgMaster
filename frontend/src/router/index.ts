@@ -25,6 +25,11 @@ const router = createRouter({
       component: () => import('../views/GameSessionView.vue'),
     },
     {
+      path: '/character/:charId',
+      name: 'character-sheet',
+      component: () => import('../views/CharacterSheetView.vue'),
+    },
+    {
       path: '/admin',
       name: 'admin',
       component: () => import('../views/AdminView.vue'),

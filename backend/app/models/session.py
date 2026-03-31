@@ -47,6 +47,9 @@ class Session(Base):
     messages: Mapped[list[Message]] = relationship(  # noqa: F821
         "Message", back_populates="session", cascade="all, delete-orphan"
     )
+    save_slots: Mapped[list[SaveSlot]] = relationship(  # noqa: F821
+        "SaveSlot", back_populates="session", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<Session id={self.id!r} name={self.name!r} status={self.status}>"
