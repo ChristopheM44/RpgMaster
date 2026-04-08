@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from pydantic_settings import BaseSettings
 
 
@@ -33,3 +36,54 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# ---------------------------------------------------------------------------
+# Runtime LLM overrides (survivent aux redémarrages via llm_runtime.json)
+# Surchargent les valeurs .env sans nécessiter de redémarrage du serveur.
+# ---------------------------------------------------------------------------
+
+_RUNTIME_LLM_FILE = Path(__file__).parent.parent / "llm_runtime.json"
+_runtime_llm: dict = {}
+
+
+def _load_runtime_llm() -> None:
+    global _runtime_llm
+    if _RUNTIME_LLM_FILE.exists():
+        try:
+            _runtime_llm = json.loads(_RUNTIME_LLM_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            _runtime_llm = {}
+
+
+def _save_runtime_llm() -> None:
+    _RUNTIME_LLM_FILE.write_text(json.dumps(_runtime_llm), encoding="utf-8")
+
+
+def update_llm_settings(
+    ollama_base_url: str | None = None,
+    gm_model: str | None = None,
+    player_model: str | None = None,
+) -> None:
+    """Met à jour le(s) setting(s) LLM en mémoire et persiste."""
+    if ollama_base_url is not None:
+        _runtime_llm["ollama_base_url"] = ollama_base_url
+    if gm_model is not None:
+        _runtime_llm["gm_model"] = gm_model
+    if player_model is not None:
+        _runtime_llm["player_model"] = player_model
+    _save_runtime_llm()
+
+
+def get_ollama_url() -> str:
+    return _runtime_llm.get("ollama_base_url", settings.ollama_base_url)
+
+
+def get_gm_model() -> str:
+    return _runtime_llm.get("gm_model", settings.gm_model)
+
+
+def get_player_model() -> str:
+    return _runtime_llm.get("player_model", settings.player_model)
+
+
+_load_runtime_llm()

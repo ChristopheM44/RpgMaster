@@ -1,10 +1,12 @@
 """Routes d'administration — configuration TTS runtime + état LLM Ollama.
 
 Endpoints :
-    GET  /api/admin/settings      → paramètres TTS courants
-    PUT  /api/admin/settings      → mise à jour partielle
-    GET  /api/admin/tts/health    → disponibilité de chaque backend TTS
-    GET  /api/admin/llm/health    → état Ollama (disponibilité + modèles)
+    GET  /api/admin/settings          → paramètres TTS courants
+    PUT  /api/admin/settings          → mise à jour partielle TTS
+    GET  /api/admin/tts/health        → disponibilité de chaque backend TTS
+    GET  /api/admin/llm/health        → état Ollama (disponibilité + modèles)
+    GET  /api/admin/llm/settings      → paramètres LLM courants
+    PUT  /api/admin/llm/settings      → mise à jour URL/modèles Ollama (runtime)
 """
 from __future__ import annotations
 
@@ -14,7 +16,7 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, field_validator
 
-from app.config import settings
+from app.config import get_gm_model, get_ollama_url, get_player_model, update_llm_settings
 from app.llm.voxtral_client import tts_router
 
 router = APIRouter()
@@ -57,6 +59,18 @@ class OllamaHealthResponse(BaseModel):
     player_model: str
 
 
+class LlmSettingsResponse(BaseModel):
+    ollama_base_url: str
+    gm_model: str
+    player_model: str
+
+
+class LlmSettingsUpdate(BaseModel):
+    ollama_base_url: Optional[str] = None
+    gm_model: Optional[str] = None
+    player_model: Optional[str] = None
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -93,20 +107,45 @@ async def get_llm_health() -> OllamaHealthResponse:
     """Vérifie la disponibilité d'Ollama et retourne la liste des modèles installés."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(f"{settings.ollama_base_url}/api/tags")
+            resp = await client.get(f"{get_ollama_url()}/api/tags")
             resp.raise_for_status()
             data = resp.json()
             models = [m["name"] for m in data.get("models", [])]
         return OllamaHealthResponse(
             available=True,
             models=models,
-            gm_model=settings.gm_model,
-            player_model=settings.player_model,
+            gm_model=get_gm_model(),
+            player_model=get_player_model(),
         )
     except Exception:
         return OllamaHealthResponse(
             available=False,
             models=[],
-            gm_model=settings.gm_model,
-            player_model=settings.player_model,
+            gm_model=get_gm_model(),
+            player_model=get_player_model(),
         )
+
+
+@router.get("/llm/settings", response_model=LlmSettingsResponse)
+async def get_llm_settings() -> LlmSettingsResponse:
+    """Retourne les paramètres LLM courants (runtime ou .env)."""
+    return LlmSettingsResponse(
+        ollama_base_url=get_ollama_url(),
+        gm_model=get_gm_model(),
+        player_model=get_player_model(),
+    )
+
+
+@router.put("/llm/settings", response_model=LlmSettingsResponse)
+async def update_llm_settings_endpoint(body: LlmSettingsUpdate) -> LlmSettingsResponse:
+    """Met à jour l'URL et/ou les modèles Ollama à chaud, sans redémarrage."""
+    update_llm_settings(
+        ollama_base_url=body.ollama_base_url,
+        gm_model=body.gm_model,
+        player_model=body.player_model,
+    )
+    return LlmSettingsResponse(
+        ollama_base_url=get_ollama_url(),
+        gm_model=get_gm_model(),
+        player_model=get_player_model(),
+    )

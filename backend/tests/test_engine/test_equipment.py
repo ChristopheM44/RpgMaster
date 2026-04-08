@@ -54,8 +54,8 @@ class TestGetWeapon:
         assert "thrown" in w.properties
         assert w.damage_dice == "1d4"
         assert w.damage_type == "piercing"
-        assert w.range_normal == 20
-        assert w.range_long == 60
+        assert w.range_normal == 6
+        assert w.range_long == 18
 
     def test_greataxe_is_martial_heavy_two_handed(self):
         w = get_weapon("greataxe")
@@ -77,13 +77,13 @@ class TestGetWeapon:
     def test_longbow_is_ammunition(self):
         w = get_weapon("longbow")
         assert "ammunition" in w.properties
-        assert w.range_normal == 150
-        assert w.range_long == 600
+        assert w.range_normal == 45
+        assert w.range_long == 180
 
     def test_shortbow_range(self):
         w = get_weapon("shortbow")
-        assert w.range_normal == 80
-        assert w.range_long == 320
+        assert w.range_normal == 24
+        assert w.range_long == 96
 
     def test_greatsword_two_d6(self):
         w = get_weapon("greatsword")

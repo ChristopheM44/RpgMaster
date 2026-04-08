@@ -12,6 +12,7 @@ import type {
   CharacterCreate,
   CharacterUpdate,
   CharacterListResponse,
+  PregenTemplate,
   GameStateResponse,
   SaveSlot,
   SaveSlotListResponse,
@@ -19,6 +20,7 @@ import type {
   TtsSettings,
   TtsHealthResponse,
   OllamaHealthResponse,
+  LlmSettings,
 } from '../types'
 
 const BASE_URL = 'http://localhost:8000/api'
@@ -121,6 +123,24 @@ export const characterApi = {
     }),
 
   delete: (id: string) => request<void>(`/characters/${id}`, { method: 'DELETE' }),
+
+  inventoryEquip: (id: string, itemId: string) =>
+    request<Character>(`/characters/${id}/inventory/equip`, {
+      method: 'POST',
+      body: JSON.stringify({ item_id: itemId }),
+    }),
+
+  inventoryUse: (id: string, itemId: string) =>
+    request<Character>(`/characters/${id}/inventory/use`, {
+      method: 'POST',
+      body: JSON.stringify({ item_id: itemId }),
+    }),
+
+  inventoryDrop: (id: string, itemId: string) =>
+    request<Character>(`/characters/${id}/inventory/drop`, {
+      method: 'POST',
+      body: JSON.stringify({ item_id: itemId }),
+    }),
 }
 
 // ─── Game ──────────────────────────────────────────────────────────────────────
@@ -129,10 +149,13 @@ export const gameApi = {
   getState: (sessionId: string) =>
     request<GameStateResponse>(`/game/${sessionId}/state`),
 
-  start: (sessionId: string) =>
+  start: (
+    sessionId: string,
+    body?: { adventure_script?: string; auto_generate?: boolean },
+  ) =>
     request<{ status: string; phase: string; session_id: string; characters?: number }>(
       `/game/${sessionId}/start`,
-      { method: 'POST' },
+      { method: 'POST', body: body ? JSON.stringify(body) : undefined },
     ),
 
   getHistory: (sessionId: string, limit = 100) =>
@@ -161,6 +184,21 @@ export const saveApi = {
     request<void>(`/game/${sessionId}/saves/${saveId}`, { method: 'DELETE' }),
 }
 
+// ─── Pregen ───────────────────────────────────────────────────────────────────
+
+export const pregenApi = {
+  list: () => request<PregenTemplate[]>('/characters/pregenerated'),
+
+  create: (
+    classId: string,
+    body: { session_id: string; name?: string; player_name?: string; is_ai?: boolean },
+  ) =>
+    request<Character>(`/characters/pregenerated/${classId}`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+}
+
 // ─── Admin ─────────────────────────────────────────────────────────────────────
 
 export const adminApi = {
@@ -175,4 +213,12 @@ export const adminApi = {
   getTtsHealth: () => request<TtsHealthResponse>('/admin/tts/health'),
 
   getLlmHealth: () => request<OllamaHealthResponse>('/admin/llm/health'),
+
+  getLlmSettings: () => request<LlmSettings>('/admin/llm/settings'),
+
+  updateLlmSettings: (data: Partial<LlmSettings>) =>
+    request<LlmSettings>('/admin/llm/settings', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
 }

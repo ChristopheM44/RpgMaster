@@ -59,12 +59,12 @@ class BaseAgent(ABC):
     # -------------------------------------------------------------------------
 
     def _extract_json(self, text: str) -> Optional[dict[str, Any]]:
-        """Extrait un objet JSON depuis la sortie brute du LLM.
+        """Extrait le premier objet JSON valide depuis la sortie brute du LLM.
 
         Tente dans l'ordre :
         1. Parse direct (si le modèle a bien suivi les instructions)
         2. Extraction depuis un bloc ```json … ```
-        3. Recherche du premier ``{…}`` dans le texte
+        3. Premier bloc ``{…}`` équilibré (résistant aux doubles réponses du LLM)
         """
         stripped = text.strip()
 
@@ -82,13 +82,35 @@ class BaseAgent(ABC):
             except json.JSONDecodeError:
                 pass
 
-        # 3 — Premier objet JSON trouvé dans le texte
-        match = re.search(r"\{.*\}", stripped, re.DOTALL)
-        if match:
-            try:
-                return json.loads(match.group(0))
-            except json.JSONDecodeError:
-                pass
+        # 3 — Premier objet JSON équilibré (tracking de profondeur)
+        # Évite le piège du regex greedy quand le LLM retourne plusieurs blocs JSON
+        start = stripped.find("{")
+        if start != -1:
+            depth = 0
+            in_string = False
+            escape_next = False
+            for i, ch in enumerate(stripped[start:], start):
+                if escape_next:
+                    escape_next = False
+                    continue
+                if ch == "\\" and in_string:
+                    escape_next = True
+                    continue
+                if ch == '"':
+                    in_string = not in_string
+                    continue
+                if in_string:
+                    continue
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        candidate = stripped[start : i + 1]
+                        try:
+                            return json.loads(candidate)
+                        except json.JSONDecodeError:
+                            break
 
         logger.warning("Impossible d'extraire du JSON depuis la sortie LLM : %s…", stripped[:200])
         return None

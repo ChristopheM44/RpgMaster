@@ -91,24 +91,37 @@
 - [x] Composant `OllamaStatusPanel.vue` : etat Ollama (connexion, modeles disponibles, modeles configures MJ/IA)
 - [ ] Mapping voix : 1 voix MJ narration, voix distinctes par PNJ
 - [x] Save/Load : serialisation et restauration complete du game state
-- [ ] Gestion de deconnexion et reconnexion WebSocket
+- [x] Gestion de deconnexion et reconnexion WebSocket
 
 ## Sprint 8 : Polish + Playtest
 - [x] CharacterSheetView : fiche de personnage complete et detaillee
 - [x] Flow de lancement de sorts : selection, cible, emplacement
-- [ ] Gestion d'inventaire : equiper, utiliser, lacher
-- [ ] Variete de rencontres : pre-construites + generation dynamique
-- [ ] Tuning des prompts GM et joueurs IA (iterations basees sur le playtesting)
-- [ ] Gestion d'erreur gracieuse (LLM lent/indisponible, deconnexion)
-- [ ] Responsive design mobile
+- [x] Francisation complete : labels UI + descriptions SRD JSON en francais (SRD 5.2.1 FR CC-BY-4.0)
+- [x] Gestion d'inventaire : equiper, utiliser, lacher
+- [x] Variete de rencontres : pre-construites + generation dynamique
+- [x] Transparence actions IA en combat : resolution deterministe + event COMBAT_ACTION structure
+- [x] Tuning des prompts GM et joueurs IA (iterations basees sur le playtesting)
+- [x] Gestion d'erreur gracieuse (LLM lent/indisponible, deconnexion)
+- [x] Responsive design mobile
+
+## Sprint 9 : Personnages Prétirés + Flux Setup [TERMINE]
+- [x] `engine/srd_data/pregens.json` : 12 templates prétirés niveau 1 (un par classe SRD 5.2)
+- [x] `api/routes_pregen.py` : GET /api/characters/pregenerated + POST /api/characters/pregenerated/{class_id}
+- [x] `main.py` : enregistrement du router pregen avant le router character
+- [x] `types/index.ts` : interface PregenTemplate
+- [x] `services/api.ts` : pregenApi (list + create)
+- [x] `views/CharacterSetupView.vue` : écran intermédiaire /session/:id/setup (liste groupe, ajout prétiré via modal, création wizard, lancement partie)
+- [x] `router/index.ts` : route character-setup
+- [x] `views/LobbyView.vue` : redirect vers character-setup après création/ajout
+- [x] `views/CharacterCreationView.vue` : redirect vers character-setup après création
 
 ## Backlog (post-MVP)
-- [ ] Phase 2 multijoueur : multi local (plusieurs humains, meme serveur)
+- [x] Phase 2 multijoueur : multi local hot-seat (plusieurs humains, meme ordi)
 - [ ] Phase 3 multijoueur : multi reseau (Redis pub/sub, authentification)
-- [ ] Carte tactique de combat (grille 2D)
-- [ ] Systeme de campagne (enchainement de sessions, progression persistante)
+- [x] Carte tactique de combat (grille 2D)
+- [x] Systeme de campagne (enchainement de sessions, progression persistante)
 - [ ] Generateur de donjon procedural
-- [ ] Plus de classes, especes, sorts, monstres (SRD 5.2 complet)
+- [x] Plus de classes, especes, sorts, monstres (SRD 5.2 complet)
 - [ ] Support d'autres systemes de regles (modulaire)
 - [ ] Mode spectateur
 - [ ] Export de session (journal de partie en PDF/Markdown)

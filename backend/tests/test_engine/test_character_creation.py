@@ -215,18 +215,18 @@ class TestSpeciesTraits:
 
     def test_invalid_species_raises(self):
         with pytest.raises(ValueError, match="species"):
-            get_species_traits("halfling")
+            get_species_traits("dragon")
 
     def test_human_plus_one_all_abilities(self):
         traits = get_species_traits("human")
         for ability in Ability:
             assert traits.ability_bonuses.get(ability.value, 0) == 1
 
-    def test_human_speed_30(self):
-        assert get_species_traits("human").speed == 30
+    def test_human_speed_9(self):
+        assert get_species_traits("human").speed == 9
 
     def test_human_no_darkvision(self):
-        assert get_species_traits("human").darkvision_ft == 0
+        assert get_species_traits("human").darkvision_m == 0
 
     def test_elf_dex_bonus_2(self):
         traits = get_species_traits("elf")
@@ -236,8 +236,8 @@ class TestSpeciesTraits:
         traits = get_species_traits("elf")
         assert traits.ability_bonuses["intelligence"] == 1
 
-    def test_elf_darkvision_60(self):
-        assert get_species_traits("elf").darkvision_ft == 60
+    def test_elf_darkvision_18(self):
+        assert get_species_traits("elf").darkvision_m == 18
 
     def test_elf_perception_proficiency(self):
         assert "perception" in get_species_traits("elf").skill_proficiencies
@@ -245,8 +245,8 @@ class TestSpeciesTraits:
     def test_elf_fey_ancestry_in_traits(self):
         assert "Fey Ancestry" in get_species_traits("elf").traits
 
-    def test_elf_speed_30(self):
-        assert get_species_traits("elf").speed == 30
+    def test_elf_speed_9(self):
+        assert get_species_traits("elf").speed == 9
 
     def test_dwarf_con_bonus_2(self):
         traits = get_species_traits("dwarf")
@@ -256,11 +256,11 @@ class TestSpeciesTraits:
         traits = get_species_traits("dwarf")
         assert traits.ability_bonuses["strength"] == 2
 
-    def test_dwarf_darkvision_60(self):
-        assert get_species_traits("dwarf").darkvision_ft == 60
+    def test_dwarf_darkvision_18(self):
+        assert get_species_traits("dwarf").darkvision_m == 18
 
-    def test_dwarf_speed_25(self):
-        assert get_species_traits("dwarf").speed == 25
+    def test_dwarf_speed_7_5(self):
+        assert get_species_traits("dwarf").speed == 7.5
 
     def test_dwarf_dwarven_resilience(self):
         assert "Dwarven Resilience" in get_species_traits("dwarf").traits
@@ -273,9 +273,15 @@ class TestSpeciesTraits:
         for species in VALID_SPECIES:
             assert "common" in get_species_traits(species).languages
 
-    def test_all_species_medium_size(self):
-        for species in VALID_SPECIES:
+    def test_medium_species_have_medium_size(self):
+        medium_species = {"human", "elf", "dwarf", "half_elf", "half_orc", "tiefling"}
+        for species in medium_species:
             assert get_species_traits(species).size == "Medium"
+
+    def test_small_species_have_small_size(self):
+        small_species = {"halfling", "gnome"}
+        for species in small_species:
+            assert get_species_traits(species).size == "Small"
 
 
 # ---------------------------------------------------------------------------
@@ -291,7 +297,7 @@ class TestClassFeatures:
 
     def test_invalid_class_raises(self):
         with pytest.raises(ValueError, match="class"):
-            get_class_features("barbarian")
+            get_class_features("paladin_king")
 
     def test_fighter_hit_die_10(self):
         assert get_class_features("fighter").hit_die == 10
@@ -507,7 +513,7 @@ class TestBuildCharacter:
     def test_species_traits_attached(self):
         char = build_character("Gimli", "dwarf", "fighter", _standard_base())
         assert char.species_traits.name == "Dwarf"
-        assert char.species_traits.darkvision_ft == 60
+        assert char.species_traits.darkvision_m == 18
 
     def test_class_features_attached(self):
         char = build_character("Legolas", "elf", "rogue", _standard_base())

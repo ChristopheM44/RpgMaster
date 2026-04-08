@@ -103,18 +103,21 @@ function saveBonus(ability: string): number {
 }
 
 // Armor class: check equipped armor, else 10 + DEX mod
+// SRD item fields: category ('light'|'medium'|'heavy'|'shield'), base_ac, dex_cap (0=heavy, null=uncapped)
 const armorClass = computed((): number => {
   if (!character.value) return 10
   const equip = character.value.equipment as Record<string, unknown>[]
-  const armor = equip.find(
-    (e) => e.equipped && (e.category === 'armor' || (e.id as string)?.includes('armor')),
-  )
-  if (armor && typeof armor.ac_base === 'number') {
-    const dexBonus = armor.dex_bonus === false ? 0 : mods.value.dex ?? 0
-    const maxDex = typeof armor.max_dex_bonus === 'number' ? armor.max_dex_bonus : 99
-    return armor.ac_base + Math.min(dexBonus, maxDex)
+  const ARMOR_CATS = new Set(['light', 'medium', 'heavy'])
+  const armor = equip.find((e) => e.equipped && ARMOR_CATS.has(e.category as string))
+  const shield = equip.find((e) => e.equipped && e.category === 'shield')
+  const shieldBonus = shield ? 2 : 0
+  if (armor && typeof armor.base_ac === 'number') {
+    const dexCap = armor.dex_cap  // null = uncapped, 0 = heavy (no DEX), number = medium cap
+    const dexMod = mods.value.dex ?? 0
+    const dexApplied = dexCap === null ? dexMod : Math.min(dexMod, dexCap as number)
+    return armor.base_ac + dexApplied + shieldBonus
   }
-  return 10 + (mods.value.dex ?? 0)
+  return 10 + (mods.value.dex ?? 0) + shieldBonus
 })
 
 const initiative = computed(() => mods.value.dex ?? 0)
@@ -204,6 +207,68 @@ function goBack() {
   if (sessionId) router.push({ name: 'game-session', params: { id: sessionId } })
   else router.back()
 }
+
+// ─── Inventory actions ─────────────────────────────────────────────────────────
+
+const inventoryLoading = ref<string | null>(null)  // item_id en cours d'action
+const inventoryError = ref<string | null>(null)
+
+const EQUIPPABLE_CATEGORIES = new Set([
+  'simple_melee', 'simple_ranged', 'martial_melee', 'martial_ranged',
+  'light', 'medium', 'heavy', 'shield',
+])
+
+function isEquippable(item: Record<string, unknown>): boolean {
+  return EQUIPPABLE_CATEGORIES.has(item.category as string)
+}
+
+function isConsumable(item: Record<string, unknown>): boolean {
+  const id = (item.id as string ?? '').toLowerCase()
+  const name = (item.name_fr as string ?? '').toLowerCase()
+  return id.includes('potion') || name.includes('potion')
+}
+
+async function onEquip(itemId: string) {
+  if (!character.value) return
+  inventoryLoading.value = itemId
+  inventoryError.value = null
+  try {
+    character.value = await characterApi.inventoryEquip(character.value.id, itemId)
+  } catch {
+    inventoryError.value = 'Impossible de modifier l\'équipement.'
+  } finally {
+    inventoryLoading.value = null
+  }
+}
+
+async function onUse(itemId: string) {
+  if (!character.value) return
+  inventoryLoading.value = itemId
+  inventoryError.value = null
+  try {
+    character.value = await characterApi.inventoryUse(character.value.id, itemId)
+  } catch {
+    inventoryError.value = 'Impossible d\'utiliser cet objet.'
+  } finally {
+    inventoryLoading.value = null
+  }
+}
+
+const itemToDrop = ref<string | null>(null)
+
+async function confirmDrop() {
+  if (!character.value || !itemToDrop.value) return
+  inventoryLoading.value = itemToDrop.value
+  inventoryError.value = null
+  try {
+    character.value = await characterApi.inventoryDrop(character.value.id, itemToDrop.value)
+  } catch {
+    inventoryError.value = 'Impossible de lâcher cet objet.'
+  } finally {
+    inventoryLoading.value = null
+    itemToDrop.value = null
+  }
+}
 </script>
 
 <template>
@@ -268,7 +333,7 @@ function goBack() {
               <span class="font-semibold capitalize">{{ character.species }}</span>
             </div>
             <div class="flex justify-between">
-              <span class="text-parchment/50">Background</span>
+              <span class="text-parchment/50">Historique</span>
               <span class="font-semibold">{{ backgroundLabel }}</span>
             </div>
             <div class="flex justify-between">
@@ -473,27 +538,74 @@ function goBack() {
       <!-- ── Row 5 : Equipment ─────────────────────────────────────────────────── -->
       <div class="rounded border border-gold/20 bg-ink/60 p-4">
         <h2 class="mb-3 text-xs uppercase tracking-widest text-gold/60 font-semibold">Équipement</h2>
-        <div v-if="character.equipment?.length" class="grid gap-1.5 sm:grid-cols-2 md:grid-cols-3">
+        <p v-if="inventoryError" class="mb-2 rounded border border-blood/30 bg-blood/10 px-3 py-1.5 text-xs text-blood">
+          {{ inventoryError }}
+        </p>
+        <div v-if="character.equipment?.length" class="space-y-1.5">
           <div
-            v-for="(item, idx) in character.equipment"
+            v-for="(item, idx) in (character.equipment as Record<string, unknown>[])"
             :key="idx"
             class="flex items-center gap-2 rounded border px-3 py-1.5 text-sm"
             :class="item.equipped
               ? 'border-gold/30 bg-gold/5 text-parchment'
-              : 'border-parchment/10 bg-transparent text-parchment/50'"
+              : 'border-parchment/10 bg-transparent text-parchment/60'"
           >
-            <!-- Equipped indicator -->
-            <span
-              class="shrink-0 text-xs"
-              :title="item.equipped ? 'Équipé' : 'Dans le sac'"
-            >{{ item.equipped ? '⚔' : '○' }}</span>
+            <!-- Équipé indicator -->
+            <span class="shrink-0 text-xs" :title="item.equipped ? 'Équipé' : 'Dans le sac'">
+              {{ item.equipped ? '⚔' : '○' }}
+            </span>
             <span class="flex-1 capitalize">{{ String(item.name_fr ?? item.id ?? 'Objet inconnu') }}</span>
             <span v-if="item.quantity && Number(item.quantity) > 1" class="text-xs text-parchment/40">
               ×{{ item.quantity }}
             </span>
+            <!-- Action buttons -->
+            <div class="flex shrink-0 gap-1">
+              <button
+                v-if="isEquippable(item)"
+                class="rounded border px-2 py-0.5 text-xs transition-colors"
+                :class="item.equipped
+                  ? 'border-gold/40 text-gold/70 hover:bg-gold/10'
+                  : 'border-parchment/20 text-parchment/50 hover:border-gold/30 hover:text-parchment'"
+                :disabled="inventoryLoading === item.id"
+                @click="onEquip(String(item.id))"
+              >{{ item.equipped ? 'Retirer' : 'Équiper' }}</button>
+              <button
+                v-if="isConsumable(item)"
+                class="rounded border border-arcane/30 px-2 py-0.5 text-xs text-arcane/70 transition-colors hover:bg-arcane/10"
+                :disabled="inventoryLoading === item.id"
+                @click="onUse(String(item.id))"
+              >Utiliser</button>
+              <button
+                class="rounded border border-parchment/10 px-2 py-0.5 text-xs text-parchment/30 transition-colors hover:border-blood/30 hover:text-blood/70"
+                :disabled="inventoryLoading === item.id"
+                @click="itemToDrop = String(item.id)"
+              >Lâcher</button>
+            </div>
           </div>
         </div>
         <p v-else class="text-sm italic text-parchment/30">Aucun objet</p>
+      </div>
+
+      <!-- Confirmation dialog : lâcher un objet -->
+      <div
+        v-if="itemToDrop"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+        @click.self="itemToDrop = null"
+      >
+        <div class="rounded border border-blood/30 bg-ink p-6 shadow-xl w-80">
+          <p class="mb-1 text-sm font-semibold text-parchment">Lâcher cet objet ?</p>
+          <p class="mb-4 text-xs text-parchment/50">Cette action est irréversible.</p>
+          <div class="flex gap-3">
+            <button
+              class="flex-1 rounded border border-blood/50 bg-blood/10 py-2 text-sm font-semibold text-blood transition-colors hover:bg-blood/20"
+              @click="confirmDrop"
+            >Confirmer</button>
+            <button
+              class="flex-1 rounded border border-parchment/20 py-2 text-sm text-parchment/50 transition-colors hover:text-parchment"
+              @click="itemToDrop = null"
+            >Annuler</button>
+          </div>
+        </div>
       </div>
 
       <!-- ── Row 6 : Traits de classe (niveau 1) ──────────────────────────────── -->

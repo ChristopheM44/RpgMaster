@@ -1,6 +1,6 @@
 # RpgMaster — Avancement du projet
 
-> Derniere mise a jour : 2026-03-31 (Sprint 7 : 12/14 taches — Sprint 8 : 2/7 taches)
+> Derniere mise a jour : 2026-04-07 (Sprint 9 : personnages prétirés + écran CharacterSetup)
 
 ---
 
@@ -16,7 +16,8 @@
 | Sprint 5 | Agents joueurs IA | ✅ Termine |
 | Sprint 6 | Frontend MVP | ✅ Termine |
 | Sprint 7 | Integration + Voix | 🔄 En cours |
-| Sprint 8 | Polish + Playtest | 🔄 En cours |
+| Sprint 8 | Polish + Playtest | ✅ Termine |
+| Sprint 9 | Personnages Prétirés + Flux Setup | ✅ Termine |
 
 ---
 
@@ -322,6 +323,69 @@ Ajout d'un panneau de monitoring Ollama dans la page `/admin`, au-dessus du pann
 - `adminApi.getLlmHealth()` dans `services/api.ts`
 - `components/ui/OllamaStatusPanel.vue` : badge connexion, cards modèles MJ/Joueurs IA avec statut Installé/Non installé, liste des modèles disponibles, bouton Rafraîchir
 - `views/AdminView.vue` : panel Ollama en premier, TTS en dessous
+
+---
+
+### Sprint 8 — Polish + Playtest (2026-03-31)
+
+#### Tuning des prompts GM et joueurs IA
+
+Revue complète des 5 templates Jinja2 basée sur les retours de playtesting.
+
+**`gm_system.txt`** :
+- Règle 5 : ne jamais commencer deux narrations consécutives par la même formule
+- Section "CONTINUITÉ NARRATIVE" : cohérence avec messages récents, PNJ persistants entre interactions
+- Style enrichi : variation des registres sensoriels (son, odeur, toucher), longueur adaptée à la phase (exploration = riche, combat = court)
+- Ordre explicite : `encounter_setup` doit TOUJOURS précéder `state_transition`
+
+**`gm_narrate.txt`** : variation des ouvertures (pas toujours "Vous"/"Le groupe"), note "pas de balises markdown"
+
+**`gm_combat.txt`** : réactions des ennemis blessés, variation des formules d'attaque, clarification sur le champ `actions` vide pour les tours monstres
+
+**`player_decide.txt`** : hiérarchie tactique explicite — survie (<25% PV) → soins allié → focus fire → conservation sorts hauts niveau → variété d'actions
+
+**`player_roleplay.txt`** : réaction au contexte de la scène, option `examine`, ton naturel et non verbeux
+
+---
+
+#### Gestion d'erreur gracieuse (LLM lent/indisponible, déconnexion)
+
+**Backend — `llm/ollama_client.py`** :
+- Timeout 120s sur le client Ollama (évite les hangs infinis sur LLM lent)
+- `httpx.ReadTimeout` ajouté aux exceptions interceptées dans le retry loop
+
+**Frontend — `stores/game.ts`** :
+- Nouveau flag `isProcessing` : `true` à l'envoi d'une action, `false` à la réception de narration ou erreur
+- `setProcessing()` exporté
+
+**Frontend — `composables/useWebSocket.ts`** :
+- `sendAction()` déclenche `setProcessing(true)` automatiquement
+- Délai de reconnexion progressif (3s × nb de tentatives)
+- Message "Connexion perdue. Rechargez la page." après 5 échecs consécutifs
+- `isReconnecting` (computed) et `reconnectCount` exposés pour l'UI
+
+**Frontend — `components/narrative/NarrativeLog.vue`** :
+- Indicateur "Le Maître du Jeu réfléchit ●●●" animé (bounce) visible quand `isProcessing`
+
+**Frontend — `components/common/ActionBar.vue`** :
+- Textarea et bouton Envoyer désactivés pendant le traitement LLM
+- Placeholder adaptatif : "Le Maître du Jeu répond..." quand en attente
+- Statut "MJ en cours..." dans la barre de connexion
+
+**Frontend — `views/GameSessionView.vue`** :
+- Bannière d'erreur dismissible (rouge) en haut de l'écran
+- Bandeau de reconnexion (violet) avec compteur de tentatives
+
+---
+
+#### Responsive design mobile
+
+**`views/GameSessionView.vue`** :
+- Desktop (`md:`) : layout 3 panneaux inchangé (NarrativeLog 60% | CombatTracker + CharacterSummary 40%)
+- Mobile : un seul panneau visible à la fois, navigation par onglets en bas de l'écran
+  - Récit 📜 | Combat ⚔ | Personnages 👤
+  - Onglet actif surligné en gold avec bordure supérieure
+- Header simplifié sur mobile : Phase masquée, boutons réduits à leurs icônes
 
 ---
 
@@ -861,6 +925,28 @@ Implémentation complète du flux de sélection de sort, choix de l'emplacement 
 
 ---
 
+#### Francisation complete (2026-04-01)
+
+Tout le contenu visible par l'utilisateur est desormais en francais, conformement au SRD 5.2.1 FR (CC-BY-4.0).
+
+**Labels UI corriges** :
+- `ActionBar.vue` : "Dash" → "Foncer"
+- `SpellCastPanel.vue` : "Cantrip" → "Tour de magie"
+- `CharacterSheetView.vue` : "Background" → "Historique"
+- `CharacterCreationView.vue` : "Background" → "Historique" (4 occurrences : step label, titre etape, recapitulatifs)
+
+**Donnees SRD JSON — descriptions traduites** :
+- `spells.json` : 20 sorts (niveaux 0-3) — tous les champs `description` en francais
+- `classes.json` : 4 classes + 9 capacites de niveau 1 — tous les `description` en francais
+- `species.json` : 3 especes + 9 traits raciaux — tous les `description` en francais
+- `monsters.json` : 10 monstres — `description` des traits traduits + `name_fr` ajoute sur chaque trait et action (le champ `name` interne est conserve pour le moteur)
+- `encounters.json` : deja entierement en francais
+- `equipment.json` : pas de champ `description`, noms deja traduits via `name_fr`
+
+**Convention etablie** : les IDs internes (Python/JSON) restent en anglais (`"fighter"`, `"strength"`, `"blinded"`, types WebSocket, etc.) car ce sont des identifiants de code jamais vus de l'utilisateur.
+
+---
+
 #### CharacterSheetView — Fiche de personnage complete
 
 Nouvelle vue `CharacterSheetView.vue` accessible depuis le panneau `CharacterSummary` via le bouton "Fiche complete".
@@ -881,6 +967,56 @@ Nouvelle vue `CharacterSheetView.vue` accessible depuis le panneau `CharacterSum
 
 ---
 
+---
+
+### Sprint 8 — Variete de rencontres (pre-construites + generation dynamique)
+
+**Objectif** : remplacer le spawn d'un monstre unique aléatoire par un système de rencontres varié, calibré sur le niveau du groupe, avec des templates narratifs pré-construits.
+
+---
+
+**`engine/encounter_builder.py`** (nouveau) — logique pure, zero I/O :
+- Tableaux XP Thresholds SRD 5.2 (niveaux 1-10, 4 paliers : easy/medium/hard/deadly)
+- Multiplicateurs de groupe (x1.0 → x4.0 selon le nombre de monstres)
+- `calculate_xp_budget(party_levels, difficulty)` : budget total pour le groupe
+- `calculate_adjusted_xp(monster_xp_list)` : XP brut × multiplicateur
+- `assess_difficulty(party_levels, monster_xp_list)` : évalue trivial/easy/medium/hard/deadly
+- `generate_encounter(monsters_data, party_levels, difficulty, rng)` : génération aléatoire dans le budget, max 3 types de monstres, fallback garanti
+- `expand_to_combatants(encounter, monsters_by_id)` : aplatit en liste de dicts prêts pour `state_data["combatants"]`
+
+**`engine/srd_data/encounters.json`** (nouveau) — 12 templates pré-construits :
+- Couvre les terrains : forêt, donjon, route, village, cimetière, grotte, égout, ruines, marais
+- Composition variée : mêlée pure, mixte ranged/melee, undead, goblinoïdes, bêtes
+- Plages de niveaux : 1-2 (beast pack), 1-3 (goblin ambush), 2-5 (war band, hobgoblin squad), 3-7 (ogre, owlbear), 5-10 (troll)
+- Chaque template inclut un `intro_text` narratif immersif utilisé à la place du texte générique
+
+**`services/encounter_service.py`** (nouveau) — singleton chargé une fois :
+- `list_presets(min_level, max_level, terrain, difficulty)` : filtrage multi-critères
+- `get_preset(id)` / `build_from_preset(id)` : accès et conversion template → `BuiltEncounter`
+- `generate(party_levels, difficulty)` : délègue au moteur
+- `pick_preset_for_party(party_levels)` : sélection aléatoire d'un preset adapté au niveau moyen du groupe
+- `expand(encounter)` : wrapper vers `expand_to_combatants`
+
+**`api/routes_encounters.py`** (nouveau) — 3 endpoints REST :
+- `GET /api/encounters` : liste les presets avec résumé monstre (filtres : min_level, max_level, terrain, difficulty)
+- `GET /api/encounters/generate?party_levels=3,3,4&difficulty=hard` : génération dynamique
+- `GET /api/encounters/{id}` : détail d'un preset converti en `BuiltEncounterSchema`
+
+**`api/ws_game.py`** — `_handle_start_combat()` refactorisé :
+- Lit les niveaux des personnages depuis `state_data["characters"]`
+- Si `content` fourni → charge le preset correspondant (ex: `"goblin_war_band"`)
+- Sinon → tente un preset adapté au niveau, puis fallback génération dynamique
+- Supporte plusieurs combattants NPC avec IDs uniques (`goblin_1`, `goblin_2`...)
+- Utilise le `intro_text` du preset si disponible
+
+**`main.py`** : router `/api/encounters` enregistré.
+
+**`tests/test_engine/test_encounter_builder.py`** (nouveau) — 35 tests unitaires :
+- Couverture : `get_xp_threshold`, `get_group_multiplier`, `calculate_xp_budget`, `calculate_adjusted_xp`, `assess_difficulty`, `generate_encounter`, `expand_to_combatants`
+- Tests de robustesse : fallback, déterminisme via RNG seedé, bornes de difficulté
+
+---
+
 ## Liens utiles
 
 | Ressource | URL |
@@ -890,3 +1026,160 @@ Nouvelle vue `CharacterSheetView.vue` accessible depuis le panneau `CharacterSum
 | Ollama API | http://localhost:11434 |
 | Voxtral TTS (optionnel) | http://localhost:8091 |
 | Licence SRD 5.2 | CC-BY-4.0 (dans `engine/srd_data/`) |
+
+---
+
+## Sprint correctifs — Phase 2 (2026-03-31)
+
+### Bug 4 résolu : Désynchronisation rencontre/narration
+
+Le MJ pouvait narrer "3 gobelins surgissent" mais le moteur générait des monstres aléatoires sans lien.
+
+**Solution :** Nouveau type d'action `encounter_setup` dans le schéma GM.
+
+- **`gm_system.txt`** : Ajout de `encounter_setup` avec liste de `monster_ids` valides
+- **`gm_narrate.txt`** : Instruction pour émettre `encounter_setup` + `state_transition` en séquence quand des ennemis sont narrés
+- **`action_resolver.py`** : Gestion de `encounter_setup` → stocke `state_data["pending_encounter"]`
+- **`encounter_service.py`** : Nouvelle méthode `build_from_monster_ids(monster_ids)` — construit un `BuiltEncounter` depuis une liste d'IDs (avec répétitions, IDs inconnus ignorés)
+- **`ws_game.py`** : `_handle_start_combat()` consomme d'abord `pending_encounter` avant de tomber sur le preset/génération dynamique
+
+Désormais : MJ décrit "2 gobelins + 1 bugbear" → `encounter_setup` stocke ces IDs → `start_combat` instancie exactement ces ennemis.
+
+### Feature 3 : Modal "Lancer l'aventure"
+
+Le bouton "Démarrer la partie" est remplacé par un modal avec 3 modes de lancement.
+
+- **`routes_game.py`** : `POST /game/{id}/start` accepte body `{adventure_script?, auto_generate?}`
+  - **libre** : texte d'accueil neutre (comportement actuel)
+  - **script** : le texte fourni devient la narration d'introduction (directement diffusé)
+  - **auto** : GMAgent génère une accroche narrative adaptée au groupe (non-bloquant)
+- **`AdventureStartModal.vue`** (nouveau) : Modal 3 onglets (Libre / Script / Génération auto)
+  - Onglet Script : textarea pour décrire le scénario
+  - Bouton "Lancer l'aventure !" désactivé si script vide
+- **`GameSessionView.vue`** : Bouton ouvre le modal, `handleStartConfirm()` dispatche selon le mode
+- **`api.ts`** : `gameApi.start()` accepte body optionnel
+
+---
+
+## Backlog — Carte tactique + Système de campagne [2026-03-31]
+
+### Carte tactique de combat (grille 2D)
+
+**Backend — `engine/tactical_grid.py`** (pure logic, no I/O) :
+- `GridPosition(col, row)` — coordonnées 2D
+- `chebyshev_distance(a, b)` — distance D&D (diagonale = cardinal = 5 ft)
+- `distance_ft(a, b)` — en pieds
+- `is_adjacent(a, b)` — portée mêlée (≤ 5 ft = 1 case)
+- `is_within_range(a, b, range_ft)` — validation portée attaque
+- `cells_reachable(from, speed_ft, grid, occupied)` — cases atteignables
+- `validate_move(from, to, speed_ft, grid, occupied)` — retourne `(valid, reason)`
+- `initialize_positions(player_ids, npc_ids, cols, rows)` — placement initial (joueurs en bas, ennemis en haut)
+
+**Backend — `ws_game.py`** :
+- Import de `tactical_grid`
+- `_handle_start_combat` : initialise `state_data["grid_positions"]` et `state_data["grid_config"]` (10×8 cases, 5 ft/case) ; ajoute `position` dans chaque entrée `combat_combatants`
+- `_handle_move(session_id, action, active, db)` : valide le déplacement, met à jour `grid_positions`, émet `COMBATANT_MOVED`
+- `_dispatch_action` : route `action_type == "move"` vers `_handle_move`
+
+**Backend — `game/event_bus.py`** :
+- Nouveau `EventType.COMBATANT_MOVED = "combatant_moved"`
+
+**Frontend** :
+- `types/index.ts` : `GridPosition`, `GridConfig`, `CombatantMovedPayload`, `position?` dans `CombatantState`, `'combatant_moved'` dans `WsEventType`
+- `stores/game.ts` : `gridConfig` ref, `moveCombatant(payload)`, reset gridConfig
+- `components/combat/TacticalGrid.vue` : grille CSS 10×8 cases × 28 px, tokens colorés (vous/allié/ennemi), cases accessibles highlight en tour actif, clic → `emit('move', col, row)`
+- `composables/useWebSocket.ts` : case `'combatant_moved'` → `gameStore.moveCombatant()`
+- `views/GameSessionView.vue` : `TacticalGrid` affiché au-dessus de `CombatTracker` en phase combat, `handleMove(col, row)` → `sendAction('move', col+','+row)`
+
+### Gestion d'inventaire — équiper, utiliser, lâcher (Sprint 8)
+
+**Backend — `game/event_bus.py`** :
+- Nouveau `EventType.EQUIPMENT_UPDATED = "equipment_updated"`
+
+**Backend — `api/routes_character.py`** :
+- Helper `_find_item(equipment, item_id)` + modèle `InventoryActionRequest`
+- `POST /api/characters/{id}/inventory/equip` — toggle équipé/retiré ; déséquipe automatiquement les autres armures si catégorie light/medium/heavy
+- `POST /api/characters/{id}/inventory/use` — applique l'effet d'un consommable (potion → soin 2d4+2 PV), décrémente la quantité ou supprime l'objet
+- `POST /api/characters/{id}/inventory/drop` — supprime définitivement l'objet de l'inventaire
+
+**Backend — `api/ws_game.py`** :
+- `item_id: Optional[str]` ajouté à `PlayerActionMessage`
+- `_handle_equip_item(session_id, action, active, db)` : toggle équipé, sync `state_data`, broadcast `EQUIPMENT_UPDATED` + narration
+- `_handle_use_item(session_id, action, active, db)` : effet potion (soin + `HP_CHANGED`), décrémente stock, sync `state_data`, broadcast `EQUIPMENT_UPDATED` + narration
+- `_handle_drop_item(session_id, action, active, db)` : supprime l'objet, sync `state_data`, broadcast `EQUIPMENT_UPDATED` + narration
+- Routage `equip` / `use_item` / `drop_item` en bypass GM (comme `end_turn`)
+
+**Frontend** :
+- `types/index.ts` : `EquipmentUpdatedPayload`, `'equipment_updated'` dans `WsEventType`
+- `stores/character.ts` : `updateEquipment(characterId, equipment)` — met à jour `myCharacter` et `sessionCharacters`
+- `composables/useWebSocket.ts` : case `'equipment_updated'` → `charStore.updateEquipment()`
+- `services/api.ts` : `characterApi.inventoryEquip/Use/Drop(id, itemId)`
+- `views/CharacterSheetView.vue` : boutons **Équiper/Retirer** (armes/armures), **Utiliser** (potions), **Lâcher** (tous) sur chaque item ; dialog de confirmation avant lâcher ; message d'erreur inline
+- `components/common/ActionBar.vue` : bouton **Objet** ouvre un picker overlay listant consommables + objets équipables du personnage ; actions Utiliser/Équiper envoient WS action avec `item_id`
+
+### Système de campagne (progression persistante)
+
+**Backend — `models/campaign.py`** :
+- `Campaign` : `id`, `name`, `description`, `session_ids` (JSON list), `current_session_index`, `character_ids` (JSON list), `xp_pool` (JSON dict), timestamps
+
+**Backend — `alembic/versions/b2c3d4e5f6a7_add_campaigns.py`** :
+- Migration `campaigns` table (SQLite)
+
+**Backend — `services/campaign_service.py`** :
+- `create_campaign(name, description, db)` → `Campaign`
+- `get_campaign(id, db)` → `Campaign | None`
+- `list_campaigns(db)` → `list[Campaign]`
+- `attach_session(campaign_id, session_id, db)` → ajoute session + enregistre personnages
+- `advance_to_next_session(campaign_id, new_session_name, db)` → clone personnages (PV max, conditions effacées, stats préservées), crée nouvelle session, incrémente `current_session_index`
+- `award_xp(campaign_id, character_id, xp, db)` → pool XP
+
+**Backend — `api/routes_campaign.py`** :
+- `POST /api/campaigns` — créer campagne
+- `GET /api/campaigns` — lister
+- `GET /api/campaigns/{id}` — détail
+- `DELETE /api/campaigns/{id}` — supprimer
+- `POST /api/campaigns/{id}/sessions` — attacher session existante
+- `POST /api/campaigns/{id}/advance` — session suivante + transfert personnages
+- `POST /api/campaigns/{id}/xp` — attribuer XP
+
+**Frontend** :
+- `types/index.ts` : `Campaign`, `CampaignCreate`, `CampaignAdvanceBody`, `CampaignAdvanceResponse`
+- `stores/campaign.ts` : `fetchCampaigns`, `createCampaign`, `fetchCampaign`, `attachSession`, `advance`, `deleteCampaign`
+- `views/CampaignView.vue` : liste campagnes + detail (sessions, XP), modal création, modal avance session, bouton "Jouer session courante"
+- `router/index.ts` : route `/campaigns` → `CampaignView`
+- `views/LobbyView.vue` : bouton "⚔ Campagnes" en haut à droite
+
+---
+
+### Sprint 9 — Personnages Prétirés + Flux CharacterSetup
+
+Ajout d'un écran intermédiaire entre le Lobby et le jeu pour composer le groupe.
+
+**Nouveau flux** :
+```
+Lobby → créer session → /session/:id/setup
+  → choisir prétiré (modal grille 12 classes) | créer via wizard
+  → ajouter d'autres personnages
+  → Lancer la partie
+```
+
+**Backend** :
+- `engine/srd_data/pregens.json` : 12 templates prétirés niveau 1 (Fighter, Wizard, Rogue, Cleric, Barbarian, Bard, Druid, Monk, Paladin, Ranger, Sorcerer, Warlock) avec stats finales, équipement, sorts, compétences, et historique
+- `api/routes_pregen.py` :
+  - `GET /api/characters/pregenerated` → liste les 12 templates (sans créer en DB)
+  - `POST /api/characters/pregenerated/{class_id}` → instancie depuis template (body : session_id, name?, is_ai?) en réutilisant `_resolve_equipment` et `_init_spell_slots`
+- `main.py` : enregistrement du pregen router **avant** le character router pour que `/pregenerated` ne soit pas capturé par `/{id}`
+
+**Frontend** :
+- `types/index.ts` : interface `PregenTemplate`
+- `services/api.ts` : `pregenApi.list()` et `pregenApi.create(classId, body)`
+- `views/CharacterSetupView.vue` : nouvelle vue `/session/:id/setup` avec :
+  - En-tête session + retour lobby
+  - Cards des personnages actuels (avec bouton Retirer)
+  - Boutons "Personnage prétiré" et "Créer un personnage"
+  - Modal prétiré : grille 12 classes → sélection → fiche stats + champ nom → confirmation
+  - Bouton "Lancer la Partie" (désactivé si 0 personnages)
+- `router/index.ts` : route `character-setup`
+- `views/LobbyView.vue` : redirections vers `character-setup` (handleCreate + handleAddCharacter)
+- `views/CharacterCreationView.vue` : redirect vers `character-setup` après création (au lieu de `game-session`)
+

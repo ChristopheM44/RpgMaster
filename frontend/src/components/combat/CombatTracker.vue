@@ -5,7 +5,7 @@ const gameStore = useGameStore()
 </script>
 
 <template>
-  <div class="flex h-full flex-col">
+  <div class="flex flex-1 min-h-0 flex-col">
     <div class="border-b border-gold/20 px-4 py-2">
       <h2 class="text-sm font-semibold uppercase tracking-widest text-gold/60">
         Combat
@@ -67,6 +67,44 @@ const gameStore = useGameStore()
             :key="cond"
             class="rounded bg-blood/20 px-1.5 py-0.5 text-xs text-blood"
           >{{ cond }}</span>
+        </div>
+
+        <!-- Jets de sauvegarde contre la mort -->
+        <div
+          v-if="combatant.hp_current <= 0 && combatant.death_saves"
+          class="mt-2 space-y-1"
+        >
+          <div v-if="combatant.death_saves.stable" class="text-xs text-green-400 italic">
+            Stable
+          </div>
+          <template v-else>
+            <div class="flex items-center gap-1.5">
+              <span class="w-14 text-xs text-green-400/70 shrink-0">Succès</span>
+              <div class="flex gap-1">
+                <span
+                  v-for="i in 3"
+                  :key="i"
+                  class="h-3 w-3 rounded-full border"
+                  :class="i <= (combatant.death_saves.successes ?? 0)
+                    ? 'bg-green-500 border-green-400'
+                    : 'border-parchment/20'"
+                />
+              </div>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="w-14 text-xs text-blood/70 shrink-0">Échecs</span>
+              <div class="flex gap-1">
+                <span
+                  v-for="i in 3"
+                  :key="i"
+                  class="h-3 w-3 rounded-full border"
+                  :class="i <= (combatant.death_saves.failures ?? 0)
+                    ? 'bg-blood border-blood/80'
+                    : 'border-parchment/20'"
+                />
+              </div>
+            </div>
+          </template>
         </div>
       </div>
     </div>

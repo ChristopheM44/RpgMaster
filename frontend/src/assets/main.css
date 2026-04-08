@@ -25,6 +25,16 @@
 
 /* === Base styles === */
 
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+#app {
+  height: 100%;
+}
+
 body {
   background-color: var(--color-ink);
   color: var(--color-parchment);

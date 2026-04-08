@@ -124,11 +124,67 @@ class ActionResolver:
         # ----------------------------------------------------------------
         if action_type == "attack":
             roll_results = self._resolve_attack(character_id, target_id, active.state_data)
+            # Le moteur fait autorité : appliquer les dégâts immédiatement, sans attendre le GM.
+            if roll_results and roll_results.get("hit") and target_id:
+                damage_amount = roll_results.get("damage", {}).get("total", 0)
+                if damage_amount > 0:
+                    await self._apply_gm_action(
+                        session_id,
+                        "damage_apply",
+                        {"target": target_id, "amount": damage_amount},
+                        active,
+                    )
+        elif action_type == "death_save":
+            roll_results = self._resolve_death_save(character_id, active.state_data)
+            await self._apply_death_save_outcome(session_id, character_id, roll_results, active)
+        elif action_type == "stabilize":
+            roll_results = self._resolve_stabilize(character_id, target_id, active.state_data)
+            if roll_results.get("success") and target_id:
+                combatants_st: Dict[str, Any] = active.state_data.setdefault("combatants", {})
+                if target_id in combatants_st:
+                    ds_st = combatants_st[target_id].setdefault(
+                        "death_saves", {"successes": 0, "failures": 0, "stable": False}
+                    )
+                    ds_st["stable"] = True
+                    conds_st: List[str] = list(combatants_st[target_id].get("conditions", []))
+                    if "inconscient" in conds_st:
+                        conds_st.remove("inconscient")
+                        combatants_st[target_id]["conditions"] = conds_st
+                        await event_bus.publish_to_session(
+                            session_id,
+                            EventType.CONDITION_CHANGED,
+                            {"combatant_id": target_id, "condition": "inconscient", "added": False},
+                            source="action_resolver",
+                        )
+                    await event_bus.publish_to_session(
+                        session_id,
+                        EventType.DEATH_SAVE_UPDATED,
+                        {"combatant_id": target_id, "death_saves": dict(ds_st)},
+                        source="action_resolver",
+                    )
+                    active.mark_dirty()
         elif action_type == "cast_spell":
             if spell_id is not None and db is not None:
                 roll_results = await self._resolve_cast_spell(
                     session_id, character_id, spell_id, slot_level, target_id, active, db
                 )
+                # Le moteur fait autorité : appliquer les dégâts immédiatement.
+                if roll_results and not roll_results.get("error") and target_id:
+                    atk = roll_results.get("attack", {})
+                    dmg = roll_results.get("damage", {})
+                    # Sorts avec jet d'attaque : appliquer si touche
+                    # Sorts auto_hit ou save : appliquer directement
+                    if dmg:
+                        hit = atk.get("hit", True) if atk else True
+                        if hit:
+                            damage_amount = dmg.get("total", 0)
+                            if damage_amount > 0:
+                                await self._apply_gm_action(
+                                    session_id,
+                                    "damage_apply",
+                                    {"target": target_id, "amount": damage_amount},
+                                    active,
+                                )
             else:
                 roll_results = self._resolve_generic_roll(content)
 
@@ -162,7 +218,7 @@ class ActionResolver:
             await event_bus.publish_to_session(
                 session_id,
                 EventType.ROLL_RESULT,
-                roll_results,
+                self._normalize_roll_event(roll_results),
                 source="action_resolver",
             )
 
@@ -174,6 +230,11 @@ class ActionResolver:
             {"text": narration_text, "speaker": "Maître du Jeu", "narration_id": narration_id},
             source="action_resolver",
         )
+
+        # Persistance en DB (fire-and-forget)
+        if db is not None:
+            from app.services.message_service import persist_narration
+            asyncio.create_task(persist_narration(session_id, narration_text, "Maître du Jeu", db))
 
         # TTS fire-and-forget : ne bloque jamais le game loop
         asyncio.create_task(
@@ -250,6 +311,86 @@ class ActionResolver:
             payload["summary"] = f"Attaque : {attack.total} vs CA {target_ac} ({miss_label})"
 
         return payload
+
+    def _normalize_roll_event(self, raw: Dict[str, Any]) -> Dict[str, Any]:
+        """Convertit le payload brut en RollResultPayload attendu par le frontend."""
+        roll_type = raw.get("type", "")
+
+        if roll_type in ("death_save", "stabilize"):
+            d20 = int(raw.get("d20_roll", 0))
+            total = int(raw.get("total", d20))
+            return {
+                "dice_notation": "1d20",
+                "rolls": [d20],
+                "total": total,
+                "modifier": int(raw.get("modifier", 0)),
+                "label": raw.get("label", raw.get("summary", "")),
+                "success": raw.get("success"),
+            }
+
+        if roll_type == "attack":
+            d20 = int(raw.get("d20_roll", 0))
+            total = int(raw.get("attack_total", d20))
+            return {
+                "dice_notation": "1d20",
+                "rolls": [d20],
+                "total": total,
+                "modifier": total - d20,
+                "label": raw.get("summary", "Attaque"),
+                "success": raw.get("hit"),
+            }
+
+        if roll_type == "cast_spell":
+            atk = raw.get("attack", {})
+            if atk:
+                d20 = int(atk.get("d20_roll", 0))
+                total = int(atk.get("total", d20))
+                return {
+                    "dice_notation": "1d20",
+                    "rolls": [d20],
+                    "total": total,
+                    "modifier": total - d20,
+                    "label": raw.get("summary", raw.get("spell_name", "Sort")),
+                    "success": atk.get("hit"),
+                }
+            # Sort avec jet de sauvegarde : afficher le jet de la cible
+            save_d20 = raw.get("save_d20")
+            if save_d20 is not None:
+                save_total = int(raw.get("save_total", save_d20))
+                ability = str(raw.get("save_ability", "DEX"))[:3].upper()
+                return {
+                    "dice_notation": "1d20",
+                    "rolls": [int(save_d20)],
+                    "total": save_total,
+                    "modifier": save_total - int(save_d20),
+                    "label": raw.get("summary", raw.get("spell_name", "Sort")),
+                    "success": raw.get("target_saved"),
+                }
+            dmg = raw.get("damage", {})
+            if dmg:
+                return {
+                    "dice_notation": str(dmg.get("notation", "")),
+                    "rolls": list(dmg.get("rolls", [])),
+                    "total": int(dmg.get("total", 0)),
+                    "modifier": 0,
+                    "label": raw.get("summary", raw.get("spell_name", "Sort")),
+                }
+            return {
+                "dice_notation": "",
+                "rolls": [],
+                "total": 0,
+                "modifier": 0,
+                "label": raw.get("summary", "Sort lancé"),
+            }
+
+        # generic_roll
+        return {
+            "dice_notation": str(raw.get("notation", "1d20")),
+            "rolls": list(raw.get("rolls", [])),
+            "total": int(raw.get("total", 0)),
+            "modifier": 0,
+            "label": raw.get("summary", ""),
+        }
 
     def _resolve_generic_roll(self, content: Optional[str]) -> Dict[str, Any]:
         """Jet de dé générique (d20) pour les sorts ou tests sans contexte."""
@@ -440,23 +581,60 @@ class ActionResolver:
         elif spell.get("save") and damage_dice:
             # Sort avec jet de sauvegarde et dégâts
             save_info: Dict[str, Any] = spell["save"]
+            save_ability: str = save_info.get("ability", "dexterity")
+            on_success: str = save_info.get("on_success", "half_damage")
             dc = spell_save_dc(caster_ability_score, prof_bonus_val)
             if extra_dice and effective_slot > spell_level:
                 dmg = upcast_damage(damage_dice, extra_dice, spell_level, effective_slot)
             else:
                 dmg = combat_engine.roll_damage(damage_dice)
+
+            # Jet de sauvegarde de la cible
+            full_damage = dmg.total
+            applied_damage = full_damage
+            save_d20: Optional[int] = None
+            save_total_val: Optional[int] = None
+            target_saved = False
+
+            if target_id:
+                combatants_sv: Dict[str, Any] = active.state_data.get("combatants", {})
+                target_data = combatants_sv.get(target_id, {})
+                target_ability_score = int(
+                    target_data.get("ability_scores", {}).get(save_ability, 10)
+                )
+                save_mod = ability_modifier(target_ability_score)
+                save_r = roll("d20")
+                save_d20 = save_r.total
+                save_total_val = save_d20 + save_mod
+                target_saved = save_total_val >= dc
+
+                if target_saved:
+                    if on_success == "half_damage":
+                        applied_damage = full_damage // 2
+                    elif on_success == "no_damage":
+                        applied_damage = 0
+
             payload["save_dc"] = dc
-            payload["save_ability"] = save_info.get("ability", "dexterity")
+            payload["save_ability"] = save_ability
+            payload["save_d20"] = save_d20
+            payload["save_total"] = save_total_val
+            payload["target_saved"] = target_saved
             payload["damage"] = {
                 "notation": dmg.notation,
                 "rolls": dmg.rolls,
-                "total": dmg.total,
+                "total": applied_damage,
+                "full_total": full_damage,
                 "type": spell.get("damage_type", ""),
             }
-            on_success = save_info.get("on_success", "half_damage")
+
+            save_result_str = ""
+            if save_total_val is not None:
+                outcome = "réussi" if target_saved else "raté"
+                save_result_str = f" (JS {save_total_val} {outcome})"
             payload["summary"] = (
-                f"{spell_name} : JS {save_info.get('ability', 'DEX').upper()} "
-                f"DD {dc} → {dmg.total} dégâts ({on_success})"
+                f"{spell_name} : JS {save_ability.upper()[:3]} DD {dc}"
+                f"{save_result_str} → {applied_damage} dégâts"
+                + (f" (/{full_damage} moitié)" if target_saved and on_success == "half_damage" else "")
             )
 
         elif spell.get("save"):
@@ -475,6 +653,161 @@ class ActionResolver:
             payload["summary"] = f"{spell_name} lancé ({slot_label})"
 
         return payload
+
+    def _resolve_death_save(
+        self,
+        character_id: Optional[str],
+        state_data: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Jet de sauvegarde contre la mort (SRD 5.2 §Dying).
+
+        - 20 naturel : succès critique → récupère 1 PV
+        - 1 naturel  : échec critique → 2 échecs
+        - ≥ 10       : succès
+        - 2–9        : échec
+        3 succès = stable ; 3 échecs = mort.
+        """
+        from app.engine.combat import roll_death_save  # noqa: PLC0415
+        result = roll_death_save()
+
+        cdata = state_data.get("combatants", {}).get(character_id or "", {})
+        ds = cdata.get("death_saves", {"successes": 0, "failures": 0, "stable": False})
+        succ = ds.get("successes", 0)
+        fail = ds.get("failures", 0)
+
+        if result.critical_success:
+            label = f"Jet de sauvegarde contre la mort — 20 NATUREL ! Récupère 1 PV !"
+        elif result.critical_failure:
+            fail = min(3, fail + 2)
+            label = f"Jet de sauvegarde contre la mort — 1 NATUREL ! ({fail}/3 échecs)"
+        elif result.success:
+            succ = min(3, succ + 1)
+            label = f"Jet de sauvegarde contre la mort — Succès ({result.d20_roll}) [{succ}/3]"
+        else:
+            fail = min(3, fail + 1)
+            label = f"Jet de sauvegarde contre la mort — Échec ({result.d20_roll}) [{fail}/3]"
+
+        return {
+            "type": "death_save",
+            "character_id": character_id,
+            "d20_roll": result.d20_roll,
+            "success": result.success,
+            "critical_success": result.critical_success,
+            "critical_failure": result.critical_failure,
+            "notation": "1d20",
+            "rolls": [result.d20_roll],
+            "total": result.d20_roll,
+            "modifier": 0,
+            "label": label,
+            "summary": label,
+        }
+
+    async def _apply_death_save_outcome(
+        self,
+        session_id: str,
+        character_id: Optional[str],
+        roll_results: Dict[str, Any],
+        active: Any,
+    ) -> None:
+        """Met à jour les compteurs de jet de sauvegarde et gère les issues (stable / mort)."""
+        if not character_id:
+            return
+        combatants: Dict[str, Any] = active.state_data.setdefault("combatants", {})
+        cdata = combatants.get(character_id)
+        if cdata is None:
+            return
+        ds: Dict[str, Any] = cdata.setdefault(
+            "death_saves", {"successes": 0, "failures": 0, "stable": False}
+        )
+
+        if roll_results.get("critical_success"):
+            cdata["hp"] = 1
+            ds["stable"] = True
+            conds: List[str] = list(cdata.get("conditions", []))
+            if "inconscient" in conds:
+                conds.remove("inconscient")
+                cdata["conditions"] = conds
+                await event_bus.publish_to_session(
+                    session_id,
+                    EventType.CONDITION_CHANGED,
+                    {"combatant_id": character_id, "condition": "inconscient", "added": False},
+                    source="action_resolver",
+                )
+            active.mark_dirty()
+            await event_bus.publish_to_session(
+                session_id,
+                EventType.HP_CHANGED,
+                {"combatant_id": character_id, "hp": 1, "delta": 1},
+                source="action_resolver",
+            )
+        elif roll_results.get("critical_failure"):
+            ds["failures"] = min(3, ds.get("failures", 0) + 2)
+            active.mark_dirty()
+        elif roll_results.get("success"):
+            ds["successes"] = min(3, ds.get("successes", 0) + 1)
+            if ds["successes"] >= 3:
+                ds["stable"] = True
+                conds_s: List[str] = list(cdata.get("conditions", []))
+                if "inconscient" in conds_s:
+                    conds_s.remove("inconscient")
+                    cdata["conditions"] = conds_s
+                    await event_bus.publish_to_session(
+                        session_id,
+                        EventType.CONDITION_CHANGED,
+                        {"combatant_id": character_id, "condition": "inconscient", "added": False},
+                        source="action_resolver",
+                    )
+            active.mark_dirty()
+        else:
+            ds["failures"] = min(3, ds.get("failures", 0) + 1)
+            active.mark_dirty()
+
+        if ds.get("failures", 0) >= 3 and not ds.get("stable"):
+            cdata["dead"] = True
+            active.mark_dirty()
+
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.DEATH_SAVE_UPDATED,
+            {"combatant_id": character_id, "death_saves": dict(ds)},
+            source="action_resolver",
+        )
+
+    def _resolve_stabilize(
+        self,
+        healer_id: Optional[str],
+        target_id: Optional[str],
+        state_data: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Jet de Médecine DD 10 pour stabiliser un personnage inconscient (SRD 5.2)."""
+        from app.engine.ability_checks import ability_modifier  # noqa: PLC0415
+        combatants: Dict[str, Any] = state_data.get("combatants", {})
+        healer = combatants.get(healer_id or "", {})
+        wis_score = int(healer.get("ability_scores", {}).get("wisdom", 10))
+        wis_mod = ability_modifier(wis_score)
+        r = roll("d20")
+        total = r.total + wis_mod
+        dc = 10
+        success = total >= dc
+        sign = f"+{wis_mod}" if wis_mod >= 0 else str(wis_mod)
+        target_name = combatants.get(target_id or "", {}).get("name", target_id or "cible")
+        return {
+            "type": "stabilize",
+            "healer_id": healer_id,
+            "target_id": target_id,
+            "target_name": target_name,
+            "d20_roll": r.total,
+            "modifier": wis_mod,
+            "total": total,
+            "dc": dc,
+            "success": success,
+            "notation": "1d20",
+            "rolls": [r.total],
+            "summary": (
+                f"Médecine DD {dc} : 1d20[{r.total}]{sign} = {total}"
+                f" — {'Stabilisé !' if success else 'Échec'}"
+            ),
+        }
 
     # ------------------------------------------------------------------
     # Application des actions GM (dégâts, conditions, etc.)
@@ -513,6 +846,21 @@ class ActionResolver:
                     },
                     source="action_resolver",
                 )
+                # Si un joueur tombe à 0 PV : init jets de sauvegarde contre la mort
+                if new_hp == 0 and combatants[target_id].get("is_player", False):
+                    cdata = combatants[target_id]
+                    if "death_saves" not in cdata:
+                        cdata["death_saves"] = {"successes": 0, "failures": 0, "stable": False}
+                    conds: List[str] = list(cdata.get("conditions", []))
+                    if "inconscient" not in conds:
+                        conds.append("inconscient")
+                        cdata["conditions"] = conds
+                        await event_bus.publish_to_session(
+                            session_id,
+                            EventType.CONDITION_CHANGED,
+                            {"combatant_id": target_id, "condition": "inconscient", "added": True},
+                            source="action_resolver",
+                        )
             else:
                 logger.debug(
                     "damage_apply : cible '%s' non trouvée dans state_data.", target_id
@@ -531,6 +879,20 @@ class ActionResolver:
                 },
                 source="action_resolver",
             )
+
+        elif action_type == "encounter_setup":
+            monster_ids = params.get("monster_ids", [])
+            context = params.get("context", "")
+            if monster_ids:
+                active.state_data["pending_encounter"] = {
+                    "monster_ids": monster_ids,
+                    "context": context,
+                }
+                active.mark_dirty()
+                logger.info(
+                    "encounter_setup : pending_encounter défini avec %s",
+                    monster_ids,
+                )
 
         elif action_type == "state_transition":
             # La transition de phase est déléguée au SessionManager via ws_game.py.

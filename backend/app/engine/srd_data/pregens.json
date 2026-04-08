@@ -1,0 +1,319 @@
+{
+  "_license": "D&D SRD 5.2 — CC-BY-4.0",
+  "_note": "Personnages prétirés niveau 1, un par classe. Scores finaux après bonus d'espèce.",
+  "pregens": [
+    {
+      "class_id": "fighter",
+      "class_name_fr": "Guerrier",
+      "name": "Thorvald",
+      "description": "Un guerrier robuste formé à toutes les armes et armures. Idéal pour protéger ses alliés et dominer au corps à corps.",
+      "species": "human",
+      "background": "soldier",
+      "ability_scores": {"str": 16, "dex": 14, "con": 14, "int": 9, "wis": 11, "cha": 9},
+      "hp_max": 12,
+      "equipment": [
+        {"id": "chain_mail"},
+        {"id": "longsword"},
+        {"id": "shield"},
+        {"id": "handaxe"},
+        {"id": "handaxe"},
+        {"id": "dungeoneer_pack"}
+      ],
+      "known_spells": [],
+      "proficiencies": {
+        "skills": ["athletics", "intimidation"],
+        "saving_throws": ["strength", "constitution"],
+        "armor": ["light", "medium", "heavy", "shields"],
+        "weapons": ["simple", "martial"],
+        "tools": []
+      }
+    },
+    {
+      "class_id": "wizard",
+      "class_name_fr": "Magicien",
+      "name": "Elara",
+      "description": "Une elfe savante maîtrisant les arts arcaniques. Fragile mais terriblement puissante à distance avec ses sorts offensifs et utilitaires.",
+      "species": "elf",
+      "background": "sage",
+      "ability_scores": {"str": 8, "dex": 16, "con": 12, "int": 15, "wis": 13, "cha": 10},
+      "hp_max": 7,
+      "equipment": [
+        {"id": "quarterstaff"},
+        {"id": "component_pouch"},
+        {"id": "scholar_pack"},
+        {"id": "spellbook", "name_fr": "Grimoire"}
+      ],
+      "known_spells": ["fire_bolt", "prestidigitation", "mage_hand", "magic_missile", "shield", "thunderwave", "sleep", "detect_magic", "burning_hands"],
+      "proficiencies": {
+        "skills": ["arcana", "history"],
+        "saving_throws": ["intelligence", "wisdom"],
+        "armor": [],
+        "weapons": ["daggers", "darts", "slings", "quarterstaffs", "light_crossbows"],
+        "tools": []
+      }
+    },
+    {
+      "class_id": "rogue",
+      "class_name_fr": "Roublard",
+      "name": "Shade",
+      "description": "Un voleur agile et discret, expert en attaques sournoises et en crochetage. Idéal pour l'infiltration et les combats opportunistes.",
+      "species": "human",
+      "background": "criminal",
+      "ability_scores": {"str": 11, "dex": 16, "con": 14, "int": 13, "wis": 9, "cha": 15},
+      "hp_max": 10,
+      "equipment": [
+        {"id": "rapier"},
+        {"id": "shortbow"},
+        {"id": "leather"},
+        {"id": "dagger"},
+        {"id": "dagger"},
+        {"id": "thieves_tools", "name_fr": "Outils de voleur"},
+        {"id": "burglar_pack"}
+      ],
+      "known_spells": [],
+      "proficiencies": {
+        "skills": ["deception", "stealth", "perception", "sleight_of_hand"],
+        "saving_throws": ["dexterity", "intelligence"],
+        "armor": ["light"],
+        "weapons": ["simple", "hand_crossbows", "longswords", "rapiers", "shortswords"],
+        "tools": ["thieves_tools"]
+      }
+    },
+    {
+      "class_id": "cleric",
+      "class_name_fr": "Clerc",
+      "name": "Solana",
+      "description": "Une prêtresse dédiée à la guérison et à la protection. Combinaison idéale de soigneur et de combattant armé de la faveur divine.",
+      "species": "human",
+      "background": "acolyte",
+      "ability_scores": {"str": 14, "dex": 11, "con": 14, "int": 9, "wis": 16, "cha": 13},
+      "hp_max": 10,
+      "equipment": [
+        {"id": "mace"},
+        {"id": "chain_mail"},
+        {"id": "light_crossbow"},
+        {"id": "shield"},
+        {"id": "holy_symbol", "name_fr": "Symbole sacré"},
+        {"id": "priest_pack"}
+      ],
+      "known_spells": ["sacred_flame", "guidance", "thaumaturgy"],
+      "proficiencies": {
+        "skills": ["insight", "religion"],
+        "saving_throws": ["wisdom", "charisma"],
+        "armor": ["light", "medium", "shields"],
+        "weapons": ["simple"],
+        "tools": []
+      }
+    },
+    {
+      "class_id": "barbarian",
+      "class_name_fr": "Barbare",
+      "name": "Grond",
+      "description": "Un combattant enragé d'une puissance dévastatrice. Sa rage lui confère résistance aux dégâts et force surhumaine.",
+      "species": "human",
+      "background": "folk_hero",
+      "ability_scores": {"str": 16, "dex": 14, "con": 15, "int": 9, "wis": 11, "cha": 9},
+      "hp_max": 14,
+      "equipment": [
+        {"id": "greataxe"},
+        {"id": "handaxe"},
+        {"id": "handaxe"},
+        {"id": "javelin"},
+        {"id": "javelin"},
+        {"id": "javelin"},
+        {"id": "javelin"},
+        {"id": "explorer_pack"}
+      ],
+      "known_spells": [],
+      "proficiencies": {
+        "skills": ["athletics", "intimidation", "animal_handling", "survival"],
+        "saving_throws": ["strength", "constitution"],
+        "armor": ["light", "medium", "shields"],
+        "weapons": ["simple", "martial"],
+        "tools": []
+      }
+    },
+    {
+      "class_id": "bard",
+      "class_name_fr": "Barde",
+      "name": "Lyria",
+      "description": "Une musicienne charismatique dont la musique inspire ses alliés et affaiblit ses ennemis. Excellente à la négociation et au soutien.",
+      "species": "human",
+      "background": "noble",
+      "ability_scores": {"str": 9, "dex": 15, "con": 14, "int": 13, "wis": 11, "cha": 16},
+      "hp_max": 10,
+      "equipment": [
+        {"id": "rapier"},
+        {"id": "leather"},
+        {"id": "dagger"},
+        {"id": "lute", "name_fr": "Luth"},
+        {"id": "entertainer_pack", "name_fr": "Paquetage d'artiste"}
+      ],
+      "known_spells": ["vicious_mockery", "prestidigitation", "healing_word", "thunderwave", "charm_person", "faerie_fire"],
+      "proficiencies": {
+        "skills": ["history", "persuasion", "performance", "deception", "perception"],
+        "saving_throws": ["dexterity", "charisma"],
+        "armor": ["light"],
+        "weapons": ["simple", "hand_crossbows", "longswords", "rapiers", "shortswords"],
+        "tools": ["musical_instrument"]
+      }
+    },
+    {
+      "class_id": "druid",
+      "class_name_fr": "Druide",
+      "name": "Oaken",
+      "description": "Un gardien de la nature elfique, maître des sorts des éléments et de la faune. Polyvalent entre soutien et dégâts à distance.",
+      "species": "elf",
+      "background": "folk_hero",
+      "ability_scores": {"str": 8, "dex": 16, "con": 12, "int": 13, "wis": 15, "cha": 10},
+      "hp_max": 9,
+      "equipment": [
+        {"id": "quarterstaff"},
+        {"id": "leather"},
+        {"id": "druidic_focus", "name_fr": "Focalisateur druidique"},
+        {"id": "explorer_pack"}
+      ],
+      "known_spells": ["guidance", "produce_flame", "poison_spray"],
+      "proficiencies": {
+        "skills": ["perception", "nature", "animal_handling", "survival"],
+        "saving_throws": ["intelligence", "wisdom"],
+        "armor": ["light", "medium", "shields"],
+        "weapons": ["clubs", "daggers", "darts", "javelins", "maces", "quarterstaffs", "sickles", "slings", "spears"],
+        "tools": ["herbalism_kit"]
+      }
+    },
+    {
+      "class_id": "monk",
+      "class_name_fr": "Moine",
+      "name": "Sunwing",
+      "description": "Un maître des arts martiaux qui frappe vite et précisément. N'a pas besoin d'armure grâce à sa défense ki et sa haute dextérité.",
+      "species": "human",
+      "background": "folk_hero",
+      "ability_scores": {"str": 13, "dex": 16, "con": 14, "int": 9, "wis": 15, "cha": 11},
+      "hp_max": 10,
+      "equipment": [
+        {"id": "shortsword"},
+        {"id": "dungeoneer_pack"},
+        {"id": "dagger"},
+        {"id": "dagger"},
+        {"id": "dagger"},
+        {"id": "dagger"},
+        {"id": "dagger"}
+      ],
+      "known_spells": [],
+      "proficiencies": {
+        "skills": ["acrobatics", "stealth", "animal_handling", "survival"],
+        "saving_throws": ["strength", "dexterity"],
+        "armor": [],
+        "weapons": ["simple", "shortswords"],
+        "tools": []
+      }
+    },
+    {
+      "class_id": "paladin",
+      "class_name_fr": "Paladin",
+      "name": "Ardent",
+      "description": "Un chevalier sacré alliant la puissance martiale et la magie divine. Excellent défenseur avec son aura de protection et ses soins par imposition des mains.",
+      "species": "human",
+      "background": "noble",
+      "ability_scores": {"str": 16, "dex": 11, "con": 14, "int": 9, "wis": 13, "cha": 15},
+      "hp_max": 12,
+      "equipment": [
+        {"id": "longsword"},
+        {"id": "shield"},
+        {"id": "chain_mail"},
+        {"id": "holy_symbol", "name_fr": "Symbole sacré"},
+        {"id": "javelin"},
+        {"id": "javelin"},
+        {"id": "javelin"},
+        {"id": "javelin"},
+        {"id": "javelin"},
+        {"id": "priest_pack"}
+      ],
+      "known_spells": [],
+      "proficiencies": {
+        "skills": ["athletics", "insight", "history", "persuasion"],
+        "saving_throws": ["wisdom", "charisma"],
+        "armor": ["light", "medium", "heavy", "shields"],
+        "weapons": ["simple", "martial"],
+        "tools": []
+      }
+    },
+    {
+      "class_id": "ranger",
+      "class_name_fr": "Rôdeur",
+      "name": "Vael",
+      "description": "Un chasseur elfique expert en survie et en combat à distance. Redoutable contre ses ennemis jurés, à l'aise dans toutes les contrées sauvages.",
+      "species": "elf",
+      "background": "folk_hero",
+      "ability_scores": {"str": 10, "dex": 17, "con": 13, "int": 12, "wis": 14, "cha": 8},
+      "hp_max": 11,
+      "equipment": [
+        {"id": "scale_mail"},
+        {"id": "shortsword"},
+        {"id": "shortsword"},
+        {"id": "longbow"},
+        {"id": "dungeoneer_pack"}
+      ],
+      "known_spells": [],
+      "proficiencies": {
+        "skills": ["perception", "stealth", "investigation", "animal_handling", "survival"],
+        "saving_throws": ["strength", "dexterity"],
+        "armor": ["light", "medium", "shields"],
+        "weapons": ["simple", "martial"],
+        "tools": []
+      }
+    },
+    {
+      "class_id": "sorcerer",
+      "class_name_fr": "Ensorceleur",
+      "name": "Zara",
+      "description": "Une ensorceleure dont la magie jaillit de son sang draconique. Puissante à distance avec de nombreux tours de magie et sorts dévastateurs.",
+      "species": "human",
+      "background": "sage",
+      "ability_scores": {"str": 9, "dex": 14, "con": 15, "int": 13, "wis": 11, "cha": 16},
+      "hp_max": 8,
+      "equipment": [
+        {"id": "light_crossbow"},
+        {"id": "component_pouch"},
+        {"id": "dagger"},
+        {"id": "dagger"},
+        {"id": "dungeoneer_pack"}
+      ],
+      "known_spells": ["fire_bolt", "chill_touch", "prestidigitation", "minor_illusion", "magic_missile", "shield"],
+      "proficiencies": {
+        "skills": ["arcana", "history", "deception", "persuasion"],
+        "saving_throws": ["constitution", "charisma"],
+        "armor": [],
+        "weapons": ["daggers", "darts", "slings", "quarterstaffs", "light_crossbows"],
+        "tools": []
+      }
+    },
+    {
+      "class_id": "warlock",
+      "class_name_fr": "Sorcier",
+      "name": "Corvus",
+      "description": "Un invocateur lié à une entité occulte, maniant des pouvoirs maudits. Ses sorts récupèrent sur un repos court, le rendant endurant sur la durée.",
+      "species": "human",
+      "background": "sage",
+      "ability_scores": {"str": 9, "dex": 15, "con": 14, "int": 13, "wis": 11, "cha": 16},
+      "hp_max": 10,
+      "equipment": [
+        {"id": "light_crossbow"},
+        {"id": "component_pouch"},
+        {"id": "leather"},
+        {"id": "dagger"},
+        {"id": "dagger"},
+        {"id": "scholar_pack"}
+      ],
+      "known_spells": ["eldritch_blast", "prestidigitation", "hex", "arms_of_hadar"],
+      "proficiencies": {
+        "skills": ["arcana", "history", "deception", "intimidation"],
+        "saving_throws": ["wisdom", "charisma"],
+        "armor": ["light"],
+        "weapons": ["simple"],
+        "tools": []
+      }
+    }
+  ]
+}

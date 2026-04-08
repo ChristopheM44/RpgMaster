@@ -2,7 +2,6 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSessionStore } from '../stores/session'
-import { characterApi } from '../services/api'
 import type { Session } from '../types'
 
 const router = useRouter()
@@ -45,21 +44,18 @@ async function handleCreate() {
   const session = await sessionStore.createSession(name)
   if (session) {
     newSessionName.value = ''
-    router.push({ name: 'character-creation', params: { id: session.id } })
+    router.push({ name: 'character-setup', params: { id: session.id } })
   }
 }
 
 async function handleJoin(session: Session) {
   sessionStore.setCurrentSession(session)
-  if (session.status === 'lobby' || session.status === 'character_creation') {
-    // Redirect to character creation only if no characters exist yet
-    const { characters } = await characterApi.list(session.id)
-    if (characters.length === 0) {
-      router.push({ name: 'character-creation', params: { id: session.id } })
-      return
-    }
-  }
   router.push({ name: 'game-session', params: { id: session.id } })
+}
+
+function handleAddCharacter(session: Session) {
+  sessionStore.setCurrentSession(session)
+  router.push({ name: 'character-setup', params: { id: session.id } })
 }
 
 async function handleDelete(id: string) {
@@ -81,10 +77,20 @@ function formatDate(dateStr: string): string {
 <template>
   <div class="mx-auto max-w-4xl px-6 py-10">
     <!-- Titre -->
-    <h1 class="mb-2 text-4xl font-bold text-gold">Lobby</h1>
-    <p class="mb-10 text-parchment-dark">
-      Créez une nouvelle session ou reprenez une partie en cours.
-    </p>
+    <div class="mb-10 flex items-start justify-between">
+      <div>
+        <h1 class="mb-2 text-4xl font-bold text-gold">Lobby</h1>
+        <p class="text-parchment-dark">
+          Créez une nouvelle session ou reprenez une partie en cours.
+        </p>
+      </div>
+      <button
+        class="rounded border border-gold/30 bg-gold/10 px-4 py-2 text-sm font-semibold text-gold transition hover:bg-gold/20"
+        @click="router.push({ name: 'campaigns' })"
+      >
+        ⚔ Campagnes
+      </button>
+    </div>
 
     <!-- Erreur globale -->
     <div
@@ -180,6 +186,13 @@ function formatDate(dateStr: string): string {
             </template>
 
             <template v-else>
+              <button
+                v-if="session.status === 'lobby' || session.status === 'character_creation'"
+                class="rounded border border-arcane/60 px-3 py-1 font-display text-sm text-arcane transition hover:bg-arcane/10"
+                @click="handleAddCharacter(session)"
+              >
+                + Perso
+              </button>
               <button
                 class="rounded border border-gold px-4 py-1 font-display text-sm text-gold transition hover:bg-gold hover:text-ink"
                 @click="handleJoin(session)"

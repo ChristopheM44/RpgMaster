@@ -22,12 +22,12 @@
         {
           "name": "Fighting Style",
           "name_fr": "Style de combat",
-          "description": "You adopt a particular style of fighting as your specialty. Choose one: Archery, Defense, Dueling, Great Weapon Fighting, Protection, or Two-Weapon Fighting."
+          "description": "Vous adoptez un style de combat particulier comme spécialité. Choisissez l'un des styles suivants : Archerie, Défense, Duel, Combat à grandes armes, Protection ou Combat à deux armes."
         },
         {
           "name": "Second Wind",
           "name_fr": "Second souffle",
-          "description": "You can use a bonus action to regain 1d10 + fighter level HP. Usable once per short or long rest."
+          "description": "Vous pouvez utiliser une action bonus pour regagner 1d10 + niveau de guerrier points de vie. Utilisable une fois par repos court ou long."
         }
       ],
       "starting_equipment": [
@@ -56,7 +56,7 @@
           ]
         }
       ],
-      "description": "A master of martial combat, skilled with a variety of weapons and armor."
+      "description": "Un maître du combat martial, habile avec de nombreuses armes et armures."
     },
     {
       "id": "wizard",
@@ -78,12 +78,12 @@
         {
           "name": "Spellcasting",
           "name_fr": "Incantation",
-          "description": "You have a spellbook with 6 1st-level spells. You prepare INT modifier + wizard level spells per day. Spell save DC = 8 + prof + INT mod. Spell attack = prof + INT mod."
+          "description": "Vous possédez un grimoire contenant 6 sorts de niveau 1. Vous préparez un nombre de sorts égal à votre modificateur d'Intelligence + votre niveau de magicien. DD de sauvegarde des sorts = 8 + bonus de maîtrise + mod. d'Intelligence. Bonus d'attaque de sort = bonus de maîtrise + mod. d'Intelligence."
         },
         {
           "name": "Arcane Recovery",
           "name_fr": "Récupération arcanique",
-          "description": "Once per long rest, during a short rest, you can recover spell slots with a combined level up to half your wizard level (rounded up)."
+          "description": "Une fois par repos long, lors d'un repos court, vous pouvez récupérer des emplacements de sorts dont le niveau combiné est inférieur ou égal à la moitié de votre niveau de magicien (arrondi au supérieur)."
         }
       ],
       "starting_equipment": [
@@ -109,7 +109,7 @@
           "fixed": ["spellbook"]
         }
       ],
-      "description": "A scholarly magic-user capable of manipulating the structures of reality."
+      "description": "Un utilisateur savant de la magie, capable de manipuler les structures de la réalité."
     },
     {
       "id": "rogue",
@@ -133,17 +133,17 @@
         {
           "name": "Expertise",
           "name_fr": "Expertise",
-          "description": "Choose two skill proficiencies or one skill and thieves' tools. Your proficiency bonus is doubled for those skills."
+          "description": "Choisissez deux maîtrises de compétences ou une compétence et les outils de voleur. Votre bonus de maîtrise est doublé pour ces compétences."
         },
         {
           "name": "Sneak Attack",
           "name_fr": "Attaque sournoise",
-          "description": "Once per turn, deal 1d6 extra damage if you have advantage on the attack roll, or an ally is within 5 ft of the target. Requires a finesse or ranged weapon."
+          "description": "Une fois par tour, infligez 1d6 dégâts supplémentaires si vous avez l'avantage au jet d'attaque, ou si un allié se trouve à 1,50 mètre de la cible. Nécessite une arme de finesse ou à distance."
         },
         {
           "name": "Thieves' Cant",
           "name_fr": "Argot des voleurs",
-          "description": "You understand thieves' cant, a secret language of the criminal underworld, including signs and symbols used to convey messages."
+          "description": "Vous comprenez l'argot des voleurs, un langage secret du milieu criminel, incluant des signes et symboles utilisés pour transmettre des messages."
         }
       ],
       "starting_equipment": [
@@ -170,7 +170,7 @@
           "fixed": ["leather", "two_daggers", "thieves_tools"]
         }
       ],
-      "description": "A scoundrel who uses stealth and trickery to overcome obstacles and enemies."
+      "description": "Un vaurien qui use de la furtivité et de la ruse pour surmonter les obstacles et les ennemis."
     },
     {
       "id": "cleric",
@@ -190,17 +190,17 @@
         {
           "name": "Spellcasting",
           "name_fr": "Incantation",
-          "description": "Wisdom is your spellcasting ability. Spell save DC = 8 + prof + WIS mod. Spell attack = prof + WIS mod. You prepare WIS modifier + cleric level spells from the cleric list."
+          "description": "La Sagesse est votre caractéristique d'incantation. DD de sauvegarde des sorts = 8 + bonus de maîtrise + mod. de Sagesse. Bonus d'attaque de sort = bonus de maîtrise + mod. de Sagesse. Vous préparez un nombre de sorts égal à votre modificateur de Sagesse + votre niveau de clerc."
         },
         {
           "name": "Divine Domain",
           "name_fr": "Domaine divin",
-          "description": "Choose a domain — Life, Light, Trickery, or War. You gain domain spells and features depending on your choice."
+          "description": "Choisissez un domaine parmi : Vie, Lumière, Duperie ou Guerre. Vous obtenez des sorts de domaine et des capacités selon votre choix."
         },
         {
           "name": "Channel Divinity",
           "name_fr": "Conduit divin",
-          "description": "Once per short or long rest, you can channel divine energy. Turn Undead: undead within 30 ft must succeed on a WIS saving throw or be turned for 1 minute."
+          "description": "Une fois par repos court ou long, vous pouvez canaliser l'énergie divine. Renvoi des morts-vivants : les morts-vivants dans un rayon de 9 mètres doivent réussir un jet de sauvegarde de Sagesse ou être renvoyés pendant 1 minute."
         }
       ],
       "starting_equipment": [
@@ -233,7 +233,417 @@
           "fixed": ["shield", "holy_symbol"]
         }
       ],
-      "description": "A priestly champion who wields divine magic in service of a higher power."
+      "description": "Un champion divin qui manie la magie divine au service d'une puissance supérieure."
+    },
+    {
+      "id": "barbarian",
+      "name": "Barbarian",
+      "name_fr": "Barbare",
+      "hit_die": 12,
+      "primary_abilities": ["strength", "constitution"],
+      "saving_throw_proficiencies": ["strength", "constitution"],
+      "armor_proficiencies": ["light", "medium", "shields"],
+      "weapon_proficiencies": ["simple", "martial"],
+      "tool_proficiencies": [],
+      "skill_choices": [
+        "animal_handling", "athletics", "intimidation", "nature", "perception", "survival"
+      ],
+      "num_skill_choices": 2,
+      "spellcasting_ability": null,
+      "caster_type": null,
+      "level_1_features": [
+        {
+          "name": "Rage",
+          "name_fr": "Rage",
+          "description": "Au combat, vous vous battez avec une férocité primitive. Par une action bonus, vous entrez en rage pour 1 minute. En rage : avantage aux jets de Force, résistance aux dégâts contondants/perforants/tranchants, bonus aux dégâts en Force (+2). Utilisable 2 fois par repos long au niveau 1."
+        },
+        {
+          "name": "Unarmored Defense",
+          "name_fr": "Défense sans armure",
+          "description": "Sans armure, votre Classe d'Armure est égale à 10 + modificateur de Dextérité + modificateur de Constitution. Vous pouvez utiliser un bouclier et conserver cet avantage."
+        }
+      ],
+      "starting_equipment": [
+        {
+          "choice": [
+            ["greataxe"],
+            ["martial_weapon"]
+          ]
+        },
+        {
+          "choice": [
+            ["handaxe", "handaxe"],
+            ["simple_weapon"]
+          ]
+        },
+        {
+          "fixed": ["explorer_pack", "javelin", "javelin", "javelin", "javelin"]
+        }
+      ],
+      "description": "Un combattant sauvage et féroce qui puise dans une rage primitive pour frapper ses ennemis avec une force dévastatrice."
+    },
+    {
+      "id": "bard",
+      "name": "Bard",
+      "name_fr": "Barde",
+      "hit_die": 8,
+      "primary_abilities": ["charisma"],
+      "saving_throw_proficiencies": ["dexterity", "charisma"],
+      "armor_proficiencies": ["light"],
+      "weapon_proficiencies": ["simple", "hand_crossbows", "longswords", "rapiers", "shortswords"],
+      "tool_proficiencies": ["musical_instrument"],
+      "skill_choices": [
+        "acrobatics", "animal_handling", "arcana", "athletics", "deception", "history",
+        "insight", "intimidation", "investigation", "medicine", "nature", "perception",
+        "performance", "persuasion", "religion", "sleight_of_hand", "stealth", "survival"
+      ],
+      "num_skill_choices": 3,
+      "spellcasting_ability": "charisma",
+      "caster_type": "full",
+      "level_1_features": [
+        {
+          "name": "Spellcasting",
+          "name_fr": "Incantation",
+          "description": "Le Charisme est votre caractéristique d'incantation. DD de sauvegarde = 8 + bonus de maîtrise + mod. de Charisme. Vous connaissez 4 sorts de barde et 2 tours de magie. Vous avez des emplacements de sorts de lanceur complet."
+        },
+        {
+          "name": "Bardic Inspiration",
+          "name_fr": "Inspiration bardique (d6)",
+          "description": "Par une action bonus, choisissez une créature dans un rayon de 18 mètres qui peut vous entendre. Elle gagne un dé d'Inspiration bardique (d6) utilisable dans l'heure. Elle peut ajouter ce dé à un jet d'attaque, de caractéristique ou de sauvegarde. Utilisable Charisme fois par repos long."
+        }
+      ],
+      "starting_equipment": [
+        {
+          "choice": [
+            ["rapier"],
+            ["longsword"],
+            ["simple_weapon"]
+          ]
+        },
+        {
+          "choice": [
+            ["diplomat_pack"],
+            ["entertainer_pack"]
+          ]
+        },
+        {
+          "choice": [
+            ["lute"],
+            ["musical_instrument"]
+          ]
+        },
+        {
+          "fixed": ["leather", "dagger"]
+        }
+      ],
+      "description": "Un artiste inspiré dont la musique et les mots ont le pouvoir de modifier le cours des batailles et d'illuminer les esprits."
+    },
+    {
+      "id": "druid",
+      "name": "Druid",
+      "name_fr": "Druide",
+      "hit_die": 8,
+      "primary_abilities": ["wisdom"],
+      "saving_throw_proficiencies": ["intelligence", "wisdom"],
+      "armor_proficiencies": ["light", "medium", "shields"],
+      "weapon_proficiencies": ["clubs", "daggers", "darts", "javelins", "maces", "quarterstaffs", "scimitars", "sickles", "slings", "spears"],
+      "tool_proficiencies": ["herbalism_kit"],
+      "skill_choices": [
+        "arcana", "animal_handling", "insight", "medicine", "nature", "perception", "religion", "survival"
+      ],
+      "num_skill_choices": 2,
+      "spellcasting_ability": "wisdom",
+      "caster_type": "full",
+      "level_1_features": [
+        {
+          "name": "Druidic",
+          "name_fr": "Druidique",
+          "description": "Vous connaissez le druidique, la langue secrète des druides. Vous pouvez parler, lire et écrire cette langue. Elle est gardée secrète par les druides."
+        },
+        {
+          "name": "Spellcasting",
+          "name_fr": "Incantation",
+          "description": "La Sagesse est votre caractéristique d'incantation. DD de sauvegarde = 8 + bonus de maîtrise + mod. de Sagesse. Vous préparez un nombre de sorts égal à votre modificateur de Sagesse + votre niveau de druide. Vous avez des emplacements de sorts de lanceur complet."
+        }
+      ],
+      "starting_equipment": [
+        {
+          "choice": [
+            ["wooden_shield"],
+            ["simple_weapon"]
+          ]
+        },
+        {
+          "choice": [
+            ["scimitar"],
+            ["simple_melee_weapon"]
+          ]
+        },
+        {
+          "fixed": ["leather", "explorer_pack", "druidic_focus"]
+        }
+      ],
+      "description": "Un gardien de la nature qui tire sa magie du monde naturel, capable de prendre la forme d'animaux et de lancer des sorts des éléments."
+    },
+    {
+      "id": "monk",
+      "name": "Monk",
+      "name_fr": "Moine",
+      "hit_die": 8,
+      "primary_abilities": ["dexterity", "wisdom"],
+      "saving_throw_proficiencies": ["strength", "dexterity"],
+      "armor_proficiencies": [],
+      "weapon_proficiencies": ["simple", "shortswords"],
+      "tool_proficiencies": [],
+      "skill_choices": [
+        "acrobatics", "athletics", "history", "insight", "religion", "stealth"
+      ],
+      "num_skill_choices": 2,
+      "spellcasting_ability": null,
+      "caster_type": null,
+      "level_1_features": [
+        {
+          "name": "Unarmored Defense",
+          "name_fr": "Défense sans armure",
+          "description": "Sans armure ni bouclier, votre CA est égale à 10 + modificateur de Dextérité + modificateur de Sagesse."
+        },
+        {
+          "name": "Martial Arts",
+          "name_fr": "Arts martiaux",
+          "description": "Vous maîtrisez les arts martiaux. Vos frappes à mains nues et armes de moine infligent 1d4 dégâts. Vous pouvez utiliser la Dextérité au lieu de la Force pour les jets d'attaque et de dégâts. Lorsque vous utilisez une attaque avec action, vous pouvez faire une frappe à mains nues par action bonus."
+        }
+      ],
+      "starting_equipment": [
+        {
+          "choice": [
+            ["shortsword"],
+            ["simple_weapon"]
+          ]
+        },
+        {
+          "choice": [
+            ["dungeoneer_pack"],
+            ["explorer_pack"]
+          ]
+        },
+        {
+          "fixed": ["dart", "dart", "dart", "dart", "dart", "dart", "dart", "dart", "dart", "dart"]
+        }
+      ],
+      "description": "Un maître des arts martiaux qui exploite l'énergie ki pour effectuer des prouesses physiques prodigieuses et des attaques dévastatrices."
+    },
+    {
+      "id": "paladin",
+      "name": "Paladin",
+      "name_fr": "Paladin",
+      "hit_die": 10,
+      "primary_abilities": ["strength", "charisma"],
+      "saving_throw_proficiencies": ["wisdom", "charisma"],
+      "armor_proficiencies": ["light", "medium", "heavy", "shields"],
+      "weapon_proficiencies": ["simple", "martial"],
+      "tool_proficiencies": [],
+      "skill_choices": [
+        "athletics", "insight", "intimidation", "medicine", "persuasion", "religion"
+      ],
+      "num_skill_choices": 2,
+      "spellcasting_ability": "charisma",
+      "caster_type": "half",
+      "level_1_features": [
+        {
+          "name": "Divine Sense",
+          "name_fr": "Sens divin",
+          "description": "Par une action, vous pouvez percevoir la présence de tout céleste, fiélon ou mort-vivant dans un rayon de 18 mètres qui n'est pas derrière une couverture totale. Utilisable 1 + modificateur de Charisme fois par repos long."
+        },
+        {
+          "name": "Lay on Hands",
+          "name_fr": "Imposition des mains",
+          "description": "Vous disposez d'un réservoir de 5 × niveau de paladin points de vie par repos long. Par une action, vous pouvez toucher une créature pour lui restaurer jusqu'à ce nombre de PV. Vous pouvez aussi dépenser 5 PV pour guérir une maladie ou un poison."
+        }
+      ],
+      "starting_equipment": [
+        {
+          "choice": [
+            ["martial_weapon", "shield"],
+            ["martial_weapon", "martial_weapon"]
+          ]
+        },
+        {
+          "choice": [
+            ["javelin", "javelin", "javelin", "javelin", "javelin"],
+            ["simple_weapon"]
+          ]
+        },
+        {
+          "choice": [
+            ["priest_pack"],
+            ["explorer_pack"]
+          ]
+        },
+        {
+          "fixed": ["chain_mail", "holy_symbol"]
+        }
+      ],
+      "description": "Un saint guerrier lié par un serment sacré à combattre le mal et à défendre la justice, capable de lancer des sorts divins et de guérir ses alliés."
+    },
+    {
+      "id": "ranger",
+      "name": "Ranger",
+      "name_fr": "Rôdeur",
+      "hit_die": 10,
+      "primary_abilities": ["dexterity", "wisdom"],
+      "saving_throw_proficiencies": ["strength", "dexterity"],
+      "armor_proficiencies": ["light", "medium", "shields"],
+      "weapon_proficiencies": ["simple", "martial"],
+      "tool_proficiencies": [],
+      "skill_choices": [
+        "animal_handling", "athletics", "insight", "investigation", "nature",
+        "perception", "stealth", "survival"
+      ],
+      "num_skill_choices": 3,
+      "spellcasting_ability": "wisdom",
+      "caster_type": "half",
+      "level_1_features": [
+        {
+          "name": "Favored Enemy",
+          "name_fr": "Ennemi juré",
+          "description": "Choisissez un type d'ennemi juré (aberrations, bêtes, célestes, constructions, dragons, élémentaires, fées, fiélons, géants, humanoïdes, plantes, morts-vivants ou vases). Vous avez l'avantage aux jets de Sagesse (Survie) pour traquer ces créatures et de Sagesse (Intuition) pour les comprendre. Vous apprenez leur langue."
+        },
+        {
+          "name": "Natural Explorer",
+          "name_fr": "Explorateur né",
+          "description": "Choisissez un type de terrain favori (arctique, côtier, désert, forêt, prairies, marais, montagne ou souterrain). Vous ignorez les terrains difficiles dans cet environnement, obtenez l'avantage à l'initiative et doublez votre bonus de maîtrise pour certains tests de compétence liés à ce terrain."
+        }
+      ],
+      "starting_equipment": [
+        {
+          "choice": [
+            ["scale_mail"],
+            ["leather"]
+          ]
+        },
+        {
+          "choice": [
+            ["shortsword", "shortsword"],
+            ["simple_melee_weapon", "simple_melee_weapon"]
+          ]
+        },
+        {
+          "choice": [
+            ["dungeoneer_pack"],
+            ["explorer_pack"]
+          ]
+        },
+        {
+          "fixed": ["longbow", "quiver", "20 arrows"]
+        }
+      ],
+      "description": "Un chasseur et explorateur des contrées sauvages, maître du combat et de la survie, capable de traquer ses ennemis jurés à travers n'importe quel terrain."
+    },
+    {
+      "id": "sorcerer",
+      "name": "Sorcerer",
+      "name_fr": "Ensorceleur",
+      "hit_die": 6,
+      "primary_abilities": ["charisma"],
+      "saving_throw_proficiencies": ["constitution", "charisma"],
+      "armor_proficiencies": [],
+      "weapon_proficiencies": ["daggers", "darts", "slings", "quarterstaffs", "light_crossbows"],
+      "tool_proficiencies": [],
+      "skill_choices": [
+        "arcana", "deception", "insight", "intimidation", "persuasion", "religion"
+      ],
+      "num_skill_choices": 2,
+      "spellcasting_ability": "charisma",
+      "caster_type": "full",
+      "level_1_features": [
+        {
+          "name": "Spellcasting",
+          "name_fr": "Incantation",
+          "description": "Le Charisme est votre caractéristique d'incantation. DD de sauvegarde = 8 + bonus de maîtrise + mod. de Charisme. Vous connaissez 2 tours de magie et 2 sorts de niveau 1. Vous avez des emplacements de sorts de lanceur complet."
+        },
+        {
+          "name": "Sorcerous Origin",
+          "name_fr": "Origine magique",
+          "description": "Choisissez une origine ensorcelée : Lignée draconique (résistance à un type de dégâts, peau squameuse) ou Magie sauvage (surtensions de magie sauvage). Cette origine vous confère des capacités supplémentaires aux niveaux 1, 6, 14 et 18."
+        }
+      ],
+      "starting_equipment": [
+        {
+          "choice": [
+            ["light_crossbow", "20 bolts"],
+            ["simple_weapon"]
+          ]
+        },
+        {
+          "choice": [
+            ["component_pouch"],
+            ["arcane_focus"]
+          ]
+        },
+        {
+          "choice": [
+            ["dungeoneer_pack"],
+            ["explorer_pack"]
+          ]
+        },
+        {
+          "fixed": ["dagger", "dagger"]
+        }
+      ],
+      "description": "Un lanceur de sorts dont le pouvoir magique jaillit d'une source intérieure innée, souvent liée à une lignée draconique ou à une exposition à une magie sauvage."
+    },
+    {
+      "id": "warlock",
+      "name": "Warlock",
+      "name_fr": "Sorcier",
+      "hit_die": 8,
+      "primary_abilities": ["charisma"],
+      "saving_throw_proficiencies": ["wisdom", "charisma"],
+      "armor_proficiencies": ["light"],
+      "weapon_proficiencies": ["simple"],
+      "tool_proficiencies": [],
+      "skill_choices": [
+        "arcana", "deception", "history", "intimidation", "investigation", "nature", "religion"
+      ],
+      "num_skill_choices": 2,
+      "spellcasting_ability": "charisma",
+      "caster_type": "half",
+      "level_1_features": [
+        {
+          "name": "Otherworldly Patron",
+          "name_fr": "Patron occulte",
+          "description": "Vous avez conclu un pacte avec un être d'autre monde : l'Archifée, le Fiélon ou le Grand Ancien. Votre patron vous octroie des pouvoirs et des sorts supplémentaires selon votre choix."
+        },
+        {
+          "name": "Pact Magic",
+          "name_fr": "Magie de pacte",
+          "description": "Le Charisme est votre caractéristique d'incantation. Vous avez des emplacements de sorts qui se rechargent après un repos court ou long. Au niveau 1, vous avez 1 emplacement de niveau 1. Vous connaissez 2 sorts de sorcier et 2 tours de magie."
+        }
+      ],
+      "starting_equipment": [
+        {
+          "choice": [
+            ["light_crossbow", "20 bolts"],
+            ["simple_weapon"]
+          ]
+        },
+        {
+          "choice": [
+            ["component_pouch"],
+            ["arcane_focus"]
+          ]
+        },
+        {
+          "choice": [
+            ["scholar_pack"],
+            ["dungeoneer_pack"]
+          ]
+        },
+        {
+          "fixed": ["leather", "simple_weapon", "dagger", "dagger"]
+        }
+      ],
+      "description": "Un utilisateur de magie qui a conclu un pacte avec une entité puissante d'un autre monde, obtenant des pouvoirs occultes en échange de service ou de dévotion."
     }
   ]
 }

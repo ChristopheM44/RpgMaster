@@ -5,6 +5,7 @@ import { useGameStore } from '../../stores/game'
 import type { SaveSlot } from '../../types'
 
 const props = defineProps<{ sessionId: string }>()
+const emit = defineEmits<{ (e: 'load-complete'): void }>()
 
 const gameStore = useGameStore()
 const saves = ref<SaveSlot[]>([])
@@ -45,8 +46,8 @@ async function loadSave(saveId: string) {
   successMsg.value = null
   try {
     await saveApi.load(props.sessionId, saveId)
-    successMsg.value = 'Partie restaurée. Reconnexion recommandée.'
-    gameStore.addSystemEntry('Partie restaurée depuis une sauvegarde.')
+    successMsg.value = 'Partie restaurée. Reconnexion en cours…'
+    emit('load-complete')
   } catch (e: unknown) {
     error.value = e instanceof Error ? e.message : 'Erreur lors du chargement.'
   } finally {

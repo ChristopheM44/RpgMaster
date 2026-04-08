@@ -85,7 +85,7 @@ class ActionEconomy:
     action: bool = True
     bonus_action: bool = True
     reaction: bool = True
-    movement: int = 30  # feet remaining
+    movement: float = 9.0  # mètres restants
 
     def use_action(self) -> bool:
         """Consume the action. Returns False if already spent."""
@@ -108,11 +108,11 @@ class ActionEconomy:
         self.reaction = False
         return True
 
-    def spend_movement(self, feet: int) -> bool:
+    def spend_movement(self, meters: float) -> bool:
         """Spend movement. Returns False if insufficient movement remains."""
-        if feet > self.movement:
+        if meters > self.movement:
             return False
-        self.movement -= feet
+        self.movement -= meters
         return True
 
 
@@ -232,6 +232,12 @@ def roll_damage(
         ValueError: If the notation is invalid or uses keep-highest syntax.
     """
     cleaned = notation.strip().lower().replace(" ", "")
+
+    # Support flat damage values (e.g. "1" for monsters with no damage dice)
+    if cleaned.lstrip("+-").isdigit():
+        flat = max(0, int(cleaned))
+        return DamageResult(notation=notation, rolls=[], modifier=flat, total=flat, critical=False)
+
     m = _DMG_NOTATION.match(cleaned)
     if not m:
         raise ValueError(
@@ -282,10 +288,10 @@ def roll_death_save(rng: Optional[random.Random] = None) -> DeathSaveResult:
     )
 
 
-def new_turn_economy(speed: int = 30) -> ActionEconomy:
+def new_turn_economy(speed: float = 9.0) -> ActionEconomy:
     """Return a fresh ActionEconomy at the start of a combatant's turn.
 
     Args:
-        speed: The combatant's base walking speed in feet (default 30).
+        speed: The combatant's base walking speed in metres (default 9 m = 30 ft).
     """
     return ActionEconomy(action=True, bonus_action=True, reaction=True, movement=speed)

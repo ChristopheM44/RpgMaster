@@ -31,7 +31,7 @@ class CombatantInfo:
     name: str
     dex_score: int
     is_player: bool
-    speed: int = 30  # walking speed in feet
+    speed: float = 9.0  # vitesse en mètres
     is_ai_controlled: bool = False  # True for AI companion players
 
 

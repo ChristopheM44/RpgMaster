@@ -6,8 +6,7 @@
       "name": "Human",
       "name_fr": "Humain",
       "size": "Medium",
-      "speed": 30,
-      "darkvision_ft": 0,
+      "speed": 9,
       "ability_bonuses": {
         "strength": 1,
         "dexterity": 1,
@@ -17,21 +16,24 @@
         "charisma": 1
       },
       "skill_proficiencies": [],
-      "languages": ["common"],
+      "languages": [
+        "common"
+      ],
       "extra_languages": 1,
       "traits": [
         {
           "name": "Versatility",
           "name_fr": "Versatilité",
-          "description": "Humans gain +1 to all six ability scores, reflecting their adaptability and ambition."
+          "description": "Les humains gagnent +1 à leurs six valeurs de caractéristiques, reflétant leur adaptabilité et leur ambition."
         },
         {
           "name": "Extra Language",
           "name_fr": "Langue supplémentaire",
-          "description": "You can speak, read, and write one extra language of your choice."
+          "description": "Vous pouvez parler, lire et écrire une langue supplémentaire de votre choix."
         }
       ],
-      "description": "Humans are the most adaptable and ambitious people among the common races. They are short-lived compared to other races, but strive to achieve as much as they can in years they have."
+      "description": "Les humains sont le peuple le plus adaptable et le plus ambitieux parmi les races communes. Ils vivent moins longtemps que les autres races, mais s'efforcent d'accomplir autant que possible durant leurs années.",
+      "darkvision_m": 0
     },
     {
       "id": "elf",
@@ -39,48 +41,53 @@
       "name_fr": "Elfe",
       "subtype": "High Elf",
       "size": "Medium",
-      "speed": 30,
-      "darkvision_ft": 60,
+      "speed": 9,
       "ability_bonuses": {
         "dexterity": 2,
         "intelligence": 1
       },
-      "skill_proficiencies": ["perception"],
-      "languages": ["common", "elvish"],
+      "skill_proficiencies": [
+        "perception"
+      ],
+      "languages": [
+        "common",
+        "elvish"
+      ],
       "extra_languages": 0,
       "traits": [
         {
           "name": "Darkvision",
           "name_fr": "Vision dans le noir",
-          "description": "You can see in dim light within 60 feet as if it were bright light, and in darkness as if it were dim light. You can't discern color in darkness, only shades of gray."
+          "description": "Vous pouvez voir dans la lumière faible jusqu'à 18 mètres comme si c'était une lumière vive, et dans l'obscurité comme si c'était une lumière faible. Vous ne pouvez pas distinguer les couleurs dans l'obscurité, uniquement des nuances de gris."
         },
         {
           "name": "Keen Senses",
           "name_fr": "Sens aiguisés",
-          "description": "You have proficiency in the Perception skill."
+          "description": "Vous maîtrisez la compétence Perception."
         },
         {
           "name": "Fey Ancestry",
           "name_fr": "Ascendance féerique",
-          "description": "You have advantage on saving throws against being charmed, and magic can't put you to sleep."
+          "description": "Vous avez l'avantage aux jets de sauvegarde contre le charme, et la magie ne peut pas vous endormir."
         },
         {
           "name": "Trance",
           "name_fr": "Transe",
-          "description": "Elves don't sleep. Instead, they meditate deeply, remaining semiconscious, for 4 hours a day. This gives the same benefit as 8 hours of sleep."
+          "description": "Les elfes ne dorment pas. À la place, ils méditent profondément, restant semi-conscients, pendant 4 heures par jour. Cela leur procure le même bénéfice que 8 heures de sommeil."
         },
         {
           "name": "Elf Weapon Training",
           "name_fr": "Entraînement aux armes elfes",
-          "description": "You have proficiency with the longsword, shortsword, shortbow, and longbow."
+          "description": "Vous maîtrisez l'épée longue, l'épée courte, l'arc court et l'arc long."
         },
         {
           "name": "Cantrip",
           "name_fr": "Sort mineur",
-          "description": "You know one cantrip of your choice from the wizard spell list. Intelligence is your spellcasting ability for it."
+          "description": "Vous connaissez un tour de magie de votre choix de la liste du magicien. L'Intelligence est votre caractéristique d'incantation pour ce sort."
         }
       ],
-      "description": "Elves are a magical people of otherworldly grace, living in places of ethereal beauty. High elves have a sharp mind and a mastery of at least the basics of magic."
+      "description": "Les elfes sont un peuple magique d'une grâce d'un autre monde, vivant dans des lieux d'une beauté éthérée. Les hauts-elfes ont un esprit vif et maîtrisent au moins les bases de la magie.",
+      "darkvision_m": 18
     },
     {
       "id": "dwarf",
@@ -88,43 +95,244 @@
       "name_fr": "Nain",
       "subtype": "Mountain Dwarf",
       "size": "Medium",
-      "speed": 25,
-      "darkvision_ft": 60,
+      "speed": 7.5,
       "ability_bonuses": {
         "constitution": 2,
         "strength": 2
       },
       "skill_proficiencies": [],
-      "languages": ["common", "dwarvish"],
+      "languages": [
+        "common",
+        "dwarvish"
+      ],
       "extra_languages": 0,
       "traits": [
         {
           "name": "Darkvision",
           "name_fr": "Vision dans le noir",
-          "description": "You can see in dim light within 60 feet as if it were bright light, and in darkness as if it were dim light. You can't discern color in darkness, only shades of gray."
+          "description": "Vous pouvez voir dans la lumière faible jusqu'à 18 mètres comme si c'était une lumière vive, et dans l'obscurité comme si c'était une lumière faible. Vous ne pouvez pas distinguer les couleurs dans l'obscurité, uniquement des nuances de gris."
         },
         {
           "name": "Dwarven Resilience",
           "name_fr": "Résilience naine",
-          "description": "You have advantage on saving throws against poison, and you have resistance against poison damage."
+          "description": "Vous avez l'avantage aux jets de sauvegarde contre le poison, et vous avez la résistance aux dégâts de poison."
         },
         {
           "name": "Dwarven Combat Training",
           "name_fr": "Entraînement au combat nain",
-          "description": "You have proficiency with the battleaxe, handaxe, light hammer, and warhammer."
+          "description": "Vous maîtrisez la hache de bataille, la hachette, le marteau léger et le marteau de guerre."
         },
         {
           "name": "Tool Proficiency",
           "name_fr": "Maîtrise d'outils",
-          "description": "You gain proficiency with the artisan's tools of your choice: smith's tools, brewer's supplies, or mason's tools."
+          "description": "Vous acquérez la maîtrise des outils d'artisan de votre choix : outils de forgeron, matériel de brasseur ou outils de maçon."
         },
         {
           "name": "Stonecunning",
           "name_fr": "Sens de la pierre",
-          "description": "Whenever you make an Intelligence (History) check related to the origin of stonework, you are considered proficient and add double your proficiency bonus."
+          "description": "Chaque fois que vous effectuez un test d'Intelligence (Histoire) en rapport avec l'origine d'une construction en pierre, vous êtes considéré comme compétent et ajoutez le double de votre bonus de maîtrise."
         }
       ],
-      "description": "Dwarves are bold and hardy, known as skilled warriors, miners, and workers of stone and metal. Mountain dwarves are strong and hardy, accustomed to a difficult life in rugged terrain."
+      "description": "Les nains sont des gens audacieux et robustes, connus comme des guerriers habiles, mineurs et artisans de la pierre et du métal. Les nains des montagnes sont forts et résistants, habitués à une vie difficile en terrain accidenté.",
+      "darkvision_m": 18
+    },
+    {
+      "id": "halfling",
+      "name": "Halfling",
+      "name_fr": "Halfelin",
+      "subtype": "Lightfoot Halfling",
+      "size": "Small",
+      "speed": 7.5,
+      "ability_bonuses": {
+        "dexterity": 2
+      },
+      "skill_proficiencies": [],
+      "languages": [
+        "common",
+        "halfling"
+      ],
+      "extra_languages": 0,
+      "traits": [
+        {
+          "name": "Lucky",
+          "name_fr": "Chanceux",
+          "description": "Quand vous obtenez un 1 naturel à un jet d'attaque, de caractéristique ou de sauvegarde, vous pouvez relancer le dé et devez utiliser le nouveau résultat."
+        },
+        {
+          "name": "Brave",
+          "name_fr": "Courageux",
+          "description": "Vous avez l'avantage aux jets de sauvegarde contre la peur."
+        },
+        {
+          "name": "Halfling Nimbleness",
+          "name_fr": "Agilité halfeline",
+          "description": "Vous pouvez traverser l'espace de toute créature de taille supérieure à la vôtre."
+        },
+        {
+          "name": "Naturally Stealthy",
+          "name_fr": "Furtivité naturelle",
+          "description": "Vous pouvez tenter de vous cacher même si vous n'êtes que derrière une créature d'une taille supérieure à la vôtre."
+        }
+      ],
+      "description": "Les halfelins sont un peuple petit, joyeux et rustique qui chérit le confort des maisons et des bonnes choses de la vie. Les pieds-légers sont plus enclins à l'aventure que les autres halfelins et se dissimulent facilement.",
+      "darkvision_m": 0
+    },
+    {
+      "id": "gnome",
+      "name": "Gnome",
+      "name_fr": "Gnome",
+      "subtype": "Forest Gnome",
+      "size": "Small",
+      "speed": 7.5,
+      "ability_bonuses": {
+        "intelligence": 2
+      },
+      "skill_proficiencies": [],
+      "languages": [
+        "common",
+        "gnomish"
+      ],
+      "extra_languages": 0,
+      "traits": [
+        {
+          "name": "Darkvision",
+          "name_fr": "Vision dans le noir",
+          "description": "Vous pouvez voir dans la lumière faible jusqu'à 18 mètres comme si c'était une lumière vive, et dans l'obscurité comme si c'était une lumière faible. Vous ne distinguez que des nuances de gris dans l'obscurité."
+        },
+        {
+          "name": "Gnome Cunning",
+          "name_fr": "Ruse gnome",
+          "description": "Vous avez l'avantage à tous les jets de sauvegarde d'Intelligence, de Sagesse et de Charisme contre la magie."
+        },
+        {
+          "name": "Natural Illusionist",
+          "name_fr": "Illusionniste né",
+          "description": "Vous connaissez le tour de magie Illusion mineure. L'Intelligence est votre caractéristique d'incantation."
+        },
+        {
+          "name": "Speak with Small Beasts",
+          "name_fr": "Parler aux petites bêtes",
+          "description": "Par gestes et sons simples, vous pouvez communiquer des idées simples avec de petites bêtes ou plus petites."
+        }
+      ],
+      "description": "Les gnomes sont un peuple d'une ingéniosité débordante et d'une curiosité insatiable. Les gnomes des forêts sont furtifs et vivent en harmonie avec la nature, doués pour l'illusion et la communication avec les animaux.",
+      "darkvision_m": 18
+    },
+    {
+      "id": "half_elf",
+      "name": "Half-Elf",
+      "name_fr": "Demi-Elfe",
+      "size": "Medium",
+      "speed": 9,
+      "ability_bonuses": {
+        "charisma": 2,
+        "strength": 1,
+        "constitution": 1
+      },
+      "skill_proficiencies": [],
+      "languages": [
+        "common",
+        "elvish"
+      ],
+      "extra_languages": 1,
+      "traits": [
+        {
+          "name": "Darkvision",
+          "name_fr": "Vision dans le noir",
+          "description": "Vous pouvez voir dans la lumière faible jusqu'à 18 mètres comme si c'était une lumière vive, et dans l'obscurité comme si c'était une lumière faible. Vous ne distinguez que des nuances de gris dans l'obscurité."
+        },
+        {
+          "name": "Fey Ancestry",
+          "name_fr": "Ascendance féerique",
+          "description": "Vous avez l'avantage aux jets de sauvegarde contre le charme, et la magie ne peut pas vous endormir."
+        },
+        {
+          "name": "Skill Versatility",
+          "name_fr": "Polyvalence",
+          "description": "Vous maîtrisez deux compétences de votre choix. Note : le SRD original accorde +2 CHA et +1 à deux caractéristiques au choix ; ce jeu simplifie en +2 CHA, +1 FOR, +1 CON."
+        }
+      ],
+      "description": "Les demi-elfes combinent les atouts humains et elfes : l'ambition et la diversité humaines, la grâce et la sensibilité aux sens des elfes. Ni totalement humains, ni pleinement elfes, ils trouvent souvent leur place dans l'aventure.",
+      "darkvision_m": 18
+    },
+    {
+      "id": "half_orc",
+      "name": "Half-Orc",
+      "name_fr": "Demi-Orc",
+      "size": "Medium",
+      "speed": 9,
+      "ability_bonuses": {
+        "strength": 2,
+        "constitution": 1
+      },
+      "skill_proficiencies": [
+        "intimidation"
+      ],
+      "languages": [
+        "common",
+        "orc"
+      ],
+      "extra_languages": 0,
+      "traits": [
+        {
+          "name": "Darkvision",
+          "name_fr": "Vision dans le noir",
+          "description": "Vous pouvez voir dans la lumière faible jusqu'à 18 mètres comme si c'était une lumière vive, et dans l'obscurité comme si c'était une lumière faible. Vous ne distinguez que des nuances de gris dans l'obscurité."
+        },
+        {
+          "name": "Menacing",
+          "name_fr": "Menaçant",
+          "description": "Vous maîtrisez la compétence Intimidation."
+        },
+        {
+          "name": "Relentless Endurance",
+          "name_fr": "Endurance implacable",
+          "description": "Lorsque vous tombez à 0 point de vie mais n'êtes pas tué net, vous pouvez passer à 1 PV à la place. Utilisable une fois par repos long."
+        },
+        {
+          "name": "Savage Attacks",
+          "name_fr": "Attaques sauvages",
+          "description": "Lorsque vous portez un coup critique avec une arme de corps-à-corps, vous pouvez lancer l'un des dés de dégâts de l'arme une fois de plus et l'ajouter aux dégâts supplémentaires du coup critique."
+        }
+      ],
+      "description": "Les demi-orcs héritent de la vigueur physique des orcs et de l'adaptabilité humaine. Marqués par leur apparence imposante, ils excellent dans les rôles de combattants en première ligne.",
+      "darkvision_m": 18
+    },
+    {
+      "id": "tiefling",
+      "name": "Tiefling",
+      "name_fr": "Tieflin",
+      "size": "Medium",
+      "speed": 9,
+      "ability_bonuses": {
+        "intelligence": 1,
+        "charisma": 2
+      },
+      "skill_proficiencies": [],
+      "languages": [
+        "common",
+        "infernal"
+      ],
+      "extra_languages": 0,
+      "traits": [
+        {
+          "name": "Darkvision",
+          "name_fr": "Vision dans le noir",
+          "description": "Vous pouvez voir dans la lumière faible jusqu'à 18 mètres comme si c'était une lumière vive, et dans l'obscurité comme si c'était une lumière faible. Vous ne distinguez que des nuances de gris dans l'obscurité."
+        },
+        {
+          "name": "Hellish Resistance",
+          "name_fr": "Résistance infernale",
+          "description": "Vous avez la résistance aux dégâts de feu."
+        },
+        {
+          "name": "Infernal Legacy",
+          "name_fr": "Héritage infernal",
+          "description": "Vous connaissez le tour de magie Thaumaturgie. Au niveau 3, vous pouvez lancer Représailles infernales une fois par repos long. Au niveau 5, vous pouvez lancer Ténèbres une fois par repos long. Le Charisme est votre caractéristique d'incantation."
+        }
+      ],
+      "description": "Les tieflings portent le sang d'un démon ou d'un diable, résultat d'un pacte ancestral. Malgré la méfiance qu'ils inspirent, beaucoup défient leur héritage pour devenir des héros redoutables.",
+      "darkvision_m": 18
     }
   ]
 }

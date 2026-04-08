@@ -1,0 +1,308 @@
+{
+  "_license": "D&D SRD 5.2 — CC-BY-4.0 (https://www.dndbeyond.com/srd)",
+  "_note": "Pre-built encounter templates. Each entry defines monster composition, terrain, and narrative seeds.",
+  "encounters": [
+    {
+      "id": "goblin_ambush",
+      "name": "Embuscade gobeline",
+      "description": "Une patrouille de gobelins tend une embuscade sur le chemin forestier.",
+      "terrain": "forest",
+      "tags": ["humanoid", "ambush", "forest"],
+      "min_level": 1,
+      "max_level": 3,
+      "difficulty": "medium",
+      "monsters": [
+        {"monster_id": "goblin", "count": 3}
+      ],
+      "intro_text": "Des feuilles bruissent dans les arbres. Trop tard — des silhouettes verdâtres bondissent des fourrés, cimeterres au clair !"
+    },
+    {
+      "id": "goblin_war_band",
+      "name": "Bande de guerre gobeline",
+      "description": "Un hobgobelin commande une escouade de gobelins.",
+      "terrain": "forest",
+      "tags": ["humanoid", "goblinoid", "forest"],
+      "min_level": 2,
+      "max_level": 4,
+      "difficulty": "hard",
+      "monsters": [
+        {"monster_id": "goblin", "count": 3},
+        {"monster_id": "hobgoblin", "count": 1}
+      ],
+      "intro_text": "Un hobgobelin en armure de chaînes aboie des ordres en gobelin. Trois de ses soldats se déploient en formation tactique autour de vous."
+    },
+    {
+      "id": "undead_patrol",
+      "name": "Patrouille morte-vivante",
+      "description": "Des squelettes gardent les ruines d'un ancien château.",
+      "terrain": "dungeon",
+      "tags": ["undead", "dungeon", "ruins"],
+      "min_level": 1,
+      "max_level": 3,
+      "difficulty": "medium",
+      "monsters": [
+        {"monster_id": "skeleton", "count": 3}
+      ],
+      "intro_text": "Le cliquetis d'os résonne dans le couloir de pierre. Trois squelettes en armure rouillée se retournent vers vous, leurs orbites brillant d'une lueur bleutée."
+    },
+    {
+      "id": "zombie_horde",
+      "name": "Horde de zombies",
+      "description": "Un groupe de zombies erre dans un village abandonné.",
+      "terrain": "village",
+      "tags": ["undead", "village", "horde"],
+      "min_level": 1,
+      "max_level": 4,
+      "difficulty": "hard",
+      "monsters": [
+        {"monster_id": "zombie", "count": 4}
+      ],
+      "intro_text": "Des gémissements plaintifs emplissent l'air vicié. Quatre formes titubantes émergent des bâtiments en ruine, attiré par l'odeur des vivants."
+    },
+    {
+      "id": "undead_rising",
+      "name": "Levée des morts",
+      "description": "Des squelettes et zombies surgissent d'un cimetière profané.",
+      "terrain": "graveyard",
+      "tags": ["undead", "graveyard", "mixed"],
+      "min_level": 2,
+      "max_level": 5,
+      "difficulty": "hard",
+      "monsters": [
+        {"monster_id": "skeleton", "count": 2},
+        {"monster_id": "zombie", "count": 2}
+      ],
+      "intro_text": "La terre du cimetière se soulève. Des mains osseuses et des doigts putréfiés percent la surface, et quatre créatures du trépas se hissent hors de leurs tombes."
+    },
+    {
+      "id": "bugbear_lair",
+      "name": "Repaire du croque-mitaine",
+      "description": "Un croque-mitaine défend son repaire avec ses complices gobelins.",
+      "terrain": "cave",
+      "tags": ["humanoid", "goblinoid", "cave"],
+      "min_level": 2,
+      "max_level": 4,
+      "difficulty": "hard",
+      "monsters": [
+        {"monster_id": "bugbear", "count": 1},
+        {"monster_id": "goblin", "count": 2}
+      ],
+      "intro_text": "Une masse descend en sifflant — le croque-mitaine frappe depuis les ombres ! Deux gobelins ricochent derrière lui, coupant la retraite."
+    },
+    {
+      "id": "beast_pack",
+      "name": "Meute sauvage",
+      "description": "Une meute de rats géants infeste les égouts sous la ville.",
+      "terrain": "sewer",
+      "tags": ["beast", "sewer", "swarm"],
+      "min_level": 1,
+      "max_level": 2,
+      "difficulty": "easy",
+      "monsters": [
+        {"monster_id": "rat", "count": 6}
+      ],
+      "intro_text": "Un flot de fourrure grise déferle depuis les tunnels. Les rats — énormes, affamés — se jettent sur vous en poussant des couinements stridents."
+    },
+    {
+      "id": "snake_den",
+      "name": "Nid de serpents",
+      "description": "Des serpents venimeux nichent dans les ruines d'un temple.",
+      "terrain": "ruins",
+      "tags": ["beast", "ruins", "poison"],
+      "min_level": 1,
+      "max_level": 3,
+      "difficulty": "medium",
+      "monsters": [
+        {"monster_id": "poisonous_snake", "count": 4}
+      ],
+      "intro_text": "Le sifflement résonne entre les colonnes brisées. Quatre serpents aux écailles iridescentes dressent la tête, langues frémissantes, prêts à frapper."
+    },
+    {
+      "id": "ogre_toll",
+      "name": "Péage de l'ogre",
+      "description": "Un ogre exige un péage au pont du village.",
+      "terrain": "road",
+      "tags": ["giant", "road", "solo"],
+      "min_level": 3,
+      "max_level": 6,
+      "difficulty": "hard",
+      "monsters": [
+        {"monster_id": "ogre", "count": 1}
+      ],
+      "intro_text": "Une masse de deux mètres se dresse au milieu du pont, massue à l'épaule. 'Payer ou mourir,' grogne l'ogre avec un sourire qui révèle des dents cassées."
+    },
+    {
+      "id": "owlbear_territory",
+      "name": "Territoire de l'owlbear",
+      "description": "Un owlbear défend férocement son territoire dans la forêt ancienne.",
+      "terrain": "deep_forest",
+      "tags": ["monstrosity", "forest", "solo", "powerful"],
+      "min_level": 3,
+      "max_level": 7,
+      "difficulty": "hard",
+      "monsters": [
+        {"monster_id": "owlbear", "count": 1}
+      ],
+      "intro_text": "Un cri entre le hululement et le rugissement déchire l'air. L'owlbear se dresse sur ses pattes arrière, plumes hérissées, griffes éclaboussées de sang frais."
+    },
+    {
+      "id": "troll_bridge",
+      "name": "Le troll du marais",
+      "description": "Un troll régénérant émerge des eaux sombres d'un marécage.",
+      "terrain": "swamp",
+      "tags": ["giant", "swamp", "solo", "deadly"],
+      "min_level": 5,
+      "max_level": 10,
+      "difficulty": "deadly",
+      "monsters": [
+        {"monster_id": "troll", "count": 1}
+      ],
+      "intro_text": "Les eaux noires du marécage se troublent. Une silhouette verdâtre et diforme se hisse sur la berge, ses plaies se refermant à vue d'œil. Le troll vous fixe de ses petits yeux jaunes."
+    },
+    {
+      "id": "hobgoblin_squad",
+      "name": "Escouade hobgobeline",
+      "description": "Une patrouille militaire hobgobeline en formation de combat.",
+      "terrain": "road",
+      "tags": ["humanoid", "goblinoid", "military", "road"],
+      "min_level": 2,
+      "max_level": 5,
+      "difficulty": "medium",
+      "monsters": [
+        {"monster_id": "hobgoblin", "count": 3}
+      ],
+      "intro_text": "Trois hobgobelins en armure brillante défilent au pas cadencé. Ils vous repèrent, et leur chef lève le poing — la colonne s'arrête et se déploie en ligne de combat."
+    },
+    {
+      "id": "orc_warband",
+      "name": "Troupe d'orcs",
+      "description": "Une troupe d'orcs pillards cherche à attaquer les voyageurs.",
+      "terrain": "forest",
+      "tags": ["humanoid", "orc", "ambush", "forest"],
+      "min_level": 1,
+      "max_level": 4,
+      "difficulty": "medium",
+      "monsters": [
+        {"monster_id": "orc", "count": 3}
+      ],
+      "intro_text": "Des rugissements gutturaux brisent le silence de la forêt. Trois orcs brandissant des haches surgissent des buissons, leur peau verdâtre maculée de sang séché."
+    },
+    {
+      "id": "gnoll_pack",
+      "name": "Meute de gnolls",
+      "description": "Une meute de gnolls affamés patrouille dans les ruines d'un vieux temple.",
+      "terrain": "ruins",
+      "tags": ["humanoid", "gnoll", "ruins"],
+      "min_level": 2,
+      "max_level": 4,
+      "difficulty": "medium",
+      "monsters": [
+        {"monster_id": "gnoll", "count": 4}
+      ],
+      "intro_text": "Un ricanement hystérique résonne entre les murs effondrés. Quatre créatures hyénoïdes bondissent sur vous, crocs dégoulinants de bave, yeux brillants d'une faim dévorante."
+    },
+    {
+      "id": "crypt_awakening",
+      "name": "La crypte maudite",
+      "description": "Les gardiens morts-vivants d'une crypte ancienne se dressent contre les intrus.",
+      "terrain": "dungeon",
+      "tags": ["undead", "dungeon", "tomb"],
+      "min_level": 2,
+      "max_level": 5,
+      "difficulty": "hard",
+      "monsters": [
+        {"monster_id": "ghoul", "count": 2},
+        {"monster_id": "skeleton", "count": 3}
+      ],
+      "intro_text": "La dalle de pierre se soulève avec un craquement sinistre. Des silhouettes osseuses se redressent, et dans leur sillage, deux formes plus rapides et plus dangereuses se glissent hors des niches."
+    },
+    {
+      "id": "spider_lair",
+      "name": "Le nid d'araignées",
+      "description": "Une araignée géante défend son nid dans les profondeurs d'une caverne.",
+      "terrain": "cave",
+      "tags": ["beast", "cave", "spider"],
+      "min_level": 2,
+      "max_level": 4,
+      "difficulty": "medium",
+      "monsters": [
+        {"monster_id": "giant_spider", "count": 1},
+        {"monster_id": "wolf", "count": 2}
+      ],
+      "intro_text": "Des fils de soie collants accrochent vos pieds. Au centre de la grotte, une masse poilue de la taille d'un cheval vous observe depuis les hauteurs, ses huit yeux scintillant dans l'obscurité."
+    },
+    {
+      "id": "werewolf_hunting",
+      "name": "La malédiction de la pleine lune",
+      "description": "Un loup-garou traque les aventuriers en forêt la nuit de pleine lune.",
+      "terrain": "forest",
+      "tags": ["monstrosity", "forest", "night", "boss"],
+      "min_level": 3,
+      "max_level": 6,
+      "difficulty": "hard",
+      "monsters": [
+        {"monster_id": "werewolf", "count": 1},
+        {"monster_id": "wolf", "count": 2}
+      ],
+      "intro_text": "La pleine lune illumine la forêt d'une lumière argentée. Un hurlement déchirant fend la nuit — puis un autre, plus proche. Des silhouettes rapides convergent vers vous depuis les arbres."
+    },
+    {
+      "id": "mummy_tomb",
+      "name": "Le tombeau de la momie",
+      "description": "Une momie ancienne protège son tombeau dans les profondeurs d'une pyramide.",
+      "terrain": "dungeon",
+      "tags": ["undead", "dungeon", "tomb", "boss"],
+      "min_level": 5,
+      "max_level": 8,
+      "difficulty": "hard",
+      "monsters": [
+        {"monster_id": "mummy", "count": 1},
+        {"monster_id": "skeleton", "count": 4}
+      ],
+      "intro_text": "L'air est chargé d'un parfum de natron et d'encens. Au fond de la salle, bandages pourrissants agités par une force surnaturelle, une silhouette se dresse. Ses yeux s'embrasent d'une lueur malveillante."
+    },
+    {
+      "id": "dragon_lair",
+      "name": "L'antre du dragon rouge",
+      "description": "Un jeune dragon rouge garde jalousement son trésor dans une caverne volcanique.",
+      "terrain": "cave",
+      "tags": ["dragon", "fire", "boss", "deadly"],
+      "min_level": 8,
+      "max_level": 12,
+      "difficulty": "deadly",
+      "monsters": [
+        {"monster_id": "young_red_dragon", "count": 1}
+      ],
+      "intro_text": "La chaleur est suffocante. Des pièces d'or et des gemmes étincellent à la lueur des roches en fusion. Au sommet du monticule de trésors, une paire d'yeux dorés s'ouvre. Le dragon déploie ses ailes cuivrées et rugit."
+    },
+    {
+      "id": "giant_stronghold",
+      "name": "Le bastion des géants",
+      "description": "Des géants des collines défendent leur territoire contre les intrus.",
+      "terrain": "mountain",
+      "tags": ["giant", "mountain", "deadly"],
+      "min_level": 5,
+      "max_level": 9,
+      "difficulty": "deadly",
+      "monsters": [
+        {"monster_id": "hill_giant", "count": 2}
+      ],
+      "intro_text": "Le sol tremble. Des silhouettes massives de huit mètres de haut surgissent des rochers, massues géantes sur l'épaule. Leur rire tonitruant fait dégringoler des pierres des falaises."
+    },
+    {
+      "id": "vampire_castle",
+      "name": "Le château du vampire",
+      "description": "Un vampire seigneur accueille les intrus dans son château maudit.",
+      "terrain": "dungeon",
+      "tags": ["undead", "boss", "deadly", "vampire"],
+      "min_level": 10,
+      "max_level": 15,
+      "difficulty": "deadly",
+      "monsters": [
+        {"monster_id": "vampire", "count": 1},
+        {"monster_id": "vampire_spawn", "count": 2}
+      ],
+      "intro_text": "Les portes du château s'ouvrent seules dans un grincement lugubre. À la lueur des candélabres, un homme en cape noire vous accueille d'une révérence exagérée, dévoilant des crocs luisants dans l'ombre."
+    }
+  ]
+}

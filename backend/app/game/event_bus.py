@@ -52,6 +52,8 @@ class EventType(str):
     ROUND_START = "round_start"
     COMBAT_START = "combat_start"
     COMBAT_END = "combat_end"
+    COMBAT_ACTION = "combat_action"
+    COMBATANT_MOVED = "combatant_moved"
 
     # Session lifecycle
     PHASE_CHANGE = "phase_change"
@@ -64,6 +66,8 @@ class EventType(str):
 
     # Character updates
     SPELL_SLOT_UPDATED = "spell_slot_updated"
+    EQUIPMENT_UPDATED = "equipment_updated"
+    DEATH_SAVE_UPDATED = "death_save_updated"
 
     # Errors
     ERROR = "error"

@@ -30,8 +30,8 @@ class WeaponStats:
     damage_dice: str            # e.g. "1d6"  – passed directly to roll_damage()
     damage_type: str            # "piercing" | "slashing" | "bludgeoning"
     properties: List[str]       # SRD property tags (see WEAPON_PROPERTIES)
-    range_normal: Optional[int] # None for melee-only weapons; feet
-    range_long: Optional[int]   # long range imposes disadvantage
+    range_normal: Optional[float]  # None pour les armes de mêlée uniquement ; mètres
+    range_long: Optional[float]    # longue portée impose le désavantage
     versatile_dice: Optional[str]  # two-handed damage, e.g. "1d8" for longsword
     weight: float               # pounds
     cost_gp: float              # gold pieces
@@ -44,7 +44,7 @@ WEAPON_PROPERTIES = frozenset({
     "heavy",        # small/tiny creatures have disadvantage
     "light",        # can be used with two-weapon fighting
     "loading",      # one attack per action regardless of number of attacks
-    "reach",        # +5 ft reach
+    "reach",        # +1,5 m de portée
     "thrown",       # can be thrown (uses same ability as melee)
     "two-handed",   # requires two hands
     "versatile",    # can be used one- or two-handed (versatile_dice)
@@ -66,28 +66,28 @@ _WEAPONS: Dict[str, WeaponStats] = {
         name="Dagger", category="simple",
         damage_dice="1d4", damage_type="piercing",
         properties=["finesse", "light", "thrown"],
-        range_normal=20, range_long=60,
+        range_normal=6, range_long=18,
         versatile_dice=None, weight=1.0, cost_gp=2.0,
     ),
     "handaxe": WeaponStats(
         name="Handaxe", category="simple",
         damage_dice="1d6", damage_type="slashing",
         properties=["light", "thrown"],
-        range_normal=20, range_long=60,
+        range_normal=6, range_long=18,
         versatile_dice=None, weight=2.0, cost_gp=5.0,
     ),
     "javelin": WeaponStats(
         name="Javelin", category="simple",
         damage_dice="1d6", damage_type="piercing",
         properties=["thrown"],
-        range_normal=30, range_long=120,
+        range_normal=9, range_long=36,
         versatile_dice=None, weight=2.0, cost_gp=0.5,
     ),
     "light_hammer": WeaponStats(
         name="Light Hammer", category="simple",
         damage_dice="1d4", damage_type="bludgeoning",
         properties=["light", "thrown"],
-        range_normal=20, range_long=60,
+        range_normal=6, range_long=18,
         versatile_dice=None, weight=2.0, cost_gp=2.0,
     ),
     "mace": WeaponStats(
@@ -113,7 +113,7 @@ _WEAPONS: Dict[str, WeaponStats] = {
         name="Spear", category="simple",
         damage_dice="1d6", damage_type="piercing",
         properties=["thrown", "versatile"],
-        range_normal=20, range_long=60,
+        range_normal=6, range_long=18,
         versatile_dice="1d8", weight=3.0, cost_gp=1.0,
     ),
     # ---- Simple ranged ----
@@ -121,14 +121,14 @@ _WEAPONS: Dict[str, WeaponStats] = {
         name="Light Crossbow", category="simple",
         damage_dice="1d8", damage_type="piercing",
         properties=["ammunition", "loading", "two-handed"],
-        range_normal=80, range_long=320,
+        range_normal=24, range_long=96,
         versatile_dice=None, weight=5.0, cost_gp=25.0,
     ),
     "shortbow": WeaponStats(
         name="Shortbow", category="simple",
         damage_dice="1d6", damage_type="piercing",
         properties=["ammunition", "two-handed"],
-        range_normal=80, range_long=320,
+        range_normal=24, range_long=96,
         versatile_dice=None, weight=2.0, cost_gp=25.0,
     ),
     # ---- Martial melee ----
@@ -192,14 +192,14 @@ _WEAPONS: Dict[str, WeaponStats] = {
         name="Hand Crossbow", category="martial",
         damage_dice="1d6", damage_type="piercing",
         properties=["ammunition", "light", "loading"],
-        range_normal=30, range_long=120,
+        range_normal=9, range_long=36,
         versatile_dice=None, weight=3.0, cost_gp=75.0,
     ),
     "longbow": WeaponStats(
         name="Longbow", category="martial",
         damage_dice="1d8", damage_type="piercing",
         properties=["ammunition", "heavy", "two-handed"],
-        range_normal=150, range_long=600,
+        range_normal=45, range_long=180,
         versatile_dice=None, weight=2.0, cost_gp=50.0,
     ),
 }

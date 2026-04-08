@@ -263,17 +263,17 @@ class TestActionEconomy:
         assert eco.use_reaction() is False
 
     def test_spend_movement_partial(self):
-        eco = new_turn_economy(speed=30)
-        assert eco.spend_movement(10) is True
-        assert eco.movement == 20
-        assert eco.spend_movement(20) is True
+        eco = new_turn_economy(speed=9)
+        assert eco.spend_movement(3) is True
+        assert eco.movement == 6
+        assert eco.spend_movement(6) is True
         assert eco.movement == 0
 
     def test_spend_movement_insufficient(self):
-        eco = new_turn_economy(speed=10)
-        assert eco.spend_movement(15) is False
-        assert eco.movement == 10  # unchanged
+        eco = new_turn_economy(speed=3)
+        assert eco.spend_movement(4.5) is False
+        assert eco.movement == 3  # unchanged
 
-    def test_default_speed_30(self):
+    def test_default_speed_9m(self):
         eco = new_turn_economy()
-        assert eco.movement == 30
+        assert eco.movement == 9.0

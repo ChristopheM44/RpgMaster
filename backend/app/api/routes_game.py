@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import uuid
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +18,11 @@ from app.models.save_slot import SaveSlot
 from app.models.session import Session, SessionStatus
 
 router = APIRouter()
+
+
+class StartGameBody(BaseModel):
+    adventure_script: Optional[str] = None
+    auto_generate: bool = False
 
 
 @router.get("/{session_id}/state")
@@ -39,7 +47,11 @@ async def get_game_state(session_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{session_id}/start")
-async def start_game(session_id: str, db: AsyncSession = Depends(get_db)):
+async def start_game(
+    session_id: str,
+    body: StartGameBody = Body(default_factory=StartGameBody),
+    db: AsyncSession = Depends(get_db),
+):
     """Start a game session — transition to EXPLORATION and set up participants."""
     from app.api.ws_game import _build_session_state_payload, session_manager
 
@@ -92,11 +104,20 @@ async def start_game(session_id: str, db: AsyncSession = Depends(get_db)):
             "hp_max": c.hp_max,
             "is_ai": c.is_ai,
             "dex": int(c.ability_scores.get("dex", 10)),
+            "str": int(c.ability_scores.get("str", 10)),
+            "equipment": list(c.equipment or []),
         }
         for c in characters
     }
     active.mark_dirty()
     await session_manager.save_state(session_id, db)
+
+    # Store adventure context for the GM agent
+    if body.adventure_script:
+        active.state_data["adventure_script"] = body.adventure_script
+    if body.auto_generate:
+        active.state_data["auto_generate_adventure"] = True
+    active.mark_dirty()
 
     # Notify any already-connected WebSocket clients
     await event_bus.publish_to_session(
@@ -111,18 +132,36 @@ async def start_game(session_id: str, db: AsyncSession = Depends(get_db)):
         _build_session_state_payload(session_id),
         source="routes_game",
     )
-    await event_bus.publish_to_session(
-        session_id,
-        EventType.NARRATION,
-        {
-            "text": (
-                "La partie commence ! Vous vous trouvez au seuil de l'aventure. "
-                "Que souhaitez-vous faire ?"
-            ),
-            "speaker": "Maître du Jeu",
-        },
-        source="routes_game",
-    )
+
+    from app.services.message_service import persist_narration
+
+    if body.adventure_script:
+        # Le script fourni devient la narration d'introduction
+        welcome_text = body.adventure_script
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.NARRATION,
+            {"text": welcome_text, "speaker": "Maître du Jeu"},
+            source="routes_game",
+        )
+        await persist_narration(session_id, welcome_text, "Maître du Jeu", db)
+    elif body.auto_generate:
+        # Le MJ génère une accroche d'aventure adapée au groupe (fire-and-forget)
+        from app.api.ws_game import _send_welcome_narration
+        asyncio.create_task(_send_welcome_narration(session_id, active, db))
+    else:
+        # Mode libre : texte d'accueil neutre
+        welcome_text = (
+            "La partie commence ! Vous vous trouvez au seuil de l'aventure. "
+            "Que souhaitez-vous faire ?"
+        )
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.NARRATION,
+            {"text": welcome_text, "speaker": "Maître du Jeu"},
+            source="routes_game",
+        )
+        await persist_narration(session_id, welcome_text, "Maître du Jeu", db)
 
     return {
         "status": "ok",
@@ -343,12 +382,19 @@ async def load_save(session_id: str, save_id: str, db: AsyncSession = Depends(ge
     if session_manager.is_active(session_id):
         await session_manager.close_session(session_id, db)
     await session_manager.open_session(session_id, db)
+    from app.api.ws_game import _build_session_state_payload
 
     # Notifier les clients connectes
     await event_bus.publish_to_session(
         session_id,
         EventType.PHASE_CHANGE,
         {"phase": save.phase},
+        source="routes_game",
+    )
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.SESSION_STATE,
+        _build_session_state_payload(session_id),
         source="routes_game",
     )
 

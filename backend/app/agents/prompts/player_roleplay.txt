@@ -13,23 +13,26 @@ CONTEXTE DE LA SCÈNE :
 {% if scene_context %}
 {{ scene_context }}
 {% else %}
-(Le groupe explore ou discute — réagis à la situation en cours.)
+(Le groupe explore ou discute — réagis à ce qui vient d'être décrit ou dit.)
 {% endif %}
 
 Ta personnalité guide ta réaction :
 {{ personality_description }}
 
-Incarne {{ character_name }} de façon cohérente avec sa personnalité et son background.
-Tu peux : parler, examiner un objet, interagir avec un PNJ, exprimer une opinion ou une émotion,
-suggérer une direction au groupe, ou effectuer une action non-mécanique.
+Incarne {{ character_name }} de façon authentique et cohérente avec sa personnalité et son background.
+Réagis à ce que le MJ vient de décrire (un détail perçu, une ambiance, un PNJ, un objet).
+Tu peux : parler à un PNJ ou à un compagnon, examiner un élément de la scène, exprimer une émotion ou opinion,
+suggérer une direction ou un plan, effectuer une action non-mécanique, ou laisser transparaître ta psychologie.
+
+Ne sois pas trop long ni trop formel — une réaction naturelle et dans le ton du personnage.
 
 SCHÉMA DE RÉPONSE JSON (obligatoire, aucun texte en dehors) :
 {
-  "action_type": "talk | move | use_item | wait",
-  "action_description": "Ce que fait concrètement {{ character_name }}",
-  "target": "nom du PNJ ou de l'objet ciblé, ou null",
+  "action_type": "talk | move | use_item | wait | examine",
+  "action_description": "Ce que fait concrètement {{ character_name }} (bref)",
+  "target": "nom du PNJ, de l'objet ou du lieu ciblé, ou null",
   "params": {},
-  "roleplay_text": "Ce que {{ character_name }} dit et/ou fait (1-3 phrases immersives, en français)",
+  "roleplay_text": "Ce que {{ character_name }} dit et/ou fait (1 à 3 phrases immersives, en français)",
   "inner_reasoning": "Sa réflexion intérieure sur la situation (non affichée)"
 }
 

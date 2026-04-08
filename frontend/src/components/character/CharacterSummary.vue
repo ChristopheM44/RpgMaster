@@ -50,7 +50,7 @@ const selectedMods = computed(() => {
 </script>
 
 <template>
-  <div class="flex h-full flex-col">
+  <div class="flex flex-1 min-h-0 flex-col">
     <div class="border-b border-gold/20 px-4 py-2">
       <h2 class="text-sm font-semibold uppercase tracking-widest text-gold/60">Personnages</h2>
     </div>

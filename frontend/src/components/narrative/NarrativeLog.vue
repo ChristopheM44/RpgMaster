@@ -7,7 +7,7 @@ const gameStore = useGameStore()
 const logEl = ref<HTMLElement | null>(null)
 
 watch(
-  () => gameStore.narrativeLog.length,
+  () => gameStore.narrativeLog.length + (gameStore.isProcessing ? 1 : 0),
   async () => {
     await nextTick()
     if (logEl.value) {
@@ -18,7 +18,7 @@ watch(
 </script>
 
 <template>
-  <div class="flex h-full flex-col">
+  <div class="flex flex-1 min-h-0 flex-col">
     <div class="border-b border-gold/20 px-4 py-2">
       <h2 class="text-sm font-semibold uppercase tracking-widest text-gold/60">Récit</h2>
     </div>
@@ -51,11 +51,41 @@ watch(
           <DiceRollResult :roll="entry.roll" />
         </div>
 
+        <!-- Action IA structurée (combat) -->
+        <div v-else-if="entry.type === 'combat_action' && entry.combatAction" class="rounded border border-blood/30 bg-blood/5 px-3 py-2 text-sm space-y-1">
+          <div class="flex items-center gap-2 text-blood font-semibold">
+            <span>⚔</span>
+            <span>{{ entry.combatAction.attacker_name }}</span>
+            <span class="text-parchment/50 font-normal">attaque</span>
+            <span>{{ entry.combatAction.target_name }}</span>
+            <span v-if="entry.combatAction.critical" class="ml-1 rounded bg-gold/20 px-1 py-0.5 text-xs text-gold font-bold uppercase tracking-wide">Critique !</span>
+          </div>
+          <div class="flex flex-wrap gap-3 text-xs text-parchment/70">
+            <span>d20 : <span class="font-mono text-parchment">{{ entry.combatAction.d20 }}</span></span>
+            <span>Total : <span class="font-mono text-parchment">{{ entry.combatAction.attack_roll }}</span> vs CA {{ entry.combatAction.target_ac }}</span>
+            <span v-if="entry.combatAction.hit" class="text-green-400 font-semibold">Touché</span>
+            <span v-else class="text-parchment/40">Raté</span>
+            <span v-if="entry.combatAction.hit && entry.combatAction.damage !== null" class="text-blood font-semibold">
+              {{ entry.combatAction.damage }} dégâts
+            </span>
+          </div>
+        </div>
+
         <!-- Message système -->
         <div v-else-if="entry.type === 'system'">
           <p class="text-center text-xs text-parchment/40 py-1">─── {{ entry.text }} ───</p>
         </div>
       </template>
+
+      <!-- Indicateur "MJ réfléchit..." -->
+      <div v-if="gameStore.isProcessing" class="flex items-center gap-2 py-1">
+        <span class="text-gold/50 italic text-sm">Le Maître du Jeu réfléchit</span>
+        <span class="flex gap-1">
+          <span class="inline-block h-1.5 w-1.5 rounded-full bg-gold/50 animate-bounce" style="animation-delay: 0ms" />
+          <span class="inline-block h-1.5 w-1.5 rounded-full bg-gold/50 animate-bounce" style="animation-delay: 150ms" />
+          <span class="inline-block h-1.5 w-1.5 rounded-full bg-gold/50 animate-bounce" style="animation-delay: 300ms" />
+        </span>
+      </div>
     </div>
   </div>
 </template>

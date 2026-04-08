@@ -7,7 +7,7 @@ const sessionStore = useSessionStore()
 </script>
 
 <template>
-  <header class="fixed top-0 z-50 w-full border-b border-stone bg-ink-light px-6 py-3">
+  <header class="w-full border-b border-stone bg-ink-light px-6 py-3 shrink-0">
     <nav class="mx-auto flex max-w-7xl items-center justify-between">
       <router-link
         to="/"

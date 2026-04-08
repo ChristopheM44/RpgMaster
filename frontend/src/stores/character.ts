@@ -58,6 +58,16 @@ export const useCharacterStore = defineStore('character', () => {
     }
   }
 
+  function updateEquipment(characterId: string, equipment: Record<string, unknown>[]) {
+    if (myCharacter.value?.id === characterId) {
+      myCharacter.value = { ...myCharacter.value, equipment }
+    }
+    const idx = sessionCharacters.value.findIndex((c) => c.id === characterId)
+    if (idx !== -1) {
+      sessionCharacters.value[idx] = { ...sessionCharacters.value[idx], equipment } as Character
+    }
+  }
+
   function updateSpellSlots(
     characterId: string,
     spellSlots: Record<string, { total: number; used: number }>,
@@ -108,6 +118,7 @@ export const useCharacterStore = defineStore('character', () => {
     loadCharacter,
     loadSessionCharacters,
     updateHp,
+    updateEquipment,
     updateSpellSlots,
     setMyCharacter,
     setSelectedCharacter,

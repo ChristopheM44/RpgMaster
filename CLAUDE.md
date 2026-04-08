@@ -17,6 +17,38 @@ Application de jeu de role avec un Maitre de Jeu IA, utilisant les regles D&D SR
 | Temps reel | WebSocket | Natif FastAPI, endpoint `/ws/game/{session_id}` |
 | Conteneurs | Docker Compose | Ollama + Voxtral (optionnel) |
 
+## Lancer le stack complet
+
+```bash
+# Terminal 1 — Backend
+cd backend && source .venv/bin/activate
+alembic upgrade head          # a faire une seule fois, ou apres migration
+python -m uvicorn app.main:app --reload
+
+# Terminal 2 — Frontend
+cd frontend && npm run dev
+
+# URLs
+# Frontend : http://localhost:5173
+# Backend  : http://localhost:8000
+# API docs : http://localhost:8000/docs
+```
+
+## Variables d'environnement
+
+Copier `.env.example` vers `backend/.env` et ajuster si besoin.
+
+| Variable | Defaut | Obligatoire |
+|----------|--------|-------------|
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Oui |
+| `GM_MODEL` | `mistral:7b` | Oui |
+| `PLAYER_MODEL` | `mistral:7b` | Oui |
+| `VOXTRAL_ENABLED` | `false` | Non |
+| `VOXTRAL_BASE_URL` | `http://localhost:8091` | Si TTS active |
+| `DATABASE_URL` | `sqlite+aiosqlite:///./rpgmaster.db` | Oui |
+| `MAX_CONTEXT_MESSAGES` | `20` | Non |
+| `TTS_ASYNC` | `true` | Non |
+
 ## Commandes
 
 ### Backend
@@ -24,11 +56,15 @@ Application de jeu de role avec un Maitre de Jeu IA, utilisant les regles D&D SR
 cd backend
 source .venv/bin/activate
 python -m uvicorn app.main:app --reload          # Dev server (port 8000)
-pytest                                             # Tests
+pytest                                             # Tous les tests
+pytest tests/test_engine/ -v                       # Tests moteur uniquement
+pytest tests/test_api/ -v                          # Tests API uniquement
+pytest tests/test_game/ -v                         # Tests game loop uniquement
 pytest --cov=app                                   # Tests avec couverture
 ruff check app/                                    # Lint
 ruff format app/                                   # Format
 alembic upgrade head                               # Migrations DB
+alembic history                                    # Voir les migrations
 ```
 
 ### Frontend
@@ -46,7 +82,7 @@ RpgMaster/
 ├── backend/app/
 │   ├── main.py              # FastAPI app factory + CORS + routers
 │   ├── config.py            # Pydantic Settings (.env)
-│   ├─��� api/                 # Routes REST + WebSocket
+│   ├── api/                 # Routes REST + WebSocket
 │   ├── models/              # SQLAlchemy ORM
 │   ├── schemas/             # Pydantic request/response
 │   ├── services/            # Logique metier
@@ -58,7 +94,7 @@ RpgMaster/
 │   ├── game/                # Orchestration (game loop, turn manager, event bus)
 │   └── db/                  # SQLAlchemy async engine
 ├── frontend/src/
-���   ├── views/               # Pages (Home, Lobby, CharacterCreation, GameSession)
+│   ├── views/               # Pages (Home, Lobby, CharacterCreation, GameSession)
 │   ├── components/          # narrative/, combat/, character/, common/, ui/
 │   ├── stores/              # Pinia (session, game, character, chat)
 │   ├── composables/         # useWebSocket, useGameActions, useAudio
@@ -66,6 +102,18 @@ RpgMaster/
 │   └── types/               # Interfaces TypeScript
 └── docs/                    # Documentation projet
 ```
+
+## Strategie de tests
+
+| Suite | Dossier | Ce qu'elle teste |
+|-------|---------|-----------------|
+| Engine | `tests/test_engine/` | Logique pure D&D, sans I/O — jets de des, combat, sorts, conditions |
+| API | `tests/test_api/` | Endpoints REST avec DB SQLite en memoire |
+| Agents | `tests/test_agents/` | GMAgent, PlayerAgent, ContextManager (Ollama mocke) |
+| Game loop | `tests/test_game/` | Event bus, session manager, turn manager, WebSocket, integration |
+
+Les tests `engine/` sont purement unitaires (rapides, aucune dependance externe).
+Les tests `game/` peuvent necessiter une boucle asyncio — utiliser `pytest-asyncio`.
 
 ## Principes de conception
 
@@ -98,3 +146,12 @@ COMBAT (rounds) -> ENCOUNTER_END -> EXPLORATION -> ...
 - Voxtral TTS necessite vLLM-Omni, PAS Ollama - deux backends LLM distincts
 - Le frontend tourne sur le port 5173 (Vite), le backend sur le port 8000 (Uvicorn)
 - CORS configure pour `http://localhost:5173`
+
+## Anti-patterns a eviter
+
+- **Ne jamais creer une nouvelle session SQLAlchemy dans un handler WebSocket** — reutiliser le `db` injecte via `Depends(get_db)` ou passe en parametre.
+- **Ne jamais appeler le LLM de facon bloquante dans un handler WebSocket** — toujours utiliser `asyncio.create_task()` pour les appels GMAgent/PlayerAgent.
+- **Ne pas faire resoudre les mecaniques par le LLM** — jets de des, calculs de degats, initiative : tout passe par `engine/`. Le LLM produit uniquement de la narration.
+- **Ne pas ajouter de champs relationnels complexes au game state** — c'est un JSON blob valide par Pydantic. Eviter de creer de nouvelles tables SQLAlchemy pour des donnees de jeu.
+- **Ne pas modifier `engine/` pour y faire des I/O** — ce package doit rester pure logic, testable sans base de donnees ni reseau.
+- **Ne pas utiliser `tts_backend="vllm"` sans vLLM-Omni en cours** — l'app tombe en erreur. Garder `VOXTRAL_ENABLED=false` si Voxtral n'est pas demarre.

@@ -11,6 +11,7 @@ No I/O, no async, no database access.
 """
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
@@ -29,8 +30,13 @@ POINT_BUY_COST: Dict[int, int] = {
     8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9,
 }
 
-VALID_SPECIES = frozenset({"human", "elf", "dwarf"})
-VALID_CLASSES = frozenset({"fighter", "wizard", "rogue", "cleric"})
+VALID_SPECIES = frozenset({
+    "human", "elf", "dwarf", "halfling", "gnome", "half_elf", "half_orc", "tiefling",
+})
+VALID_CLASSES = frozenset({
+    "fighter", "wizard", "rogue", "cleric",
+    "barbarian", "bard", "druid", "monk", "paladin", "ranger", "sorcerer", "warlock",
+})
 
 
 def point_buy_cost(score: int) -> int:
@@ -44,6 +50,27 @@ def point_buy_cost(score: int) -> int:
             f"Point buy score must be between 8 and 15, got {score}"
         )
     return POINT_BUY_COST[score]
+
+
+def roll_ability_scores(rng: random.Random | None = None) -> List[int]:
+    """Roll six ability scores using the 4d6-drop-lowest method.
+
+    For each of the six scores: roll four d6, discard the lowest, sum the rest.
+
+    Args:
+        rng: Optional :class:`random.Random` instance for reproducibility in tests.
+             Defaults to the module-level RNG.
+
+    Returns:
+        List of six integers (each in range 3–18).
+    """
+    _rng = rng or random
+    results: List[int] = []
+    for _ in range(6):
+        rolls = [_rng.randint(1, 6) for _ in range(4)]
+        rolls.sort()
+        results.append(sum(rolls[1:]))  # drop lowest
+    return results
 
 
 def validate_point_buy(scores: Dict[str, int]) -> int:
@@ -140,9 +167,9 @@ class SpeciesTraits:
 
     name: str
     ability_bonuses: Dict[str, int]     # e.g. {"dexterity": 2, "intelligence": 1}
-    speed: int                          # base walking speed in feet
+    speed: float                        # vitesse de déplacement de base en mètres
     size: str                           # "Medium" or "Small"
-    darkvision_ft: int                  # 0 = no darkvision
+    darkvision_m: float                 # 0 = pas de vision dans le noir
     traits: List[str]                   # feature names
     skill_proficiencies: List[str]      # bonus skill proficiencies granted by species
     languages: List[str]
@@ -153,9 +180,9 @@ _SPECIES_DATA: Dict[str, SpeciesTraits] = {
     "human": SpeciesTraits(
         name="Human",
         ability_bonuses={a.value: 1 for a in Ability},
-        speed=30,
+        speed=9,
         size="Medium",
-        darkvision_ft=0,
+        darkvision_m=0,
         traits=["Extra Language", "Versatility"],
         skill_proficiencies=[],
         languages=["common"],
@@ -164,9 +191,9 @@ _SPECIES_DATA: Dict[str, SpeciesTraits] = {
     "elf": SpeciesTraits(
         name="Elf",
         ability_bonuses={"dexterity": 2, "intelligence": 1},
-        speed=30,
+        speed=9,
         size="Medium",
-        darkvision_ft=60,
+        darkvision_m=18,
         traits=[
             "Darkvision",
             "Keen Senses",
@@ -182,9 +209,9 @@ _SPECIES_DATA: Dict[str, SpeciesTraits] = {
     "dwarf": SpeciesTraits(
         name="Dwarf",
         ability_bonuses={"constitution": 2, "strength": 2},
-        speed=25,
+        speed=7.5,
         size="Medium",
-        darkvision_ft=60,
+        darkvision_m=18,
         traits=[
             "Darkvision",
             "Dwarven Resilience",
@@ -194,6 +221,61 @@ _SPECIES_DATA: Dict[str, SpeciesTraits] = {
         ],
         skill_proficiencies=[],
         languages=["common", "dwarvish"],
+    ),
+    # Lightfoot Halfling: +2 DEX
+    "halfling": SpeciesTraits(
+        name="Halfling",
+        ability_bonuses={"dexterity": 2},
+        speed=7.5,
+        size="Small",
+        darkvision_m=0,
+        traits=["Lucky", "Brave", "Halfling Nimbleness", "Naturally Stealthy"],
+        skill_proficiencies=[],
+        languages=["common", "halfling"],
+    ),
+    # Forest Gnome: +2 INT
+    "gnome": SpeciesTraits(
+        name="Gnome",
+        ability_bonuses={"intelligence": 2},
+        speed=7.5,
+        size="Small",
+        darkvision_m=18,
+        traits=["Darkvision", "Gnome Cunning", "Natural Illusionist", "Speak with Small Beasts"],
+        skill_proficiencies=[],
+        languages=["common", "gnomish"],
+    ),
+    # Half-Elf: +2 CHA, +1 STR, +1 CON (simplifié — SRD: +2 CHA + 2×+1 au choix)
+    "half_elf": SpeciesTraits(
+        name="Half-Elf",
+        ability_bonuses={"charisma": 2, "strength": 1, "constitution": 1},
+        speed=9,
+        size="Medium",
+        darkvision_m=18,
+        traits=["Darkvision", "Fey Ancestry", "Skill Versatility"],
+        skill_proficiencies=[],
+        languages=["common", "elvish"],
+    ),
+    # Half-Orc: +2 STR, +1 CON
+    "half_orc": SpeciesTraits(
+        name="Half-Orc",
+        ability_bonuses={"strength": 2, "constitution": 1},
+        speed=9,
+        size="Medium",
+        darkvision_m=18,
+        traits=["Darkvision", "Menacing", "Relentless Endurance", "Savage Attacks"],
+        skill_proficiencies=["intimidation"],
+        languages=["common", "orc"],
+    ),
+    # Tiefling: +1 INT, +2 CHA
+    "tiefling": SpeciesTraits(
+        name="Tiefling",
+        ability_bonuses={"intelligence": 1, "charisma": 2},
+        speed=9,
+        size="Medium",
+        darkvision_m=18,
+        traits=["Darkvision", "Hellish Resistance", "Infernal Legacy"],
+        skill_proficiencies=[],
+        languages=["common", "infernal"],
     ),
 }
 
@@ -297,6 +379,118 @@ _CLASS_DATA: Dict[str, ClassFeatures] = {
         level_1_features=["Spellcasting", "Divine Domain", "Channel Divinity"],
         spellcasting_ability="wisdom",
         caster_type="full",
+    ),
+    "barbarian": ClassFeatures(
+        name="Barbarian",
+        hit_die=12,
+        saving_throw_proficiencies=["strength", "constitution"],
+        armor_proficiencies=["light", "medium", "shields"],
+        weapon_proficiencies=["simple", "martial"],
+        skill_choices=[
+            "animal_handling", "athletics", "intimidation", "nature", "perception", "survival",
+        ],
+        num_skill_choices=2,
+        level_1_features=["Rage", "Unarmored Defense"],
+        spellcasting_ability=None,
+        caster_type=None,
+    ),
+    "bard": ClassFeatures(
+        name="Bard",
+        hit_die=8,
+        saving_throw_proficiencies=["dexterity", "charisma"],
+        armor_proficiencies=["light"],
+        weapon_proficiencies=["simple", "hand_crossbows", "longswords", "rapiers", "shortswords"],
+        skill_choices=[
+            "acrobatics", "animal_handling", "arcana", "athletics", "deception", "history",
+            "insight", "intimidation", "investigation", "medicine", "nature", "perception",
+            "performance", "persuasion", "religion", "sleight_of_hand", "stealth", "survival",
+        ],
+        num_skill_choices=3,
+        level_1_features=["Spellcasting", "Bardic Inspiration (d6)"],
+        spellcasting_ability="charisma",
+        caster_type="full",
+    ),
+    "druid": ClassFeatures(
+        name="Druid",
+        hit_die=8,
+        saving_throw_proficiencies=["intelligence", "wisdom"],
+        armor_proficiencies=["light", "medium", "shields"],
+        weapon_proficiencies=["clubs", "daggers", "darts", "javelins", "maces", "quarterstaffs",
+                              "scimitars", "sickles", "slings", "spears"],
+        skill_choices=[
+            "arcana", "animal_handling", "insight", "medicine", "nature",
+            "perception", "religion", "survival",
+        ],
+        num_skill_choices=2,
+        level_1_features=["Druidic", "Spellcasting"],
+        spellcasting_ability="wisdom",
+        caster_type="full",
+    ),
+    "monk": ClassFeatures(
+        name="Monk",
+        hit_die=8,
+        saving_throw_proficiencies=["strength", "dexterity"],
+        armor_proficiencies=[],
+        weapon_proficiencies=["simple", "shortswords"],
+        skill_choices=["acrobatics", "athletics", "history", "insight", "religion", "stealth"],
+        num_skill_choices=2,
+        level_1_features=["Unarmored Defense", "Martial Arts"],
+        spellcasting_ability=None,
+        caster_type=None,
+    ),
+    "paladin": ClassFeatures(
+        name="Paladin",
+        hit_die=10,
+        saving_throw_proficiencies=["wisdom", "charisma"],
+        armor_proficiencies=["light", "medium", "heavy", "shields"],
+        weapon_proficiencies=["simple", "martial"],
+        skill_choices=["athletics", "insight", "intimidation", "medicine", "persuasion", "religion"],
+        num_skill_choices=2,
+        level_1_features=["Divine Sense", "Lay on Hands"],
+        spellcasting_ability="charisma",
+        caster_type="half",
+    ),
+    "ranger": ClassFeatures(
+        name="Ranger",
+        hit_die=10,
+        saving_throw_proficiencies=["strength", "dexterity"],
+        armor_proficiencies=["light", "medium", "shields"],
+        weapon_proficiencies=["simple", "martial"],
+        skill_choices=[
+            "animal_handling", "athletics", "insight", "investigation",
+            "nature", "perception", "stealth", "survival",
+        ],
+        num_skill_choices=3,
+        level_1_features=["Favored Enemy", "Natural Explorer"],
+        spellcasting_ability="wisdom",
+        caster_type="half",
+    ),
+    "sorcerer": ClassFeatures(
+        name="Sorcerer",
+        hit_die=6,
+        saving_throw_proficiencies=["constitution", "charisma"],
+        armor_proficiencies=[],
+        weapon_proficiencies=["daggers", "darts", "slings", "quarterstaffs", "light_crossbows"],
+        skill_choices=["arcana", "deception", "insight", "intimidation", "persuasion", "religion"],
+        num_skill_choices=2,
+        level_1_features=["Spellcasting", "Sorcerous Origin"],
+        spellcasting_ability="charisma",
+        caster_type="full",
+    ),
+    "warlock": ClassFeatures(
+        name="Warlock",
+        hit_die=8,
+        saving_throw_proficiencies=["wisdom", "charisma"],
+        armor_proficiencies=["light"],
+        weapon_proficiencies=["simple"],
+        skill_choices=[
+            "arcana", "deception", "history", "intimidation",
+            "investigation", "nature", "religion",
+        ],
+        num_skill_choices=2,
+        level_1_features=["Otherworldly Patron", "Pact Magic"],
+        spellcasting_ability="charisma",
+        caster_type="half",
     ),
 }
 

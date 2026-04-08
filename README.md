@@ -36,6 +36,30 @@ ollama pull mistral:7b
 ```
 *Note : Ollama tourne par défaut sur le port local `11434`.*
 
+#### Utiliser Ollama depuis un autre Mac sur le même réseau
+
+Si Ollama tourne sur un Mac différent (Mac 2) et que vous souhaitez l'exposer sur le réseau local :
+
+1. Fermez complètement l'application Ollama sur le Mac 2 (vérifiez aussi l'icône dans la barre des menus en haut à droite).
+
+2. Ouvrez un Terminal sur le Mac 2 et exécutez la commande suivante pour que Ollama écoute sur toutes les interfaces réseau :
+   ```bash
+   launchctl setenv OLLAMA_HOST "0.0.0.0"
+   ```
+
+3. Relancez l'application Ollama.
+
+> **Alternative via terminal :** Si vous préférez démarrer Ollama directement en ligne de commande sans passer par l'application :
+> ```bash
+> export OLLAMA_HOST=0.0.0.0
+> ollama serve
+> ```
+
+Une fois Ollama accessible sur le réseau, mettez à jour la variable `OLLAMA_BASE_URL` dans `backend/.env` avec l'adresse IP du Mac 2 :
+```
+OLLAMA_BASE_URL=http://<IP_DU_MAC_2>:11434
+```
+
 ### 3. Configurer le micro-service TTS restreint (Kokoro-ONNX)
 Le système vocal (Text-to-Speech) fonctionne en micro-service isolé car il cible Python 3.11 spécifiquement pour des questions de compatibilité.
 ```bash

@@ -7,7 +7,6 @@ from typing import Any, Optional
 from app.agents.base_agent import BaseAgent
 from app.agents.context_manager import ContextManager
 from app.agents.schemas import AgentContext, AgentResponse, GMAction, GMResponse
-from app.config import settings
 from app.llm.ollama_client import OllamaClient, OllamaError
 
 logger = logging.getLogger(__name__)
@@ -30,7 +29,7 @@ class GMAgent(BaseAgent):
         client: Optional[OllamaClient] = None,
         model: Optional[str] = None,
     ):
-        self._client = client or OllamaClient(model=model or settings.gm_model)
+        self._client = client or OllamaClient(model=model)
         self._system_prompt = self._load_system_prompt("gm_system.txt")
 
     # -------------------------------------------------------------------------

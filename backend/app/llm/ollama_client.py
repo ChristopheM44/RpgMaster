@@ -8,12 +8,13 @@ from typing import Optional
 import httpx
 import ollama
 
-from app.config import settings
+from app.config import get_gm_model, get_ollama_url
 
 logger = logging.getLogger(__name__)
 
 _MAX_RETRIES = 3
 _BASE_DELAY = 1.0  # seconds, doubles on each retry
+_LLM_TIMEOUT = 120.0  # seconds before giving up on a single LLM call
 
 
 class OllamaError(Exception):
@@ -27,9 +28,26 @@ class OllamaClient:
     """
 
     def __init__(self, base_url: Optional[str] = None, model: Optional[str] = None):
-        self.base_url = base_url or settings.ollama_base_url
-        self.model = model or settings.gm_model
-        self._client = ollama.AsyncClient(host=self.base_url)
+        self._explicit_base_url = base_url  # None = suit les paramètres runtime
+        self._explicit_model = model         # None = suit les paramètres runtime
+        self._cached_url: Optional[str] = None
+        self._client: Optional[ollama.AsyncClient] = None
+
+    @property
+    def base_url(self) -> str:
+        return self._explicit_base_url or get_ollama_url()
+
+    @property
+    def model(self) -> str:
+        return self._explicit_model or get_gm_model()
+
+    def _get_client(self) -> ollama.AsyncClient:
+        """Retourne le client Ollama, en le recréant si l'URL a changé."""
+        current_url = self.base_url
+        if self._client is None or self._cached_url != current_url:
+            self._client = ollama.AsyncClient(host=current_url, timeout=_LLM_TIMEOUT)
+            self._cached_url = current_url
+        return self._client
 
     # -------------------------------------------------------------------------
     # Public API
@@ -45,7 +63,7 @@ class OllamaClient:
         """Envoie une requête chat et retourne le contenu de la réponse."""
 
         async def _call() -> str:
-            response = await self._client.chat(
+            response = await self._get_client().chat(
                 model=model or self.model,
                 messages=messages,
                 options={"temperature": temperature, "num_predict": max_tokens},
@@ -65,7 +83,7 @@ class OllamaClient:
         """Envoie une requête generate et retourne le texte de la réponse."""
 
         async def _call() -> str:
-            response = await self._client.generate(
+            response = await self._get_client().generate(
                 model=model or self.model,
                 prompt=prompt,
                 system=system or "",
@@ -83,7 +101,7 @@ class OllamaClient:
     ) -> AsyncIterator[str]:
         """Stream une réponse chat, retourne les chunks de texte un par un."""
         try:
-            stream = await self._client.chat(
+            stream = await self._get_client().chat(
                 model=model or self.model,
                 messages=messages,
                 options={"temperature": temperature},
@@ -98,7 +116,7 @@ class OllamaClient:
     async def is_available(self) -> bool:
         """Vérifie qu'Ollama est joignable."""
         try:
-            await self._client.list()
+            await self._get_client().list()
             return True
         except Exception:
             return False
@@ -115,7 +133,14 @@ class OllamaClient:
         for attempt in range(1, _MAX_RETRIES + 1):
             try:
                 return await coro_fn()
-            except (httpx.ConnectError, httpx.TimeoutException, ollama.ResponseError) as exc:
+            except (
+                httpx.ConnectError,
+                httpx.TimeoutException,
+                httpx.ReadTimeout,
+                httpx.ReadError,
+                httpx.RemoteProtocolError,
+                ollama.ResponseError,
+            ) as exc:
                 last_exc = exc
                 if attempt == _MAX_RETRIES:
                     break

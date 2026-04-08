@@ -1,4 +1,4 @@
-import { ref, onUnmounted } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { useGameStore } from '../stores/game'
 import { useCharacterStore } from '../stores/character'
 import { useAudio } from './useAudio'
@@ -11,8 +11,13 @@ import type {
   PhaseChangePayload,
   CombatStartPayload,
   HpChangedPayload,
+  ConditionChangedPayload,
+  DeathSaveUpdatedPayload,
   SpellSlotUpdatedPayload,
+  EquipmentUpdatedPayload,
   AudioPayload,
+  CombatActionPayload,
+  CombatantMovedPayload,
 } from '../types'
 
 const WS_BASE = 'ws://localhost:8000'
@@ -28,16 +33,29 @@ export function useWebSocket(sessionId: string) {
   const reconnectCount = ref(0)
   let pingTimer: ReturnType<typeof setInterval> | null = null
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  let intentionalClose = false
+  let pendingCharacterId: string | undefined
+
+  const isReconnecting = computed(
+    () => !gameStore.connected && reconnectCount.value > 0 && reconnectCount.value < MAX_RECONNECTS,
+  )
+
+  const isDisconnected = computed(
+    () => !gameStore.connected && reconnectCount.value >= MAX_RECONNECTS,
+  )
 
   function connect(characterId?: string) {
-    if (ws.value?.readyState === WebSocket.OPEN) return
+    intentionalClose = false
+    pendingCharacterId = characterId
+    // Prevent duplicate connections: skip if already open or connecting
+    if (ws.value && ws.value.readyState !== WebSocket.CLOSED) return
 
     const socket = new WebSocket(`${WS_BASE}/ws/game/${sessionId}`)
     ws.value = socket
 
     socket.onopen = () => {
-      gameStore.setConnected(true)
       reconnectCount.value = 0
+      gameStore.setConnected(true)
 
       if (characterId) {
         send({ type: 'join', character_id: characterId })
@@ -58,14 +76,17 @@ export function useWebSocket(sessionId: string) {
     socket.onclose = () => {
       cleanup()
       gameStore.setConnected(false)
-      if (reconnectCount.value < MAX_RECONNECTS) {
+      if (!intentionalClose && reconnectCount.value < MAX_RECONNECTS) {
         reconnectCount.value++
-        reconnectTimer = setTimeout(() => connect(characterId), RECONNECT_DELAY_MS)
+        const delay = RECONNECT_DELAY_MS * reconnectCount.value
+        reconnectTimer = setTimeout(() => connect(pendingCharacterId), delay)
+      } else if (!intentionalClose && reconnectCount.value >= MAX_RECONNECTS) {
+        gameStore.setError('Connexion perdue. Rechargez la page pour rejoindre la session.')
       }
     }
 
     socket.onerror = () => {
-      gameStore.setError('Erreur de connexion WebSocket.')
+      // onclose will fire immediately after, which handles reconnect
     }
   }
 
@@ -84,15 +105,29 @@ export function useWebSocket(sessionId: string) {
         gameStore.applyTurnStart(msg.payload as TurnStartPayload)
         break
       case 'phase_change':
+        gameStore.setProcessing(false)
         gameStore.applyPhaseChange((msg.payload as PhaseChangePayload).phase)
         break
-      case 'combat_start':
-        gameStore.setCombatants((msg.payload as CombatStartPayload).combatants)
+      case 'combat_start': {
+        const p = msg.payload as CombatStartPayload
+        gameStore.setCombatants(p.combatants)
+        if (p.grid_config) gameStore.setGridConfig(p.grid_config)
         break
+      }
       case 'hp_changed': {
         const p = msg.payload as HpChangedPayload
         gameStore.applyHpChanged(p)
         charStore.updateHp(p.combatant_id, p.hp)
+        break
+      }
+      case 'condition_changed': {
+        const p = msg.payload as ConditionChangedPayload
+        gameStore.applyConditionChanged(p.combatant_id, p.condition, p.added)
+        break
+      }
+      case 'death_save_updated': {
+        const p = msg.payload as DeathSaveUpdatedPayload
+        gameStore.applyDeathSaveUpdated(p.combatant_id, p.death_saves)
         break
       }
       case 'spell_slot_updated': {
@@ -100,7 +135,19 @@ export function useWebSocket(sessionId: string) {
         charStore.updateSpellSlots(p.character_id, p.spell_slots)
         break
       }
+      case 'equipment_updated': {
+        const p = msg.payload as EquipmentUpdatedPayload
+        charStore.updateEquipment(p.character_id, p.equipment)
+        break
+      }
+      case 'combat_action':
+        gameStore.addCombatAction(msg.payload as CombatActionPayload)
+        break
+      case 'combatant_moved':
+        gameStore.moveCombatant(msg.payload as CombatantMovedPayload)
+        break
       case 'combat_end':
+        gameStore.setProcessing(false)
         gameStore.setCombatants([])
         break
       case 'audio':
@@ -127,6 +174,10 @@ export function useWebSocket(sessionId: string) {
     targetId?: string,
     extra?: Record<string, unknown>,
   ) {
+    // Mark as processing — cleared when narration or error arrives
+    if (gameStore.connected) {
+      gameStore.setProcessing(true)
+    }
     send({
       type: 'action',
       action_type: actionType,
@@ -137,10 +188,18 @@ export function useWebSocket(sessionId: string) {
     })
   }
 
+  function reconnect() {
+    reconnectCount.value = 0
+    gameStore.setError(null)
+    connect(pendingCharacterId)
+  }
+
   function disconnect() {
+    intentionalClose = true
     cleanup()
     ws.value?.close()
     ws.value = null
+    reconnectCount.value = 0
   }
 
   function cleanup() {
@@ -150,5 +209,5 @@ export function useWebSocket(sessionId: string) {
 
   onUnmounted(disconnect)
 
-  return { connect, disconnect, send, sendAction }
+  return { connect, disconnect, reconnect, send, sendAction, reconnectCount, isReconnecting, isDisconnected }
 }

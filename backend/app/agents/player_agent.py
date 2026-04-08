@@ -13,7 +13,6 @@ from app.agents.schemas import (
     PlayerActionChoice,
     PlayerPersonality,
 )
-from app.config import settings
 from app.llm.ollama_client import OllamaClient, OllamaError
 
 logger = logging.getLogger(__name__)
@@ -94,7 +93,7 @@ class PlayerAgent(BaseAgent):
         self._character_id = character_id
         self._character_name = character_name
         self._personality = personality or PlayerPersonality(traits=["brave"])
-        self._client = client or OllamaClient(model=model or settings.gm_model)
+        self._client = client or OllamaClient(model=model)
         self._system_prompt = self._build_system_prompt()
 
     # -------------------------------------------------------------------------

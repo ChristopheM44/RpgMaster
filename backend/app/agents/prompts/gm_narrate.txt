@@ -8,14 +8,20 @@ ACTION DU JOUEUR :
 {% if player_action %}
 {{ player_action }}
 {% else %}
-(Le joueur attend — décris l'environnement immédiat et ce que les personnages perçoivent.)
+(Le joueur attend — décris l'environnement immédiat : sons, lumières, odeurs, présences perçues.)
 {% endif %}
 
 En tant que Maître du Jeu, décris ce qui se passe et ce que les personnages perçoivent.
 
 Instructions :
-- Si l'action nécessite un jet de dés (ex : escalader un mur, persuader un garde), inclus un roll_request.
-- Si la situation débouche sur une rencontre hostile, inclus un state_transition vers COMBAT.
-- Si aucune action mécanique n'est requise, laisse le tableau "actions" vide.
+- Varie les registres sensoriels : vue, ouïe, odorat, toucher, ressenti émotionnel.
+- Si l'action du joueur nécessite un jet de dés (escalader, persuader, crocheter, percevoir…), inclus un roll_request.
+- Si la narration décrit l'apparition d'ennemis hostiles qui veulent attaquer le groupe, inclus OBLIGATOIREMENT ces deux actions dans cet ordre exact :
+    1. encounter_setup avec la liste précise des monster_ids correspondant aux ennemis décrits.
+    2. state_transition vers COMBAT.
+  Le moteur utilisera encounter_setup pour instancier exactement les ennemis que tu as narrés.
+  N'utilise encounter_setup QUE pour une nouvelle rencontre, pas si le combat est déjà en cours.
+- Si aucune action mécanique n'est requise, laisse le tableau "actions" vide [].
+- Évite de commencer la narration par « Vous » ou « Le groupe » à chaque fois — varie les formules.
 
-Réponds UNIQUEMENT en JSON valide selon le schéma du system prompt.
+Réponds avec UN SEUL objet JSON valide selon le schéma du system prompt. Pas de balises markdown. Pas de second objet JSON.

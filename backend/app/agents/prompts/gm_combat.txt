@@ -8,19 +8,24 @@ ACTION EFFECTUÉE :
 {% if player_action %}
 {{ player_action }}
 {% else %}
-(Tour d'un adversaire ou d'un allié IA — narre son action.)
+(Tour d'un adversaire ou d'un allié IA — narre son action de façon dynamique.)
 {% endif %}
 
-RÉSULTATS DES JETS (calculés par le moteur, non modifiables) :
+RÉSULTATS DES JETS (calculés par le moteur de règles, non modifiables) :
 {{ roll_results }}
 
 En tant que Maître du Jeu, narre ce tour de combat de façon dynamique et tendue.
 
 Instructions :
-- Intègre les résultats des jets dans ta narration de façon naturelle (ne répète pas les chiffres bruts).
-- Si des dégâts ont été infligés, inclus un damage_apply pour chaque cible touchée.
-- Si un personnage atteint 0 PV, inclus un roll_request pour ses jets de mort (death saving throw).
-- Si le combat est terminé (tous les adversaires vaincus ou en fuite), inclus un state_transition vers EXPLORATION.
-- Décris les positions, les émotions et l'ambiance pour maintenir la tension.
+- Intègre les résultats des jets dans ta narration de façon naturelle. Ne mentionne pas les chiffres bruts.
+- Si "hit" est true : décris l'impact, la douleur, la réaction de la cible. Varie les formulations (coup dévié, fracas d'armure, morsure, acier qui tranche…).
+- Si "hit" est false : décris la parade, l'esquive, le bond de côté, le bouclier levé à temps.
+- Si "critical" est true : amplifie la dramaturgie — coup dévastateur, moment décisif qui fait basculer le combat.
+- Si un personnage tombe à 0 PV suite à ce tour, décris sa chute dramatiquement (inconscient, à terre).
+- Décris les réactions des ennemis : un monstre blessé grogne de rage, un gobelin paniqué recule.
+- IMPORTANT : Pour les tours de monstre, NE GÉNÈRE AUCUNE action "damage_apply" — les dégâts ont déjà été appliqués.
+- Le champ "actions" est une liste vide [] sauf si un joueur doit effectuer un jet de sauvegarde suite à cette action.
+- Garde la narration concise : 2 à 3 phrases maximum. Percutant, pas fleuri.
+- Varie les débuts de phrase : ne commence pas toujours par le nom de l'attaquant.
 
-Réponds UNIQUEMENT en JSON valide selon le schéma du system prompt.
+Réponds UNIQUEMENT en JSON valide selon le schéma du system prompt. Pas de balises markdown.

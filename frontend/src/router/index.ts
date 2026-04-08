@@ -15,6 +15,11 @@ const router = createRouter({
       component: () => import('../views/LobbyView.vue'),
     },
     {
+      path: '/session/:id/setup',
+      name: 'character-setup',
+      component: () => import('../views/CharacterSetupView.vue'),
+    },
+    {
       path: '/session/:id/characters',
       name: 'character-creation',
       component: () => import('../views/CharacterCreationView.vue'),
@@ -33,6 +38,11 @@ const router = createRouter({
       path: '/admin',
       name: 'admin',
       component: () => import('../views/AdminView.vue'),
+    },
+    {
+      path: '/campaigns',
+      name: 'campaigns',
+      component: () => import('../views/CampaignView.vue'),
     },
   ],
 })

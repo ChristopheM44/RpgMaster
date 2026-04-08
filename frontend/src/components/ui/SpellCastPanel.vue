@@ -48,21 +48,20 @@ const availableSlots = computed<{ level: number; remaining: number }[]>(() => {
   return result
 })
 
-// Cibles disponibles en combat (hors soi-même)
+// Cibles disponibles en combat (ennemis uniquement)
 const combatTargets = computed(() => {
   const myId = charStore.myCharacter?.id
-  return gameStore.combatants.filter((c) => c.id !== myId)
+  return gameStore.combatants.filter((c) => c.id !== myId && c.is_ai)
 })
 
-// Un sort d'attaque de sort nécessite de choisir une cible explicite
+// Un sort nécessite de choisir une cible si : jet d'attaque, auto_hit ou save+dégâts
 const needsTarget = computed(() => {
   const spell = selectedSpell.value
   if (!spell) return false
-  return (
-    ['ranged_spell', 'melee_spell'].includes(spell.attack_type ?? '') &&
-    gameStore.isInCombat &&
-    combatTargets.value.length > 0
-  )
+  const isTargeted =
+    ['ranged_spell', 'melee_spell', 'auto_hit'].includes(spell.attack_type ?? '') ||
+    (spell.save !== null && spell.damage_dice !== null)
+  return isTargeted && gameStore.isInCombat && combatTargets.value.length > 0
 })
 
 function hasAvailableSlot(spell: SrdSpell): boolean {
@@ -179,7 +178,7 @@ onMounted(async () => {
             <div class="flex items-center justify-between">
               <span class="font-medium text-parchment text-sm">{{ spell.name_fr }}</span>
               <span class="text-xs text-parchment/40 shrink-0">
-                {{ spell.level === 0 ? 'Cantrip' : `Niv. ${spell.level}` }}
+                {{ spell.level === 0 ? 'Tour de magie' : `Niv. ${spell.level}` }}
               </span>
             </div>
             <div class="flex items-center gap-2 mt-0.5">

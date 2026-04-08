@@ -34,10 +34,7 @@ Connection lifecycle
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-import random
-from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
@@ -47,22 +44,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.schemas import AgentContext
 from app.db.database import get_db
+from app.engine.combat import roll_attack, roll_damage
+from app.engine.tactical_grid import initialize_positions, validate_move, GridPosition
 from app.game.action_resolver import ActionResolver
 from app.game.event_bus import EventType, GameEvent, event_bus
 from app.game.session_manager import SessionManager
 from app.game.turn_manager import CombatantInfo
 from app.models.character import Character
 from app.models.session import SessionStatus
+from app.services.encounter_service import encounter_service
+from app.services.message_service import persist_narration
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-# ---------------------------------------------------------------------------
-# SRD data path
-# ---------------------------------------------------------------------------
-
-_SRD_DIR = Path(__file__).parent.parent / "engine" / "srd_data"
 
 # ---------------------------------------------------------------------------
 # Module-level session manager (shared across all WS connections)
@@ -83,12 +78,13 @@ class JoinMessage(BaseModel):
 
 class PlayerActionMessage(BaseModel):
     type: str  # "action"
-    action_type: str  # free_text|attack|cast_spell|move|end_turn|start_combat|take_rest
+    action_type: str  # free_text|attack|cast_spell|move|end_turn|start_combat|take_rest|equip|use_item|drop_item
     content: Optional[str] = None
     target_id: Optional[str] = None
     character_id: Optional[str] = None
     spell_id: Optional[str] = None    # cast_spell only
     slot_level: Optional[int] = None  # cast_spell only
+    item_id: Optional[str] = None     # equip/use_item/drop_item only
 
 
 class PingMessage(BaseModel):
@@ -209,6 +205,102 @@ def _build_session_state_payload(session_id: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+_ARMOR_CATS = {"light", "medium", "heavy"}
+
+
+def _compute_ac_from_equipment(equipment: list, dex_mod: int) -> int:
+    """Calcule l'AC à partir de l'équipement équipé (armure + bouclier).
+
+    Utilise les champs SRD : base_ac, dex_cap (0=lourd, None=libre, int=moyen).
+    """
+    armor = next(
+        (it for it in equipment if it.get("equipped") and it.get("category") in _ARMOR_CATS),
+        None,
+    )
+    shield = next(
+        (it for it in equipment if it.get("equipped") and it.get("category") == "shield"),
+        None,
+    )
+    shield_bonus = 2 if shield else 0
+
+    if armor and isinstance(armor.get("base_ac"), int):
+        dex_cap = armor.get("dex_cap")  # None = uncapped, 0 = heavy, int = medium
+        dex_applied = dex_mod if dex_cap is None else min(dex_mod, int(dex_cap))
+        return armor["base_ac"] + dex_applied + shield_bonus
+
+    return 10 + dex_mod + shield_bonus
+
+
+async def _auto_death_save(
+    session_id: str,
+    combatant_id: str,
+    name: str,
+    active: Any,
+) -> None:
+    """Auto-roule un jet de sauvegarde contre la mort pour un compagnon IA à 0 PV."""
+    from app.engine.combat import roll_death_save  # noqa: PLC0415
+
+    result = roll_death_save()
+    combatants: dict[str, Any] = active.state_data.setdefault("combatants", {})
+    cdata = combatants.get(combatant_id, {})
+    ds: dict[str, Any] = cdata.setdefault("death_saves", {"successes": 0, "failures": 0, "stable": False})
+
+    if result.critical_success:
+        cdata["hp"] = 1
+        ds["stable"] = True
+        conds = list(cdata.get("conditions", []))
+        if "inconscient" in conds:
+            conds.remove("inconscient")
+            cdata["conditions"] = conds
+        active.mark_dirty()
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.HP_CHANGED,
+            {"combatant_id": combatant_id, "hp": 1, "delta": 1},
+            source="ws_game",
+        )
+        narr = f"{name} réussit son jet de sauvegarde avec un 20 naturel et reprend conscience avec 1 PV !"
+    elif result.critical_failure:
+        ds["failures"] = min(3, ds.get("failures", 0) + 2)
+        active.mark_dirty()
+        narr = f"{name} rate son jet de sauvegarde avec un 1 naturel — 2 échecs !"
+    elif result.success:
+        ds["successes"] = min(3, ds.get("successes", 0) + 1)
+        if ds["successes"] >= 3:
+            ds["stable"] = True
+        active.mark_dirty()
+        narr = f"{name} réussit son jet de sauvegarde contre la mort ({result.d20_roll}) [{ds['successes']}/3 succès]."
+    else:
+        ds["failures"] = min(3, ds.get("failures", 0) + 1)
+        active.mark_dirty()
+        narr = f"{name} rate son jet de sauvegarde contre la mort ({result.d20_roll}) [{ds['failures']}/3 échecs]."
+
+    if ds.get("failures", 0) >= 3 and not ds.get("stable"):
+        cdata["dead"] = True
+        active.mark_dirty()
+        narr = f"{name} est mort(e) — 3 échecs aux jets de sauvegarde."
+
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.ROLL_RESULT,
+        {
+            "dice_notation": "1d20",
+            "rolls": [result.d20_roll],
+            "total": result.d20_roll,
+            "modifier": 0,
+            "label": f"Jet de sauvegarde — {name}",
+            "success": result.success,
+        },
+        source="ws_game",
+    )
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.NARRATION,
+        {"text": narr, "speaker": "Maître du Jeu"},
+        source="ws_game",
+    )
+
+
 async def _remove_dead_combatants(session_id: str, active: Any) -> None:
     """Remove NPCs with hp <= 0 from the turn order and broadcast narration."""
     combatants: dict[str, Any] = active.state_data.get("combatants", {})
@@ -244,15 +336,14 @@ async def _handle_combat_end(session_id: str, active: Any, db: AsyncSession) -> 
         {"phase": SessionStatus.EXPLORATION.value},
         source="ws_game",
     )
+    victory_text = "Victoire ! Tous les ennemis ont été vaincus. Le calme revient."
     await event_bus.publish_to_session(
         session_id,
         EventType.NARRATION,
-        {
-            "text": "Victoire ! Tous les ennemis ont été vaincus. Le calme revient.",
-            "speaker": "Maître du Jeu",
-        },
+        {"text": victory_text, "speaker": "Maître du Jeu"},
         source="ws_game",
     )
+    await persist_narration(session_id, victory_text, "Maître du Jeu", db)
     await event_bus.publish_to_session(
         session_id,
         EventType.SESSION_STATE,
@@ -266,22 +357,62 @@ async def _handle_combat_end(session_id: str, active: Any, db: AsyncSession) -> 
 # ---------------------------------------------------------------------------
 
 
-async def _handle_start_combat(session_id: str, active: Any, db: AsyncSession) -> None:
-    """Spawn a random encounter, roll initiative, and start combat."""
-    # Load a random low-CR monster
-    monsters_path = _SRD_DIR / "monsters.json"
-    with monsters_path.open(encoding="utf-8") as f:
-        monsters_data = json.load(f)
+async def _handle_start_combat(
+    session_id: str,
+    active: Any,
+    db: AsyncSession,
+    encounter_id: Optional[str] = None,
+) -> None:
+    """Spawn an encounter, roll initiative, and start combat.
 
-    candidates = [m for m in monsters_data["monsters"] if 0 < m["cr"] <= 1]
-    if not candidates:
-        candidates = monsters_data["monsters"][:1]
-    monster = random.choice(candidates)
-
-    monster_id = f"{monster['id']}_1"
-
-    # Build combatant maps
+    If encounter_id is provided, load that pre-built encounter.
+    Otherwise generate a dynamic encounter adapted to the party's levels.
+    """
+    # Resolve party levels from characters in state_data
     characters_data: dict[str, Any] = active.state_data.get("characters", {})
+    party_levels = [int(c.get("level", 1)) for c in characters_data.values()]
+    if not party_levels:
+        party_levels = [1]
+
+    # Build (or generate) the encounter
+    intro_text: Optional[str] = None
+    built = None
+
+    # 1. Priorité : encounter déclaré par le GM via encounter_setup
+    pending = active.state_data.pop("pending_encounter", None)
+    if pending:
+        monster_ids = pending.get("monster_ids", [])
+        intro_text = pending.get("context") or None
+        if monster_ids:
+            candidate = encounter_service.build_from_monster_ids(monster_ids)
+            if candidate.entries:
+                built = candidate
+            else:
+                logger.warning(
+                    "_handle_start_combat: aucun monster_id valide dans pending_encounter"
+                    " %s, fallback.",
+                    monster_ids,
+                )
+
+    # 2. Fallback : preset ou génération dynamique
+    if built is None:
+        if encounter_id:
+            built = encounter_service.build_from_preset(encounter_id)
+            preset = encounter_service.get_preset(encounter_id)
+            intro_text = preset.get("intro_text") if preset else None
+            if built is None:
+                built = encounter_service.generate(party_levels)
+        else:
+            preset = encounter_service.pick_preset_for_party(party_levels)
+            if preset:
+                intro_text = preset.get("intro_text")
+                built = encounter_service.build_from_preset(preset["id"])
+            else:
+                built = encounter_service.generate(party_levels)
+
+    npc_combatants = encounter_service.expand(built)
+
+    # Build player combatant maps
     combatants_list: list[CombatantInfo] = []
     combatants_info: dict[str, Any] = {}
 
@@ -297,45 +428,82 @@ async def _handle_start_combat(session_id: str, active: Any, db: AsyncSession) -
                 is_ai_controlled=bool(cdata.get("is_ai", False)),
             )
         )
+        char_equipment = cdata.get("equipment", [])
         combatants_info[char_id] = {
             "name": cdata["name"],
             "hp": int(cdata.get("hp", 10)),
             "hp_max": int(cdata.get("hp_max", 10)),
             "is_player": True,
             "is_ai": bool(cdata.get("is_ai", False)),
-            "ac": 10 + dex_mod,
+            "ac": _compute_ac_from_equipment(char_equipment, dex_mod),
             "attack_bonus": 3,
             "damage_notation": "1d6+2",
         }
 
-    monster_dex = int(monster["ability_scores"].get("dexterity", 10))
-    monster_actions = monster.get("actions", [])
-    first_action = monster_actions[0] if monster_actions else {}
-    monster_name = monster.get("name_fr", monster["name"])
-
-    combatants_list.append(
-        CombatantInfo(
-            combatant_id=monster_id,
-            name=monster_name,
-            dex_score=monster_dex,
-            is_player=False,
-            is_ai_controlled=True,
+    # Add NPC combatants from the built encounter
+    npc_names: list[str] = []
+    for npc in npc_combatants:
+        cid = npc["combatant_id"]
+        encounter_service._ensure_loaded()
+        monster_id_base = "_".join(cid.rsplit("_", 1)[:-1]) if "_" in cid else cid
+        monster_data = encounter_service._monsters_by_id.get(monster_id_base, {})
+        dex = int(monster_data.get("ability_scores", {}).get("dexterity", 10))
+        combatants_list.append(
+            CombatantInfo(
+                combatant_id=cid,
+                name=npc["name"],
+                dex_score=dex,
+                is_player=False,
+                is_ai_controlled=True,
+            )
         )
-    )
-    combatants_info[monster_id] = {
-        "name": monster_name,
-        "hp": int(monster["hp"]),
-        "hp_max": int(monster["hp"]),
-        "is_player": False,
-        "is_ai": True,
-        "ac": int(monster["ac"]),
-        "attack_bonus": int(first_action.get("attack_bonus", 2)),
-        "damage_notation": first_action.get("damage_dice", "1d4"),
-    }
+        combatants_info[cid] = {
+            "name": npc["name"],
+            "hp": npc["hp"],
+            "hp_max": npc["hp_max"],
+            "is_player": False,
+            "is_ai": True,
+            "ac": npc["ac"],
+            "attack_bonus": npc["attack_bonus"],
+            "damage_notation": npc["damage_notation"],
+        }
+        npc_names.append(npc["name"])
+
+    # Enregistrer les PlayerAgent pour les compagnons IA (personnages avec is_ai=True)
+    # Si non enregistrés, ils tomberaient dans le chemin "monstre ennemi" de _handle_ai_turns.
+    from app.agents.player_agent import PlayerAgent, PlayerPersonality
+    for char_id, cdata in characters_data.items():
+        if cdata.get("is_ai", False) and char_id not in active.ai_players:
+            personality_traits = cdata.get("personality", ["brave"])
+            if isinstance(personality_traits, str):
+                personality_traits = [personality_traits]
+            active.ai_players[char_id] = PlayerAgent(
+                character_id=char_id,
+                character_name=cdata["name"],
+                personality=PlayerPersonality(traits=personality_traits),
+            )
+            logger.info(
+                "_handle_start_combat: PlayerAgent enregistré pour compagnon IA '%s' (%s).",
+                cdata["name"],
+                char_id,
+            )
 
     # Roll initiative and set up TurnManager
     turn_entries = active.turn_manager.setup_combat(combatants_list)
     active.state_data["combatants"] = combatants_info
+
+    # Initialize tactical grid positions
+    player_ids = [cid for cid, c in combatants_info.items() if c["is_player"]]
+    npc_ids = [cid for cid, c in combatants_info.items() if not c["is_player"]]
+    grid_cols, grid_rows = 10, 8
+    grid_positions = initialize_positions(player_ids, npc_ids, grid_cols, grid_rows)
+    active.state_data["grid_positions"] = {
+        cid: pos.to_dict() for cid, pos in grid_positions.items()
+    }
+    active.state_data["grid_config"] = {
+        "cols": grid_cols, "rows": grid_rows, "cell_size_m": 1.5
+    }
+
     active.phase = SessionStatus.COMBAT
     active.round_number = 1
     active.mark_dirty()
@@ -360,13 +528,17 @@ async def _handle_start_combat(session_id: str, active: Any, db: AsyncSession) -
             "is_ai": not combatants_info[entry.combatant_id]["is_player"],
             "conditions": [],
             "is_active": (i == 0),
+            "position": grid_positions.get(entry.combatant_id, GridPosition(0, 0)).to_dict(),
         }
         for i, entry in enumerate(turn_entries)
     ]
     await event_bus.publish_to_session(
         session_id,
         "combat_start",
-        {"combatants": combat_combatants},
+        {
+            "combatants": combat_combatants,
+            "grid_config": {"cols": grid_cols, "rows": grid_rows, "cell_size_m": 1.5},
+        },
         source="ws_game",
     )
 
@@ -379,18 +551,20 @@ async def _handle_start_combat(session_id: str, active: Any, db: AsyncSession) -
     )
 
     # Narration d'introduction
+    if not intro_text:
+        enemy_list = ", ".join(npc_names) if npc_names else "des ennemis"
+        verb = "surgissent" if len(npc_names) > 1 else "surgit"
+        intro_text = (
+            f"{enemy_list} {verb} devant vous ! "
+            "L'initiative est lancée — le combat commence !"
+        )
     await event_bus.publish_to_session(
         session_id,
         EventType.NARRATION,
-        {
-            "text": (
-                f"Un {monster_name} surgit de l'ombre ! "
-                "L'initiative est lancée — le combat commence !"
-            ),
-            "speaker": "Maître du Jeu",
-        },
+        {"text": intro_text, "speaker": "Maître du Jeu"},
         source="ws_game",
     )
+    await persist_narration(session_id, intro_text, "Maître du Jeu", db)
 
     # Announce first turn (or trigger AI turns if monster goes first)
     first = active.turn_manager.current_turn
@@ -460,6 +634,18 @@ async def _handle_ai_turns(session_id: str, active: Any, db: AsyncSession) -> No
             source="ws_game",
         )
 
+        # Si ce combattant IA est un joueur à 0 PV → jet de sauvegarde automatique
+        _cdata = active.state_data.get("combatants", {}).get(current.combatant_id, {})
+        if _cdata.get("is_player") and int(_cdata.get("hp", 1)) == 0:
+            _ds = _cdata.get("death_saves", {})
+            if not _ds.get("stable") and not _cdata.get("dead"):
+                await _auto_death_save(session_id, current.combatant_id, current.name, active)
+            active.turn_manager.next_turn()
+            active.turn_number += 1
+            active.round_number = active.turn_manager.round_number
+            active.mark_dirty()
+            continue
+
         agent = active.ai_players.get(current.combatant_id)
         if agent is not None:
             # AI companion: delegate to AIPlayerManager (handles its own next_turn() loop)
@@ -469,26 +655,106 @@ async def _handle_ai_turns(session_id: str, active: Any, db: AsyncSession) -> No
             # process_ai_turns already stopped at a non-AI turn — fall through to broadcast
             break
 
-        # Enemy monster: GM narrates the monster's action directly
-        context = AgentContext(
-            session_id=session_id,
-            game_phase=active.phase.value.upper(),
-            game_state=active.state_data,
-            player_action=f"[Tour du monstre] {current.name} agit.",
-        )
+        # Enemy monster: deterministic mechanical resolution first, then GM prose narration
+        combatants_info: dict[str, Any] = active.state_data.get("combatants", {})
+
+        # Pick target: first alive player
+        target_id: Optional[str] = None
+        target_name = "la cible"
+        target_ac = 10
+        for cid, cdata in combatants_info.items():
+            if cdata.get("is_player", False) and int(cdata.get("hp", 0)) > 0:
+                target_id = cid
+                target_name = cdata.get("name", cid)
+                target_ac = int(cdata.get("ac", 10))
+                break
+
+        monster_info = combatants_info.get(current.combatant_id, {})
+        attack_bonus = int(monster_info.get("attack_bonus", 0))
+        damage_notation = monster_info.get("damage_notation", "1d4")
+
+        # Résolution déterministe (moteur de règles D&D SRD)
+        damage_dealt = 0
         try:
-            gm_response = await action_resolver._gm.think(context)
-            narration_text = gm_response.content
-            for gm_action in gm_response.actions:
-                merged_params: dict[str, Any] = dict(gm_action.params)
-                if gm_action.target and "target" not in merged_params:
-                    merged_params["target"] = gm_action.target
-                await action_resolver._apply_gm_action(
-                    session_id, gm_action.type, merged_params, active
+            atk = roll_attack(attack_bonus, target_ac)
+            if target_id is not None and atk.hit:
+                dmg = roll_damage(damage_notation, critical=atk.critical)
+                damage_dealt = dmg.total
+                new_hp = max(0, int(combatants_info[target_id].get("hp", 0)) - damage_dealt)
+                combatants_info[target_id]["hp"] = new_hp
+                active.mark_dirty()
+                await event_bus.publish_to_session(
+                    session_id,
+                    EventType.HP_CHANGED,
+                    {"combatant_id": target_id, "hp": new_hp, "delta": -damage_dealt},
+                    source="ws_game",
                 )
+                # Si un joueur tombe à 0 PV : init jets de sauvegarde contre la mort
+                if new_hp == 0 and combatants_info[target_id].get("is_player", False):
+                    cdata = combatants_info[target_id]
+                    if "death_saves" not in cdata:
+                        cdata["death_saves"] = {"successes": 0, "failures": 0, "stable": False}
+                    conds = list(cdata.get("conditions", []))
+                    if "inconscient" not in conds:
+                        conds.append("inconscient")
+                        cdata["conditions"] = conds
+        except Exception as exc:
+            logger.error("_handle_ai_turns: résolution mécanique échouée pour '%s': %s", current.name, exc)
+            atk = roll_attack(0, 10)  # attaque neutre pour continuer
+
+        # Émission de l'event structuré COMBAT_ACTION
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.COMBAT_ACTION,
+            {
+                "attacker_id": current.combatant_id,
+                "attacker_name": current.name,
+                "target_id": target_id,
+                "target_name": target_name,
+                "action_type": "attack",
+                "action_name": "Attaque",
+                "d20": atk.d20_roll,
+                "attack_roll": atk.total,
+                "attack_bonus": attack_bonus,
+                "target_ac": target_ac,
+                "hit": atk.hit,
+                "critical": atk.critical,
+                "damage": damage_dealt if atk.hit else None,
+                "damage_notation": damage_notation,
+            },
+            source="ws_game",
+        )
+
+        # GM narre l'action en prose (mécaniques déjà résolues — ne pas réappliquer)
+        roll_results = {
+            "attacker": current.name,
+            "target": target_name,
+            "d20": atk.d20_roll,
+            "attack_total": atk.total,
+            "target_ac": target_ac,
+            "hit": atk.hit,
+            "critical": atk.critical,
+            "damage": damage_dealt,
+            "damage_notation": damage_notation,
+        }
+        try:
+            gm_response = await action_resolver._gm.run_combat_turn(
+                game_state=active.state_data,
+                player_action=f"[Tour du monstre] {current.name} attaque {target_name}.",
+                roll_results=roll_results,
+            )
+            narration_text = gm_response.narration
+            # NE PAS exécuter gm_response.actions — les mécaniques sont déjà résolues
         except Exception as exc:
             logger.error("_handle_ai_turns: GM agent failed for '%s': %s", current.name, exc)
-            narration_text = f"{current.name} se prépare à attaquer…"
+            if atk.hit:
+                crit_str = " (CRITIQUE !)" if atk.critical else ""
+                narration_text = (
+                    f"{current.name} attaque {target_name}{crit_str}"
+                    f" et inflige {damage_dealt} dégâts !"
+                )
+            else:
+                narration_text = f"{current.name} attaque {target_name} mais rate !"
 
         await event_bus.publish_to_session(
             session_id,
@@ -528,6 +794,255 @@ async def _handle_ai_turns(session_id: str, active: Any, db: AsyncSession) -> No
     )
 
 
+async def _handle_reset_combat(session_id: str, active: Any, db: AsyncSession) -> None:
+    """Test utility: exit combat, restore full HP, return to exploration."""
+    active.turn_manager.reset()
+    active.phase = SessionStatus.EXPLORATION
+    active.state_data.pop("combatants", None)
+
+    # Restore HP in characters snapshot
+    characters_data: dict[str, Any] = active.state_data.get("characters", {})
+    for cdata in characters_data.values():
+        cdata["hp"] = cdata.get("hp_max", cdata.get("hp", 10))
+
+    # Persist to DB
+    result = await db.execute(
+        select(Character).where(Character.session_id == session_id)
+    )
+    chars = result.scalars().all()
+    for char in chars:
+        char.hp_current = char.hp_max
+    await db.commit()
+
+    active.mark_dirty()
+    await session_manager.save_state(session_id, db)
+
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.PHASE_CHANGE,
+        {"phase": SessionStatus.EXPLORATION.value},
+        source="ws_game",
+    )
+    reset_text = "[TEST] Combat annulé. Points de vie restaurés. Retour en exploration."
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.NARRATION,
+        {"text": reset_text, "speaker": "Maître du Jeu"},
+        source="ws_game",
+    )
+    await persist_narration(session_id, reset_text, "Maître du Jeu", db)
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.SESSION_STATE,
+        _build_session_state_payload(session_id),
+        source="ws_game",
+    )
+
+
+async def _handle_equip_item(
+    session_id: str,
+    action: PlayerActionMessage,
+    active: Any,
+    db: AsyncSession,
+) -> None:
+    """Équipe ou retire un objet (toggle) pendant une session active."""
+    item_id = action.item_id
+    character_id = action.character_id
+    if not item_id or not character_id:
+        await event_bus.publish_to_session(
+            session_id, EventType.ERROR,
+            {"message": "item_id et character_id requis pour équiper un objet."},
+            source="ws_game",
+        )
+        return
+
+    result = await db.execute(select(Character).where(Character.id == character_id))
+    char = result.scalar_one_or_none()
+    if not char:
+        return
+
+    equipment = list(char.equipment or [])
+    idx = next((i for i, it in enumerate(equipment) if it.get("id") == item_id), -1)
+    if idx == -1:
+        await event_bus.publish_to_session(
+            session_id, EventType.ERROR,
+            {"message": f"Objet '{item_id}' introuvable dans l'inventaire."},
+            source="ws_game",
+        )
+        return
+
+    item = equipment[idx]
+    new_equipped = not item.get("equipped", False)
+
+    _armor_cats = {"light", "medium", "heavy"}
+    if new_equipped and item.get("category", "") in _armor_cats:
+        for i, eq in enumerate(equipment):
+            if i != idx and eq.get("category", "") in _armor_cats:
+                equipment[i] = {**eq, "equipped": False}
+
+    equipment[idx] = {**item, "equipped": new_equipped}
+    char.equipment = equipment
+    await db.commit()
+
+    # Sync in-memory snapshot
+    chars_data = active.state_data.get("characters", {})
+    if character_id in chars_data:
+        chars_data[character_id]["equipment"] = equipment
+    active.mark_dirty()
+
+    item_name = item.get("name_fr") or item_id
+    action_label = "équipe" if new_equipped else "retire"
+    await event_bus.publish_to_session(
+        session_id, EventType.EQUIPMENT_UPDATED,
+        {"character_id": character_id, "equipment": equipment},
+        source="ws_game",
+    )
+    await event_bus.publish_to_session(
+        session_id, EventType.NARRATION,
+        {"text": f"{char.name} {action_label} : {item_name}.", "speaker": "Maître du Jeu"},
+        source="ws_game",
+    )
+
+
+async def _handle_use_item(
+    session_id: str,
+    action: PlayerActionMessage,
+    active: Any,
+    db: AsyncSession,
+) -> None:
+    """Utilise un objet consommable pendant une session (potion = soin)."""
+    from app.engine.dice import roll as dice_roll
+
+    item_id = action.item_id
+    character_id = action.character_id
+    if not item_id or not character_id:
+        await event_bus.publish_to_session(
+            session_id, EventType.ERROR,
+            {"message": "item_id et character_id requis pour utiliser un objet."},
+            source="ws_game",
+        )
+        return
+
+    result = await db.execute(select(Character).where(Character.id == character_id))
+    char = result.scalar_one_or_none()
+    if not char:
+        return
+
+    equipment = list(char.equipment or [])
+    idx = next((i for i, it in enumerate(equipment) if it.get("id") == item_id), -1)
+    if idx == -1:
+        await event_bus.publish_to_session(
+            session_id, EventType.ERROR,
+            {"message": f"Objet '{item_id}' introuvable dans l'inventaire."},
+            source="ws_game",
+        )
+        return
+
+    item = equipment[idx]
+    item_name = item.get("name_fr") or item_id
+    hp_restored = 0
+
+    item_id_lower = item_id.lower()
+    name_fr_lower = (item.get("name_fr") or "").lower()
+    if "potion" in item_id_lower or "potion" in name_fr_lower:
+        heal_result = dice_roll("2d4+2")
+        hp_restored = heal_result.total
+        new_hp = min(char.hp_max, char.hp_current + hp_restored)
+        char.hp_current = new_hp
+
+        chars_data = active.state_data.get("characters", {})
+        if character_id in chars_data:
+            chars_data[character_id]["hp"] = new_hp
+        combatants = active.state_data.get("combatants", {})
+        if character_id in combatants:
+            combatants[character_id]["hp"] = new_hp
+
+        await event_bus.publish_to_session(
+            session_id, EventType.HP_CHANGED,
+            {"combatant_id": character_id, "delta": hp_restored, "hp": new_hp},
+            source="ws_game",
+        )
+
+    qty = int(item.get("quantity", 1))
+    if qty > 1:
+        equipment[idx] = {**item, "quantity": qty - 1}
+    else:
+        equipment.pop(idx)
+
+    char.equipment = equipment
+    await db.commit()
+
+    chars_data = active.state_data.get("characters", {})
+    if character_id in chars_data:
+        chars_data[character_id]["equipment"] = equipment
+    active.mark_dirty()
+
+    await event_bus.publish_to_session(
+        session_id, EventType.EQUIPMENT_UPDATED,
+        {"character_id": character_id, "equipment": equipment},
+        source="ws_game",
+    )
+
+    if hp_restored > 0:
+        narration = f"{char.name} boit {item_name} et récupère {hp_restored} point(s) de vie."
+    else:
+        narration = f"{char.name} utilise {item_name}."
+    await event_bus.publish_to_session(
+        session_id, EventType.NARRATION,
+        {"text": narration, "speaker": "Maître du Jeu"},
+        source="ws_game",
+    )
+
+
+async def _handle_drop_item(
+    session_id: str,
+    action: PlayerActionMessage,
+    active: Any,
+    db: AsyncSession,
+) -> None:
+    """Retire définitivement un objet de l'inventaire."""
+    item_id = action.item_id
+    character_id = action.character_id
+    if not item_id or not character_id:
+        await event_bus.publish_to_session(
+            session_id, EventType.ERROR,
+            {"message": "item_id et character_id requis pour lâcher un objet."},
+            source="ws_game",
+        )
+        return
+
+    result = await db.execute(select(Character).where(Character.id == character_id))
+    char = result.scalar_one_or_none()
+    if not char:
+        return
+
+    equipment = list(char.equipment or [])
+    idx = next((i for i, it in enumerate(equipment) if it.get("id") == item_id), -1)
+    if idx == -1:
+        return
+
+    item = equipment.pop(idx)
+    item_name = item.get("name_fr") or item_id
+    char.equipment = equipment
+    await db.commit()
+
+    chars_data = active.state_data.get("characters", {})
+    if character_id in chars_data:
+        chars_data[character_id]["equipment"] = equipment
+    active.mark_dirty()
+
+    await event_bus.publish_to_session(
+        session_id, EventType.EQUIPMENT_UPDATED,
+        {"character_id": character_id, "equipment": equipment},
+        source="ws_game",
+    )
+    await event_bus.publish_to_session(
+        session_id, EventType.NARRATION,
+        {"text": f"{char.name} lâche {item_name}.", "speaker": "Maître du Jeu"},
+        source="ws_game",
+    )
+
+
 async def _handle_take_rest(session_id: str, active: Any, db: AsyncSession) -> None:
     """Long rest: restore full HP for all characters, then return to exploration."""
     characters_data: dict[str, Any] = active.state_data.get("characters", {})
@@ -555,24 +1070,143 @@ async def _handle_take_rest(session_id: str, active: Any, db: AsyncSession) -> N
         {"phase": SessionStatus.EXPLORATION.value},
         source="ws_game",
     )
+    rest_text = (
+        "Le groupe prend un long repos. Les blessures guérissent, "
+        "les forces sont entièrement restaurées. L'aventure continue..."
+    )
     await event_bus.publish_to_session(
         session_id,
         EventType.NARRATION,
-        {
-            "text": (
-                "Le groupe prend un long repos. Les blessures guérissent, "
-                "les forces sont entièrement restaurées. L'aventure continue..."
-            ),
-            "speaker": "Maître du Jeu",
-        },
+        {"text": rest_text, "speaker": "Maître du Jeu"},
         source="ws_game",
     )
+    await persist_narration(session_id, rest_text, "Maître du Jeu", db)
     await event_bus.publish_to_session(
         session_id,
         EventType.SESSION_STATE,
         _build_session_state_payload(session_id),
         source="ws_game",
     )
+
+
+async def _handle_move(
+    session_id: str,
+    action: PlayerActionMessage,
+    active: Any,
+    db: AsyncSession,
+) -> None:
+    """Handle a movement action: validate, update position, broadcast."""
+    if not action.content or "," not in action.content:
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.ERROR,
+            {"message": "Format de déplacement invalide. Attendu: 'col,row'"},
+            source="ws_game",
+        )
+        return
+
+    try:
+        parts = action.content.split(",")
+        target_col = int(parts[0].strip())
+        target_row = int(parts[1].strip())
+    except (ValueError, IndexError):
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.ERROR,
+            {"message": "Coordonnées de déplacement invalides."},
+            source="ws_game",
+        )
+        return
+
+    mover_id = action.character_id
+    if not mover_id:
+        return
+
+    grid_positions: dict[str, Any] = active.state_data.get("grid_positions", {})
+    grid_config: dict[str, Any] = active.state_data.get("grid_config", {"cols": 10, "rows": 8})
+    grid_cols = int(grid_config.get("cols", 10))
+    grid_rows = int(grid_config.get("rows", 8))
+
+    from_data = grid_positions.get(mover_id)
+    if from_data is None:
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.ERROR,
+            {"message": "Position de départ introuvable."},
+            source="ws_game",
+        )
+        return
+
+    from_pos = GridPosition.from_dict(from_data)
+    to_pos = GridPosition(col=target_col, row=target_row)
+
+    # Get mover's speed from characters data
+    combatants_info: dict[str, Any] = active.state_data.get("combatants", {})
+    mover_data = combatants_info.get(mover_id, {})
+    speed_m = float(mover_data.get("speed_m", 9.0))
+
+    # Occupied positions (excluding mover)
+    occupied = [
+        GridPosition.from_dict(v)
+        for cid, v in grid_positions.items()
+        if cid != mover_id
+    ]
+
+    valid, reason = validate_move(from_pos, to_pos, speed_m, grid_cols, grid_rows, occupied)
+    if not valid:
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.ERROR,
+            {"message": f"Déplacement invalide : {reason}"},
+            source="ws_game",
+        )
+        return
+
+    from app.engine.tactical_grid import distance_m as grid_distance_m
+    dist = grid_distance_m(from_pos, to_pos)
+
+    # Update position in state
+    grid_positions[mover_id] = to_pos.to_dict()
+    active.mark_dirty()
+
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.COMBATANT_MOVED,
+        {
+            "combatant_id": mover_id,
+            "position": to_pos.to_dict(),
+            "movement_used_m": dist,
+        },
+        source="ws_game",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Welcome narration (join en exploration)
+# ---------------------------------------------------------------------------
+
+
+async def _send_welcome_narration(session_id: str, active: Any, db: AsyncSession) -> None:
+    """Demande au GMAgent de décrire la scène courante quand un joueur rejoint en exploration."""
+    try:
+        gm_response = await action_resolver._gm.narrate(
+            game_state=active.state_data,
+            player_action=None,
+        )
+        welcome_text = gm_response.narration if gm_response else (
+            "Bienvenue dans l'aventure ! Décrivez votre action pour commencer."
+        )
+    except Exception as exc:
+        logger.warning("_send_welcome_narration: GMAgent failed: %s", exc)
+        welcome_text = "Bienvenue dans l'aventure ! Décrivez votre action pour commencer."
+
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.NARRATION,
+        {"text": welcome_text, "speaker": "Maître du Jeu"},
+        source="ws_game",
+    )
+    await persist_narration(session_id, welcome_text, "Maître du Jeu", db)
 
 
 # ---------------------------------------------------------------------------
@@ -597,18 +1231,61 @@ async def _dispatch_action(
         return
 
     # ----------------------------------------------------------------
+    # Guard : un joueur inconscient ne peut pas attaquer ni lancer de sort
+    # ----------------------------------------------------------------
+    if action.action_type in ("attack", "cast_spell") and action.character_id:
+        _combatants = active.state_data.get("combatants", {})
+        _cdata = _combatants.get(action.character_id, {})
+        if int(_cdata.get("hp", 1)) == 0:
+            await event_bus.publish_to_session(
+                session_id,
+                EventType.NARRATION,
+                {
+                    "text": (
+                        "Vous êtes inconscient(e) — effectuez votre jet de sauvegarde "
+                        "contre la mort."
+                    ),
+                    "speaker": "Maître du Jeu",
+                },
+                source="ws_game",
+            )
+            return
+
+    # ----------------------------------------------------------------
     # Route special action types directly (bypass GM agent)
     # ----------------------------------------------------------------
+    if action.action_type == "move":
+        await _handle_move(session_id, action, active, db)
+        return
+
     if action.action_type == "end_turn":
         await _handle_end_turn(session_id, active, db)
         return
 
     if action.action_type == "start_combat":
-        await _handle_start_combat(session_id, active, db)
+        # Optional: client may pass encounter_id in content to trigger a preset
+        encounter_id: Optional[str] = action.content if action.content else None
+        await _handle_start_combat(session_id, active, db, encounter_id=encounter_id)
         return
 
     if action.action_type == "take_rest":
         await _handle_take_rest(session_id, active, db)
+        return
+
+    if action.action_type == "reset_combat":
+        await _handle_reset_combat(session_id, active, db)
+        return
+
+    if action.action_type == "equip":
+        await _handle_equip_item(session_id, action, active, db)
+        return
+
+    if action.action_type == "use_item":
+        await _handle_use_item(session_id, action, active, db)
+        return
+
+    if action.action_type == "drop_item":
+        await _handle_drop_item(session_id, action, active, db)
         return
 
     # ----------------------------------------------------------------
@@ -733,6 +1410,49 @@ async def game_websocket(
                     session_id,
                     character_id,
                 )
+
+                # Si la session est déjà en exploration, le MJ décrit la scène
+                active_on_join = session_manager.get_session(session_id)
+                if active_on_join and active_on_join.phase == SessionStatus.EXPLORATION:
+                    asyncio.create_task(
+                        _send_welcome_narration(session_id, active_on_join, db)
+                    )
+                elif active_on_join and active_on_join.phase == SessionStatus.COMBAT:
+                    # Rejouer l'état de combat pour ce client qui se (re)connecte
+                    combatants_info: dict[str, Any] = active_on_join.state_data.get("combatants", {})
+                    grid_cfg: dict[str, Any] = active_on_join.state_data.get("grid_config", {"cols": 10, "rows": 8, "cell_size_m": 1.5})
+                    grid_positions: dict[str, Any] = active_on_join.state_data.get("grid_positions", {})
+                    turn_data = active_on_join.turn_manager.to_dict()
+                    current_idx = turn_data.get("index", 0)
+                    combat_combatants = [
+                        {
+                            "id": entry.get("combatant_id", ""),
+                            "name": entry.get("name", ""),
+                            "initiative": entry.get("initiative_total", 0),
+                            "hp_current": combatants_info.get(entry.get("combatant_id", ""), {}).get("hp", 0),
+                            "hp_max": combatants_info.get(entry.get("combatant_id", ""), {}).get("hp_max", 0),
+                            "is_ai": entry.get("is_ai_controlled", False),
+                            "conditions": [],
+                            "is_active": (i == current_idx),
+                            "position": grid_positions.get(entry.get("combatant_id", ""), {"col": 0, "row": 0}),
+                        }
+                        for i, entry in enumerate(turn_data.get("order", []))
+                    ]
+                    await websocket.send_json({
+                        "event_type": "combat_start",
+                        "session_id": session_id,
+                        "payload": {
+                            "combatants": combat_combatants,
+                            "grid_config": grid_cfg,
+                        },
+                    })
+                    current = active_on_join.turn_manager.current_turn
+                    if current:
+                        await websocket.send_json({
+                            "event_type": EventType.TURN_START,
+                            "session_id": session_id,
+                            "payload": {"combatant_id": current.combatant_id, "combatant_name": current.name},
+                        })
                 continue
 
             # --- action -------------------------------------------------
@@ -747,7 +1467,16 @@ async def game_websocket(
                     })
                     continue
 
-                await _dispatch_action(session_id, action, db)
+                try:
+                    await _dispatch_action(session_id, action, db)
+                except Exception as exc:
+                    logger.error("Unhandled error in _dispatch_action: %s", exc, exc_info=True)
+                    await event_bus.publish_to_session(
+                        session_id,
+                        EventType.ERROR,
+                        {"message": "Une erreur interne s'est produite. Réessayez."},
+                        source="ws_game",
+                    )
                 continue
 
             # --- unknown type -------------------------------------------

@@ -3,12 +3,16 @@ import { ref, computed } from 'vue'
 import type {
   NarrativeEntry,
   CombatantState,
+  DeathSaves,
+  GridConfig,
+  CombatantMovedPayload,
   SessionStatePayload,
   NarrationPayload,
   RollResultPayload,
   TurnStartPayload,
   HpChangedPayload,
   HistoryMessage,
+  CombatActionPayload,
 } from '../types'
 
 export const useGameStore = defineStore('game', () => {
@@ -25,10 +29,12 @@ export const useGameStore = defineStore('game', () => {
 
   // ─── Combat ─────────────────────────────────────────────────────────────────
   const combatants = ref<CombatantState[]>([])
+  const gridConfig = ref<GridConfig | null>(null)
 
   // ─── Connection ─────────────────────────────────────────────────────────────
   const connected = ref(false)
   const error = ref<string | null>(null)
+  const isProcessing = ref(false)
 
   // ─── Computed ───────────────────────────────────────────────────────────────
   const isInCombat = computed(() => phase.value === 'combat')
@@ -56,6 +62,7 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function addNarration(payload: NarrationPayload) {
+    isProcessing.value = false
     narrativeLog.value.push({
       id: crypto.randomUUID(),
       type: 'narration',
@@ -79,6 +86,15 @@ export const useGameStore = defineStore('game', () => {
       id: crypto.randomUUID(),
       type: 'system',
       text,
+      timestamp: new Date().toISOString(),
+    })
+  }
+
+  function addCombatAction(payload: CombatActionPayload) {
+    narrativeLog.value.push({
+      id: crypto.randomUUID(),
+      type: 'combat_action',
+      combatAction: payload,
       timestamp: new Date().toISOString(),
     })
   }
@@ -121,11 +137,40 @@ export const useGameStore = defineStore('game', () => {
     combatants.value = list
   }
 
+  function setGridConfig(config: GridConfig) {
+    gridConfig.value = config
+  }
+
+  function moveCombatant(payload: CombatantMovedPayload) {
+    const idx = combatants.value.findIndex((c) => c.id === payload.combatant_id)
+    if (idx !== -1) {
+      combatants.value[idx] = { ...combatants.value[idx]!, position: payload.position } as CombatantState
+    }
+  }
+
   function applyHpChanged(payload: HpChangedPayload) {
     const idx = combatants.value.findIndex((c) => c.id === payload.combatant_id)
     if (idx !== -1) {
       const existing = combatants.value[idx]
       combatants.value[idx] = { ...existing, hp_current: payload.hp } as CombatantState
+    }
+  }
+
+  function applyConditionChanged(combatantId: string, condition: string, added: boolean) {
+    const idx = combatants.value.findIndex((c) => c.id === combatantId)
+    if (idx !== -1) {
+      const existing = combatants.value[idx]!
+      const conditions = added
+        ? [...new Set([...existing.conditions, condition])]
+        : existing.conditions.filter((c) => c !== condition)
+      combatants.value[idx] = { ...existing, conditions }
+    }
+  }
+
+  function applyDeathSaveUpdated(combatantId: string, deathSaves: DeathSaves) {
+    const idx = combatants.value.findIndex((c) => c.id === combatantId)
+    if (idx !== -1) {
+      combatants.value[idx] = { ...combatants.value[idx]!, death_saves: deathSaves }
     }
   }
 
@@ -135,8 +180,13 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function setError(msg: string | null) {
+    isProcessing.value = false
     error.value = msg
     if (msg) addSystemEntry(`Erreur : ${msg}`)
+  }
+
+  function setProcessing(val: boolean) {
+    isProcessing.value = val
   }
 
   function restoreHistory(messages: HistoryMessage[]) {
@@ -176,10 +226,12 @@ export const useGameStore = defineStore('game', () => {
   function reset() {
     narrativeLog.value = []
     combatants.value = []
+    gridConfig.value = null
     phase.value = 'lobby'
     currentTurnId.value = null
     connected.value = false
     error.value = null
+    isProcessing.value = false
   }
 
   return {
@@ -191,22 +243,30 @@ export const useGameStore = defineStore('game', () => {
     validTransitions,
     narrativeLog,
     combatants,
+    gridConfig,
     connected,
     error,
+    isProcessing,
     isInCombat,
     activeCombatant,
     applySessionState,
     addNarration,
     addRollResult,
     addSystemEntry,
+    addCombatAction,
     addPlayerEntry,
     applyTurnStart,
     applyPhaseChange,
     updateCombatant,
     setCombatants,
+    setGridConfig,
+    moveCombatant,
     applyHpChanged,
+    applyConditionChanged,
+    applyDeathSaveUpdated,
     setConnected,
     setError,
+    setProcessing,
     restoreHistory,
     reset,
   }

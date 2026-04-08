@@ -47,7 +47,7 @@ export interface SrdSpecies {
   name_fr: string
   size: string
   speed: number
-  darkvision_ft: number
+  darkvision_m: number
   ability_bonuses: Record<string, number>
   skill_proficiencies: string[]
   languages: string[]
@@ -101,6 +101,7 @@ export interface CharacterCreate {
   hp_temp: number
   equipment?: Record<string, unknown>[]
   proficiencies?: Record<string, unknown>
+  known_spells?: string[]
   session_id?: string
 }
 
@@ -152,6 +153,19 @@ export interface CharacterListResponse {
   total: number
 }
 
+// ─── Pregen ───────────────────────────────────────────────────────────────────
+
+export interface PregenTemplate {
+  class_id: string
+  class_name_fr: string
+  name: string
+  description: string
+  species: string
+  background: string
+  ability_scores: Record<string, number>
+  hp_max: number
+}
+
 // ─── SRD Extended Types ───────────────────────────────────────────────────────
 
 export interface SrdSpell {
@@ -161,7 +175,7 @@ export interface SrdSpell {
   level: number
   school: string
   casting_time: string
-  range_ft: number
+  range_m: number
   components: string[]
   duration: string
   concentration: boolean
@@ -249,8 +263,13 @@ export type WsEventType =
   | 'phase_change'
   | 'combat_start'
   | 'combat_end'
+  | 'combat_action'
+  | 'combatant_moved'
   | 'hp_changed'
+  | 'condition_changed'
+  | 'death_save_updated'
   | 'spell_slot_updated'
+  | 'equipment_updated'
   | 'player_joined'
   | 'player_left'
   | 'audio'
@@ -301,6 +320,11 @@ export interface PhaseChangePayload {
   phase: string
 }
 
+export interface EquipmentUpdatedPayload {
+  character_id: string
+  equipment: Record<string, unknown>[]
+}
+
 export interface TurnStartPayload {
   combatant_id: string
   combatant_name?: string
@@ -308,7 +332,7 @@ export interface TurnStartPayload {
 
 // ─── Game UI State ────────────────────────────────────────────────────────────
 
-export type NarrativeEntryType = 'narration' | 'roll' | 'system' | 'player'
+export type NarrativeEntryType = 'narration' | 'roll' | 'system' | 'player' | 'combat_action'
 
 export interface NarrativeEntry {
   id: string
@@ -316,7 +340,31 @@ export interface NarrativeEntry {
   text?: string
   speaker?: string
   roll?: RollResultPayload
+  combatAction?: CombatActionPayload
   timestamp: string
+}
+
+export interface GridPosition {
+  col: number
+  row: number
+}
+
+export interface GridConfig {
+  cols: number
+  rows: number
+  cell_size_m: number
+}
+
+export interface CombatantMovedPayload {
+  combatant_id: string
+  position: GridPosition
+  movement_used_m: number
+}
+
+export interface DeathSaves {
+  successes: number
+  failures: number
+  stable: boolean
 }
 
 export interface CombatantState {
@@ -328,12 +376,25 @@ export interface CombatantState {
   conditions: string[]
   is_ai: boolean
   is_active: boolean
+  position?: GridPosition
+  death_saves?: DeathSaves
 }
 
 export interface HpChangedPayload {
   combatant_id: string
   hp: number
   delta: number
+}
+
+export interface ConditionChangedPayload {
+  combatant_id: string
+  condition: string
+  added: boolean
+}
+
+export interface DeathSaveUpdatedPayload {
+  combatant_id: string
+  death_saves: DeathSaves
 }
 
 export interface SpellSlotUpdatedPayload {
@@ -343,6 +404,24 @@ export interface SpellSlotUpdatedPayload {
 
 export interface CombatStartPayload {
   combatants: CombatantState[]
+  grid_config?: GridConfig
+}
+
+export interface CombatActionPayload {
+  attacker_id: string
+  attacker_name: string
+  target_id: string | null
+  target_name: string
+  action_type: 'attack' | 'spell' | 'ability'
+  action_name: string
+  d20: number
+  attack_roll: number
+  attack_bonus: number
+  target_ac: number
+  hit: boolean
+  critical: boolean
+  damage: number | null
+  damage_notation: string
 }
 
 // ─── TTS / Audio ──────────────────────────────────────────────────────────────
@@ -407,4 +486,39 @@ export interface OllamaHealthResponse {
   models: string[]
   gm_model: string
   player_model: string
+}
+
+export interface LlmSettings {
+  ollama_base_url: string
+  gm_model: string
+  player_model: string
+}
+
+// ─── Campaign ─────────────────────────────────────────────────────────────────
+
+export interface Campaign {
+  id: string
+  name: string
+  description: string
+  session_ids: string[]
+  current_session_index: number
+  character_ids: string[]
+  xp_pool: Record<string, number>
+  created_at: string
+  updated_at: string
+}
+
+export interface CampaignCreate {
+  name: string
+  description?: string
+}
+
+export interface CampaignAdvanceBody {
+  new_session_name: string
+}
+
+export interface CampaignAdvanceResponse {
+  campaign: Campaign
+  new_session_id: string
+  characters_transferred: number
 }

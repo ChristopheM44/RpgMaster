@@ -9,18 +9,27 @@
       "level": 0,
       "school": "evocation",
       "casting_time": "1 action",
-      "range_ft": 120,
-      "components": ["V", "S"],
+      "components": [
+        "V",
+        "S"
+      ],
       "duration": "instantaneous",
       "concentration": false,
-      "classes": ["wizard"],
+      "classes": [
+        "wizard"
+      ],
       "attack_type": "ranged_spell",
       "damage_dice": "1d10",
       "damage_type": "fire",
       "upcast_extra_dice": "1d10",
-      "upcast_breakpoints": [5, 11, 17],
+      "upcast_breakpoints": [
+        5,
+        11,
+        17
+      ],
       "save": null,
-      "description": "You hurl a mote of fire at a creature or object. Make a ranged spell attack. On a hit, the target takes 1d10 fire damage. A flammable object hit by this spell ignites."
+      "description": "Vous lancez une mote de feu vers une créature ou un objet. Effectuez une attaque de sort à distance. En cas de touche, la cible subit 1d10 dégâts de feu. Un objet inflammable touché par ce sort prend feu.",
+      "range_m": 36
     },
     {
       "id": "sacred_flame",
@@ -29,18 +38,30 @@
       "level": 0,
       "school": "evocation",
       "casting_time": "1 action",
-      "range_ft": 60,
-      "components": ["V", "S"],
+      "components": [
+        "V",
+        "S"
+      ],
       "duration": "instantaneous",
       "concentration": false,
-      "classes": ["cleric"],
+      "classes": [
+        "cleric"
+      ],
       "attack_type": null,
       "damage_dice": "1d8",
       "damage_type": "radiant",
       "upcast_extra_dice": "1d8",
-      "upcast_breakpoints": [5, 11, 17],
-      "save": {"ability": "dexterity", "on_success": "no_damage"},
-      "description": "Flame-like radiance descends on a creature you can see within range. The target must succeed on a Dexterity saving throw or take 1d8 radiant damage. The target gains no benefit from cover."
+      "upcast_breakpoints": [
+        5,
+        11,
+        17
+      ],
+      "save": {
+        "ability": "dexterity",
+        "on_success": "no_damage"
+      },
+      "description": "Une radiance semblable à une flamme descend sur une créature que vous pouvez voir à portée. La cible doit réussir un jet de sauvegarde de Dextérité ou subir 1d8 dégâts radiants. La cible ne bénéficie d'aucune protection due aux abris.",
+      "range_m": 18
     },
     {
       "id": "light",
@@ -49,18 +70,27 @@
       "level": 0,
       "school": "evocation",
       "casting_time": "1 action",
-      "range_ft": 0,
-      "components": ["V", "M"],
+      "components": [
+        "V",
+        "M"
+      ],
       "duration": "1 hour",
       "concentration": false,
-      "classes": ["cleric", "wizard"],
+      "classes": [
+        "cleric",
+        "wizard"
+      ],
       "attack_type": null,
       "damage_dice": null,
       "damage_type": null,
       "upcast_extra_dice": null,
       "upcast_breakpoints": [],
-      "save": {"ability": "dexterity", "on_success": "avoid_effect"},
-      "description": "You touch one object no larger than 10 feet in any dimension. Until the spell ends, the object sheds bright light in a 20-foot radius and dim light for an additional 20 feet. Unwilling creatures must make a DEX save."
+      "save": {
+        "ability": "dexterity",
+        "on_success": "avoid_effect"
+      },
+      "description": "Vous touchez un objet dont aucune dimension ne dépasse 3 mètres. Jusqu'à la fin du sort, l'objet diffuse une lumière vive dans un rayon de 6 mètres et une lumière faible sur 6 mètres supplémentaires. Les créatures réticentes doivent réussir un jet de sauvegarde de Dextérité.",
+      "range_m": 0
     },
     {
       "id": "mage_hand",
@@ -69,18 +99,23 @@
       "level": 0,
       "school": "conjuration",
       "casting_time": "1 action",
-      "range_ft": 30,
-      "components": ["V", "S"],
+      "components": [
+        "V",
+        "S"
+      ],
       "duration": "1 minute",
       "concentration": false,
-      "classes": ["wizard"],
+      "classes": [
+        "wizard"
+      ],
       "attack_type": null,
       "damage_dice": null,
       "damage_type": null,
       "upcast_extra_dice": null,
       "upcast_breakpoints": [],
       "save": null,
-      "description": "A spectral, floating hand appears. You can use the hand to manipulate an object, open an unlocked door or container, stow or retrieve an item, or pour the contents of a vial. The hand can't attack or carry more than 10 pounds."
+      "description": "Une main spectrale flottante apparaît à l'endroit de votre choix. Vous pouvez l'utiliser pour manipuler un objet, ouvrir une porte ou un contenant non verrouillé, ranger ou récupérer un objet, ou vider un flacon. La main ne peut pas attaquer ni porter plus de 5 kg.",
+      "range_m": 9
     },
     {
       "id": "prestidigitation",
@@ -89,18 +124,23 @@
       "level": 0,
       "school": "transmutation",
       "casting_time": "1 action",
-      "range_ft": 10,
-      "components": ["V", "S"],
+      "components": [
+        "V",
+        "S"
+      ],
       "duration": "up to 1 hour",
       "concentration": false,
-      "classes": ["wizard"],
+      "classes": [
+        "wizard"
+      ],
       "attack_type": null,
       "damage_dice": null,
       "damage_type": null,
       "upcast_extra_dice": null,
       "upcast_breakpoints": [],
       "save": null,
-      "description": "This spell is a minor magical trick that novice spellcasters use for practice. You create one of several minor magical effects: an instantaneous sensory effect, light/snuff a small flame, clean or soil an object, chill/warm/flavor a cubic foot of nonliving material, make a color mark, create a trinket or illusory image."
+      "description": "Ce sort est un tour de magie mineur que les apprentis utilisent pour s'entraîner. Vous créez l'un des effets suivants : un effet sensoriel instantané, allumer ou éteindre une petite flamme, nettoyer ou salir un objet, chauffer ou refroidir une matière non vivante d'un cube de 30 cm, créer une marque colorée, ou créer un petit objet ou une image illusoire.",
+      "range_m": 3
     },
     {
       "id": "true_strike",
@@ -109,18 +149,22 @@
       "level": 0,
       "school": "divination",
       "casting_time": "1 action",
-      "range_ft": 30,
-      "components": ["S"],
+      "components": [
+        "S"
+      ],
       "duration": "1 round",
       "concentration": true,
-      "classes": ["wizard"],
+      "classes": [
+        "wizard"
+      ],
       "attack_type": null,
       "damage_dice": null,
       "damage_type": null,
       "upcast_extra_dice": null,
       "upcast_breakpoints": [],
       "save": null,
-      "description": "You extend your hand and point a finger at a target in range. Your magic grants you a brief insight into the target's defenses. On your next turn, you gain advantage on your first attack roll against the target."
+      "description": "Vous tendez la main et pointez un doigt vers une cible à portée. Votre magie vous accorde un bref aperçu des défenses de la cible. À votre prochain tour, vous avez l'avantage à votre premier jet d'attaque contre la cible.",
+      "range_m": 9
     },
     {
       "id": "magic_missile",
@@ -129,11 +173,15 @@
       "level": 1,
       "school": "evocation",
       "casting_time": "1 action",
-      "range_ft": 120,
-      "components": ["V", "S"],
+      "components": [
+        "V",
+        "S"
+      ],
       "duration": "instantaneous",
       "concentration": false,
-      "classes": ["wizard"],
+      "classes": [
+        "wizard"
+      ],
       "attack_type": "auto_hit",
       "damage_dice": "1d4+1",
       "damage_type": "force",
@@ -142,7 +190,8 @@
       "upcast_extra_dice": null,
       "upcast_breakpoints": [],
       "save": null,
-      "description": "You create three glowing darts of magical force. Each dart hits a creature of your choice that you can see within range. A dart deals 1d4+1 force damage. The darts all strike simultaneously. When cast at a higher level, the spell creates one more dart for each slot level above 1st."
+      "description": "Vous créez trois projectiles d'énergie magique lumineux. Chacun frappe une créature de votre choix que vous pouvez voir à portée. Un projectile inflige 1d4 + 1 dégâts de force. Tous les projectiles frappent simultanément. Aux niveaux supérieurs : un projectile supplémentaire par niveau d'emplacement au-delà du 1er.",
+      "range_m": 36
     },
     {
       "id": "burning_hands",
@@ -151,20 +200,28 @@
       "level": 1,
       "school": "evocation",
       "casting_time": "1 action",
-      "range_ft": 15,
-      "components": ["V", "S"],
+      "components": [
+        "V",
+        "S"
+      ],
       "duration": "instantaneous",
       "concentration": false,
-      "classes": ["wizard"],
+      "classes": [
+        "wizard"
+      ],
       "attack_type": "area",
       "area_shape": "cone",
-      "area_size_ft": 15,
       "damage_dice": "3d6",
       "damage_type": "fire",
       "upcast_extra_dice": "1d6",
       "upcast_breakpoints": [],
-      "save": {"ability": "dexterity", "on_success": "half_damage"},
-      "description": "As you hold your hands with thumbs touching and fingers spread, a thin sheet of flames shoots forth in a 15-foot cone. Each creature in that area must make a Dexterity saving throw, taking 3d6 fire damage on a failed save, or half as much on a successful one."
+      "save": {
+        "ability": "dexterity",
+        "on_success": "half_damage"
+      },
+      "description": "En tenant vos mains avec les pouces qui se touchent et les doigts écartés, un mince rideau de flammes jaillit en un cône de 4,5 mètres. Chaque créature dans la zone doit réussir un jet de sauvegarde de Dextérité, subissant 3d6 dégâts de feu en cas d'échec, ou la moitié en cas de succès.",
+      "range_m": 4.5,
+      "area_size_m": 4.5
     },
     {
       "id": "cure_wounds",
@@ -173,11 +230,15 @@
       "level": 1,
       "school": "evocation",
       "casting_time": "1 action",
-      "range_ft": 0,
-      "components": ["V", "S"],
+      "components": [
+        "V",
+        "S"
+      ],
       "duration": "instantaneous",
       "concentration": false,
-      "classes": ["cleric"],
+      "classes": [
+        "cleric"
+      ],
       "attack_type": null,
       "damage_dice": null,
       "damage_type": null,
@@ -186,7 +247,8 @@
       "upcast_extra_dice": "1d8",
       "upcast_breakpoints": [],
       "save": null,
-      "description": "A creature you touch regains a number of hit points equal to 1d8 + your spellcasting ability modifier. This spell has no effect on undead or constructs. When cast at a higher level, the healing increases by 1d8 for each slot level above 1st."
+      "description": "Une créature que vous touchez regagne un nombre de points de vie égal à 1d8 + votre modificateur de caractéristique d'incantation. Ce sort est sans effet sur les morts-vivants et les artificiels. Aux niveaux supérieurs : +1d8 par niveau d'emplacement au-delà du 1er.",
+      "range_m": 0
     },
     {
       "id": "shield",
@@ -196,11 +258,15 @@
       "school": "abjuration",
       "casting_time": "1 reaction",
       "reaction_trigger": "when hit by attack or targeted by magic missile",
-      "range_ft": 0,
-      "components": ["V", "S"],
+      "components": [
+        "V",
+        "S"
+      ],
       "duration": "1 round",
       "concentration": false,
-      "classes": ["wizard"],
+      "classes": [
+        "wizard"
+      ],
       "attack_type": null,
       "damage_dice": null,
       "damage_type": null,
@@ -208,7 +274,8 @@
       "upcast_extra_dice": null,
       "upcast_breakpoints": [],
       "save": null,
-      "description": "An invisible barrier of magical force appears and protects you. Until the start of your next turn, you have a +5 bonus to AC, including against the triggering attack, and you take no damage from magic missile."
+      "description": "Une barrière invisible de force magique apparaît et vous protège. Jusqu'au début de votre prochain tour, vous bénéficiez d'un bonus de +5 à la CA, y compris contre l'attaque déclencheuse, et vous ne subissez aucun dégât des projectiles magiques.",
+      "range_m": 0
     },
     {
       "id": "thunderwave",
@@ -217,22 +284,31 @@
       "level": 1,
       "school": "evocation",
       "casting_time": "1 action",
-      "range_ft": 0,
-      "components": ["V", "S"],
+      "components": [
+        "V",
+        "S"
+      ],
       "duration": "instantaneous",
       "concentration": false,
-      "classes": ["wizard", "cleric"],
+      "classes": [
+        "wizard",
+        "cleric"
+      ],
       "attack_type": "area",
       "area_shape": "cube",
-      "area_size_ft": 15,
       "area_origin": "self",
       "damage_dice": "2d8",
       "damage_type": "thunder",
-      "push_ft": 10,
       "upcast_extra_dice": "1d8",
       "upcast_breakpoints": [],
-      "save": {"ability": "constitution", "on_success": "half_damage_no_push"},
-      "description": "A wave of thunderous force sweeps out from you. Each creature in a 15-foot cube originating from you must make a Constitution saving throw. On a failed save, a creature takes 2d8 thunder damage and is pushed 10 feet away. On a success, half damage and no push. Unsecured objects are pushed automatically."
+      "save": {
+        "ability": "constitution",
+        "on_success": "half_damage_no_push"
+      },
+      "description": "Une vague de force tonnante émane de vous. Chaque créature dans un cube de 4,5 mètres partant de vous doit réussir un jet de sauvegarde de Constitution. En cas d'échec, elle subit 2d8 dégâts de tonnerre et est repoussée de 3 mètres. En cas de succès, elle subit la moitié des dégâts et n'est pas repoussée. Les objets non arrimés dans la zone sont automatiquement repoussés.",
+      "range_m": 0,
+      "area_size_m": 4.5,
+      "push_m": 3
     },
     {
       "id": "detect_magic",
@@ -241,19 +317,25 @@
       "level": 1,
       "school": "divination",
       "casting_time": "1 action",
-      "range_ft": 30,
-      "components": ["V", "S"],
+      "components": [
+        "V",
+        "S"
+      ],
       "duration": "10 minutes",
       "concentration": true,
       "ritual": true,
-      "classes": ["cleric", "wizard"],
+      "classes": [
+        "cleric",
+        "wizard"
+      ],
       "attack_type": null,
       "damage_dice": null,
       "damage_type": null,
       "upcast_extra_dice": null,
       "upcast_breakpoints": [],
       "save": null,
-      "description": "For the duration, you sense the presence of magic within 30 feet of you. If you sense magic in this way, you can use your action to see a faint aura around any visible creature or object in the area that bears magic, and you learn its school of magic."
+      "description": "Pendant toute la durée, vous sentez la présence de magie dans un rayon de 9 mètres autour de vous. Si vous détectez de la magie, vous pouvez utiliser votre action pour voir une faible aura entourant toute créature ou tout objet visible portant de la magie, et vous apprenez son école de magie.",
+      "range_m": 9
     },
     {
       "id": "healing_word",
@@ -262,11 +344,14 @@
       "level": 1,
       "school": "evocation",
       "casting_time": "1 bonus action",
-      "range_ft": 60,
-      "components": ["V"],
+      "components": [
+        "V"
+      ],
       "duration": "instantaneous",
       "concentration": false,
-      "classes": ["cleric"],
+      "classes": [
+        "cleric"
+      ],
       "attack_type": null,
       "damage_dice": null,
       "damage_type": null,
@@ -275,7 +360,8 @@
       "upcast_extra_dice": "1d4",
       "upcast_breakpoints": [],
       "save": null,
-      "description": "A creature of your choice that you can see within range regains hit points equal to 1d4 + your spellcasting ability modifier. This spell has no effect on undead or constructs. Higher levels: +1d4 per slot level above 1st."
+      "description": "Une créature de votre choix que vous pouvez voir à portée regagne des points de vie égaux à 1d4 + votre modificateur de caractéristique d'incantation. Ce sort est sans effet sur les morts-vivants et les artificiels. Aux niveaux supérieurs : +1d4 par niveau d'emplacement au-delà du 1er.",
+      "range_m": 18
     },
     {
       "id": "bless",
@@ -284,11 +370,16 @@
       "level": 1,
       "school": "enchantment",
       "casting_time": "1 action",
-      "range_ft": 30,
-      "components": ["V", "S", "M"],
+      "components": [
+        "V",
+        "S",
+        "M"
+      ],
       "duration": "1 minute",
       "concentration": true,
-      "classes": ["cleric"],
+      "classes": [
+        "cleric"
+      ],
       "attack_type": null,
       "damage_dice": null,
       "damage_type": null,
@@ -296,7 +387,8 @@
       "upcast_extra_targets": 1,
       "upcast_breakpoints": [],
       "save": null,
-      "description": "You bless up to 3 creatures within range. Until the spell ends, whenever a target makes an attack roll or a saving throw, the target can roll 1d4 and add the result to the attack roll or saving throw. Higher levels: one additional creature per slot level above 1st."
+      "description": "Vous bénissez jusqu'à 3 créatures à portée. Jusqu'à la fin du sort, chaque fois qu'une cible effectue un jet d'attaque ou un jet de sauvegarde, elle lance 1d4 et ajoute le résultat au jet. Aux niveaux supérieurs : une créature supplémentaire par niveau d'emplacement au-delà du 1er.",
+      "range_m": 9
     },
     {
       "id": "scorching_ray",
@@ -305,11 +397,15 @@
       "level": 2,
       "school": "evocation",
       "casting_time": "1 action",
-      "range_ft": 120,
-      "components": ["V", "S"],
+      "components": [
+        "V",
+        "S"
+      ],
       "duration": "instantaneous",
       "concentration": false,
-      "classes": ["wizard"],
+      "classes": [
+        "wizard"
+      ],
       "attack_type": "ranged_spell",
       "damage_dice": "2d6",
       "damage_type": "fire",
@@ -318,7 +414,8 @@
       "upcast_extra_dice": null,
       "upcast_breakpoints": [],
       "save": null,
-      "description": "You create three rays of fire and hurl them at targets within range. You can hurl them at one target or several. Make a ranged spell attack for each ray. On a hit, the target takes 2d6 fire damage. Higher levels: one additional ray per slot level above 2nd."
+      "description": "Vous créez trois rayons de feu que vous lancez sur des cibles à portée. Vous pouvez les diriger vers une ou plusieurs cibles. Effectuez un jet d'attaque de sort à distance pour chaque rayon. En cas de touche, la cible subit 2d6 dégâts de feu. Aux niveaux supérieurs : un rayon supplémentaire par niveau d'emplacement au-delà du 2e.",
+      "range_m": 36
     },
     {
       "id": "misty_step",
@@ -327,19 +424,23 @@
       "level": 2,
       "school": "conjuration",
       "casting_time": "1 bonus action",
-      "range_ft": 30,
-      "components": ["V"],
+      "components": [
+        "V"
+      ],
       "duration": "instantaneous",
       "concentration": false,
-      "classes": ["wizard"],
+      "classes": [
+        "wizard"
+      ],
       "attack_type": null,
       "damage_dice": null,
       "damage_type": null,
-      "teleport_ft": 30,
       "upcast_extra_dice": null,
       "upcast_breakpoints": [],
       "save": null,
-      "description": "Briefly surrounded by silvery mist, you teleport up to 30 feet to an unoccupied space that you can see."
+      "description": "Brièvement entouré d'une brume argentée, vous vous téléportez jusqu'à 9 mètres vers un espace inoccupé visible.",
+      "range_m": 9,
+      "teleport_m": 9
     },
     {
       "id": "hold_person",
@@ -348,11 +449,17 @@
       "level": 2,
       "school": "enchantment",
       "casting_time": "1 action",
-      "range_ft": 60,
-      "components": ["V", "S", "M"],
+      "components": [
+        "V",
+        "S",
+        "M"
+      ],
       "duration": "1 minute",
       "concentration": true,
-      "classes": ["cleric", "wizard"],
+      "classes": [
+        "cleric",
+        "wizard"
+      ],
       "attack_type": null,
       "damage_dice": null,
       "damage_type": null,
@@ -360,8 +467,13 @@
       "targets": 1,
       "upcast_extra_targets": 1,
       "upcast_breakpoints": [],
-      "save": {"ability": "wisdom", "on_success": "no_effect", "repeat_save": "end_of_turn"},
-      "description": "Choose a humanoid you can see within range. The target must succeed on a Wisdom saving throw or be paralyzed for the duration. At the end of each of its turns, the target can make another Wisdom saving throw. On a success, the spell ends. Higher levels: one additional humanoid per slot level above 2nd."
+      "save": {
+        "ability": "wisdom",
+        "on_success": "no_effect",
+        "repeat_save": "end_of_turn"
+      },
+      "description": "Choisissez un humanoïde que vous pouvez voir à portée. La cible doit réussir un jet de sauvegarde de Sagesse ou être paralysée pendant toute la durée. À la fin de chacun de ses tours, la cible peut effectuer un nouveau jet de sauvegarde de Sagesse. En cas de succès, le sort prend fin. Aux niveaux supérieurs : un humanoïde supplémentaire par niveau d'emplacement au-delà du 2e.",
+      "range_m": 18
     },
     {
       "id": "invisibility",
@@ -370,11 +482,16 @@
       "level": 2,
       "school": "illusion",
       "casting_time": "1 action",
-      "range_ft": 0,
-      "components": ["V", "S", "M"],
+      "components": [
+        "V",
+        "S",
+        "M"
+      ],
       "duration": "1 hour",
       "concentration": true,
-      "classes": ["wizard"],
+      "classes": [
+        "wizard"
+      ],
       "attack_type": null,
       "damage_dice": null,
       "damage_type": null,
@@ -383,7 +500,8 @@
       "upcast_extra_targets": 1,
       "upcast_breakpoints": [],
       "save": null,
-      "description": "A creature you touch becomes invisible until the spell ends. Anything the target is wearing or carrying is invisible as long as it is on the target's person. The spell ends for a target that attacks or casts a spell. Higher levels: one additional creature per slot level above 2nd."
+      "description": "Une créature que vous touchez devient invisible jusqu'à la fin du sort. Tout ce que porte la cible est invisible tant qu'il reste sur elle. Le sort prend fin pour une cible qui attaque ou lance un sort. Aux niveaux supérieurs : une créature supplémentaire par niveau d'emplacement au-delà du 2e.",
+      "range_m": 0
     },
     {
       "id": "web",
@@ -392,21 +510,32 @@
       "level": 2,
       "school": "conjuration",
       "casting_time": "1 action",
-      "range_ft": 60,
-      "components": ["V", "S", "M"],
+      "components": [
+        "V",
+        "S",
+        "M"
+      ],
       "duration": "1 hour",
       "concentration": true,
-      "classes": ["wizard"],
+      "classes": [
+        "wizard"
+      ],
       "attack_type": "area",
       "area_shape": "cube",
-      "area_size_ft": 20,
       "damage_dice": null,
       "damage_type": null,
       "condition": "restrained",
       "upcast_extra_dice": null,
       "upcast_breakpoints": [],
-      "save": {"ability": "dexterity", "on_success": "no_effect", "repeat_save": "start_of_turn", "repeat_action": "strength_check_dc_15"},
-      "description": "You conjure a mass of thick, sticky webbing at a point you choose within range. The webs fill a 20-foot cube. Each creature in the area must succeed on a Dexterity saving throw or be restrained. A restrained creature can escape with a Strength (Athletics) check (DC = your spell save DC) using its action."
+      "save": {
+        "ability": "dexterity",
+        "on_success": "no_effect",
+        "repeat_save": "start_of_turn",
+        "repeat_action": "strength_check_dc_15"
+      },
+      "description": "Vous conjurez une masse de toiles épaisses et collantes en un point à portée. Les toiles remplissent un cube de 6 mètres. Chaque créature dans la zone doit réussir un jet de sauvegarde de Dextérité ou être entravée. Une créature entravée peut se libérer en utilisant son action et réussissant un test de Force (Athlétisme) dont le DD est égal à votre DD de sorts.",
+      "range_m": 18,
+      "area_size_m": 6
     },
     {
       "id": "spiritual_weapon",
@@ -415,19 +544,1692 @@
       "level": 2,
       "school": "evocation",
       "casting_time": "1 bonus action",
-      "range_ft": 60,
-      "components": ["V", "S"],
+      "components": [
+        "V",
+        "S"
+      ],
       "duration": "1 minute",
       "concentration": false,
-      "classes": ["cleric"],
+      "classes": [
+        "cleric"
+      ],
       "attack_type": "melee_spell",
       "damage_dice": "1d8",
       "damage_type": "force",
       "bonus_action_attack": true,
       "upcast_extra_dice": "1d8",
-      "upcast_breakpoints": [4, 6, 8],
+      "upcast_breakpoints": [
+        4,
+        6,
+        8
+      ],
       "save": null,
-      "description": "You create a floating, spectral weapon within range. As a bonus action on your turn, you can move the weapon up to 20 feet and repeat the attack against a creature within 5 feet of it. The weapon disappears if you cast this spell again. Higher levels: +1d8 damage for every two slot levels above 2nd."
+      "description": "Vous créez une arme spectrale flottante à portée. En tant qu'action bonus à votre tour, vous pouvez déplacer l'arme jusqu'à 6 mètres et répéter l'attaque contre une créature à 1,50 mètre de l'arme. L'arme disparaît si vous relancez ce sort. Aux niveaux supérieurs : +1d8 dégâts tous les deux niveaux d'emplacement au-delà du 2e.",
+      "range_m": 18
+    },
+    {
+      "id": "eldritch_blast",
+      "name": "Eldritch Blast",
+      "name_fr": "Blast occulte",
+      "level": 0,
+      "school": "evocation",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S"
+      ],
+      "duration": "instantaneous",
+      "concentration": false,
+      "classes": [
+        "warlock"
+      ],
+      "attack_type": "ranged_spell",
+      "damage_dice": "1d10",
+      "damage_type": "force",
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": null,
+      "description": "Un faisceau d'énergie occulte crépitante jaillit vers une créature à portée. Effectuez une attaque de sort à distance. En cas de touche, la cible subit 1d10 dégâts de force. (Aux niveaux 5, 11 et 17 : 2, 3 puis 4 faisceaux distincts.)",
+      "range_m": 36
+    },
+    {
+      "id": "vicious_mockery",
+      "name": "Vicious Mockery",
+      "name_fr": "Raillerie vicieuse",
+      "level": 0,
+      "school": "enchantment",
+      "casting_time": "1 action",
+      "components": [
+        "V"
+      ],
+      "duration": "instantaneous",
+      "concentration": false,
+      "classes": [
+        "bard"
+      ],
+      "attack_type": null,
+      "damage_dice": "1d4",
+      "damage_type": "psychic",
+      "upcast_extra_dice": "1d4",
+      "upcast_breakpoints": [
+        5,
+        11,
+        17
+      ],
+      "save": {
+        "ability": "wisdom",
+        "on_success": "no_damage"
+      },
+      "description": "Vous accablez une créature que vous pouvez voir à portée d'un torrent d'insultes entrelacées de magie. Si la cible rate un jet de sauvegarde de Sagesse, elle subit 1d4 dégâts psychiques et a le désavantage à son prochain jet d'attaque avant la fin de son prochain tour.",
+      "range_m": 18
+    },
+    {
+      "id": "minor_illusion",
+      "name": "Minor Illusion",
+      "name_fr": "Illusion mineure",
+      "level": 0,
+      "school": "illusion",
+      "casting_time": "1 action",
+      "components": [
+        "S",
+        "M"
+      ],
+      "duration": "1 minute",
+      "concentration": false,
+      "classes": [
+        "bard",
+        "sorcerer",
+        "warlock",
+        "wizard"
+      ],
+      "attack_type": null,
+      "damage_dice": null,
+      "damage_type": null,
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": null,
+      "description": "Vous créez un son ou une image d'un objet dans les limites de la portée. L'illusion prend fin si vous la dissipez ou lancez de nouveau ce sort. Un son peut être un murmure ou un cri, et dure jusqu'à la fin de la durée. Une image doit tenir dans un cube de 1,50 mètre.",
+      "range_m": 9
+    },
+    {
+      "id": "dancing_lights",
+      "name": "Dancing Lights",
+      "name_fr": "Lumières dansantes",
+      "level": 0,
+      "school": "evocation",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S",
+        "M"
+      ],
+      "duration": "1 minute",
+      "concentration": true,
+      "classes": [
+        "bard",
+        "sorcerer",
+        "wizard"
+      ],
+      "attack_type": null,
+      "damage_dice": null,
+      "damage_type": null,
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": null,
+      "description": "Vous créez jusqu'à quatre lumières de la taille d'une torche dans les limites de la portée, leur donnant l'apparence de torches, de lanternes ou de sphères lumineuses. Par une action bonus à votre tour, vous pouvez déplacer les lumières jusqu'à 18 mètres.",
+      "range_m": 36
+    },
+    {
+      "id": "poison_spray",
+      "name": "Poison Spray",
+      "name_fr": "Nuage de poison",
+      "level": 0,
+      "school": "conjuration",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S"
+      ],
+      "duration": "instantaneous",
+      "concentration": false,
+      "classes": [
+        "druid",
+        "sorcerer",
+        "warlock",
+        "wizard"
+      ],
+      "attack_type": null,
+      "damage_dice": "1d12",
+      "damage_type": "poison",
+      "upcast_extra_dice": "1d12",
+      "upcast_breakpoints": [
+        5,
+        11,
+        17
+      ],
+      "save": {
+        "ability": "constitution",
+        "on_success": "no_damage"
+      },
+      "description": "Vous tendez la main vers une créature que vous pouvez voir à portée et projetez un nuage de gaz nocif. La créature doit réussir un jet de sauvegarde de Constitution ou subir 1d12 dégâts de poison.",
+      "range_m": 3
+    },
+    {
+      "id": "chill_touch",
+      "name": "Chill Touch",
+      "name_fr": "Contact glacial",
+      "level": 0,
+      "school": "necromancy",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S"
+      ],
+      "duration": "1 round",
+      "concentration": false,
+      "classes": [
+        "sorcerer",
+        "warlock",
+        "wizard"
+      ],
+      "attack_type": "ranged_spell",
+      "damage_dice": "1d8",
+      "damage_type": "necrotic",
+      "upcast_extra_dice": "1d8",
+      "upcast_breakpoints": [
+        5,
+        11,
+        17
+      ],
+      "save": null,
+      "description": "Vous créez une main spectrale squelettique dans l'espace d'une créature à portée. Effectuez une attaque de sort à distance. En cas de touche, la cible subit 1d8 dégâts nécrotiques et ne peut pas récupérer de points de vie jusqu'au début de votre prochain tour.",
+      "range_m": 36
+    },
+    {
+      "id": "guidance",
+      "name": "Guidance",
+      "name_fr": "Guidance",
+      "level": 0,
+      "school": "divination",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S"
+      ],
+      "duration": "1 minute",
+      "concentration": true,
+      "classes": [
+        "cleric",
+        "druid"
+      ],
+      "attack_type": null,
+      "damage_dice": null,
+      "damage_type": null,
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": null,
+      "description": "Vous touchez une créature consentante. Une fois avant la fin de la durée, la créature peut lancer un d4 et ajouter le résultat à un test de caractéristique de son choix. Elle peut attendre le résultat du test avant de décider d'utiliser ce dé.",
+      "range_m": 0
+    },
+    {
+      "id": "spare_the_dying",
+      "name": "Spare the Dying",
+      "name_fr": "Épargne des mourants",
+      "level": 0,
+      "school": "necromancy",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S"
+      ],
+      "duration": "instantaneous",
+      "concentration": false,
+      "classes": [
+        "cleric"
+      ],
+      "attack_type": null,
+      "damage_dice": null,
+      "damage_type": null,
+      "heal_dice": null,
+      "heal_bonus": null,
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": null,
+      "description": "Vous touchez une créature vivante qui est à 0 point de vie. La créature devient stable. Ce sort n'a aucun effet sur les morts-vivants ou les constructions.",
+      "range_m": 0
+    },
+    {
+      "id": "thaumaturgy",
+      "name": "Thaumaturgy",
+      "name_fr": "Thaumaturgie",
+      "level": 0,
+      "school": "transmutation",
+      "casting_time": "1 action",
+      "components": [
+        "V"
+      ],
+      "duration": "1 minute",
+      "concentration": false,
+      "classes": [
+        "cleric"
+      ],
+      "attack_type": null,
+      "damage_dice": null,
+      "damage_type": null,
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": null,
+      "description": "Vous manifestez une merveille mineure, un signe de pouvoir surnaturel. Vous créez l'un des effets magiques suivants : votre voix gronde comme un tonnerre, des flammes vacillent, des tremblements légers se font sentir, ou vous faites cligner des yeux à une porte ou une fenêtre.",
+      "range_m": 9
+    },
+    {
+      "id": "produce_flame",
+      "name": "Produce Flame",
+      "name_fr": "Production de flamme",
+      "level": 0,
+      "school": "conjuration",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S"
+      ],
+      "duration": "10 minutes",
+      "concentration": false,
+      "classes": [
+        "druid"
+      ],
+      "attack_type": "ranged_spell",
+      "damage_dice": "1d8",
+      "damage_type": "fire",
+      "upcast_extra_dice": "1d8",
+      "upcast_breakpoints": [
+        5,
+        11,
+        17
+      ],
+      "save": null,
+      "description": "Une flamme non clignotante apparaît dans votre main. Elle éclaire à 3 mètres et 3 mètres supplémentaires en lumière faible. Vous pouvez lancer la flamme contre une créature à portée en attaque de sort à distance pour 1d8 dégâts de feu, mettant fin au sort.",
+      "range_m": 9
+    },
+    {
+      "id": "charm_person",
+      "name": "Charm Person",
+      "name_fr": "Charme-personne",
+      "level": 1,
+      "school": "enchantment",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S"
+      ],
+      "duration": "1 hour",
+      "concentration": false,
+      "classes": [
+        "bard",
+        "druid",
+        "sorcerer",
+        "warlock",
+        "wizard"
+      ],
+      "attack_type": null,
+      "damage_dice": null,
+      "damage_type": null,
+      "upcast_extra_targets": 1,
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": {
+        "ability": "wisdom",
+        "on_success": "no_effect"
+      },
+      "description": "Vous tentez de charmer un humanoïde que vous pouvez voir à portée. Il doit réussir un jet de sauvegarde de Sagesse (avantage s'il est en combat) ou être charmé par vous pendant 1 heure. Il vous considère comme un ami proche. Le sort prend fin si vous ou vos alliés lui causez des dégâts. Aux niveaux supérieurs : une cible supplémentaire par niveau au-delà du 1er.",
+      "range_m": 9
+    },
+    {
+      "id": "sleep",
+      "name": "Sleep",
+      "name_fr": "Sommeil",
+      "level": 1,
+      "school": "enchantment",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S",
+        "M"
+      ],
+      "duration": "1 minute",
+      "concentration": false,
+      "classes": [
+        "bard",
+        "sorcerer",
+        "wizard"
+      ],
+      "attack_type": "area",
+      "area_shape": "sphere",
+      "area_origin": "point",
+      "damage_dice": null,
+      "damage_type": null,
+      "upcast_extra_dice": "2d8",
+      "upcast_breakpoints": [],
+      "save": null,
+      "description": "Ce sort plonge des créatures dans un sommeil magique. Lancez 5d8 ; le résultat indique combien de PV de créatures peuvent être affectées. Les créatures dans un rayon de 6 mètres d'un point choisi sont affectées en commençant par celles avec le moins de PV. Aux niveaux supérieurs : +2d8 PV affectés par niveau supplémentaire.",
+      "range_m": 27,
+      "area_size_m": 6
+    },
+    {
+      "id": "guiding_bolt",
+      "name": "Guiding Bolt",
+      "name_fr": "Éclair guide",
+      "level": 1,
+      "school": "evocation",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S"
+      ],
+      "duration": "1 round",
+      "concentration": false,
+      "classes": [
+        "cleric"
+      ],
+      "attack_type": "ranged_spell",
+      "damage_dice": "4d6",
+      "damage_type": "radiant",
+      "upcast_extra_dice": "1d6",
+      "upcast_breakpoints": [],
+      "save": null,
+      "description": "Un flash de lumière jaillit vers une créature de votre choix à portée. Effectuez une attaque de sort à distance. En cas de touche, la cible subit 4d6 dégâts radiants et le prochain jet d'attaque contre elle a l'avantage, car une lumière mystique la scintille jusqu'à la fin de votre prochain tour. Aux niveaux supérieurs : +1d6 par niveau au-delà du 1er.",
+      "range_m": 36
+    },
+    {
+      "id": "inflict_wounds",
+      "name": "Inflict Wounds",
+      "name_fr": "Infliger des blessures",
+      "level": 1,
+      "school": "necromancy",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S"
+      ],
+      "duration": "instantaneous",
+      "concentration": false,
+      "classes": [
+        "cleric"
+      ],
+      "attack_type": "melee_spell",
+      "damage_dice": "3d10",
+      "damage_type": "necrotic",
+      "upcast_extra_dice": "1d10",
+      "upcast_breakpoints": [],
+      "save": null,
+      "description": "Effectuez une attaque de sort de contact contre une créature à portée de contact. En cas de touche, la cible subit 3d10 dégâts nécrotiques. Aux niveaux supérieurs : +1d10 par niveau au-delà du 1er.",
+      "range_m": 0
+    },
+    {
+      "id": "hunters_mark",
+      "name": "Hunter's Mark",
+      "name_fr": "Marque du chasseur",
+      "level": 1,
+      "school": "divination",
+      "casting_time": "1 bonus action",
+      "components": [
+        "V"
+      ],
+      "duration": "1 hour",
+      "concentration": true,
+      "classes": [
+        "ranger"
+      ],
+      "attack_type": null,
+      "damage_dice": null,
+      "damage_type": null,
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": null,
+      "description": "Vous choisissez une créature que vous pouvez voir à portée et la désignez mystiquement comme votre proie. Jusqu'à la fin du sort, vous infligez 1d6 dégâts supplémentaires à la cible chaque fois que vous la touchez avec une attaque d'arme, et vous avez l'avantage aux tests de Perception et Survie pour la trouver. Aux niveaux 3-4 : dure 8 heures. Niveaux 5+ : dure 24 heures.",
+      "range_m": 27
+    },
+    {
+      "id": "divine_favor",
+      "name": "Divine Favor",
+      "name_fr": "Faveur divine",
+      "level": 1,
+      "school": "evocation",
+      "casting_time": "1 bonus action",
+      "components": [
+        "V",
+        "S"
+      ],
+      "duration": "1 minute",
+      "concentration": true,
+      "classes": [
+        "paladin"
+      ],
+      "attack_type": null,
+      "damage_dice": null,
+      "damage_type": null,
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": null,
+      "description": "Votre prière insuffle l'énergie divine en vos armes. Jusqu'à la fin du sort, vos attaques d'armes infligent 1d4 dégâts radiants supplémentaires à chaque touche.",
+      "range_m": 0
+    },
+    {
+      "id": "hex",
+      "name": "Hex",
+      "name_fr": "Maléfice",
+      "level": 1,
+      "school": "enchantment",
+      "casting_time": "1 bonus action",
+      "components": [
+        "V",
+        "S",
+        "M"
+      ],
+      "duration": "1 hour",
+      "concentration": true,
+      "classes": [
+        "warlock"
+      ],
+      "attack_type": null,
+      "damage_dice": "1d6",
+      "damage_type": "necrotic",
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": null,
+      "description": "Vous maudissez une créature que vous pouvez voir à portée. Jusqu'à la fin du sort, vous infligez 1d6 dégâts nécrotiques supplémentaires à la cible chaque fois que vous la touchez avec une attaque. Choisissez aussi une caractéristique : la cible a le désavantage aux tests effectués avec cette caractéristique. Si la cible tombe à 0 PV, vous pouvez déplacer la malédiction sur une autre créature.",
+      "range_m": 27
+    },
+    {
+      "id": "entangle",
+      "name": "Entangle",
+      "name_fr": "Enchevêtrement",
+      "level": 1,
+      "school": "conjuration",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S"
+      ],
+      "duration": "1 minute",
+      "concentration": true,
+      "classes": [
+        "druid"
+      ],
+      "attack_type": "area",
+      "area_shape": "square",
+      "area_origin": "point",
+      "damage_dice": null,
+      "damage_type": null,
+      "condition": "restrained",
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": {
+        "ability": "strength",
+        "on_success": "no_effect"
+      },
+      "description": "Des herbes et des lianes émergent du sol dans un carré de 6 mètres de côté. Les créatures dans la zone au moment du lancer doivent réussir un jet de sauvegarde de Force ou être entravées jusqu'à la fin du sort. Une créature entravée peut utiliser son action pour effectuer un test de Force contre votre DD de sort.",
+      "range_m": 27,
+      "area_size_m": 6
+    },
+    {
+      "id": "faerie_fire",
+      "name": "Faerie Fire",
+      "name_fr": "Feu féerique",
+      "level": 1,
+      "school": "evocation",
+      "casting_time": "1 action",
+      "components": [
+        "V"
+      ],
+      "duration": "1 minute",
+      "concentration": true,
+      "classes": [
+        "bard",
+        "druid"
+      ],
+      "attack_type": "area",
+      "area_shape": "cube",
+      "area_origin": "point",
+      "damage_dice": null,
+      "damage_type": null,
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": {
+        "ability": "dexterity",
+        "on_success": "no_effect"
+      },
+      "description": "Tous les objets dans un cube de 6 mètres d'origine sont décrits par une lumière bleue, verte ou violette. Les créatures qui ratent un jet de sauvegarde de Dextérité sont également entourées de lumière. Les attaques contre les créatures ou objets illuminés ont l'avantage, et ne peuvent pas bénéficier d'invisibilité.",
+      "range_m": 18,
+      "area_size_m": 6
+    },
+    {
+      "id": "goodberry",
+      "name": "Goodberry",
+      "name_fr": "Baies nutritives",
+      "level": 1,
+      "school": "transmutation",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S",
+        "M"
+      ],
+      "duration": "instantaneous",
+      "concentration": false,
+      "classes": [
+        "druid",
+        "ranger"
+      ],
+      "attack_type": null,
+      "damage_dice": null,
+      "damage_type": null,
+      "heal_dice": null,
+      "heal_bonus": "1",
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": null,
+      "description": "Ce sort crée jusqu'à 10 baies magiques. Une créature peut utiliser son action pour manger une baie. Manger une baie soigne 1 PV et fournit suffisamment de nourriture pour une journée. Les baies perdent leurs propriétés après 24 heures.",
+      "range_m": 0
+    },
+    {
+      "id": "fog_cloud",
+      "name": "Fog Cloud",
+      "name_fr": "Nuage brumeux",
+      "level": 1,
+      "school": "conjuration",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S"
+      ],
+      "duration": "1 hour",
+      "concentration": true,
+      "classes": [
+        "druid",
+        "ranger",
+        "sorcerer",
+        "wizard"
+      ],
+      "attack_type": null,
+      "damage_dice": null,
+      "damage_type": null,
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": null,
+      "description": "Vous créez une sphère de brouillard de 6 mètres de rayon centrée sur un point à portée. La zone est fortement obscurcie. Elle dure pour la durée ou jusqu'à ce qu'un vent de vitesse modérée ou plus la disperse. Aux niveaux supérieurs : le rayon augmente de 6 mètres par niveau au-delà du 1er.",
+      "range_m": 36
+    },
+    {
+      "id": "wrathful_smite",
+      "name": "Wrathful Smite",
+      "name_fr": "Frappe courroucée",
+      "level": 1,
+      "school": "evocation",
+      "casting_time": "1 bonus action",
+      "components": [
+        "V"
+      ],
+      "duration": "1 minute",
+      "concentration": true,
+      "classes": [
+        "paladin"
+      ],
+      "attack_type": null,
+      "damage_dice": "1d6",
+      "damage_type": "psychic",
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": {
+        "ability": "wisdom",
+        "on_success": "no_effect"
+      },
+      "description": "La prochaine fois que vous touchez une créature avec une attaque d'arme avant la fin du sort, votre attaque inflige 1d6 dégâts psychiques supplémentaires. La cible doit réussir un jet de sauvegarde de Sagesse ou être effrayée jusqu'à la fin du sort.",
+      "range_m": 0
+    },
+    {
+      "id": "arms_of_hadar",
+      "name": "Arms of Hadar",
+      "name_fr": "Bras de Hadar",
+      "level": 1,
+      "school": "conjuration",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S"
+      ],
+      "duration": "instantaneous",
+      "concentration": false,
+      "classes": [
+        "warlock"
+      ],
+      "attack_type": "area",
+      "area_shape": "sphere",
+      "area_origin": "self",
+      "damage_dice": "2d6",
+      "damage_type": "necrotic",
+      "upcast_extra_dice": "1d6",
+      "upcast_breakpoints": [],
+      "save": {
+        "ability": "strength",
+        "on_success": "no_damage"
+      },
+      "description": "Vous invoquez la puissance de Hadar, l'obscurité affamée. Des tentacules nécrotiques jaillissent de vous dans toutes les directions. Chaque créature dans un rayon de 3 mètres doit réussir un jet de sauvegarde de Force ou subir 2d6 dégâts nécrotiques et ne peut pas prendre de réaction jusqu'à son prochain tour. En cas de réussite, la moitié des dégâts. Aux niveaux supérieurs : +1d6 par niveau au-delà du 1er.",
+      "range_m": 0,
+      "area_size_m": 3
+    },
+    {
+      "id": "prayer_of_healing",
+      "name": "Prayer of Healing",
+      "name_fr": "Prière de guérison",
+      "level": 2,
+      "school": "evocation",
+      "casting_time": "10 minutes",
+      "components": [
+        "V"
+      ],
+      "duration": "instantaneous",
+      "concentration": false,
+      "classes": [
+        "cleric"
+      ],
+      "attack_type": null,
+      "damage_dice": null,
+      "damage_type": null,
+      "heal_dice": "2d8",
+      "heal_bonus": "spellcasting_modifier",
+      "targets": 6,
+      "upcast_extra_dice": "1d8",
+      "upcast_breakpoints": [],
+      "save": null,
+      "description": "Jusqu'à six créatures de votre choix que vous pouvez voir à portée récupèrent 2d8 + modificateur d'incantation points de vie. Ce sort n'a aucun effet sur les morts-vivants ou les constructions. Aux niveaux supérieurs : +1d8 par niveau au-delà du 2e.",
+      "range_m": 9
+    },
+    {
+      "id": "lesser_restoration",
+      "name": "Lesser Restoration",
+      "name_fr": "Restauration partielle",
+      "level": 2,
+      "school": "abjuration",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S"
+      ],
+      "duration": "instantaneous",
+      "concentration": false,
+      "classes": [
+        "bard",
+        "cleric",
+        "druid",
+        "paladin",
+        "ranger"
+      ],
+      "attack_type": null,
+      "damage_dice": null,
+      "damage_type": null,
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": null,
+      "description": "Vous touchez une créature et mettez fin à une maladie ou une condition : aveuglé, sourd, paralysé ou empoisonné.",
+      "range_m": 0
+    },
+    {
+      "id": "shatter",
+      "name": "Shatter",
+      "name_fr": "Fracas",
+      "level": 2,
+      "school": "evocation",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S",
+        "M"
+      ],
+      "duration": "instantaneous",
+      "concentration": false,
+      "classes": [
+        "bard",
+        "sorcerer",
+        "warlock",
+        "wizard"
+      ],
+      "attack_type": "area",
+      "area_shape": "sphere",
+      "area_origin": "point",
+      "damage_dice": "3d8",
+      "damage_type": "thunder",
+      "upcast_extra_dice": "1d8",
+      "upcast_breakpoints": [],
+      "save": {
+        "ability": "constitution",
+        "on_success": "half_damage"
+      },
+      "description": "Un son retentissant soudain frappe douloureusement. Chaque créature dans une sphère de 3 mètres centrée sur un point doit réussir un jet de Constitution ou subir 3d8 dégâts de tonnerre (moitié en cas de réussite). Une créature faite de matière inorganique est désavantagée. Les objets non magiques dans la zone subissent automatiquement les dégâts. Aux niveaux supérieurs : +1d8 par niveau au-delà du 2e.",
+      "range_m": 18,
+      "area_size_m": 3
+    },
+    {
+      "id": "blur",
+      "name": "Blur",
+      "name_fr": "Flou",
+      "level": 2,
+      "school": "illusion",
+      "casting_time": "1 action",
+      "components": [
+        "V"
+      ],
+      "duration": "1 minute",
+      "concentration": true,
+      "classes": [
+        "sorcerer",
+        "wizard"
+      ],
+      "attack_type": null,
+      "damage_dice": null,
+      "damage_type": null,
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": null,
+      "description": "Votre corps semble flouter et osciller aux yeux des autres. Pendant la durée, toute créature effectuant une attaque contre vous a le désavantage à son jet d'attaque. Un attaquant immunisé à la cécité est immunisé à cet effet.",
+      "range_m": 0
+    },
+    {
+      "id": "moonbeam",
+      "name": "Moonbeam",
+      "name_fr": "Rayon de lune",
+      "level": 2,
+      "school": "evocation",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S",
+        "M"
+      ],
+      "duration": "1 minute",
+      "concentration": true,
+      "classes": [
+        "druid"
+      ],
+      "attack_type": "area",
+      "area_shape": "cylinder",
+      "area_origin": "point",
+      "damage_dice": "2d10",
+      "damage_type": "radiant",
+      "upcast_extra_dice": "1d10",
+      "upcast_breakpoints": [],
+      "save": {
+        "ability": "constitution",
+        "on_success": "half_damage"
+      },
+      "description": "Un rayon de lumière argentée et pâle tombe dans un cylindre de 1,50 mètre de rayon et 12 mètres de haut centré sur un point à portée. Les créatures dans le cylindre doivent réussir un jet de Constitution ou subir 2d10 dégâts radiants (moitié en cas de réussite). Les métamorphes ont le désavantage. Par une action bonus, vous pouvez déplacer le rayon. Aux niveaux supérieurs : +1d10 par niveau au-delà du 2e.",
+      "range_m": 36,
+      "area_size_m": 1.5
+    },
+    {
+      "id": "pass_without_trace",
+      "name": "Pass Without Trace",
+      "name_fr": "Passage sans trace",
+      "level": 2,
+      "school": "abjuration",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S",
+        "M"
+      ],
+      "duration": "1 hour",
+      "concentration": true,
+      "classes": [
+        "druid",
+        "ranger"
+      ],
+      "attack_type": null,
+      "damage_dice": null,
+      "damage_type": null,
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": null,
+      "description": "Un voile d'ombres et de silence émane de vous et couvre vous-même et vos compagnons. Pendant la durée, chaque créature que vous choisissez dans un rayon de 9 mètres (y compris vous) gagne un bonus de +10 aux tests de Discrétion et ne peut pas être pistée hors de la magie.",
+      "range_m": 0
+    },
+    {
+      "id": "suggestion",
+      "name": "Suggestion",
+      "name_fr": "Suggestion",
+      "level": 2,
+      "school": "enchantment",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "M"
+      ],
+      "duration": "8 hours",
+      "concentration": true,
+      "classes": [
+        "bard",
+        "sorcerer",
+        "warlock",
+        "wizard"
+      ],
+      "attack_type": null,
+      "damage_dice": null,
+      "damage_type": null,
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": {
+        "ability": "wisdom",
+        "on_success": "no_effect"
+      },
+      "description": "Vous formulez une suggestion d'un ou deux mots magiquement influencée à une créature que vous pouvez voir. La suggestion doit être une ligne de conduite réalisable. La créature doit réussir un jet de sauvegarde de Sagesse ou suivre la suggestion de son mieux. Le sort se termine si vous ou vos alliés attaquez la créature.",
+      "range_m": 9
+    },
+    {
+      "id": "heat_metal",
+      "name": "Heat Metal",
+      "name_fr": "Métal brûlant",
+      "level": 2,
+      "school": "transmutation",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S",
+        "M"
+      ],
+      "duration": "1 minute",
+      "concentration": true,
+      "classes": [
+        "bard",
+        "druid"
+      ],
+      "attack_type": null,
+      "damage_dice": "2d8",
+      "damage_type": "fire",
+      "upcast_extra_dice": "1d8",
+      "upcast_breakpoints": [],
+      "save": null,
+      "description": "Choisissez un objet métallique manufacturé, comme une arme métallique ou une armure lourde ou intermédiaire, à portée. Vous faites chauffer l'objet à blanc. Une créature tenant ou portant l'objet et en contact physique avec lui subit 2d8 dégâts de feu. Par une action bonus à chaque tour, vous pouvez infliger à nouveau les dégâts. Aux niveaux supérieurs : +1d8 par niveau au-delà du 2e.",
+      "range_m": 18
+    },
+    {
+      "id": "dispel_magic",
+      "name": "Dispel Magic",
+      "name_fr": "Dissipation de la magie",
+      "level": 3,
+      "school": "abjuration",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S"
+      ],
+      "duration": "instantaneous",
+      "concentration": false,
+      "classes": [
+        "bard",
+        "cleric",
+        "druid",
+        "paladin",
+        "sorcerer",
+        "warlock",
+        "wizard"
+      ],
+      "attack_type": null,
+      "damage_dice": null,
+      "damage_type": null,
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": null,
+      "description": "Choisissez une créature, un objet ou un effet magique à portée. Tout sort de niveau 3 ou inférieur sur la cible prend fin. Pour chaque sort de niveau 4 ou supérieur sur la cible, effectuez un test de caractéristique d'incantation (DD = 10 + niveau du sort) pour y mettre fin. Aux niveaux supérieurs : dissipe automatiquement les sorts jusqu'au niveau de l'emplacement utilisé.",
+      "range_m": 36
+    },
+    {
+      "id": "fireball",
+      "name": "Fireball",
+      "name_fr": "Boule de feu",
+      "level": 3,
+      "school": "evocation",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S",
+        "M"
+      ],
+      "duration": "instantaneous",
+      "concentration": false,
+      "classes": [
+        "sorcerer",
+        "wizard"
+      ],
+      "attack_type": "area",
+      "area_shape": "sphere",
+      "area_origin": "point",
+      "damage_dice": "8d6",
+      "damage_type": "fire",
+      "upcast_extra_dice": "1d6",
+      "upcast_breakpoints": [],
+      "save": {
+        "ability": "dexterity",
+        "on_success": "half_damage"
+      },
+      "description": "Un point lumineux jaillit de votre doigt pointé vers un point à portée, puis s'étend en une explosion de flammes tonitruante. Chaque créature dans une sphère de 6 mètres doit faire un jet de Dextérité ou subir 8d6 dégâts de feu (moitié en cas de réussite). Le feu contourne les coins. Aux niveaux supérieurs : +1d6 par niveau au-delà du 3e.",
+      "range_m": 45,
+      "area_size_m": 6
+    },
+    {
+      "id": "lightning_bolt",
+      "name": "Lightning Bolt",
+      "name_fr": "Éclair",
+      "level": 3,
+      "school": "evocation",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S",
+        "M"
+      ],
+      "duration": "instantaneous",
+      "concentration": false,
+      "classes": [
+        "sorcerer",
+        "wizard"
+      ],
+      "attack_type": "area",
+      "area_shape": "line",
+      "area_origin": "self",
+      "damage_dice": "8d6",
+      "damage_type": "lightning",
+      "upcast_extra_dice": "1d6",
+      "upcast_breakpoints": [],
+      "save": {
+        "ability": "dexterity",
+        "on_success": "half_damage"
+      },
+      "description": "Un trait d'éclair de 30 mètres de long et 1,50 mètre de large jaillit de vous dans une direction. Chaque créature dans la ligne doit réussir un jet de Dextérité ou subir 8d6 dégâts de foudre (moitié en cas de réussite). Aux niveaux supérieurs : +1d6 par niveau au-delà du 3e.",
+      "range_m": 0,
+      "area_size_m": 30
+    },
+    {
+      "id": "counterspell",
+      "name": "Counterspell",
+      "name_fr": "Contresort",
+      "level": 3,
+      "school": "abjuration",
+      "casting_time": "1 reaction",
+      "reaction_trigger": "when you see a creature within 18 mètres casting a spell",
+      "components": [
+        "S"
+      ],
+      "duration": "instantaneous",
+      "concentration": false,
+      "classes": [
+        "sorcerer",
+        "warlock",
+        "wizard"
+      ],
+      "attack_type": null,
+      "damage_dice": null,
+      "damage_type": null,
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": null,
+      "description": "Vous tentez d'interrompre une créature en cours d'incantation d'un sort. Si la créature lance un sort de niveau 3 ou inférieur, le sort échoue et n'a aucun effet. Si le sort est de niveau 4 ou supérieur, effectuez un test de caractéristique d'incantation (DD = 10 + niveau du sort). Aux niveaux supérieurs : annule automatiquement les sorts jusqu'au niveau de l'emplacement utilisé.",
+      "range_m": 18
+    },
+    {
+      "id": "revivify",
+      "name": "Revivify",
+      "name_fr": "Retour à la vie",
+      "level": 3,
+      "school": "necromancy",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S",
+        "M"
+      ],
+      "duration": "instantaneous",
+      "concentration": false,
+      "classes": [
+        "cleric",
+        "druid",
+        "paladin"
+      ],
+      "attack_type": null,
+      "damage_dice": null,
+      "damage_type": null,
+      "heal_dice": null,
+      "heal_bonus": "1",
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": null,
+      "description": "Vous touchez une créature décédée il y a moins d'une minute. Elle revient à la vie avec 1 PV. Ce sort ne peut pas ramener à la vie une créature qui est morte de vieillesse, ni restaurer un corps détruit ou incomplet.",
+      "range_m": 0
+    },
+    {
+      "id": "call_lightning",
+      "name": "Call Lightning",
+      "name_fr": "Appel de la foudre",
+      "level": 3,
+      "school": "conjuration",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S"
+      ],
+      "duration": "10 minutes",
+      "concentration": true,
+      "classes": [
+        "druid"
+      ],
+      "attack_type": null,
+      "damage_dice": "3d10",
+      "damage_type": "lightning",
+      "upcast_extra_dice": "1d10",
+      "upcast_breakpoints": [],
+      "save": {
+        "ability": "dexterity",
+        "on_success": "half_damage"
+      },
+      "description": "Un nuage orageux apparaît dans un cylindre de 3 mètres de haut et 18 mètres de rayon. Par une action bonus à votre tour, vous pouvez désigner un point sous le nuage : un éclair frappe ce point. Les créatures dans un rayon de 1,50 mètre doivent réussir un jet de Dextérité ou subir 3d10 dégâts de foudre (moitié en cas de réussite). Aux niveaux supérieurs : +1d10 par niveau au-delà du 3e.",
+      "range_m": 36
+    },
+    {
+      "id": "spirit_guardians",
+      "name": "Spirit Guardians",
+      "name_fr": "Esprits gardiens",
+      "level": 3,
+      "school": "conjuration",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S",
+        "M"
+      ],
+      "duration": "10 minutes",
+      "concentration": true,
+      "classes": [
+        "cleric"
+      ],
+      "attack_type": "area",
+      "area_shape": "sphere",
+      "area_origin": "self",
+      "damage_dice": "3d8",
+      "damage_type": "radiant",
+      "upcast_extra_dice": "1d8",
+      "upcast_breakpoints": [],
+      "save": {
+        "ability": "wisdom",
+        "on_success": "half_damage"
+      },
+      "description": "Vous appelez des esprits pour vous protéger. Ils tourbillonnent dans un rayon de 4,50 mètres autour de vous jusqu'à la fin du sort. Si vous êtes aligné sur le bien ou neutre, les esprits apparaissent angéliques ou féeriques. Si vous êtes mauvais, ils apparaissent spectraux. Les créatures hostiles dans la zone ont leur vitesse réduite de moitié et doivent réussir un jet de Sagesse ou subir 3d8 dégâts radiants ou nécrotiques. Aux niveaux supérieurs : +1d8 par niveau au-delà du 3e.",
+      "range_m": 0,
+      "area_size_m": 4.5
+    },
+    {
+      "id": "fly",
+      "name": "Fly",
+      "name_fr": "Vol",
+      "level": 3,
+      "school": "transmutation",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S",
+        "M"
+      ],
+      "duration": "10 minutes",
+      "concentration": true,
+      "classes": [
+        "sorcerer",
+        "warlock",
+        "wizard"
+      ],
+      "attack_type": null,
+      "damage_dice": null,
+      "damage_type": null,
+      "upcast_extra_targets": 1,
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": null,
+      "description": "Vous touchez une créature consentante. La cible gagne une vitesse de vol de 18 mètres pour la durée. Quand le sort se termine, la cible tombe si elle est encore en l'air. Aux niveaux supérieurs : vous pouvez cibler une créature supplémentaire par niveau au-delà du 3e.",
+      "range_m": 9
+    },
+    {
+      "id": "hypnotic_pattern",
+      "name": "Hypnotic Pattern",
+      "name_fr": "Motif hypnotique",
+      "level": 3,
+      "school": "illusion",
+      "casting_time": "1 action",
+      "components": [
+        "S",
+        "M"
+      ],
+      "duration": "1 minute",
+      "concentration": true,
+      "classes": [
+        "bard",
+        "sorcerer",
+        "warlock",
+        "wizard"
+      ],
+      "attack_type": "area",
+      "area_shape": "cube",
+      "area_origin": "point",
+      "damage_dice": null,
+      "damage_type": null,
+      "condition": "incapacitated",
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": {
+        "ability": "wisdom",
+        "on_success": "no_effect"
+      },
+      "description": "Vous créez un motif tourbillonnant de couleurs dans un cube de 9 mètres. Chaque créature visible dans la zone doit réussir un jet de Sagesse ou être charmée pendant la durée. Tant qu'elles sont charmées, elles sont incapacitées et ont une vitesse de 0. Le sort se termine pour une créature si elle subit des dégâts ou si quelqu'un utilise son action pour la secouer.",
+      "range_m": 36,
+      "area_size_m": 9
+    },
+    {
+      "id": "animate_dead",
+      "name": "Animate Dead",
+      "name_fr": "Animation des morts",
+      "level": 3,
+      "school": "necromancy",
+      "casting_time": "1 minute",
+      "components": [
+        "V",
+        "S",
+        "M"
+      ],
+      "duration": "instantaneous",
+      "concentration": false,
+      "classes": [
+        "cleric",
+        "wizard"
+      ],
+      "attack_type": null,
+      "damage_dice": null,
+      "damage_type": null,
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": null,
+      "description": "Ce sort crée un serviteur mort-vivant. Choisissez un tas d'ossements ou un cadavre d'une créature humanoïde de taille M ou P à portée. Votre sort imbibe la cible d'une parodie sinistre de la vie, en faisant surgir un squelette (si vous choisissez des os) ou un zombie (si vous choisissez un cadavre). Aux niveaux supérieurs : 2 morts-vivants supplémentaires par niveau au-delà du 3e.",
+      "range_m": 3
+    },
+    {
+      "id": "banishment",
+      "name": "Banishment",
+      "name_fr": "Bannissement",
+      "level": 4,
+      "school": "abjuration",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S",
+        "M"
+      ],
+      "duration": "1 minute",
+      "concentration": true,
+      "classes": [
+        "cleric",
+        "paladin",
+        "sorcerer",
+        "warlock",
+        "wizard"
+      ],
+      "attack_type": null,
+      "damage_dice": null,
+      "damage_type": null,
+      "upcast_extra_targets": 1,
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": {
+        "ability": "charisma",
+        "on_success": "no_effect"
+      },
+      "description": "Vous tentez d'envoyer une créature que vous pouvez voir à portée vers un autre plan d'existence. La cible doit réussir un jet de Charisme ou être bannie. Une créature native du plan actuel est bannie dans un demi-plan inoffensif et revient à la fin du sort. Une créature d'un autre plan est expulsée vers son plan natal. Aux niveaux supérieurs : une cible supplémentaire par niveau au-delà du 4e.",
+      "range_m": 18
+    },
+    {
+      "id": "polymorph",
+      "name": "Polymorph",
+      "name_fr": "Métamorphose",
+      "level": 4,
+      "school": "transmutation",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S",
+        "M"
+      ],
+      "duration": "1 hour",
+      "concentration": true,
+      "classes": [
+        "bard",
+        "druid",
+        "sorcerer",
+        "wizard"
+      ],
+      "attack_type": null,
+      "damage_dice": null,
+      "damage_type": null,
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": {
+        "ability": "wisdom",
+        "on_success": "no_effect"
+      },
+      "description": "Ce sort transforme une créature que vous pouvez voir à portée en une nouvelle forme. Une créature non consentante peut tenter un jet de sauvegarde de Sagesse. La créature transformée est limitée par les actions disponibles à sa nouvelle forme. Elle reprend sa forme originale quand elle tombe à 0 PV ou quand le sort prend fin.",
+      "range_m": 18
+    },
+    {
+      "id": "ice_storm",
+      "name": "Ice Storm",
+      "name_fr": "Tempête de grêle",
+      "level": 4,
+      "school": "evocation",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S",
+        "M"
+      ],
+      "duration": "instantaneous",
+      "concentration": false,
+      "classes": [
+        "druid",
+        "sorcerer",
+        "wizard"
+      ],
+      "attack_type": "area",
+      "area_shape": "cylinder",
+      "area_origin": "point",
+      "damage_dice": "2d8",
+      "damage_type": "bludgeoning",
+      "upcast_extra_dice": "1d8",
+      "upcast_breakpoints": [],
+      "save": {
+        "ability": "dexterity",
+        "on_success": "half_damage"
+      },
+      "description": "De la grêle de glace tombe dans un cylindre de 6 mètres de rayon et 12 mètres de haut centré sur un point. Chaque créature dans le cylindre subit 2d8 dégâts contondants et 4d6 dégâts de froid, moitié en cas de réussite au jet de Dextérité. La zone devient un terrain difficile jusqu'à la fin de votre prochain tour. Aux niveaux supérieurs : +1d8 dégâts contondants par niveau au-delà du 4e.",
+      "range_m": 90,
+      "area_size_m": 6
+    },
+    {
+      "id": "blight",
+      "name": "Blight",
+      "name_fr": "Fléau",
+      "level": 4,
+      "school": "necromancy",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S"
+      ],
+      "duration": "instantaneous",
+      "concentration": false,
+      "classes": [
+        "druid",
+        "sorcerer",
+        "warlock",
+        "wizard"
+      ],
+      "attack_type": null,
+      "damage_dice": "8d8",
+      "damage_type": "necrotic",
+      "upcast_extra_dice": "1d8",
+      "upcast_breakpoints": [],
+      "save": {
+        "ability": "constitution",
+        "on_success": "half_damage"
+      },
+      "description": "Une énergie nécromantique envahit une créature de votre choix que vous pouvez voir à portée, drainant l'humidité et la vitalité de celle-ci. La cible doit réussir un jet de Constitution ou subir 8d8 dégâts nécrotiques (moitié en cas de réussite). Ce sort n'a aucun effet sur les morts-vivants ou les constructions. Aux niveaux supérieurs : +1d8 par niveau au-delà du 4e.",
+      "range_m": 9
+    },
+    {
+      "id": "greater_invisibility",
+      "name": "Greater Invisibility",
+      "name_fr": "Invisibilité totale",
+      "level": 4,
+      "school": "illusion",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S"
+      ],
+      "duration": "1 minute",
+      "concentration": true,
+      "classes": [
+        "bard",
+        "sorcerer",
+        "wizard"
+      ],
+      "attack_type": null,
+      "damage_dice": null,
+      "damage_type": null,
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": null,
+      "description": "Vous ou une créature que vous touchez devenez invisible jusqu'à la fin du sort. Tout ce que la cible porte ou transporte est invisible tant que la créature le porte. Contrairement au sort Invisibilité normal, ce sort n'est pas interrompu par une attaque ou un sort.",
+      "range_m": 0
+    },
+    {
+      "id": "death_ward",
+      "name": "Death Ward",
+      "name_fr": "Protection contre la mort",
+      "level": 4,
+      "school": "abjuration",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S"
+      ],
+      "duration": "8 hours",
+      "concentration": false,
+      "classes": [
+        "cleric",
+        "paladin"
+      ],
+      "attack_type": null,
+      "damage_dice": null,
+      "damage_type": null,
+      "heal_dice": null,
+      "heal_bonus": "1",
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": null,
+      "description": "Vous touchez une créature et l'imbibez d'un peu de magie divine. La première fois que la cible serait réduite à 0 PV par des dégâts, elle est réduite à 1 PV à la place et le sort prend fin. Si le sort est encore actif quand la cible est soumise à un effet qui la tuerait instantanément, cet effet est annulé et le sort prend fin.",
+      "range_m": 0
+    },
+    {
+      "id": "wall_of_fire",
+      "name": "Wall of Fire",
+      "name_fr": "Mur de feu",
+      "level": 4,
+      "school": "evocation",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S",
+        "M"
+      ],
+      "duration": "1 minute",
+      "concentration": true,
+      "classes": [
+        "druid",
+        "sorcerer",
+        "wizard"
+      ],
+      "attack_type": "area",
+      "area_shape": "line",
+      "area_origin": "point",
+      "damage_dice": "5d8",
+      "damage_type": "fire",
+      "upcast_extra_dice": "1d8",
+      "upcast_breakpoints": [],
+      "save": {
+        "ability": "dexterity",
+        "on_success": "no_damage"
+      },
+      "description": "Vous créez un mur de feu sur une surface solide à portée. Le mur peut avoir jusqu'à 18 mètres de long, 1,50 mètre d'épaisseur et 6 mètres de haut. Une créature entrant dans la zone du mur ou commençant son tour dans celle-ci subit 5d8 dégâts de feu. Aux niveaux supérieurs : +1d8 par niveau au-delà du 4e.",
+      "range_m": 36,
+      "area_size_m": 18
+    },
+    {
+      "id": "cone_of_cold",
+      "name": "Cone of Cold",
+      "name_fr": "Cône de froid",
+      "level": 5,
+      "school": "evocation",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S",
+        "M"
+      ],
+      "duration": "instantaneous",
+      "concentration": false,
+      "classes": [
+        "sorcerer",
+        "wizard"
+      ],
+      "attack_type": "area",
+      "area_shape": "cone",
+      "area_origin": "self",
+      "damage_dice": "8d8",
+      "damage_type": "cold",
+      "upcast_extra_dice": "1d8",
+      "upcast_breakpoints": [],
+      "save": {
+        "ability": "constitution",
+        "on_success": "half_damage"
+      },
+      "description": "Un souffle d'air glacé jaillit de vos mains dans un cône de 18 mètres. Chaque créature dans la zone doit faire un jet de Constitution ou subir 8d8 dégâts de froid (moitié en cas de réussite). Une créature tuée par ce sort devient une statue de glace jusqu'à ce qu'elle dégèle. Aux niveaux supérieurs : +1d8 par niveau au-delà du 5e.",
+      "range_m": 0,
+      "area_size_m": 18
+    },
+    {
+      "id": "hold_monster",
+      "name": "Hold Monster",
+      "name_fr": "Immobilisation de monstre",
+      "level": 5,
+      "school": "enchantment",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S",
+        "M"
+      ],
+      "duration": "1 minute",
+      "concentration": true,
+      "classes": [
+        "bard",
+        "sorcerer",
+        "warlock",
+        "wizard"
+      ],
+      "attack_type": null,
+      "damage_dice": null,
+      "damage_type": null,
+      "condition": "paralyzed",
+      "upcast_extra_targets": 1,
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": {
+        "ability": "wisdom",
+        "on_success": "no_effect",
+        "repeat_save": "end_of_turn"
+      },
+      "description": "Choisissez une créature que vous pouvez voir à portée. La cible doit réussir un jet de Sagesse ou être paralysée pendant la durée. Ce sort fonctionne sur n'importe quel type de créature (contrairement à Immobilisation de personne). La cible peut refaire le jet de sauvegarde à la fin de chacun de ses tours. Aux niveaux supérieurs : une cible supplémentaire par niveau au-delà du 5e.",
+      "range_m": 27
+    },
+    {
+      "id": "mass_cure_wounds",
+      "name": "Mass Cure Wounds",
+      "name_fr": "Soins de groupe",
+      "level": 5,
+      "school": "evocation",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S"
+      ],
+      "duration": "instantaneous",
+      "concentration": false,
+      "classes": [
+        "bard",
+        "cleric",
+        "druid"
+      ],
+      "attack_type": null,
+      "damage_dice": null,
+      "damage_type": null,
+      "heal_dice": "3d8",
+      "heal_bonus": "spellcasting_modifier",
+      "targets": 6,
+      "upcast_extra_dice": "1d8",
+      "upcast_breakpoints": [],
+      "save": null,
+      "description": "Une vague d'énergie curative déferle parmi les créatures proches de vous. Choisissez jusqu'à six créatures dans un rayon de 9 mètres. Chaque cible regagne 3d8 + modificateur d'incantation PV. Ce sort n'a aucun effet sur les morts-vivants ou les constructions. Aux niveaux supérieurs : +1d8 par niveau au-delà du 5e.",
+      "range_m": 18
+    },
+    {
+      "id": "flame_strike",
+      "name": "Flame Strike",
+      "name_fr": "Colonne de feu",
+      "level": 5,
+      "school": "evocation",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S",
+        "M"
+      ],
+      "duration": "instantaneous",
+      "concentration": false,
+      "classes": [
+        "cleric"
+      ],
+      "attack_type": "area",
+      "area_shape": "cylinder",
+      "area_origin": "point",
+      "damage_dice": "4d6",
+      "damage_type": "fire",
+      "upcast_extra_dice": "1d6",
+      "upcast_breakpoints": [],
+      "save": {
+        "ability": "dexterity",
+        "on_success": "half_damage"
+      },
+      "description": "Une colonne de feu divin tombe du ciel dans un cylindre de 3 mètres de rayon et 12 mètres de haut centré sur un point à portée. Chaque créature dans le cylindre doit réussir un jet de Dextérité ou subir 4d6 dégâts de feu et 4d6 dégâts radiants (moitié en cas de réussite). Aux niveaux supérieurs : +1d6 dégâts de feu et +1d6 dégâts radiants par niveau au-delà du 5e.",
+      "range_m": 18,
+      "area_size_m": 3
+    },
+    {
+      "id": "raise_dead",
+      "name": "Raise Dead",
+      "name_fr": "Rappel à la vie",
+      "level": 5,
+      "school": "necromancy",
+      "casting_time": "1 hour",
+      "components": [
+        "V",
+        "S",
+        "M"
+      ],
+      "duration": "instantaneous",
+      "concentration": false,
+      "classes": [
+        "bard",
+        "cleric",
+        "paladin"
+      ],
+      "attack_type": null,
+      "damage_dice": null,
+      "damage_type": null,
+      "heal_dice": null,
+      "heal_bonus": "1",
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": null,
+      "description": "Vous ramenez à la vie une créature morte depuis 10 jours au maximum, à condition que son âme soit libre et consentante. La créature revient à la vie avec 1 PV. Ce sort neutralise les poisons et les maladies qui sévissaient au moment de la mort. Il ne restaure pas les membres manquants, ni ne peut ramener les morts-vivants.",
+      "range_m": 0
+    },
+    {
+      "id": "scrying",
+      "name": "Scrying",
+      "name_fr": "Scrutation",
+      "level": 5,
+      "school": "divination",
+      "casting_time": "10 minutes",
+      "components": [
+        "V",
+        "S",
+        "M"
+      ],
+      "duration": "10 minutes",
+      "concentration": true,
+      "classes": [
+        "bard",
+        "cleric",
+        "druid",
+        "warlock",
+        "wizard"
+      ],
+      "attack_type": null,
+      "damage_dice": null,
+      "damage_type": null,
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": {
+        "ability": "wisdom",
+        "on_success": "no_effect"
+      },
+      "description": "Vous pouvez voir et entendre un être de votre choix qui se trouve sur le même plan d'existence. La cible doit réussir un jet de Sagesse (modifié selon votre familiarité avec elle). En cas d'échec, un capteur invisible apparaît dans un rayon de 3 mètres de la cible. Vous pouvez voir et entendre à travers ce capteur.",
+      "range_m": 0
+    },
+    {
+      "id": "greater_restoration",
+      "name": "Greater Restoration",
+      "name_fr": "Restauration supérieure",
+      "level": 5,
+      "school": "abjuration",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S",
+        "M"
+      ],
+      "duration": "instantaneous",
+      "concentration": false,
+      "classes": [
+        "bard",
+        "cleric",
+        "druid"
+      ],
+      "attack_type": null,
+      "damage_dice": null,
+      "damage_type": null,
+      "upcast_extra_dice": null,
+      "upcast_breakpoints": [],
+      "save": null,
+      "description": "Vous imbibez une créature que vous touchez d'une énergie positive pour défaire un effet débilitant. Vous pouvez réduire le niveau d'épuisement d'une créature de 1, mettre fin à un charme ou pétrification, mettre fin à une malédiction, réduire à 0 l'un des points de folie, ou restaurer une caractéristique réduite à sa valeur normale.",
+      "range_m": 0
+    },
+    {
+      "id": "insect_plague",
+      "name": "Insect Plague",
+      "name_fr": "Fléau d'insectes",
+      "level": 5,
+      "school": "conjuration",
+      "casting_time": "1 action",
+      "components": [
+        "V",
+        "S",
+        "M"
+      ],
+      "duration": "10 minutes",
+      "concentration": true,
+      "classes": [
+        "cleric",
+        "druid",
+        "sorcerer"
+      ],
+      "attack_type": "area",
+      "area_shape": "sphere",
+      "area_origin": "point",
+      "damage_dice": "4d10",
+      "damage_type": "piercing",
+      "upcast_extra_dice": "1d10",
+      "upcast_breakpoints": [],
+      "save": {
+        "ability": "constitution",
+        "on_success": "half_damage"
+      },
+      "description": "Des grouillantes de sauterelles mordantes emplissent une sphère de 6 mètres de rayon centrée sur un point à portée. La sphère s'étend autour des coins. Elle dure pour la durée. La zone est fortement obscurcie. Les créatures entrant dans la zone ou commençant leur tour là-bas doivent faire un jet de Constitution ou subir 4d10 dégâts perforants. Aux niveaux supérieurs : +1d10 par niveau au-delà du 5e.",
+      "range_m": 90,
+      "area_size_m": 6
     }
   ]
 }
