@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any, Optional
 
 from app.agents.base_agent import BaseAgent
@@ -133,15 +134,18 @@ class GMAgent(BaseAgent):
         messages = self._build_messages(user_prompt, context_manager)
 
         try:
-            raw = await self._client.chat(messages=messages, temperature=0.75, max_tokens=1024)
+            raw = await self._client.chat(messages=messages, temperature=0.75, max_tokens=2048)
         except OllamaError as exc:
             logger.error("GMAgent : appel LLM échoué : %s", exc)
             return GMResponse(narration=_FALLBACK_NARRATION)
 
         data = self._extract_json(raw)
         if data is None:
-            logger.warning("GMAgent : le LLM n'a pas retourné du JSON — utilisation du texte brut")
-            return GMResponse(narration=raw.strip())
+            logger.warning("GMAgent : le LLM n'a pas retourné du JSON valide — extraction partielle")
+            # Tentative d'extraction du champ narration depuis un JSON tronqué
+            match = re.search(r'"narration"\s*:\s*"((?:[^"\\]|\\.)*)', raw)
+            narration_text = match.group(1) if match else raw.strip()
+            return GMResponse(narration=narration_text)
 
         return self._parse_gm_response(data, raw)
 
