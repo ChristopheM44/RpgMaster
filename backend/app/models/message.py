@@ -55,8 +55,15 @@ class Message(Base):
     # Pour ACTION : {"action_type": "attack", "target": "goblin_1"}
     metadata_: Mapped[Optional[dict]] = mapped_column("metadata", JSON, nullable=True)
 
+    # Default Python-side pour bénéficier de la précision microseconde :
+    # SQLite's CURRENT_TIMESTAMP ne retourne que la seconde, ce qui produit
+    # des égalités lors d'actions successives rapides et casse l'ordre
+    # chronologique lu par load_recent_messages.
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, server_default=func.now()
+        DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        server_default=func.now(),
     )
 
     # Relationship

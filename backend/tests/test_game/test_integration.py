@@ -387,3 +387,142 @@ class TestResilienceGMFailure:
         # Le fallback ne doit pas être vide
         assert len(narration["payload"]["text"]) > 0
         assert turn_end["event_type"] == "turn_end"
+
+
+# ---------------------------------------------------------------------------
+# Tests auto-combat : GM narre une rencontre → combat démarre sans clic
+# ---------------------------------------------------------------------------
+
+
+class TestAutoCombatTrigger:
+    def test_hostile_narration_triggers_combat_automatically(self, ws_client) -> None:
+        """GM émet encounter_setup + state_transition COMBAT → phase devient COMBAT
+        et combat_start est diffusé, sans action manuelle 'start_combat'.
+
+        Séquence d'événements attendue après l'envoi du free_text :
+          1. narration        (GM : « Trois gobelins surgissent... »)
+          2. phase_change     (EXPLORATION → COMBAT)
+          3. combat_start     (liste des combattants + grille)
+          4. session_state    (snapshot post-init)
+          5. narration        (intro d'encounter)
+          6. turn_start       (premier combattant selon l'initiative)
+        """
+        session_id = _create_session(ws_client)
+
+        mock_response = AgentResponse(
+            content="Trois gobelins embusqués surgissent des fourrés !",
+            actions=[
+                GMAction(type="encounter_setup", params={"monster_ids": ["goblin"]}),
+                GMAction(type="state_transition", params={"to": "COMBAT"}),
+            ],
+        )
+
+        from app.game.action_resolver import ActionResolver
+        from app.api import ws_game
+        from app.models.session import SessionStatus
+
+        mock_gm = MagicMock()
+        mock_gm.think = AsyncMock(return_value=mock_response)
+        ws_game.action_resolver = ActionResolver(gm_agent=mock_gm)
+
+        with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
+            ws.receive_json()  # session_state initial
+
+            # Injecter un héros pour que _handle_start_combat ait au moins
+            # un combattant joueur — sinon l'initiative ne contient que le
+            # goblin (IA), et `_handle_ai_turns` boucle indéfiniment puisque
+            # next_turn() wrappe sur le seul combattant restant (qui reste IA).
+            active = ws_game.session_manager.get_session(session_id)
+            assert active is not None
+            active.state_data["characters"] = {
+                "hero-1": {
+                    "name": "Thorvald",
+                    "level": 1,
+                    "hp": 10,
+                    "hp_max": 10,
+                    "dex": 14,
+                    "is_ai": False,
+                    "equipment": [],
+                }
+            }
+
+            ws.send_json({
+                "type": "action",
+                "action_type": "free_text",
+                "content": "J'avance prudemment.",
+            })
+
+            # Starlette's WebSocketTestSession.receive_json n'accepte PAS `timeout`.
+            # On reçoit un nombre connu d'événements. Si le flag d'auto-combat
+            # n'avait pas été posé, on recevrait uniquement narration + turn_end
+            # (2 events) et le test expirerait — c'est justement ce qu'on veut
+            # détecter en cas de régression.
+            # NB : l'ordre exact des 5e/6e événements (intro narration vs
+            # turn_start) dépend de qui a la meilleure initiative (joueur ou
+            # goblin). On collecte simplement les 6 events puis on vérifie la
+            # présence des types attendus — sans contraindre l'ordre après
+            # session_state.
+            events = _collect_all(ws, 6)
+
+        event_types = [e["event_type"] for e in events]
+        assert event_types[0] == "narration", event_types
+        assert "combat_start" in event_types, (
+            f"combat_start attendu, reçu : {event_types}"
+        )
+        assert "phase_change" in event_types
+        # turn_start est émis soit directement (joueur first), soit par
+        # _handle_ai_turns (monstre first) — dans les deux cas il doit apparaître.
+        assert "turn_start" in event_types
+
+        # La phase de la session doit être COMBAT après traitement.
+        active = ws_game.session_manager.get_session(session_id)
+        assert active is not None
+        assert active.phase == SessionStatus.COMBAT
+        # Le flag a bien été consommé (pas de résidu).
+        assert "pending_phase_transition" not in active.state_data
+        # Le pending_encounter a aussi été consommé par _handle_start_combat.
+        assert "pending_encounter" not in active.state_data
+
+    def test_state_transition_without_encounter_does_not_start_combat(
+        self, ws_client
+    ) -> None:
+        """Sans encounter_setup, state_transition COMBAT est ignoré : phase inchangée.
+
+        Séquence attendue :
+          1. narration
+          2. turn_end          (fallback exploration, comme un free_text standard)
+        """
+        session_id = _create_session(ws_client)
+
+        mock_response = AgentResponse(
+            content="Une ombre passe au loin.",
+            actions=[GMAction(type="state_transition", params={"to": "COMBAT"})],
+        )
+
+        from app.game.action_resolver import ActionResolver
+        from app.api import ws_game
+        from app.models.session import SessionStatus
+
+        mock_gm = MagicMock()
+        mock_gm.think = AsyncMock(return_value=mock_response)
+        ws_game.action_resolver = ActionResolver(gm_agent=mock_gm)
+
+        with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
+            ws.receive_json()  # session_state
+
+            ws.send_json({
+                "type": "action",
+                "action_type": "free_text",
+                "content": "Je scrute.",
+            })
+
+            events = _collect_all(ws, 2)
+
+        event_types = [e["event_type"] for e in events]
+        assert "combat_start" not in event_types
+        assert "narration" in event_types
+        assert "turn_end" in event_types
+
+        active = ws_game.session_manager.get_session(session_id)
+        assert active is not None
+        assert active.phase != SessionStatus.COMBAT

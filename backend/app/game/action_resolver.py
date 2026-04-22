@@ -197,12 +197,41 @@ class ActionResolver:
                 f"{player_action_text} [Résultat mécanique : {roll_results.get('summary', '')}]"
             )
 
+        # 2.a Persister l'action du joueur AVANT de relire l'historique,
+        #     afin qu'elle fasse partie du contexte envoyé au MJ (cohérence
+        #     bilatérale de la conversation).
+        speaker_name = "Joueur"
+        characters_data = active.state_data.get("characters", {}) if active.state_data else {}
+        if character_id and isinstance(characters_data, dict):
+            speaker_name = characters_data.get(character_id, {}).get("name") or "Joueur"
+
+        if db is not None:
+            from app.models.message import MessageRole, MessageType
+            from app.services.message_service import persist_narration
+
+            await persist_narration(
+                session_id,
+                player_action_text,
+                speaker_name,
+                db,
+                role=MessageRole.PLAYER,
+                message_type=MessageType.ACTION,
+                metadata={"action_type": action_type, "character_id": character_id},
+            )
+
+        # 2.b Relire l'historique récent pour alimenter le prompt du MJ.
+        recent_messages: list = []
+        if db is not None:
+            from app.services.message_service import load_recent_messages
+            recent_messages = await load_recent_messages(session_id, db)
+
         context = AgentContext(
             session_id=session_id,
             game_phase=active.phase.value.upper(),
             game_state=active.state_data,
             player_action=player_action_text,
             roll_results=roll_results or {},
+            messages=recent_messages,
         )
 
         gm_response: Optional[AgentResponse] = None
@@ -231,10 +260,15 @@ class ActionResolver:
             source="action_resolver",
         )
 
-        # Persistance en DB (fire-and-forget)
+        # Persistance en DB — awaited (aligné avec les autres call sites).
+        # NB : passé auparavant en fire-and-forget via asyncio.create_task, ce qui
+        # provoquait une race SQLAlchemy : la session DB est partagée avec les
+        # appels suivants et l'autoflush déclenché par la requête de lecture
+        # d'historique pouvait collider avec l'INSERT différé. L'await garantit
+        # aussi que la narration MJ est visible pour le tour suivant.
         if db is not None:
             from app.services.message_service import persist_narration
-            asyncio.create_task(persist_narration(session_id, narration_text, "Maître du Jeu", db))
+            await persist_narration(session_id, narration_text, "Maître du Jeu", db)
 
         # TTS fire-and-forget : ne bloque jamais le game loop
         asyncio.create_task(
@@ -895,8 +929,38 @@ class ActionResolver:
                 )
 
         elif action_type == "state_transition":
-            # La transition de phase est déléguée au SessionManager via ws_game.py.
-            logger.debug("state_transition demandée par le GM : %s", params)
+            # Le MJ demande un changement de phase. On pose un drapeau que
+            # ws_game._dispatch_action consommera après le retour de resolve()
+            # pour déclencher effectivement la transition (le resolver n'a pas
+            # accès à la session DB ni au WebSocket).
+            target_phase = (
+                params.get("to")
+                or params.get("target")
+                or params.get("phase")
+                or ""
+            )
+            target_phase = str(target_phase).upper()
+
+            if target_phase == "COMBAT":
+                if active.state_data.get("pending_encounter"):
+                    active.state_data["pending_phase_transition"] = "COMBAT"
+                    active.mark_dirty()
+                    logger.info(
+                        "state_transition : passage en COMBAT programmé (pending_encounter=%s)",
+                        active.state_data["pending_encounter"].get("monster_ids"),
+                    )
+                else:
+                    logger.warning(
+                        "state_transition COMBAT ignoré : aucun pending_encounter défini "
+                        "(le MJ devrait émettre encounter_setup avant state_transition)."
+                    )
+            elif target_phase:
+                logger.info(
+                    "state_transition %s : non implémenté (scope actuel : COMBAT uniquement).",
+                    target_phase,
+                )
+            else:
+                logger.debug("state_transition reçue sans phase cible : %s", params)
 
         else:
             logger.warning("ActionResolver : type d'action GM inconnu '%s'.", action_type)

@@ -368,6 +368,16 @@ async def _handle_start_combat(
     If encounter_id is provided, load that pre-built encounter.
     Otherwise generate a dynamic encounter adapted to the party's levels.
     """
+    # Garde d'idempotence : un combat déjà en cours ne doit jamais être
+    # "re-démarré" (double-trigger possible si flag consommé deux fois ou
+    # si le joueur clique sur le bouton pendant qu'une transition auto arrive).
+    if active.phase == SessionStatus.COMBAT:
+        logger.warning(
+            "_handle_start_combat: combat déjà en cours pour session=%s — ignoré.",
+            session_id,
+        )
+        return
+
     # Resolve party levels from characters in state_data
     characters_data: dict[str, Any] = active.state_data.get("characters", {})
     party_levels = [int(c.get("level", 1)) for c in characters_data.values()]
@@ -1302,6 +1312,14 @@ async def _dispatch_action(
         spell_id=action.spell_id,
         slot_level=action.slot_level,
     )
+
+    # Auto-déclenchement du combat demandé par le MJ via state_transition.
+    # Le resolver a posé le drapeau ; on le consomme ici (accès à db +
+    # possibilité d'appeler _handle_start_combat qui roule l'initiative).
+    pending_transition = active.state_data.pop("pending_phase_transition", None)
+    if pending_transition == "COMBAT" and active.phase != SessionStatus.COMBAT:
+        await _handle_start_combat(session_id, active, db, encounter_id=None)
+        return
 
     # After resolution: check for dead NPC combatants
     if active.phase == SessionStatus.COMBAT:
