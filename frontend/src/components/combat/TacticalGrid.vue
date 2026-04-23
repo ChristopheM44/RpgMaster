@@ -68,7 +68,7 @@ function cellClasses(col: number, row: number) {
   const reachable = reachableCells.value.has(key)
   const checker = (col + row) % 2 === 0
   return [
-    reachable ? 'bg-gold/10 cursor-pointer hover:bg-gold/25' : (checker ? 'bg-ink/60' : 'bg-ink/40'),
+    reachable ? 'bg-gold/10 cursor-pointer hover:bg-gold/25' : (checker ? 'bg-bg-elev' : 'bg-bg'),
     checker ? 'border-gold/30' : 'border-gold/15',
     'border transition-colors',
   ]
@@ -94,7 +94,7 @@ function initials(name: string) {
 <template>
   <div class="select-none">
     <div class="mb-1 flex items-center justify-between px-1">
-      <span class="text-xs font-semibold uppercase tracking-widest text-gold/60">Carte tactique</span>
+      <span class="rpg-eyebrow">Carte tactique</span>
       <span class="text-xs text-parchment/30">
         {{ cols * cellSizeM }}×{{ rows * cellSizeM }} m
       </span>

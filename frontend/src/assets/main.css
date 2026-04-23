@@ -1,47 +1,256 @@
 @import "tailwindcss";
 
-/* === RpgMaster Dark Fantasy Theme === */
+/* ============================================================
+   RpgMaster — Direction 3 (Audacieuse / Éditoriale)
+   Design tokens unifiés : ember + gold sur fonds obsidienne.
+   ============================================================ */
 
 @theme {
-  --color-parchment: #f4e8c1;
-  --color-parchment-dark: #d4c89a;
-  --color-ink: #1a1a2e;
-  --color-ink-light: #2a2a4e;
-  --color-blood: #8b0000;
-  --color-blood-light: #b22222;
-  --color-gold: #c9a227;
-  --color-gold-light: #e6c34d;
-  --color-arcane: #6a0dad;
-  --color-arcane-light: #9b30ff;
-  --color-forest: #2d5016;
-  --color-forest-light: #4a8a2a;
-  --color-stone: #4a4a5a;
-  --color-stone-light: #6a6a7a;
+  /* ── Surfaces (fond → premier plan) ─────────────────────── */
+  --color-bg:             #0e0d14;  /* fond app                        */
+  --color-bg-elev:        #181623;  /* top bar, panneaux latéraux      */
+  --color-surface:        #1f1c2e;  /* cartes, chips                   */
+  --color-surface-raised: #2a2640;  /* hover, cartes sélectionnées     */
 
-  --font-display: "Cinzel", serif;
-  --font-body: "Crimson Text", serif;
-  --font-mono: "Fira Code", monospace;
+  /* Tokens historiques (compat) — remappés sur la nouvelle palette */
+  --color-ink:            #0e0d14;  /* = bg        */
+  --color-ink-light:      #181623;  /* = bg-elev   */
+  --color-stone:          #2a2640;  /* = surface-raised */
+  --color-stone-light:    rgba(247, 236, 208, 0.32);
+
+  /* ── Texte ──────────────────────────────────────────────── */
+  --color-parchment:      #f7ecd0;
+  --color-parchment-dark: rgba(247, 236, 208, 0.75);
+  --color-text-muted:     rgba(247, 236, 208, 0.50);
+  --color-text-dim:       rgba(247, 236, 208, 0.32);
+
+  /* ── Bordures ────────────────────────────────────────────── */
+  --color-border:         rgba(255, 235, 180, 0.07);
+  --color-border-strong:  rgba(255, 235, 180, 0.18);
+
+  /* ── Accents signature ───────────────────────────────────── */
+  --color-ember:          #ff8247;  /* accent chaud principal  */
+  --color-ember-soft:     rgba(255, 130, 71, 0.15);
+  --color-gold:           #f0c764;  /* or clair, CTA            */
+  --color-gold-light:     #ffdb8c;
+  --color-gold-deep:      #b88a2a;
+  --color-blood:          #e84545;
+  --color-blood-light:    #ff6b6b;
+  --color-arcane:         #c090ff;
+  --color-arcane-light:   #e0b8ff;
+  --color-teal:           #4fd8c0;
+  --color-green:          #6fd96f;
+  --color-forest:         #2d5016;     /* compat */
+  --color-forest-light:   #4a8a2a;     /* compat */
+
+  /* ── Typographie ─────────────────────────────────────────── */
+  --font-display:  "Cinzel", serif;               /* titres héroïques    */
+  --font-serif:    "Fraunces", "Source Serif 4", Georgia, serif; /* récit */
+  --font-body:     "Inter", system-ui, sans-serif;/* UI, boutons, chips  */
+  --font-mono:     "JetBrains Mono", monospace;   /* chiffres, stats     */
+
+  /* ── Rayons ──────────────────────────────────────────────── */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
 }
 
-/* === Base styles === */
+/* ============================================================
+   Base
+   ============================================================ */
 
-html,
+html, body { height: 100%; overflow: hidden; }
+#app       { height: 100%; }
+
 body {
-  height: 100%;
-  overflow: hidden;
-}
-
-#app {
-  height: 100%;
-}
-
-body {
-  background-color: var(--color-ink);
+  background-color: var(--color-bg);
   color: var(--color-parchment);
   font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  font-feature-settings: "ss01", "cv11";
 }
+
+/* Overlay "grid dust" très discret, ajoute du grain sans coûter visuellement */
+body::before {
+  content: "";
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background-image: radial-gradient(circle at 1px 1px, rgba(255,235,180,0.025) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+
+/* Lueur radiale en haut de la page pour réchauffer l'ambiance */
+body::after {
+  content: "";
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background: radial-gradient(ellipse at top, #1a1630 0%, transparent 60%);
+}
+
+#app > * { position: relative; z-index: 1; }
+
+/* ============================================================
+   Typo
+   ============================================================ */
 
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-display);
-  color: var(--color-gold);
+  color: var(--color-parchment);
+  letter-spacing: 0.03em;
 }
+
+/* Classe utilitaire pour le récit (roman) */
+.prose-narrative {
+  font-family: var(--font-serif);
+  font-size: calc(17px * var(--narrative-scale, 1));
+  line-height: 1.65;
+  color: var(--color-parchment);
+  text-wrap: pretty;
+}
+
+.font-display { font-family: var(--font-display); }
+.font-serif   { font-family: var(--font-serif); }
+.font-body    { font-family: var(--font-body); }
+.font-mono    { font-family: var(--font-mono); }
+
+/* ============================================================
+   Scrollbar
+   ============================================================ */
+
+::-webkit-scrollbar              { width: 8px; height: 8px; }
+::-webkit-scrollbar-track        { background: transparent; }
+::-webkit-scrollbar-thumb        { background: rgba(255, 255, 255, 0.08); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover  { background: rgba(255, 255, 255, 0.18); }
+
+/* ============================================================
+   Composants partagés — classes .rpg-*
+   Permettent de garder les templates Vue lisibles sans répéter
+   la même pile d'utilitaires Tailwind partout.
+   ============================================================ */
+
+/* Petit sparkle doré, à placer devant les titres de section */
+.rpg-sparkle { color: var(--color-ember); margin-right: 0.4em; }
+
+/* Puce uppercase + letterspacing : "✦ VOS AVENTURES" */
+.rpg-eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-ember);
+}
+
+/* Header de section éditorial : "— TITLE ————————" */
+.rpg-section-title {
+  display: flex; align-items: baseline; gap: 14px;
+  font-family: var(--font-display);
+  font-size: 14px; font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--color-parchment);
+  margin: 0;
+}
+.rpg-section-title::after {
+  content: ""; flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--color-border-strong), transparent);
+}
+
+/* Carte générique (panneaux, sections) */
+.rpg-card {
+  background: var(--color-bg-elev);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+/* CTA principal (ember → gold) */
+.rpg-btn-primary {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 10px 20px;
+  background: linear-gradient(135deg, var(--color-ember), var(--color-gold));
+  color: var(--color-bg);
+  border: none; border-radius: var(--radius-md);
+  font-family: var(--font-body);
+  font-size: 12px; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(255, 130, 71, 0.3);
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+.rpg-btn-primary:hover  { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(255,130,71,0.4); }
+.rpg-btn-primary:active { transform: translateY(0); }
+.rpg-btn-primary:disabled {
+  opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none;
+}
+
+/* CTA secondaire, contour or */
+.rpg-btn-secondary {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 18px;
+  background: transparent;
+  color: var(--color-gold);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  font-size: 12px; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.rpg-btn-secondary:hover { border-color: var(--color-gold); background: rgba(240,199,100,0.06); }
+
+/* Petit bouton d'icône à teinte */
+.rpg-btn-tonal {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.rpg-btn-tonal.tone-blood  { color: var(--color-blood);  background: rgba(232, 69, 69, 0.08);  border: 1px solid rgba(232, 69, 69, 0.3); }
+.rpg-btn-tonal.tone-arcane { color: var(--color-arcane); background: rgba(192,144,255, 0.10); border: 1px solid rgba(192,144,255, 0.3); }
+.rpg-btn-tonal.tone-teal   { color: var(--color-teal);   background: rgba(79,216,192, 0.08);  border: 1px solid rgba(79,216,192, 0.3); }
+.rpg-btn-tonal.tone-gold   { color: var(--color-gold);   background: rgba(240,199,100, 0.10); border: 1px solid rgba(240,199,100, 0.3); }
+.rpg-btn-tonal:hover.tone-blood  { background: rgba(232, 69, 69, 0.18); }
+.rpg-btn-tonal:hover.tone-arcane { background: rgba(192,144,255, 0.18); }
+.rpg-btn-tonal:hover.tone-teal   { background: rgba(79,216,192, 0.18); }
+.rpg-btn-tonal:hover.tone-gold   { background: rgba(240,199,100, 0.18); }
+
+/* Input */
+.rpg-input {
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  color: var(--color-parchment);
+  font-family: var(--font-serif);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.rpg-input::placeholder { color: var(--color-text-muted); }
+.rpg-input:focus {
+  border-color: var(--color-ember);
+  box-shadow: 0 0 0 3px rgba(255, 130, 71, 0.15);
+}
+
+/* Chip de statut */
+.rpg-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  border: 1px solid;
+}
+
+/* ============================================================
+   Animations
+   ============================================================ */
+
+@keyframes rpg-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.5; }
+}
+.rpg-pulse { animation: rpg-pulse 2s ease-in-out infinite; }

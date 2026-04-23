@@ -51,11 +51,11 @@ const attackTargets = computed(() => {
 })
 
 const combatActions = [
-  { label: 'Attaquer', type: 'attack', icon: '⚔' },
-  { label: 'Sort', type: 'cast_spell', icon: '✦' },
-  { label: 'Objet', type: 'use_item', icon: '🎒' },
-  { label: 'Foncer', type: 'move', icon: '💨' },
-  { label: 'Fin du tour', type: 'end_turn', icon: '⏭' },
+  { label: 'Attaquer', type: 'attack', icon: '⚔', tone: 'tone-blood' },
+  { label: 'Sort', type: 'cast_spell', icon: '✦', tone: 'tone-arcane' },
+  { label: 'Objet', type: 'use_item', icon: '🎒', tone: 'tone-gold' },
+  { label: 'Foncer', type: 'move', icon: '💨', tone: 'tone-teal' },
+  { label: 'Fin du tour', type: 'end_turn', icon: '⏭', tone: 'tone-gold' },
 ]
 
 const canSend = computed(
@@ -146,7 +146,7 @@ function onStabilize(targetId: string) {
     class="fixed inset-0 z-40 flex items-end justify-center bg-black/60"
     @click.self="showItemPicker = false"
   >
-    <div class="w-full max-w-md rounded-t-xl border border-gold/30 bg-ink p-4 shadow-xl">
+    <div class="rpg-card w-full max-w-md rounded-t-xl p-4 shadow-xl">
       <p class="mb-3 text-sm font-semibold text-parchment/70">Utiliser ou équiper un objet :</p>
       <div class="space-y-1.5 max-h-60 overflow-y-auto">
         <div
@@ -161,13 +161,12 @@ function onStabilize(targetId: string) {
           </span>
           <button
             v-if="(item.id as string ?? '').toLowerCase().includes('potion') || (item.name_fr as string ?? '').toLowerCase().includes('potion')"
-            class="rounded border border-arcane/40 px-2 py-0.5 text-xs text-arcane/80 transition-colors hover:bg-arcane/10"
+            class="rpg-btn-tonal tone-arcane"
             @click="onItemAction(item, 'use_item')"
           >Utiliser</button>
           <button
             v-else
-            class="rounded border px-2 py-0.5 text-xs transition-colors"
-            :class="item.equipped ? 'border-gold/40 text-gold/70 hover:bg-gold/10' : 'border-parchment/20 text-parchment/50 hover:border-gold/30'"
+            class="rpg-btn-tonal tone-gold"
             @click="onItemAction(item, 'equip')"
           >{{ item.equipped ? 'Retirer' : 'Équiper' }}</button>
         </div>
@@ -176,7 +175,7 @@ function onStabilize(targetId: string) {
         </p>
       </div>
       <button
-        class="mt-3 w-full rounded border border-parchment/15 py-2 text-sm text-parchment/40 transition-colors hover:text-parchment"
+        class="rpg-btn-secondary mt-3 w-full justify-center"
         @click="showItemPicker = false"
       >Annuler</button>
     </div>
@@ -188,13 +187,13 @@ function onStabilize(targetId: string) {
     class="fixed inset-0 z-40 flex items-end justify-center bg-black/60"
     @click.self="showTargetSelector = false"
   >
-    <div class="w-full max-w-md rounded-t-xl border border-blood/30 bg-ink p-4 shadow-xl">
+    <div class="rpg-card w-full max-w-md rounded-t-xl p-4 shadow-xl">
       <p class="mb-3 text-sm font-semibold text-parchment/70">Choisissez une cible :</p>
       <div class="space-y-2">
         <button
           v-for="target in attackTargets"
           :key="target.id"
-          class="w-full rounded border border-blood/20 px-4 py-2.5 text-left transition-colors hover:border-blood/50 hover:bg-blood/10"
+          class="rpg-btn-tonal tone-blood w-full text-left"
           @click="confirmAttackTarget(target.id)"
         >
           <span class="font-medium text-parchment text-sm">{{ target.name }}</span>
@@ -205,7 +204,7 @@ function onStabilize(targetId: string) {
         </p>
       </div>
       <button
-        class="mt-3 w-full rounded border border-parchment/15 py-2 text-sm text-parchment/40 transition-colors hover:text-parchment"
+        class="rpg-btn-secondary mt-3 w-full justify-center"
         @click="showTargetSelector = false"
       >
         Annuler
@@ -213,17 +212,17 @@ function onStabilize(targetId: string) {
     </div>
   </div>
 
-  <div class="shrink-0 border-t border-gold/20 bg-ink/80 px-4 py-3 space-y-2">
+  <div class="shrink-0 border-t border-border bg-bg-elev px-4 py-3 space-y-2">
     <!-- Actions de combat -->
     <div v-if="gameStore.isInCombat" class="flex flex-wrap gap-2">
 
       <!-- CAS 1 : Mon personnage est à 0 PV → jet de sauvegarde contre la mort uniquement -->
       <template v-if="isDowned && isMyTurn">
-        <div class="w-full rounded border border-blood/40 bg-blood/10 px-3 py-2 text-sm text-blood/80 italic">
+        <div class="rpg-card w-full border-blood/40 bg-blood/10 px-3 py-2 text-sm text-blood/80 italic">
           Vous êtes inconscient(e). Effectuez votre jet de sauvegarde contre la mort.
         </div>
         <button
-          class="flex items-center gap-1.5 rounded border border-blood/60 bg-blood/20 px-4 py-1.5 text-sm font-semibold text-blood transition-colors hover:bg-blood/30 cursor-pointer"
+          class="rpg-btn-tonal tone-blood"
           :disabled="!canSend"
           @click="onDeathSave"
         >
@@ -231,7 +230,7 @@ function onStabilize(targetId: string) {
           <span>Jet de sauvegarde</span>
         </button>
         <button
-          class="flex items-center gap-1.5 rounded border border-gold/20 px-3 py-1.5 text-sm text-parchment/40 transition-colors hover:border-gold/40 hover:text-parchment cursor-pointer"
+          class="rpg-btn-secondary"
           @click="emit('action', 'end_turn')"
         >
           <span>⏭</span>
@@ -244,10 +243,8 @@ function onStabilize(targetId: string) {
         <button
           v-for="action in combatActions"
           :key="action.type"
-          class="flex items-center gap-1.5 rounded border px-3 py-1.5 text-sm font-semibold transition-colors"
-          :class="isMyTurn
-            ? 'border-gold/40 text-parchment hover:bg-gold/10 hover:border-gold cursor-pointer'
-            : 'border-gold/10 text-parchment/30 cursor-not-allowed'"
+          class="rpg-btn-tonal"
+          :class="[action.tone, !isMyTurn ? 'opacity-40 !cursor-not-allowed' : '']"
           :disabled="!isMyTurn"
           @click="onCombatAction(action.type)"
         >
@@ -260,7 +257,7 @@ function onStabilize(targetId: string) {
           <button
             v-for="ally in downedAllies"
             :key="ally.id"
-            class="flex items-center gap-1.5 rounded border border-arcane/50 bg-arcane/10 px-3 py-1.5 text-sm font-semibold text-arcane transition-colors hover:bg-arcane/20 cursor-pointer"
+            class="rpg-btn-tonal tone-arcane"
             :disabled="!canSend"
             @click="onStabilize(ally.id)"
           >
@@ -277,7 +274,7 @@ function onStabilize(targetId: string) {
 
       <!-- CAS 3 : Je suis à terre mais ce n'est pas mon tour -->
       <template v-else>
-        <div class="w-full rounded border border-blood/20 bg-blood/5 px-3 py-2 text-sm text-blood/60 italic">
+        <div class="rpg-card w-full border-blood/20 bg-blood/5 px-3 py-2 text-sm text-blood/60 italic">
           Inconscient(e) — en attente de votre tour pour effectuer un jet de sauvegarde.
         </div>
       </template>
@@ -290,11 +287,11 @@ function onStabilize(targetId: string) {
         rows="2"
         :placeholder="gameStore.isProcessing ? 'Le Maître du Jeu répond...' : 'Décrivez votre action ou parlez à vos compagnons...'"
         :disabled="!canSend"
-        class="flex-1 resize-none rounded border border-gold/20 bg-ink px-3 py-2 text-sm text-parchment placeholder-parchment/30 focus:border-gold/50 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+        class="rpg-input flex-1 resize-none"
         @keydown="onKeydown"
       />
       <button
-        class="self-end rounded border border-gold/40 bg-gold/10 px-4 py-2 text-sm font-semibold text-gold hover:bg-gold/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        class="rpg-btn-primary self-end"
         :disabled="!input.trim() || !canSend"
         @click="submitText"
       >

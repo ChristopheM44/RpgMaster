@@ -33,6 +33,7 @@ class SessionResponse(BaseModel):
     status: SessionStatus
     created_at: datetime
     updated_at: datetime
+    character_count: int = 0
 
     model_config = {"from_attributes": True}
 

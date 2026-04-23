@@ -17,6 +17,7 @@ export interface Session {
   status: SessionStatus
   created_at: string
   updated_at: string
+  character_count: number
 }
 
 export interface SessionListResponse {

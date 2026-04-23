@@ -650,7 +650,7 @@ async function handleCreate() {
     <!-- Erreur critique -->
     <div
       v-else-if="submitError && speciesList.length === 0"
-      class="rounded border border-blood bg-blood/10 p-6 text-center text-blood-light"
+      class="rpg-card border-blood/60 bg-blood/10 p-6 text-center text-blood"
     >
       {{ submitError }}
     </div>
@@ -665,10 +665,10 @@ async function handleCreate() {
               :class="[
                 'flex h-8 w-8 items-center justify-center rounded-full border-2 text-sm font-bold transition',
                 i + 1 < step
-                  ? 'border-gold bg-gold text-ink'
+                  ? 'border-ember bg-ember text-bg'
                   : i + 1 === step
-                    ? 'border-gold bg-ink text-gold'
-                    : 'border-stone bg-ink text-stone-light',
+                    ? 'border-ember bg-bg text-ember'
+                    : 'border-border bg-bg text-parchment-dim',
               ]"
             >
               <span v-if="i + 1 < step">✓</span>
@@ -677,7 +677,7 @@ async function handleCreate() {
             <span
               :class="[
                 'mt-1 hidden text-xs sm:block',
-                i + 1 === step ? 'text-gold' : 'text-stone-light',
+                i + 1 === step ? 'text-gold' : 'text-parchment-dim',
               ]"
             >
               {{ label }}
@@ -685,13 +685,13 @@ async function handleCreate() {
           </div>
           <div
             v-if="i < STEP_LABELS.length - 1"
-            :class="['h-0.5 flex-1 mx-1', i + 1 < step ? 'bg-gold' : 'bg-stone']"
+            :class="['h-0.5 flex-1 mx-1', i + 1 < step ? 'bg-ember' : 'bg-border']"
           />
         </template>
       </div>
 
       <!-- Contenu de l'étape -->
-      <div class="min-h-96 rounded-lg border border-stone bg-ink-light p-6">
+      <div class="rpg-card min-h-96 p-6">
 
         <!-- Étape 1 : Espèce -->
         <template v-if="step === 1">
@@ -701,12 +701,8 @@ async function handleCreate() {
             <button
               v-for="species in speciesList"
               :key="species.id"
-              class="rounded-lg border p-4 text-left transition"
-              :class="
-                selectedSpeciesId === species.id
-                  ? 'border-gold bg-gold/10'
-                  : 'border-stone hover:border-gold/40'
-              "
+              class="rpg-card p-4 text-left cursor-pointer transition-colors"
+              :class="selectedSpeciesId === species.id ? 'border-ember/60 bg-ember/5' : 'hover:bg-surface-raised'"
               @click="selectedSpeciesId = species.id"
             >
               <div
@@ -717,10 +713,10 @@ async function handleCreate() {
               </div>
               <p class="mt-1 line-clamp-2 text-xs text-parchment-dark">{{ species.description }}</p>
               <div class="mt-3 flex flex-wrap gap-1.5">
-                <span class="rounded bg-stone/40 px-1.5 py-0.5 text-xs text-parchment-dark">
+                <span class="rpg-chip text-parchment-dim border-border">
                   Vit. {{ species.speed }} m
                 </span>
-                <span v-if="species.darkvision_m > 0" class="rounded bg-arcane/20 px-1.5 py-0.5 text-xs text-arcane-light">
+                <span v-if="species.darkvision_m > 0" class="rpg-chip text-arcane border-arcane/40">
                   Vision nocturne {{ species.darkvision_m }} m
                 </span>
               </div>
@@ -728,7 +724,7 @@ async function handleCreate() {
                 <span
                   v-for="(bonus, stat) in species.ability_bonuses"
                   :key="stat"
-                  class="rounded bg-gold/15 px-1.5 py-0.5 text-xs font-medium text-gold"
+                  class="rpg-chip text-gold border-gold/40"
                 >
                   {{ ABILITY_INFO[(ABILITY_FULL_TO_KEY[stat as string] ?? stat) as (typeof ABILITY_KEYS)[number]]?.abbr ?? (stat as string).toUpperCase() }} +{{ bonus }}
                 </span>
@@ -739,7 +735,7 @@ async function handleCreate() {
           <!-- Panneau de détail espèce sélectionnée -->
           <div
             v-if="selectedSpecies"
-            class="mt-5 rounded border border-gold/30 bg-ink p-4"
+            class="rpg-card mt-5 p-4"
           >
             <h3 class="mb-2 font-display font-bold text-gold">{{ selectedSpecies.name_fr }} — Traits</h3>
             <ul class="space-y-1">
@@ -759,12 +755,8 @@ async function handleCreate() {
             <button
               v-for="cls in classList"
               :key="cls.id"
-              class="rounded-lg border p-4 text-left transition"
-              :class="
-                selectedClassId === cls.id
-                  ? 'border-gold bg-gold/10'
-                  : 'border-stone hover:border-gold/40'
-              "
+              class="rpg-card p-4 text-left cursor-pointer transition-colors"
+              :class="selectedClassId === cls.id ? 'border-ember/60 bg-ember/5' : 'hover:bg-surface-raised'"
               @click="selectedClassId = cls.id"
             >
               <div
@@ -775,16 +767,16 @@ async function handleCreate() {
               </div>
               <p class="mt-1 line-clamp-2 text-xs text-parchment-dark">{{ cls.description }}</p>
               <div class="mt-3 flex flex-wrap gap-1.5">
-                <span class="rounded bg-blood/20 px-1.5 py-0.5 text-xs text-blood-light">
+                <span class="rpg-chip text-blood border-blood/40">
                   d{{ cls.hit_die }} PV
                 </span>
                 <span
                   v-if="cls.spellcasting_ability"
-                  class="rounded bg-arcane/20 px-1.5 py-0.5 text-xs text-arcane-light"
+                  class="rpg-chip text-arcane border-arcane/40"
                 >
                   Incantateur
                 </span>
-                <span class="rounded bg-stone/40 px-1.5 py-0.5 text-xs text-parchment-dark">
+                <span class="rpg-chip text-parchment-dim border-border">
                   {{ cls.num_skill_choices }} compétences
                 </span>
               </div>
@@ -811,12 +803,8 @@ async function handleCreate() {
             <button
               v-for="bg in BACKGROUNDS"
               :key="bg.id"
-              class="rounded-lg border p-4 text-left transition"
-              :class="
-                selectedBackgroundId === bg.id
-                  ? 'border-gold bg-gold/10'
-                  : 'border-stone hover:border-gold/40'
-              "
+              class="rpg-card p-4 text-left cursor-pointer transition-colors"
+              :class="selectedBackgroundId === bg.id ? 'border-ember/60 bg-ember/5' : 'hover:bg-surface-raised'"
               @click="selectedBackgroundId = bg.id"
             >
               <div
@@ -830,7 +818,7 @@ async function handleCreate() {
                 <span
                   v-for="skill in bg.skills"
                   :key="skill"
-                  class="rounded bg-forest/20 px-1.5 py-0.5 text-xs text-forest-light"
+                  class="rpg-chip text-teal border-teal/40"
                 >
                   {{ SKILL_FR[skill] ?? skill }}
                 </span>
@@ -849,7 +837,7 @@ async function handleCreate() {
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <!-- Valeurs standard -->
               <button
-                class="rounded-lg border border-stone p-5 text-left transition hover:border-gold/60"
+                class="rpg-card p-5 text-left cursor-pointer transition-colors hover:bg-surface-raised"
                 @click="selectStatMethod('standard')"
               >
                 <div class="mb-1 font-display text-lg font-bold text-parchment">Valeurs standard</div>
@@ -861,19 +849,19 @@ async function handleCreate() {
 
               <!-- Génération aléatoire -->
               <button
-                class="rounded-lg border border-stone p-5 text-left transition hover:border-gold/60"
+                class="rpg-card p-5 text-left cursor-pointer transition-colors hover:bg-surface-raised"
                 @click="selectStatMethod('rolled')"
               >
                 <div class="mb-1 font-display text-lg font-bold text-parchment">Génération aléatoire</div>
                 <p class="mb-3 text-xs text-parchment-dark">Lancez 4d6, ignorez le dé le plus bas. Répétez 6 fois.</p>
                 <div class="flex items-center gap-1.5">
-                  <span v-for="i in 6" :key="i" class="flex h-7 w-7 items-center justify-center rounded bg-arcane/20 text-sm font-bold text-arcane-light">?</span>
+                  <span v-for="i in 6" :key="i" class="flex h-7 w-7 items-center justify-center rounded bg-arcane/20 text-sm font-bold text-arcane">?</span>
                 </div>
               </button>
 
               <!-- Acquisition par points -->
               <button
-                class="rounded-lg border border-stone p-5 text-left transition hover:border-gold/60"
+                class="rpg-card p-5 text-left cursor-pointer transition-colors hover:bg-surface-raised"
                 @click="selectStatMethod('pointbuy')"
               >
                 <div class="mb-1 font-display text-lg font-bold text-parchment">Acquisition par points</div>
@@ -889,7 +877,7 @@ async function handleCreate() {
           <!-- UI partagée : tableau standard & jets aléatoires -->
           <template v-else-if="statMethod === 'standard' || statMethod === 'rolled'">
             <div class="mb-4 flex items-center gap-3">
-              <button class="text-xs text-stone-light underline hover:text-parchment-dark" @click="statMethod = null">
+              <button class="text-xs text-parchment-dim underline hover:text-parchment" @click="statMethod = null">
                 ← Changer de méthode
               </button>
               <span class="text-sm font-semibold text-parchment">
@@ -900,7 +888,7 @@ async function handleCreate() {
             <!-- Bouton de lancement (méthode aléatoire) -->
             <div v-if="statMethod === 'rolled'" class="mb-4">
               <button
-                class="rounded border border-arcane px-4 py-2 text-sm font-bold text-arcane-light transition hover:bg-arcane/10"
+                class="rpg-btn-tonal tone-arcane"
                 @click="rollAbilityScores"
               >
                 {{ rolledValues.length === 0 ? 'Lancer les dés (4d6)' : 'Relancer les dés' }}
@@ -914,7 +902,7 @@ async function handleCreate() {
                 :key="i"
                 :class="[
                   'rounded border px-3 py-1 text-sm font-bold transition',
-                  isPoolValueUsed(v, i) ? 'border-stone/30 text-stone-light line-through' : 'border-gold text-gold',
+                  isPoolValueUsed(v, i) ? 'border-stone/30 text-parchment-dim line-through' : 'border-gold text-gold',
                 ]"
               >
                 {{ v }}
@@ -929,14 +917,14 @@ async function handleCreate() {
               <div
                 v-for="key in ABILITY_KEYS"
                 :key="key"
-                class="rounded-lg border border-stone bg-ink p-3"
+                class="rpg-card p-3"
               >
                 <div class="mb-2 text-xs font-semibold uppercase tracking-wider text-parchment-dark">
                   {{ ABILITY_INFO[key].fr }}
                 </div>
                 <select
                   :value="assignments[key] ?? ''"
-                  class="w-full rounded border border-stone bg-ink-light px-2 py-1.5 text-parchment outline-none transition focus:border-gold"
+                  class="rpg-input w-full"
                   @change="assignStat(key, $event)"
                 >
                   <option value="">— Choisir —</option>
@@ -945,11 +933,11 @@ async function handleCreate() {
                 <div v-if="assignments[key] !== null" class="mt-2 flex items-baseline gap-2">
                   <span class="text-2xl font-bold text-gold">{{ finalScores[key] }}</span>
                   <span class="text-sm text-parchment-dark">{{ modStr(finalScores[key] as number) }}</span>
-                  <span v-if="speciesBonusFor(key) > 0" class="text-xs text-arcane-light">
+                  <span v-if="speciesBonusFor(key) > 0" class="text-xs text-arcane">
                     (+{{ speciesBonusFor(key) }} espèce)
                   </span>
                 </div>
-                <div v-else class="mt-2 text-lg text-stone-light">—</div>
+                <div v-else class="mt-2 text-lg text-parchment-dim">—</div>
               </div>
             </div>
           </template>
@@ -957,11 +945,11 @@ async function handleCreate() {
           <!-- UI : Acquisition par points -->
           <template v-else-if="statMethod === 'pointbuy'">
             <div class="mb-4 flex items-center justify-between">
-              <button class="text-xs text-stone-light underline hover:text-parchment-dark" @click="statMethod = null">
+              <button class="text-xs text-parchment-dim underline hover:text-parchment" @click="statMethod = null">
                 ← Changer de méthode
               </button>
-              <div class="flex items-center gap-2 rounded border px-3 py-1.5 text-sm"
-                :class="pointsRemaining === 0 ? 'border-gold/60 bg-gold/10 text-gold' : 'border-stone text-parchment'">
+              <div class="rpg-card flex items-center gap-2 px-3 py-1.5 text-sm"
+                :class="pointsRemaining === 0 ? 'border-ember/60 bg-ember/5 text-ember' : ''">
                 <span class="font-bold text-lg">{{ pointsRemaining }}</span>
                 <span class="text-parchment-dark">/ {{ POINT_BUY_BUDGET }} points restants</span>
               </div>
@@ -970,8 +958,8 @@ async function handleCreate() {
             <!-- Table de coût (rappel) -->
             <div class="mb-5 flex flex-wrap gap-1.5 text-xs text-parchment-dark">
               <span v-for="(cost, score) in POINT_BUY_COST" :key="score"
-                class="rounded bg-stone/30 px-2 py-0.5">
-                {{ score }} <span class="text-stone-light">({{ cost }} pt{{ cost > 1 ? 's' : '' }})</span>
+                class="rpg-chip text-parchment-dim border-border">
+                {{ score }} <span class="text-parchment-dim">({{ cost }} pt{{ cost > 1 ? 's' : '' }})</span>
               </span>
             </div>
 
@@ -979,7 +967,7 @@ async function handleCreate() {
               <div
                 v-for="key in ABILITY_KEYS"
                 :key="key"
-                class="rounded-lg border border-stone bg-ink p-3"
+                class="rpg-card p-3"
               >
                 <div class="mb-2 text-xs font-semibold uppercase tracking-wider text-parchment-dark">
                   {{ ABILITY_INFO[key].fr }}
@@ -987,26 +975,24 @@ async function handleCreate() {
                 <div class="flex items-center gap-2">
                   <button
                     :disabled="!canDecrease(key)"
-                    class="flex h-7 w-7 items-center justify-center rounded border text-lg font-bold transition disabled:cursor-not-allowed disabled:opacity-30"
-                    :class="canDecrease(key) ? 'border-stone text-parchment hover:border-gold hover:text-gold' : 'border-stone/30 text-stone-light'"
+                    class="rpg-btn-tonal tone-gold h-7 w-7 p-0 justify-center text-lg disabled:cursor-not-allowed disabled:opacity-30"
                     @click="decreaseStat(key)"
                   >−</button>
                   <span class="min-w-8 text-center text-2xl font-bold text-gold">{{ pointBuyScores[key] }}</span>
                   <button
                     :disabled="!canIncrease(key)"
-                    class="flex h-7 w-7 items-center justify-center rounded border text-lg font-bold transition disabled:cursor-not-allowed disabled:opacity-30"
-                    :class="canIncrease(key) ? 'border-stone text-parchment hover:border-gold hover:text-gold' : 'border-stone/30 text-stone-light'"
+                    class="rpg-btn-tonal tone-gold h-7 w-7 p-0 justify-center text-lg disabled:cursor-not-allowed disabled:opacity-30"
                     @click="increaseStat(key)"
                   >+</button>
                 </div>
                 <div class="mt-2 flex items-baseline gap-2">
                   <span class="text-base font-bold text-parchment">{{ finalScores[key] }}</span>
                   <span class="text-sm text-parchment-dark">{{ modStr(finalScores[key] as number) }}</span>
-                  <span v-if="speciesBonusFor(key) > 0" class="text-xs text-arcane-light">
+                  <span v-if="speciesBonusFor(key) > 0" class="text-xs text-arcane">
                     (+{{ speciesBonusFor(key) }} espèce)
                   </span>
                 </div>
-                <div class="mt-1 text-xs text-stone-light">
+                <div class="mt-1 text-xs text-parchment-dim">
                   Coût : {{ pointBuyCostFor(key) }} pt{{ pointBuyCostFor(key) > 1 ? 's' : '' }}
                 </div>
               </div>
@@ -1016,8 +1002,8 @@ async function handleCreate() {
           <!-- Aperçu HP (commun) -->
           <div v-if="canProceed" class="mt-4 rounded border border-blood/40 bg-blood/10 px-4 py-2 text-sm">
             <span class="text-parchment-dark">Points de vie au niveau 1 : </span>
-            <span class="font-bold text-blood-light">{{ hpMax }} PV</span>
-            <span class="text-stone-light"> (d{{ selectedClass?.hit_die }} max + CON {{ modStr(finalScores.con as number) }})</span>
+            <span class="font-bold text-blood">{{ hpMax }} PV</span>
+            <span class="text-parchment-dim"> (d{{ selectedClass?.hit_die }} max + CON {{ modStr(finalScores.con as number) }})</span>
           </div>
         </template>
 
@@ -1044,7 +1030,7 @@ async function handleCreate() {
           <div v-if="!bgBonusMode" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <!-- +2 / +1 -->
             <button
-              class="rounded-lg border border-stone p-5 text-left transition hover:border-gold/60"
+              class="rpg-card p-5 text-left cursor-pointer transition-colors hover:bg-surface-raised"
               @click="bgBonusMode = 'two_one'"
             >
               <div class="mb-1 font-display text-lg font-bold text-parchment">+2 et +1</div>
@@ -1052,7 +1038,7 @@ async function handleCreate() {
             </button>
             <!-- +1 / +1 / +1 -->
             <button
-              class="rounded-lg border border-stone p-5 text-left transition hover:border-gold/60"
+              class="rpg-card p-5 text-left cursor-pointer transition-colors hover:bg-surface-raised"
               @click="bgBonusMode = 'all_one'"
             >
               <div class="mb-1 font-display text-lg font-bold text-parchment">+1 / +1 / +1</div>
@@ -1062,7 +1048,7 @@ async function handleCreate() {
 
           <!-- Mode +2 / +1 : sélection des stats -->
           <template v-else-if="bgBonusMode === 'two_one'">
-            <button class="mb-4 text-xs text-stone-light underline hover:text-parchment-dark" @click="bgBonusMode = null; bgBonus2Stat = null; bgBonus1Stat = null">
+            <button class="mb-4 text-xs text-parchment-dim underline hover:text-parchment-dark" @click="bgBonusMode = null; bgBonus2Stat = null; bgBonus1Stat = null">
               ← Changer de mode
             </button>
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -1074,16 +1060,16 @@ async function handleCreate() {
                     v-for="stat in bgAbilityStats"
                     :key="stat"
                     :disabled="bgBonus1Stat === stat"
-                    class="rounded border px-4 py-2 text-left text-sm font-medium transition"
+                    class="rpg-card px-4 py-2 text-left text-sm font-medium cursor-pointer transition-colors"
                     :class="bgBonus2Stat === stat
-                      ? 'border-gold bg-gold/10 text-gold'
+                      ? 'border-ember/60 bg-ember/5 text-ember'
                       : bgBonus1Stat === stat
-                        ? 'border-stone/30 text-stone-light cursor-not-allowed opacity-40'
-                        : 'border-stone text-parchment-dark hover:border-gold/40'"
+                        ? 'opacity-40 cursor-not-allowed'
+                        : 'hover:bg-surface-raised'"
                     @click="bgBonus2Stat = stat"
                   >
                     <span class="font-bold">{{ ABILITY_INFO[stat as (typeof ABILITY_KEYS)[number]]?.fr ?? stat }}</span>
-                    <span class="ml-2 text-xs text-stone-light">{{ finalScores[stat as (typeof ABILITY_KEYS)[number]] }} → {{ Math.min(20, (finalScores[stat as (typeof ABILITY_KEYS)[number]] as number) + 2) }}</span>
+                    <span class="ml-2 text-xs text-parchment-dim">{{ finalScores[stat as (typeof ABILITY_KEYS)[number]] }} → {{ Math.min(20, (finalScores[stat as (typeof ABILITY_KEYS)[number]] as number) + 2) }}</span>
                   </button>
                 </div>
               </div>
@@ -1095,16 +1081,16 @@ async function handleCreate() {
                     v-for="stat in bgAbilityStats"
                     :key="stat"
                     :disabled="bgBonus2Stat === stat"
-                    class="rounded border px-4 py-2 text-left text-sm font-medium transition"
+                    class="rpg-card px-4 py-2 text-left text-sm font-medium cursor-pointer transition-colors"
                     :class="bgBonus1Stat === stat
-                      ? 'border-arcane bg-arcane/10 text-arcane-light'
+                      ? 'border-arcane/60 bg-arcane/10 text-arcane'
                       : bgBonus2Stat === stat
-                        ? 'border-stone/30 text-stone-light cursor-not-allowed opacity-40'
-                        : 'border-stone text-parchment-dark hover:border-arcane/20'"
+                        ? 'opacity-40 cursor-not-allowed'
+                        : 'hover:bg-surface-raised'"
                     @click="bgBonus1Stat = stat"
                   >
                     <span class="font-bold">{{ ABILITY_INFO[stat as (typeof ABILITY_KEYS)[number]]?.fr ?? stat }}</span>
-                    <span class="ml-2 text-xs text-stone-light">{{ finalScores[stat as (typeof ABILITY_KEYS)[number]] }} → {{ Math.min(20, (finalScores[stat as (typeof ABILITY_KEYS)[number]] as number) + 1) }}</span>
+                    <span class="ml-2 text-xs text-parchment-dim">{{ finalScores[stat as (typeof ABILITY_KEYS)[number]] }} → {{ Math.min(20, (finalScores[stat as (typeof ABILITY_KEYS)[number]] as number) + 1) }}</span>
                   </button>
                 </div>
               </div>
@@ -1113,15 +1099,15 @@ async function handleCreate() {
 
           <!-- Mode +1/+1/+1 : confirmation -->
           <template v-else-if="bgBonusMode === 'all_one'">
-            <button class="mb-4 text-xs text-stone-light underline hover:text-parchment-dark" @click="bgBonusMode = null">
+            <button class="mb-4 text-xs text-parchment-dim underline hover:text-parchment-dark" @click="bgBonusMode = null">
               ← Changer de mode
             </button>
-            <div class="rounded border border-gold/30 bg-gold/5 p-4">
+            <div class="rpg-card p-4">
               <p class="mb-3 text-sm text-parchment-dark">Chaque caractéristique recevra <span class="font-bold text-gold">+1</span> :</p>
               <div class="flex flex-wrap gap-3">
                 <div v-for="stat in bgAbilityStats" :key="stat" class="flex items-center gap-2 text-sm">
                   <span class="font-semibold text-parchment">{{ ABILITY_INFO[stat as (typeof ABILITY_KEYS)[number]]?.abbr ?? stat.toUpperCase() }}</span>
-                  <span class="text-stone-light">{{ finalScores[stat as (typeof ABILITY_KEYS)[number]] }} →</span>
+                  <span class="text-parchment-dim">{{ finalScores[stat as (typeof ABILITY_KEYS)[number]] }} →</span>
                   <span class="font-bold text-gold">{{ Math.min(20, (finalScores[stat as (typeof ABILITY_KEYS)[number]] as number) + 1) }}</span>
                 </div>
               </div>
@@ -1137,7 +1123,7 @@ async function handleCreate() {
             <span class="font-bold text-parchment">{{ selectedClass?.num_skill_choices }}</span>
             compétence(s) parmi celles proposées par votre classe.
           </p>
-          <p class="mb-5 text-xs text-stone-light">
+          <p class="mb-5 text-xs text-parchment-dim">
             {{ selectedSkills.length }} / {{ selectedClass?.num_skill_choices }} sélectionnée(s)
           </p>
 
@@ -1153,7 +1139,7 @@ async function handleCreate() {
               :class="
                 selectedSkills.includes(skill)
                   ? 'border-gold bg-gold/10 text-gold'
-                  : 'border-stone text-parchment-dark hover:border-gold/40 disabled:cursor-not-allowed disabled:opacity-40'
+                  : 'border-border text-parchment-dark hover:border-gold/40 disabled:cursor-not-allowed disabled:opacity-40'
               "
               @click="toggleSkill(skill)"
             >
@@ -1162,7 +1148,7 @@ async function handleCreate() {
           </div>
 
           <!-- Compétences venant du background et de l'espèce -->
-          <div class="mt-5 space-y-2 text-xs text-stone-light">
+          <div class="mt-5 space-y-2 text-xs text-parchment-dim">
             <div v-if="(selectedBackground?.skills.length ?? 0) > 0">
               <span class="text-parchment-dark">Historique ({{ selectedBackground?.name_fr }}) : </span>
               <span v-for="s in selectedBackground?.skills" :key="s" class="ml-1 text-forest-light">
@@ -1197,12 +1183,10 @@ async function handleCreate() {
                 <button
                   v-for="(option, optIdx) in group.choice"
                   :key="optIdx"
-                  class="flex-1 rounded border px-4 py-3 text-left text-sm transition"
-                  :class="
-                    equipmentChoices[i] === optIdx
-                      ? 'border-gold bg-gold/10 text-parchment'
-                      : 'border-stone text-parchment-dark hover:border-gold/40'
-                  "
+                  class="rpg-card flex-1 px-4 py-3 text-left text-sm cursor-pointer transition-colors"
+                  :class="equipmentChoices[i] === optIdx
+                    ? 'border-ember/60 bg-ember/5'
+                    : 'hover:bg-surface-raised'"
                   @click="equipmentChoices[i] = optIdx"
                 >
                   <span v-if="equipmentChoices[i] === optIdx" class="mr-2 text-gold">✓</span>
@@ -1223,7 +1207,7 @@ async function handleCreate() {
               <span
                 v-for="item in equipmentFixed"
                 :key="item"
-                class="rounded border border-stone/50 bg-ink px-2.5 py-1 text-xs text-parchment-dark"
+                class="rpg-chip text-parchment-dim border-border"
               >
                 {{ formatOption([item]) }}
               </span>
@@ -1249,7 +1233,7 @@ async function handleCreate() {
               <section v-if="numCantrips > 0" class="mb-6">
                 <h3 class="mb-1 font-display font-bold text-parchment">
                   Tours de magie
-                  <span class="ml-2 text-sm font-normal text-stone-light">
+                  <span class="ml-2 text-sm font-normal text-parchment-dim">
                     {{ selectedCantrips.length }} / {{ numCantrips }}
                   </span>
                 </h3>
@@ -1261,12 +1245,12 @@ async function handleCreate() {
                     :disabled="!selectedCantrips.includes(spell.id) && selectedCantrips.length >= numCantrips"
                     class="rounded border px-3 py-2 text-left text-sm transition"
                     :class="selectedCantrips.includes(spell.id)
-                      ? 'border-arcane bg-arcane/10 text-arcane-light'
-                      : 'border-stone text-parchment-dark hover:border-arcane/40 disabled:cursor-not-allowed disabled:opacity-40'"
+                      ? 'border-arcane bg-arcane/10 text-arcane'
+                      : 'border-border text-parchment-dark hover:border-arcane/40 disabled:cursor-not-allowed disabled:opacity-40'"
                     @click="toggleCantrip(spell.id)"
                   >
                     <div class="font-medium">{{ spell.name_fr }}</div>
-                    <div class="text-xs text-stone-light capitalize">{{ spell.school }}</div>
+                    <div class="text-xs text-parchment-dim capitalize">{{ spell.school }}</div>
                   </button>
                 </div>
               </section>
@@ -1275,7 +1259,7 @@ async function handleCreate() {
               <section v-if="numSpells > 0">
                 <h3 class="mb-1 font-display font-bold text-parchment">
                   Sorts de niveau 1
-                  <span class="ml-2 text-sm font-normal text-stone-light">
+                  <span class="ml-2 text-sm font-normal text-parchment-dim">
                     {{ selectedSpells.length }} / {{ numSpells }}
                   </span>
                 </h3>
@@ -1290,11 +1274,11 @@ async function handleCreate() {
                     class="rounded border px-3 py-2 text-left text-sm transition"
                     :class="selectedSpells.includes(spell.id)
                       ? 'border-gold bg-gold/10 text-parchment'
-                      : 'border-stone text-parchment-dark hover:border-gold/40 disabled:cursor-not-allowed disabled:opacity-40'"
+                      : 'border-border text-parchment-dark hover:border-gold/40 disabled:cursor-not-allowed disabled:opacity-40'"
                     @click="toggleSpell(spell.id)"
                   >
                     <div class="font-medium">{{ spell.name_fr }}</div>
-                    <div class="text-xs text-stone-light capitalize">
+                    <div class="text-xs text-parchment-dim capitalize">
                       {{ spell.school }}<span v-if="spell.concentration"> · Concentration</span>
                     </div>
                   </button>
@@ -1320,11 +1304,11 @@ async function handleCreate() {
             type="text"
             placeholder="Entrez un nom..."
             maxlength="100"
-            class="mb-4 w-full rounded border border-stone bg-ink px-4 py-3 font-display text-xl text-parchment outline-none transition focus:border-gold"
+            class="rpg-input mb-4 w-full font-display text-xl"
           />
 
           <!-- Compagnon IA -->
-          <label class="mb-8 flex cursor-pointer items-center gap-3 rounded border border-stone bg-ink px-4 py-3">
+          <label class="rpg-card mb-8 flex cursor-pointer items-center gap-3 px-4 py-3">
             <input v-model="isAi" type="checkbox" class="h-4 w-4 accent-arcane" />
             <span class="text-parchment">Personnage géré par l'IA</span>
             <span class="ml-auto text-xs text-parchment-dark">
@@ -1335,27 +1319,27 @@ async function handleCreate() {
           <!-- Résumé -->
           <h3 class="mb-3 font-display text-lg font-semibold text-parchment">Récapitulatif</h3>
           <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <div class="rounded border border-stone bg-ink p-3">
-              <div class="text-xs text-stone-light">Espèce</div>
+            <div class="rpg-card p-3">
+              <div class="text-xs text-parchment-dim">Espèce</div>
               <div class="font-display font-bold text-parchment">{{ selectedSpecies?.name_fr }}</div>
             </div>
-            <div class="rounded border border-stone bg-ink p-3">
-              <div class="text-xs text-stone-light">Classe</div>
+            <div class="rpg-card p-3">
+              <div class="text-xs text-parchment-dim">Classe</div>
               <div class="font-display font-bold text-parchment">{{ selectedClass?.name_fr }}</div>
             </div>
-            <div class="rounded border border-stone bg-ink p-3">
-              <div class="text-xs text-stone-light">Historique</div>
+            <div class="rpg-card p-3">
+              <div class="text-xs text-parchment-dim">Historique</div>
               <div class="font-display font-bold text-parchment">{{ selectedBackground?.name_fr }}</div>
             </div>
             <div class="rounded border border-blood/40 bg-blood/10 p-3">
-              <div class="text-xs text-stone-light">Points de Vie</div>
-              <div class="font-display text-xl font-bold text-blood-light">{{ hpMax }}</div>
+              <div class="text-xs text-parchment-dim">Points de Vie</div>
+              <div class="font-display text-xl font-bold text-blood">{{ hpMax }}</div>
             </div>
             <div class="col-span-2 rounded border border-stone bg-ink p-3 sm:col-span-2">
-              <div class="mb-1 text-xs text-stone-light">Caractéristiques</div>
+              <div class="mb-1 text-xs text-parchment-dim">Caractéristiques</div>
               <div class="flex flex-wrap gap-2">
                 <span v-for="key in ABILITY_KEYS" :key="key" class="text-sm">
-                  <span class="text-stone-light">{{ ABILITY_INFO[key].abbr }}</span>
+                  <span class="text-parchment-dim">{{ ABILITY_INFO[key].abbr }}</span>
                   <span class="ml-1 font-bold text-parchment">{{ finalScores[key] }}</span>
                   <span class="ml-0.5 text-xs text-parchment-dark">({{ modStr(finalScores[key] as number) }})</span>
                 </span>
@@ -1365,7 +1349,7 @@ async function handleCreate() {
 
           <!-- Compétences -->
           <div class="mt-3 rounded border border-stone bg-ink p-3">
-            <div class="mb-1 text-xs text-stone-light">Compétences maîtrisées</div>
+            <div class="mb-1 text-xs text-parchment-dim">Compétences maîtrisées</div>
             <div class="flex flex-wrap gap-1.5">
               <span
                 v-for="skill in [
@@ -1376,7 +1360,7 @@ async function handleCreate() {
                   ]),
                 ]"
                 :key="skill"
-                class="rounded bg-forest/20 px-2 py-0.5 text-xs text-forest-light"
+                class="rpg-chip text-teal border-teal/40"
               >
                 {{ SKILL_FR[skill] ?? skill }}
               </span>
@@ -1384,20 +1368,20 @@ async function handleCreate() {
           </div>
 
           <!-- Sorts connus -->
-          <div v-if="isCaster && (selectedCantrips.length > 0 || selectedSpells.length > 0)" class="mt-3 rounded border border-arcane/30 bg-arcane/5 p-3">
-            <div class="mb-1 text-xs text-stone-light">Sorts</div>
+          <div v-if="isCaster && (selectedCantrips.length > 0 || selectedSpells.length > 0)" class="rpg-card mt-3 border-arcane/30 bg-arcane/5 p-3">
+            <div class="mb-1 text-xs text-parchment-dim">Sorts</div>
             <div class="flex flex-wrap gap-1.5">
               <span
                 v-for="id in selectedCantrips"
                 :key="id"
-                class="rounded bg-arcane/20 px-2 py-0.5 text-xs text-arcane-light"
+                class="rpg-chip text-arcane border-arcane/40"
               >
                 {{ availableCantrips.find(s => s.id === id)?.name_fr ?? id }}
               </span>
               <span
                 v-for="id in selectedSpells"
                 :key="id"
-                class="rounded bg-gold/15 px-2 py-0.5 text-xs text-gold"
+                class="rpg-chip text-gold border-gold/40"
               >
                 {{ availableSpells.find(s => s.id === id)?.name_fr ?? id }}
               </span>
@@ -1407,7 +1391,7 @@ async function handleCreate() {
           <!-- Erreur de soumission -->
           <div
             v-if="submitError"
-            class="mt-4 rounded border border-blood bg-blood/10 px-4 py-3 text-sm text-blood-light"
+            class="mt-4 rounded border border-blood bg-blood/10 px-4 py-3 text-sm text-blood"
           >
             {{ submitError }}
           </div>
@@ -1420,7 +1404,7 @@ async function handleCreate() {
       <div class="mt-6 flex items-center justify-between">
         <button
           v-if="step > 1"
-          class="rounded border border-stone px-5 py-2 text-parchment-dark transition hover:border-gold hover:text-parchment"
+          class="rpg-btn-secondary"
           @click="prevStep"
         >
           ← Retour
@@ -1430,7 +1414,7 @@ async function handleCreate() {
         <button
           v-if="step < TOTAL_STEPS"
           :disabled="!canProceed"
-          class="rounded bg-blood px-6 py-2 font-display font-semibold text-parchment transition hover:bg-blood-light disabled:cursor-not-allowed disabled:opacity-40"
+          class="rpg-btn-primary"
           @click="nextStep"
         >
           Suivant →
@@ -1439,7 +1423,7 @@ async function handleCreate() {
         <button
           v-else
           :disabled="!canProceed || loading"
-          class="rounded bg-gold px-8 py-2 font-display font-bold text-ink transition hover:bg-gold-light disabled:cursor-not-allowed disabled:opacity-40"
+          class="rpg-btn-primary"
           @click="handleCreate"
         >
           {{ loading ? 'Création...' : '⚔ Commencer l\'Aventure' }}

@@ -52,7 +52,7 @@ const selectedMods = computed(() => {
 <template>
   <div class="flex flex-1 min-h-0 flex-col">
     <div class="border-b border-gold/20 px-4 py-2">
-      <h2 class="text-sm font-semibold uppercase tracking-widest text-gold/60">Personnages</h2>
+      <h2 class="rpg-eyebrow">Personnages</h2>
     </div>
 
     <div v-if="charStore.sessionCharacters.length === 0" class="flex-1 flex items-center justify-center">
@@ -65,10 +65,10 @@ const selectedMods = computed(() => {
         <button
           v-for="c in charStore.sessionCharacters"
           :key="c.id"
-          class="w-full rounded border px-2 py-1.5 text-left transition-colors"
+          class="rpg-card w-full px-2 py-1.5 text-left cursor-pointer transition-colors"
           :class="selected?.id === c.id
-            ? 'border-gold/50 bg-gold/10'
-            : 'border-transparent hover:border-gold/20 hover:bg-ink/60'"
+            ? 'border-ember/50 bg-surface-raised'
+            : 'hover:bg-surface-raised'"
           @click="charStore.setSelectedCharacter(c)"
         >
           <div class="flex items-center gap-1.5">
@@ -102,7 +102,7 @@ const selectedMods = computed(() => {
 
         <!-- Lien fiche complète -->
         <button
-          class="w-full rounded border border-gold/30 px-3 py-1.5 text-xs text-gold/70 transition hover:border-gold/60 hover:text-gold text-center"
+          class="rpg-btn-secondary w-full justify-center"
           @click="openSheet(selected)"
         >
           Fiche complète →
@@ -110,10 +110,8 @@ const selectedMods = computed(() => {
 
         <!-- Contrôle IA -->
         <button
-          class="w-full rounded border px-3 py-2 text-left text-xs transition-colors"
-          :class="selected.is_ai
-            ? 'border-arcane/50 bg-arcane/10 text-arcane hover:bg-arcane/20'
-            : 'border-gold/20 bg-ink/40 text-parchment/60 hover:border-gold/40 hover:text-parchment'"
+          class="rpg-btn-tonal w-full text-left px-3 py-2"
+          :class="selected.is_ai ? 'tone-arcane' : 'tone-gold'"
           @click="charStore.toggleAiControl(selected.id)"
         >
           <span class="font-semibold">{{ selected.is_ai ? '🤖 Géré par l\'IA' : '👤 Joueur humain' }}</span>
@@ -143,7 +141,7 @@ const selectedMods = computed(() => {
           <div
             v-for="(abbr, key) in ABILITY_ABBR"
             :key="key"
-            class="flex flex-col items-center rounded border border-gold/20 bg-ink/40 py-1"
+            class="rpg-card flex flex-col items-center py-1"
           >
             <span class="text-xs text-parchment/50 font-semibold">{{ abbr }}</span>
             <span class="text-sm font-bold text-parchment">{{ selected.ability_scores[key] ?? '—' }}</span>
@@ -156,7 +154,7 @@ const selectedMods = computed(() => {
           <span
             v-for="cond in selected.conditions"
             :key="cond"
-            class="rounded bg-blood/20 px-1.5 py-0.5 text-xs text-blood"
+            class="rpg-chip text-blood border-blood/40"
           >{{ cond }}</span>
         </div>
       </div>

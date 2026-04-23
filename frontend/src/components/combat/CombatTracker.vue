@@ -7,9 +7,9 @@ const gameStore = useGameStore()
 <template>
   <div class="flex flex-1 min-h-0 flex-col">
     <div class="border-b border-gold/20 px-4 py-2">
-      <h2 class="text-sm font-semibold uppercase tracking-widest text-gold/60">
+      <h2 class="rpg-eyebrow">
         Combat
-        <span v-if="gameStore.isInCombat" class="ml-2 text-blood text-xs">Round {{ gameStore.roundNumber }}</span>
+        <span v-if="gameStore.isInCombat" class="ml-2 text-blood text-xs normal-case tracking-normal font-mono">Round {{ gameStore.roundNumber }}</span>
       </h2>
     </div>
 
@@ -21,10 +21,8 @@ const gameStore = useGameStore()
       <div
         v-for="combatant in gameStore.combatants"
         :key="combatant.id"
-        class="rounded border px-3 py-2 transition-colors"
-        :class="combatant.is_active
-          ? 'border-gold bg-gold/10'
-          : 'border-gold/20 bg-ink/40'"
+        class="rpg-card px-3 py-2 transition-colors"
+        :class="combatant.is_active ? 'border-ember/60 bg-ember/5' : ''"
       >
         <div class="flex items-center gap-2">
           <!-- Initiative badge -->
@@ -65,7 +63,7 @@ const gameStore = useGameStore()
           <span
             v-for="cond in combatant.conditions"
             :key="cond"
-            class="rounded bg-blood/20 px-1.5 py-0.5 text-xs text-blood"
+            class="rpg-chip text-blood border-blood/40"
           >{{ cond }}</span>
         </div>
 

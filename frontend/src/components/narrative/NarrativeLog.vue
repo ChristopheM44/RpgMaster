@@ -20,7 +20,7 @@ watch(
 <template>
   <div class="flex flex-1 min-h-0 flex-col">
     <div class="border-b border-gold/20 px-4 py-2">
-      <h2 class="text-sm font-semibold uppercase tracking-widest text-gold/60">Récit</h2>
+      <h2 class="rpg-eyebrow">Récit</h2>
     </div>
 
     <div ref="logEl" class="flex-1 overflow-y-auto px-4 py-3 space-y-3 scrollbar-thin scrollbar-track-ink scrollbar-thumb-gold/20">
@@ -34,7 +34,7 @@ watch(
           <span v-if="entry.speaker" class="text-xs font-semibold text-gold/70 uppercase tracking-wide">
             {{ entry.speaker }}
           </span>
-          <p class="text-parchment leading-relaxed italic">{{ entry.text }}</p>
+          <p class="prose-narrative italic">{{ entry.text }}</p>
         </div>
 
         <!-- Action joueur -->
@@ -52,13 +52,13 @@ watch(
         </div>
 
         <!-- Action IA structurée (combat) -->
-        <div v-else-if="entry.type === 'combat_action' && entry.combatAction" class="rounded border border-blood/30 bg-blood/5 px-3 py-2 text-sm space-y-1">
+        <div v-else-if="entry.type === 'combat_action' && entry.combatAction" class="rpg-card border-blood/30 bg-blood/5 px-3 py-2 text-sm space-y-1">
           <div class="flex items-center gap-2 text-blood font-semibold">
             <span>⚔</span>
             <span>{{ entry.combatAction.attacker_name }}</span>
             <span class="text-parchment/50 font-normal">attaque</span>
             <span>{{ entry.combatAction.target_name }}</span>
-            <span v-if="entry.combatAction.critical" class="ml-1 rounded bg-gold/20 px-1 py-0.5 text-xs text-gold font-bold uppercase tracking-wide">Critique !</span>
+            <span v-if="entry.combatAction.critical" class="rpg-chip text-gold border-gold/50 bg-gold/10 ml-1">Critique !</span>
           </div>
           <div class="flex flex-wrap gap-3 text-xs text-parchment/70">
             <span>d20 : <span class="font-mono text-parchment">{{ entry.combatAction.d20 }}</span></span>

@@ -90,12 +90,12 @@ onMounted(fetchSaves)
         type="text"
         placeholder="Nom de la sauvegarde…"
         maxlength="100"
-        class="flex-1 bg-ink border border-gold/30 rounded px-3 py-1.5 text-parchment text-sm placeholder-parchment/40 focus:outline-none focus:border-gold/60"
+        class="rpg-input flex-1 text-sm"
         @keyup.enter="createSave"
       />
       <button
         :disabled="loading || !saveName.trim()"
-        class="px-3 py-1.5 bg-gold/20 hover:bg-gold/30 border border-gold/40 rounded text-gold text-sm disabled:opacity-40 transition-colors"
+        class="rpg-btn-primary"
         @click="createSave"
       >
         Sauvegarder
@@ -115,7 +115,7 @@ onMounted(fetchSaves)
       <li
         v-for="save in saves"
         :key="save.id"
-        class="flex items-center justify-between gap-2 border border-gold/20 rounded px-3 py-2 bg-ink/50"
+        class="rpg-card flex items-center justify-between gap-2 px-3 py-2"
       >
         <div class="flex-1 min-w-0">
           <p class="text-parchment text-sm font-medium truncate">{{ save.name }}</p>
@@ -127,7 +127,7 @@ onMounted(fetchSaves)
         <div class="flex gap-1 shrink-0">
           <button
             :disabled="loading"
-            class="px-2 py-1 bg-arcane/20 hover:bg-arcane/30 border border-arcane/40 rounded text-arcane text-xs disabled:opacity-40 transition-colors"
+            class="rpg-btn-tonal tone-teal"
             title="Charger cette sauvegarde"
             @click="loadSave(save.id)"
           >
@@ -135,7 +135,7 @@ onMounted(fetchSaves)
           </button>
           <button
             :disabled="loading"
-            class="px-2 py-1 bg-blood/20 hover:bg-blood/30 border border-blood/40 rounded text-blood text-xs disabled:opacity-40 transition-colors"
+            class="rpg-btn-tonal tone-blood"
             title="Supprimer cette sauvegarde"
             @click="deleteSave(save.id)"
           >

@@ -37,7 +37,7 @@ function confirm() {
 
 <template>
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-    <div class="w-[500px] rounded-lg border border-gold/40 bg-ink shadow-2xl p-6">
+    <div class="rpg-card w-[500px] shadow-2xl p-6">
       <h2 class="text-lg font-bold text-gold mb-1">Lancer l'aventure</h2>
       <p class="text-parchment/50 text-xs mb-5">Choisissez comment le Maître du Jeu va débuter la session.</p>
 
@@ -46,12 +46,8 @@ function confirm() {
         <button
           v-for="opt in options"
           :key="opt.id"
-          class="flex-1 rounded border py-2 text-sm font-medium transition-colors"
-          :class="
-            mode === opt.id
-              ? 'border-gold bg-gold/20 text-gold'
-              : 'border-parchment/20 bg-parchment/5 text-parchment/50 hover:border-parchment/40 hover:text-parchment/80'
-          "
+          class="flex-1"
+          :class="mode === opt.id ? 'rpg-btn-tonal tone-gold' : 'rpg-btn-secondary'"
           @click="mode = opt.id"
         >
           {{ opt.label }}
@@ -69,21 +65,21 @@ function confirm() {
           v-model="scriptText"
           rows="5"
           placeholder="Ex : Les aventuriers se retrouvent à Phandalin, embauchés pour escorter un convoi de matériel minier. En chemin, ils découvrent que des gobelins ont attaqué les muletiers..."
-          class="w-full rounded border border-parchment/20 bg-parchment/5 p-3 text-sm text-parchment placeholder-parchment/30 resize-none focus:border-gold/40 focus:outline-none transition-colors"
+          class="rpg-input w-full resize-none"
         />
       </div>
 
       <!-- Actions -->
       <div class="flex justify-end gap-3">
         <button
-          class="rounded border border-parchment/20 px-4 py-2 text-sm text-parchment/60 hover:text-parchment transition-colors"
+          class="rpg-btn-secondary"
           @click="emit('cancel')"
         >
           Annuler
         </button>
         <button
           :disabled="mode === 'script' && !scriptText.trim()"
-          class="rounded border border-gold/60 bg-gold/15 px-5 py-2 text-sm font-semibold text-gold hover:bg-gold/25 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          class="rpg-btn-primary"
           @click="confirm"
         >
           Lancer l'aventure !

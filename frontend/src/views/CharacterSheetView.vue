@@ -86,9 +86,7 @@ const skillProficiencies = computed((): string[] => {
 
 const saveProficiencies = computed((): string[] => {
   const p = character.value?.proficiencies as Record<string, unknown> | undefined
-  // From character proficiencies
   if (Array.isArray(p?.saving_throws)) return p!.saving_throws as string[]
-  // Fallback to SRD class data
   return srdClass.value?.saving_throw_proficiencies ?? []
 })
 
@@ -102,8 +100,6 @@ function saveBonus(ability: string): number {
   return saveProficiencies.value.includes(ability) ? base + profBonus.value : base
 }
 
-// Armor class: check equipped armor, else 10 + DEX mod
-// SRD item fields: category ('light'|'medium'|'heavy'|'shield'), base_ac, dex_cap (0=heavy, null=uncapped)
 const armorClass = computed((): number => {
   if (!character.value) return 10
   const equip = character.value.equipment as Record<string, unknown>[]
@@ -112,7 +108,7 @@ const armorClass = computed((): number => {
   const shield = equip.find((e) => e.equipped && e.category === 'shield')
   const shieldBonus = shield ? 2 : 0
   if (armor && typeof armor.base_ac === 'number') {
-    const dexCap = armor.dex_cap  // null = uncapped, 0 = heavy (no DEX), number = medium cap
+    const dexCap = armor.dex_cap
     const dexMod = mods.value.dex ?? 0
     const dexApplied = dexCap === null ? dexMod : Math.min(dexMod, dexCap as number)
     return armor.base_ac + dexApplied + shieldBonus
@@ -127,9 +123,11 @@ const hpPercent = computed((): number => {
   return Math.max(0, Math.min(100, (character.value.hp_current / character.value.hp_max) * 100))
 })
 
-const hpColorClass = computed((): string => {
+const hpColorVar = computed((): string => {
   const pct = hpPercent.value
-  return pct > 50 ? 'bg-green-600' : pct > 25 ? 'bg-yellow-500' : 'bg-blood'
+  if (pct > 50) return 'var(--color-green)'
+  if (pct > 25) return 'var(--color-gold)'
+  return 'var(--color-blood)'
 })
 
 const isSpellcaster = computed((): boolean => {
@@ -181,7 +179,6 @@ const personalityTraits = computed((): string[] => {
 onMounted(async () => {
   try {
     character.value = await characterApi.get(charId)
-    // Load SRD class in parallel with spells
     const promises: Promise<void>[] = [
       srdApi.getClass(character.value.char_class).then((c) => {
         srdClass.value = c
@@ -210,7 +207,7 @@ function goBack() {
 
 // ─── Inventory actions ─────────────────────────────────────────────────────────
 
-const inventoryLoading = ref<string | null>(null)  // item_id en cours d'action
+const inventoryLoading = ref<string | null>(null)
 const inventoryError = ref<string | null>(null)
 
 const EQUIPPABLE_CATEGORIES = new Set([
@@ -272,117 +269,152 @@ async function confirmDrop() {
 </script>
 
 <template>
-  <div class="min-h-screen bg-ink text-parchment">
+  <div class="min-h-screen" :style="{ background: 'var(--color-bg)', color: 'var(--color-parchment)' }">
 
     <!-- Header bar -->
-    <div class="sticky top-0 z-10 flex items-center gap-3 border-b border-gold/20 bg-ink/95 px-4 py-3 backdrop-blur">
-      <button
-        class="rounded border border-gold/30 px-3 py-1 text-xs text-gold/70 transition hover:border-gold/60 hover:text-gold"
-        @click="goBack"
-      >
-        ← Retour
-      </button>
-      <h1 class="text-lg font-bold tracking-wide text-gold">
-        {{ character?.name ?? 'Chargement…' }}
-      </h1>
-      <span v-if="character" class="text-sm text-parchment/50">
-        Niv. {{ character.level }}
-        {{ character.char_class.charAt(0).toUpperCase() + character.char_class.slice(1) }}
-        · {{ character.species }}
-      </span>
+    <div
+      class="sticky top-0 z-10 flex items-center gap-4 border-b px-6 py-3 backdrop-blur"
+      :style="{ borderColor: 'var(--color-border)', background: 'rgba(14,13,20,0.9)' }"
+    >
+      <button class="rpg-btn-secondary !py-1 !px-3 !text-[11px]" @click="goBack">← Retour</button>
+
+      <div class="flex items-baseline gap-3 min-w-0">
+        <h1
+          class="font-display text-2xl font-bold tracking-wider truncate"
+          :style="{ color: 'var(--color-parchment)' }"
+        >{{ character?.name ?? 'Chargement…' }}</h1>
+        <span
+          v-if="character"
+          class="font-serif italic text-sm shrink-0"
+          :style="{ color: 'var(--color-text-muted)' }"
+        >
+          Niv. {{ character.level }}
+          · {{ character.char_class.charAt(0).toUpperCase() + character.char_class.slice(1) }}
+          · {{ character.species }}
+        </span>
+      </div>
+
       <span
         v-if="character?.is_ai"
-        class="ml-auto rounded bg-arcane/20 px-2 py-0.5 text-xs text-arcane"
+        class="ml-auto rpg-chip"
+        :style="{
+          color: 'var(--color-arcane)',
+          background: 'rgba(192,144,255,0.1)',
+          borderColor: 'rgba(192,144,255,0.3)',
+        }"
       >IA</span>
     </div>
 
     <!-- Error -->
-    <div v-if="error" class="p-6 text-center text-blood">{{ error }}</div>
+    <div
+      v-if="error"
+      class="p-6 text-center font-serif italic"
+      :style="{ color: 'var(--color-blood-light)' }"
+    >{{ error }}</div>
 
     <!-- Loading -->
-    <div v-else-if="loading" class="flex items-center justify-center p-16">
-      <span class="animate-pulse text-parchment/40">Chargement de la fiche…</span>
+    <div
+      v-else-if="loading"
+      class="flex items-center justify-center p-16 font-serif italic"
+      :style="{ color: 'var(--color-text-muted)' }"
+    >
+      <span class="rpg-pulse">Déroulement du parchemin…</span>
     </div>
 
     <!-- Sheet content -->
-    <div v-else-if="character" class="mx-auto max-w-5xl px-4 py-6 space-y-6">
+    <div v-else-if="character" class="mx-auto max-w-5xl px-6 py-8 space-y-8">
 
       <!-- ── Row 1 : Identity + Combat vitals ─────────────────────────────────── -->
-      <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
 
         <!-- Identity card -->
-        <div class="rounded border border-gold/20 bg-ink/60 p-4 space-y-2">
-          <h2 class="text-xs uppercase tracking-widest text-gold/60 font-semibold">Identité</h2>
+        <div class="rpg-card p-5 space-y-3">
+          <div class="rpg-eyebrow">✦ Identité</div>
+
           <div>
-            <p class="text-xl font-bold text-parchment">{{ character.name }}</p>
-            <p class="text-sm text-parchment/60">
+            <p
+              class="font-display text-xl font-bold"
+              :style="{ color: 'var(--color-parchment)' }"
+            >{{ character.name }}</p>
+            <p class="font-serif text-sm italic" :style="{ color: 'var(--color-text-muted)' }">
               {{ character.player_name ? `Joueur : ${character.player_name}` : (character.is_ai ? 'Contrôlé par l\'IA' : 'Joueur humain') }}
             </p>
           </div>
-          <div class="space-y-0.5 text-sm">
-            <div class="flex justify-between">
-              <span class="text-parchment/50">Classe</span>
-              <span class="font-semibold capitalize">{{ character.char_class }}</span>
+
+          <div class="space-y-1 text-sm">
+            <div
+              v-for="(val, label) in {
+                Classe: character.char_class,
+                Niveau: character.level,
+                Espèce: character.species,
+                Historique: backgroundLabel,
+              }"
+              :key="label"
+              class="flex justify-between border-b py-1"
+              :style="{ borderColor: 'var(--color-border)' }"
+            >
+              <span :style="{ color: 'var(--color-text-muted)' }">{{ label }}</span>
+              <span class="font-semibold capitalize" :style="{ color: 'var(--color-parchment)' }">{{ val }}</span>
             </div>
-            <div class="flex justify-between">
-              <span class="text-parchment/50">Niveau</span>
-              <span class="font-semibold">{{ character.level }}</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-parchment/50">Espèce</span>
-              <span class="font-semibold capitalize">{{ character.species }}</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-parchment/50">Historique</span>
-              <span class="font-semibold">{{ backgroundLabel }}</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-parchment/50">Bonus de maîtrise</span>
-              <span class="font-semibold text-gold">{{ fmtMod(profBonus) }}</span>
+            <div class="flex justify-between pt-2">
+              <span :style="{ color: 'var(--color-text-muted)' }">Bonus de maîtrise</span>
+              <span class="font-mono font-bold" :style="{ color: 'var(--color-gold)' }">{{ fmtMod(profBonus) }}</span>
             </div>
           </div>
         </div>
 
         <!-- Combat vitals -->
-        <div class="rounded border border-gold/20 bg-ink/60 p-4 space-y-3 md:col-span-2">
-          <h2 class="text-xs uppercase tracking-widest text-gold/60 font-semibold">Stats de combat</h2>
+        <div class="rpg-card p-5 space-y-4 md:col-span-2">
+          <div class="rpg-eyebrow">⚔ Stats de combat</div>
 
           <!-- HP bar -->
           <div>
-            <div class="flex justify-between text-sm mb-1">
-              <span class="text-parchment/60">Points de Vie</span>
-              <span class="font-mono font-bold">
-                {{ character.hp_current }}<span class="text-parchment/40">/{{ character.hp_max }}</span>
-                <span v-if="character.hp_temp > 0" class="ml-1.5 text-arcane">+{{ character.hp_temp }} tmp</span>
+            <div class="flex justify-between mb-1.5">
+              <span class="text-sm" :style="{ color: 'var(--color-text-muted)' }">Points de Vie</span>
+              <span class="font-mono font-bold text-base" :style="{ color: 'var(--color-parchment)' }">
+                {{ character.hp_current }}<span :style="{ color: 'var(--color-text-dim)' }">/{{ character.hp_max }}</span>
+                <span v-if="character.hp_temp > 0" class="ml-1.5" :style="{ color: 'var(--color-arcane)' }">+{{ character.hp_temp }} tmp</span>
               </span>
             </div>
-            <div class="h-3 rounded-full bg-ink border border-gold/10 overflow-hidden">
+            <div
+              class="h-3 overflow-hidden rounded-full border"
+              :style="{
+                borderColor: 'var(--color-border)',
+                background: 'rgba(0,0,0,0.3)',
+              }"
+            >
               <div
                 class="h-full rounded-full transition-all duration-500"
-                :class="hpColorClass"
-                :style="{ width: `${hpPercent}%` }"
+                :style="{
+                  width: hpPercent + '%',
+                  background: 'linear-gradient(90deg, ' + hpColorVar + ', ' + hpColorVar + 'cc)',
+                  boxShadow: '0 0 10px ' + hpColorVar,
+                }"
               />
             </div>
           </div>
 
           <!-- Combat stats grid -->
           <div class="grid grid-cols-3 gap-3">
-            <div class="flex flex-col items-center rounded border border-gold/20 bg-ink/40 py-2">
-              <span class="text-xs text-parchment/50">Classe d'Armure</span>
-              <span class="text-2xl font-bold text-parchment">{{ armorClass }}</span>
-            </div>
-            <div class="flex flex-col items-center rounded border border-gold/20 bg-ink/40 py-2">
-              <span class="text-xs text-parchment/50">Initiative</span>
-              <span class="text-2xl font-bold" :class="initiative >= 0 ? 'text-green-400' : 'text-blood'">
-                {{ fmtMod(initiative) }}
-              </span>
-            </div>
-            <div class="flex flex-col items-center rounded border border-gold/20 bg-ink/40 py-2">
-              <span class="text-xs text-parchment/50">Dé de Vie</span>
-              <span class="text-2xl font-bold text-parchment">
-                d{{ srdClass?.hit_die ?? '?' }}
-              </span>
-              <span class="text-xs text-parchment/40">× {{ character.level }}</span>
+            <div
+              v-for="stat in [
+                { label: 'Classe d\'Armure', value: String(armorClass), sub: '', color: 'var(--color-parchment)' },
+                { label: 'Initiative', value: fmtMod(initiative), sub: '', color: initiative >= 0 ? 'var(--color-green)' : 'var(--color-blood)' },
+                { label: 'Dé de Vie', value: 'd' + (srdClass?.hit_die ?? '?'), sub: '× ' + character.level, color: 'var(--color-parchment)' },
+              ]"
+              :key="stat.label"
+              class="flex flex-col items-center rounded-lg border py-3"
+              :style="{
+                borderColor: 'var(--color-border-strong)',
+                background: 'var(--color-surface)',
+              }"
+            >
+              <span class="text-[10px] uppercase tracking-widest" :style="{ color: 'var(--color-text-muted)' }">{{ stat.label }}</span>
+              <span
+                class="font-display text-[28px] font-bold leading-tight"
+                :style="{ color: stat.color }"
+              >{{ stat.value }}</span>
+              <span v-if="stat.sub" class="font-mono text-[10px]" :style="{ color: 'var(--color-text-dim)' }">{{ stat.sub }}</span>
             </div>
           </div>
 
@@ -391,251 +423,368 @@ async function confirmDrop() {
             <span
               v-for="cond in character.conditions"
               :key="cond"
-              class="rounded-full bg-blood/25 border border-blood/40 px-2.5 py-0.5 text-xs font-semibold text-blood capitalize"
+              class="rpg-chip capitalize"
+              :style="{
+                color: 'var(--color-blood)',
+                background: 'rgba(232,69,69,0.15)',
+                borderColor: 'rgba(232,69,69,0.4)',
+              }"
             >{{ cond }}</span>
           </div>
-          <p v-else class="text-xs italic text-parchment/30">Aucune condition active</p>
+          <p
+            v-else
+            class="font-serif italic text-xs"
+            :style="{ color: 'var(--color-text-dim)' }"
+          >Aucune condition active</p>
         </div>
       </div>
 
       <!-- ── Row 2 : Ability scores + Saving throws ───────────────────────────── -->
-      <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
 
         <!-- Ability scores -->
-        <div class="rounded border border-gold/20 bg-ink/60 p-4">
-          <h2 class="mb-3 text-xs uppercase tracking-widest text-gold/60 font-semibold">Caractéristiques</h2>
-          <div class="grid grid-cols-3 gap-2">
+        <div class="rpg-card p-5">
+          <div class="rpg-eyebrow mb-4">✦ Caractéristiques</div>
+          <div class="grid grid-cols-3 gap-2.5">
             <div
               v-for="(labels, key) in ABILITY_LABELS"
               :key="key"
-              class="flex flex-col items-center rounded border border-gold/20 bg-ink/40 py-2.5 px-1"
+              class="flex flex-col items-center rounded-lg border py-3 px-1"
+              :style="{
+                borderColor: 'var(--color-border-strong)',
+                background: 'var(--color-surface)',
+              }"
             >
-              <span class="text-xs font-bold text-parchment/50 tracking-wide">{{ labels.abbr }}</span>
-              <span class="text-2xl font-bold text-parchment my-0.5">{{ scores[key] ?? '—' }}</span>
               <span
-                class="text-sm font-semibold px-2 py-0.5 rounded"
-                :class="(mods[key] ?? 0) >= 0 ? 'text-green-400' : 'text-blood'"
+                class="font-display text-[11px] font-bold tracking-[0.15em]"
+                :style="{ color: 'var(--color-text-muted)' }"
+              >{{ labels.abbr }}</span>
+              <span
+                class="font-display text-[26px] font-bold leading-tight my-0.5"
+                :style="{ color: 'var(--color-parchment)' }"
+              >{{ scores[key] ?? '—' }}</span>
+              <span
+                class="font-mono text-sm font-bold rounded px-2 py-0.5"
+                :style="{
+                  color: (mods[key] ?? 0) >= 0 ? 'var(--color-green)' : 'var(--color-blood)',
+                  background: (mods[key] ?? 0) >= 0 ? 'rgba(111,217,111,0.1)' : 'rgba(232,69,69,0.1)',
+                }"
               >{{ fmtMod(mods[key] ?? 0) }}</span>
-              <span class="mt-0.5 text-xs text-parchment/30">{{ labels.name_fr }}</span>
+              <span
+                class="font-serif italic text-[10px] mt-1"
+                :style="{ color: 'var(--color-text-dim)' }"
+              >{{ labels.name_fr }}</span>
             </div>
           </div>
         </div>
 
         <!-- Saving throws -->
-        <div class="rounded border border-gold/20 bg-ink/60 p-4">
-          <h2 class="mb-3 text-xs uppercase tracking-widest text-gold/60 font-semibold">Jets de Sauvegarde</h2>
+        <div class="rpg-card p-5">
+          <div class="rpg-eyebrow mb-4">✦ Jets de Sauvegarde</div>
           <div class="space-y-1.5">
             <div
               v-for="(labels, key) in ABILITY_LABELS"
               :key="key"
-              class="flex items-center gap-2"
+              class="flex items-center gap-3 rounded px-2 py-1.5"
+              :style="{
+                background: saveProficiencies.includes(key) ? 'rgba(240,199,100,0.05)' : 'transparent',
+              }"
             >
-              <!-- Proficiency indicator -->
               <div
-                class="h-3 w-3 rounded-full border shrink-0 transition-colors"
-                :class="saveProficiencies.includes(key)
-                  ? 'border-gold bg-gold'
-                  : 'border-parchment/30 bg-transparent'"
+                class="h-3 w-3 rounded-full border shrink-0"
+                :style="{
+                  borderColor: saveProficiencies.includes(key) ? 'var(--color-gold)' : 'var(--color-border-strong)',
+                  background: saveProficiencies.includes(key) ? 'var(--color-gold)' : 'transparent',
+                  boxShadow: saveProficiencies.includes(key) ? '0 0 6px var(--color-gold)' : 'none',
+                }"
               />
-              <span class="flex-1 text-sm text-parchment/80">{{ labels.name_fr }}</span>
+              <span class="flex-1 text-sm" :style="{ color: 'var(--color-parchment)' }">{{ labels.name_fr }}</span>
               <span
-                class="font-mono text-sm font-semibold w-8 text-right"
-                :class="saveBonus(key) >= 0 ? 'text-green-400' : 'text-blood'"
+                class="font-mono text-sm font-bold w-8 text-right"
+                :style="{ color: saveBonus(key) >= 0 ? 'var(--color-green)' : 'var(--color-blood)' }"
               >{{ fmtMod(saveBonus(key)) }}</span>
             </div>
           </div>
-          <p class="mt-3 text-xs text-parchment/30">
+          <p class="mt-3 font-serif italic text-xs" :style="{ color: 'var(--color-text-dim)' }">
             Disque plein = maîtrise incluse
           </p>
         </div>
       </div>
 
       <!-- ── Row 3 : Skills ────────────────────────────────────────────────────── -->
-      <div class="rounded border border-gold/20 bg-ink/60 p-4">
-        <h2 class="mb-3 text-xs uppercase tracking-widest text-gold/60 font-semibold">Compétences</h2>
+      <div class="rpg-card p-5">
+        <div class="rpg-eyebrow mb-4">✦ Compétences</div>
         <div class="grid grid-cols-1 gap-1 sm:grid-cols-2 md:grid-cols-3">
           <div
             v-for="skill in SKILLS"
             :key="skill.id"
-            class="flex items-center gap-2 rounded px-2 py-1"
-            :class="skillProficiencies.includes(skill.id) ? 'bg-gold/5' : ''"
+            class="flex items-center gap-2 rounded px-2.5 py-1.5 transition-colors"
+            :style="{
+              background: skillProficiencies.includes(skill.id) ? 'rgba(240,199,100,0.05)' : 'transparent',
+            }"
           >
             <div
               class="h-2.5 w-2.5 rounded-full border shrink-0"
-              :class="skillProficiencies.includes(skill.id)
-                ? 'border-gold bg-gold'
-                : 'border-parchment/30 bg-transparent'"
+              :style="{
+                borderColor: skillProficiencies.includes(skill.id) ? 'var(--color-gold)' : 'var(--color-border-strong)',
+                background: skillProficiencies.includes(skill.id) ? 'var(--color-gold)' : 'transparent',
+              }"
             />
-            <span class="flex-1 text-sm text-parchment/80">{{ skill.name_fr }}</span>
-            <span class="text-xs text-parchment/40 uppercase font-mono mr-1">{{ ABILITY_LABELS[skill.ability]?.abbr }}</span>
+            <span class="flex-1 text-sm" :style="{ color: 'var(--color-parchment)' }">{{ skill.name_fr }}</span>
+            <span class="font-mono text-[10px] uppercase mr-1" :style="{ color: 'var(--color-text-dim)' }">{{ ABILITY_LABELS[skill.ability]?.abbr }}</span>
             <span
-              class="font-mono text-sm font-semibold w-7 text-right"
-              :class="skillBonus(skill) >= 0 ? 'text-green-400' : 'text-blood'"
+              class="font-mono text-sm font-bold w-7 text-right"
+              :style="{ color: skillBonus(skill) >= 0 ? 'var(--color-green)' : 'var(--color-blood)' }"
             >{{ fmtMod(skillBonus(skill)) }}</span>
           </div>
         </div>
       </div>
 
       <!-- ── Row 4 : Spells (if spellcaster) ──────────────────────────────────── -->
-      <div v-if="isSpellcaster" class="rounded border border-arcane/30 bg-ink/60 p-4">
-        <h2 class="mb-3 text-xs uppercase tracking-widest text-arcane/70 font-semibold">Magie</h2>
+      <div
+        v-if="isSpellcaster"
+        class="rounded-[10px] border p-5"
+        :style="{
+          borderColor: 'rgba(192,144,255,0.3)',
+          background: 'linear-gradient(135deg, rgba(192,144,255,0.05), var(--color-bg-elev))',
+        }"
+      >
+        <div
+          class="mb-4 font-display text-[11px] font-bold tracking-[0.2em] uppercase"
+          :style="{ color: 'var(--color-arcane)' }"
+        >✦ Magie</div>
 
         <!-- Spell slots -->
-        <div v-if="spellSlotEntries.length" class="mb-4">
-          <p class="mb-2 text-xs text-parchment/50">Emplacements de sorts</p>
+        <div v-if="spellSlotEntries.length" class="mb-5">
+          <p class="mb-2 text-[10px] uppercase tracking-wider" :style="{ color: 'var(--color-text-muted)' }">
+            Emplacements de sorts
+          </p>
           <div class="flex flex-wrap gap-3">
             <div
               v-for="slot in spellSlotEntries"
               :key="slot.level"
-              class="rounded border border-arcane/30 bg-arcane/10 px-3 py-2 text-center"
+              class="rounded-lg border px-3 py-2 text-center"
+              :style="{
+                borderColor: 'rgba(192,144,255,0.3)',
+                background: 'rgba(192,144,255,0.08)',
+              }"
             >
-              <p class="text-xs text-parchment/50 mb-1">Niv. {{ slot.level }}</p>
+              <p class="font-display text-xs font-bold mb-1" :style="{ color: 'var(--color-arcane)' }">
+                Niv. {{ slot.level }}
+              </p>
               <div class="flex gap-1 justify-center">
                 <div
                   v-for="i in slot.total"
                   :key="i"
-                  class="h-3 w-3 rounded-full border border-arcane/50"
-                  :class="i <= slot.total - slot.used ? 'bg-arcane' : 'bg-transparent'"
+                  class="h-3 w-3 rounded-full border"
+                  :style="{
+                    borderColor: 'rgba(192,144,255,0.6)',
+                    background: i <= slot.total - slot.used ? 'var(--color-arcane)' : 'transparent',
+                    boxShadow: i <= slot.total - slot.used ? '0 0 6px var(--color-arcane)' : 'none',
+                  }"
                 />
               </div>
-              <p class="text-xs text-parchment/40 mt-1">{{ slot.total - slot.used }}/{{ slot.total }}</p>
+              <p class="font-mono text-[10px] mt-1.5" :style="{ color: 'var(--color-text-muted)' }">
+                {{ slot.total - slot.used }}/{{ slot.total }}
+              </p>
             </div>
           </div>
         </div>
 
         <!-- Known spells -->
         <div>
-          <p class="mb-2 text-xs text-parchment/50">Sorts connus ({{ character.known_spells?.length ?? 0 }})</p>
+          <p class="mb-2 text-[10px] uppercase tracking-wider" :style="{ color: 'var(--color-text-muted)' }">
+            Sorts connus ({{ character.known_spells?.length ?? 0 }})
+          </p>
           <div v-if="spellDetails.length" class="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
             <div
               v-for="spell in spellDetails"
               :key="spell.id"
-              class="rounded border border-arcane/20 bg-ink/40 px-3 py-2"
+              class="rounded-lg border px-3 py-2"
+              :style="{
+                borderColor: 'rgba(192,144,255,0.2)',
+                background: 'var(--color-surface)',
+              }"
             >
               <div class="flex items-start justify-between gap-1">
-                <p class="text-sm font-semibold text-parchment leading-tight">{{ spell.name_fr }}</p>
-                <span class="shrink-0 rounded bg-arcane/20 px-1.5 py-0.5 text-xs text-arcane">
-                  {{ spell.level === 0 ? 'Tour' : `Niv.${spell.level}` }}
-                </span>
+                <p
+                  class="font-display text-sm font-bold leading-tight"
+                  :style="{ color: 'var(--color-parchment)' }"
+                >{{ spell.name_fr }}</p>
+                <span
+                  class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold"
+                  :style="{
+                    color: 'var(--color-arcane)',
+                    background: 'rgba(192,144,255,0.15)',
+                  }"
+                >{{ spell.level === 0 ? 'Tour' : 'Niv.' + spell.level }}</span>
               </div>
-              <p class="mt-0.5 text-xs text-parchment/40">{{ SPELL_SCHOOLS[spell.school] ?? spell.school }}</p>
-              <p v-if="spell.damage_dice" class="mt-0.5 text-xs text-gold/70">
-                {{ spell.damage_dice }} {{ spell.damage_type }}
+              <p class="mt-0.5 font-serif italic text-xs" :style="{ color: 'var(--color-text-muted)' }">
+                {{ SPELL_SCHOOLS[spell.school] ?? spell.school }}
               </p>
+              <p
+                v-if="spell.damage_dice"
+                class="mt-1 font-mono text-xs"
+                :style="{ color: 'var(--color-gold)' }"
+              >{{ spell.damage_dice }} {{ spell.damage_type }}</p>
             </div>
           </div>
-          <!-- Fallback: IDs only -->
           <div v-else class="flex flex-wrap gap-1.5">
             <span
               v-for="spellId in character.known_spells"
               :key="spellId"
-              class="rounded bg-arcane/10 border border-arcane/20 px-2 py-0.5 text-xs text-arcane/80"
+              class="rpg-chip"
+              :style="{
+                color: 'var(--color-arcane)',
+                background: 'rgba(192,144,255,0.08)',
+                borderColor: 'rgba(192,144,255,0.25)',
+              }"
             >{{ spellId }}</span>
           </div>
         </div>
       </div>
 
       <!-- ── Row 5 : Equipment ─────────────────────────────────────────────────── -->
-      <div class="rounded border border-gold/20 bg-ink/60 p-4">
-        <h2 class="mb-3 text-xs uppercase tracking-widest text-gold/60 font-semibold">Équipement</h2>
-        <p v-if="inventoryError" class="mb-2 rounded border border-blood/30 bg-blood/10 px-3 py-1.5 text-xs text-blood">
-          {{ inventoryError }}
-        </p>
+      <div class="rpg-card p-5">
+        <div class="rpg-eyebrow mb-4">✦ Équipement</div>
+        <p
+          v-if="inventoryError"
+          class="mb-3 rounded-lg border px-3 py-2 text-xs"
+          :style="{
+            borderColor: 'rgba(232,69,69,0.4)',
+            background: 'rgba(232,69,69,0.1)',
+            color: 'var(--color-blood-light)',
+          }"
+        >{{ inventoryError }}</p>
         <div v-if="character.equipment?.length" class="space-y-1.5">
           <div
             v-for="(item, idx) in (character.equipment as Record<string, unknown>[])"
             :key="idx"
-            class="flex items-center gap-2 rounded border px-3 py-1.5 text-sm"
-            :class="item.equipped
-              ? 'border-gold/30 bg-gold/5 text-parchment'
-              : 'border-parchment/10 bg-transparent text-parchment/60'"
+            class="flex items-center gap-3 rounded-lg border px-3 py-2 text-sm transition-colors"
+            :style="{
+              borderColor: item.equipped ? 'rgba(240,199,100,0.3)' : 'var(--color-border)',
+              background: item.equipped ? 'rgba(240,199,100,0.05)' : 'transparent',
+              color: item.equipped ? 'var(--color-parchment)' : 'var(--color-text-muted)',
+            }"
           >
-            <!-- Équipé indicator -->
-            <span class="shrink-0 text-xs" :title="item.equipped ? 'Équipé' : 'Dans le sac'">
-              {{ item.equipped ? '⚔' : '○' }}
-            </span>
+            <span
+              class="shrink-0 text-base"
+              :style="{ color: item.equipped ? 'var(--color-gold)' : 'var(--color-text-dim)' }"
+              :title="item.equipped ? 'Équipé' : 'Dans le sac'"
+            >{{ item.equipped ? '⚔' : '○' }}</span>
             <span class="flex-1 capitalize">{{ String(item.name_fr ?? item.id ?? 'Objet inconnu') }}</span>
-            <span v-if="item.quantity && Number(item.quantity) > 1" class="text-xs text-parchment/40">
-              ×{{ item.quantity }}
-            </span>
-            <!-- Action buttons -->
+            <span
+              v-if="item.quantity && Number(item.quantity) > 1"
+              class="font-mono text-xs"
+              :style="{ color: 'var(--color-text-dim)' }"
+            >×{{ item.quantity }}</span>
             <div class="flex shrink-0 gap-1">
               <button
                 v-if="isEquippable(item)"
-                class="rounded border px-2 py-0.5 text-xs transition-colors"
-                :class="item.equipped
-                  ? 'border-gold/40 text-gold/70 hover:bg-gold/10'
-                  : 'border-parchment/20 text-parchment/50 hover:border-gold/30 hover:text-parchment'"
+                class="rounded border px-2 py-0.5 text-[10px] uppercase tracking-wide font-semibold transition-colors"
+                :style="{
+                  borderColor: item.equipped ? 'var(--color-gold)' : 'var(--color-border-strong)',
+                  color: item.equipped ? 'var(--color-gold)' : 'var(--color-text-muted)',
+                }"
                 :disabled="inventoryLoading === item.id"
                 @click="onEquip(String(item.id))"
               >{{ item.equipped ? 'Retirer' : 'Équiper' }}</button>
               <button
                 v-if="isConsumable(item)"
-                class="rounded border border-arcane/30 px-2 py-0.5 text-xs text-arcane/70 transition-colors hover:bg-arcane/10"
+                class="rpg-btn-tonal tone-arcane !py-0.5 !px-2 !text-[10px]"
                 :disabled="inventoryLoading === item.id"
                 @click="onUse(String(item.id))"
               >Utiliser</button>
               <button
-                class="rounded border border-parchment/10 px-2 py-0.5 text-xs text-parchment/30 transition-colors hover:border-blood/30 hover:text-blood/70"
+                class="rounded border px-2 py-0.5 text-[10px] uppercase tracking-wide transition-colors"
+                :style="{
+                  borderColor: 'var(--color-border)',
+                  color: 'var(--color-text-dim)',
+                }"
                 :disabled="inventoryLoading === item.id"
                 @click="itemToDrop = String(item.id)"
               >Lâcher</button>
             </div>
           </div>
         </div>
-        <p v-else class="text-sm italic text-parchment/30">Aucun objet</p>
+        <p
+          v-else
+          class="font-serif italic text-sm"
+          :style="{ color: 'var(--color-text-dim)' }"
+        >Aucun objet</p>
       </div>
 
-      <!-- Confirmation dialog : lâcher un objet -->
+      <!-- Confirmation dialog -->
       <div
         v-if="itemToDrop"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+        class="fixed inset-0 z-50 flex items-center justify-center"
+        :style="{ background: 'rgba(0,0,0,0.75)' }"
         @click.self="itemToDrop = null"
       >
-        <div class="rounded border border-blood/30 bg-ink p-6 shadow-xl w-80">
-          <p class="mb-1 text-sm font-semibold text-parchment">Lâcher cet objet ?</p>
-          <p class="mb-4 text-xs text-parchment/50">Cette action est irréversible.</p>
+        <div
+          class="rounded-[14px] border p-6 shadow-2xl w-80"
+          :style="{
+            borderColor: 'rgba(232,69,69,0.3)',
+            background: 'var(--color-bg-elev)',
+          }"
+        >
+          <p
+            class="mb-1 font-display text-base font-bold"
+            :style="{ color: 'var(--color-parchment)' }"
+          >Lâcher cet objet ?</p>
+          <p
+            class="mb-5 font-serif italic text-sm"
+            :style="{ color: 'var(--color-text-muted)' }"
+          >Cette action est irréversible.</p>
           <div class="flex gap-3">
-            <button
-              class="flex-1 rounded border border-blood/50 bg-blood/10 py-2 text-sm font-semibold text-blood transition-colors hover:bg-blood/20"
-              @click="confirmDrop"
-            >Confirmer</button>
-            <button
-              class="flex-1 rounded border border-parchment/20 py-2 text-sm text-parchment/50 transition-colors hover:text-parchment"
-              @click="itemToDrop = null"
-            >Annuler</button>
+            <button class="rpg-btn-tonal tone-blood flex-1 justify-center !py-2" @click="confirmDrop">Confirmer</button>
+            <button class="rpg-btn-secondary flex-1 justify-center !py-2" @click="itemToDrop = null">Annuler</button>
           </div>
         </div>
       </div>
 
-      <!-- ── Row 6 : Traits de classe (niveau 1) ──────────────────────────────── -->
-      <div v-if="srdClass?.level_1_features?.length" class="rounded border border-gold/20 bg-ink/60 p-4">
-        <h2 class="mb-3 text-xs uppercase tracking-widest text-gold/60 font-semibold">
-          Aptitudes de classe — {{ srdClass.name_fr }}
-        </h2>
+      <!-- ── Row 6 : Traits de classe ─────────────────────────────────────────── -->
+      <div v-if="srdClass?.level_1_features?.length" class="rpg-card p-5">
+        <div class="rpg-eyebrow mb-4">
+          ✦ Aptitudes de classe — {{ srdClass.name_fr }}
+        </div>
         <div class="grid gap-3 sm:grid-cols-2">
           <div
             v-for="feature in srdClass.level_1_features"
             :key="feature.name"
-            class="rounded border border-gold/10 bg-ink/40 px-3 py-2"
+            class="rounded-lg border px-4 py-3"
+            :style="{
+              borderColor: 'var(--color-border)',
+              background: 'var(--color-surface)',
+            }"
           >
-            <p class="text-sm font-semibold text-gold/80">{{ feature.name_fr }}</p>
-            <p class="mt-1 text-xs text-parchment/60 leading-relaxed">{{ feature.description }}</p>
+            <p
+              class="font-display text-sm font-bold tracking-wide"
+              :style="{ color: 'var(--color-gold)' }"
+            >{{ feature.name_fr }}</p>
+            <p
+              class="mt-1.5 font-serif text-[13px] leading-relaxed"
+              :style="{ color: 'var(--color-parchment-dark)' }"
+            >{{ feature.description }}</p>
           </div>
         </div>
       </div>
 
       <!-- ── Row 7 : Personnalité ─────────────────────────────────────────────── -->
-      <div v-if="personalityTraits.length" class="rounded border border-gold/20 bg-ink/60 p-4">
-        <h2 class="mb-3 text-xs uppercase tracking-widest text-gold/60 font-semibold">Personnalité</h2>
-        <ul class="space-y-1">
+      <div v-if="personalityTraits.length" class="rpg-card p-5">
+        <div class="rpg-eyebrow mb-4">✦ Personnalité</div>
+        <ul class="space-y-2">
           <li
             v-for="(trait, i) in personalityTraits"
             :key="i"
-            class="flex items-start gap-2 text-sm text-parchment/70"
+            class="flex items-start gap-3 font-serif text-sm leading-relaxed"
+            :style="{ color: 'var(--color-parchment-dark)' }"
           >
-            <span class="mt-0.5 text-gold/40 shrink-0">·</span>
-            <span>{{ trait }}</span>
+            <span
+              class="mt-0.5 shrink-0"
+              :style="{ color: 'var(--color-ember)' }"
+            >❞</span>
+            <span class="italic">{{ trait }}</span>
           </li>
         </ul>
       </div>
