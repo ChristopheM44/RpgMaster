@@ -58,5 +58,6 @@ tts_service/*.onnx
 tts_service/*.bin
 tts_service/.venv/
 
-# Runtime settings (config dynamique TTS)
+# Runtime settings (config dynamique TTS + LLM — peut contenir des clés API)
 backend/runtime_settings.json
+backend/llm_runtime.json

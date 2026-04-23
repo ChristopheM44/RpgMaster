@@ -8,7 +8,7 @@ from typing import Optional
 import httpx
 import ollama
 
-from app.config import get_gm_model, get_ollama_url
+from app.config import get_gm_model, get_ollama_api_key, get_ollama_url
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +27,17 @@ class OllamaClient:
     Encapsule le SDK officiel ollama-python (>=0.4.0).
     """
 
-    def __init__(self, base_url: Optional[str] = None, model: Optional[str] = None):
-        self._explicit_base_url = base_url  # None = suit les paramètres runtime
-        self._explicit_model = model         # None = suit les paramètres runtime
+    def __init__(
+        self,
+        base_url: Optional[str] = None,
+        model: Optional[str] = None,
+        headers: Optional[dict] = None,
+    ):
+        self._explicit_base_url = base_url
+        self._explicit_model = model
+        self._explicit_headers = headers  # None = lire depuis config au moment de la création
         self._cached_url: Optional[str] = None
+        self._cached_headers: Optional[dict] = None
         self._client: Optional[ollama.AsyncClient] = None
 
     @property
@@ -41,12 +48,29 @@ class OllamaClient:
     def model(self) -> str:
         return self._explicit_model or get_gm_model()
 
+    @property
+    def _auth_headers(self) -> Optional[dict]:
+        if self._explicit_headers is not None:
+            return self._explicit_headers or None
+        api_key = get_ollama_api_key()
+        return {"Authorization": f"Bearer {api_key}"} if api_key else None
+
     def _get_client(self) -> ollama.AsyncClient:
-        """Retourne le client Ollama, en le recréant si l'URL a changé."""
+        """Retourne le client Ollama, en le recréant si l'URL ou les headers ont changé."""
         current_url = self.base_url
-        if self._client is None or self._cached_url != current_url:
-            self._client = ollama.AsyncClient(host=current_url, timeout=_LLM_TIMEOUT)
+        current_headers = self._auth_headers
+        if (
+            self._client is None
+            or self._cached_url != current_url
+            or self._cached_headers != current_headers
+        ):
+            self._client = ollama.AsyncClient(
+                host=current_url,
+                headers=current_headers,
+                timeout=_LLM_TIMEOUT,
+            )
             self._cached_url = current_url
+            self._cached_headers = current_headers
         return self._client
 
     # -------------------------------------------------------------------------

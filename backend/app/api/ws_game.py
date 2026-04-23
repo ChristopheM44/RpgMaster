@@ -1198,6 +1198,11 @@ async def _handle_move(
 
 async def _send_welcome_narration(session_id: str, active: Any, db: AsyncSession) -> None:
     """Demande au GMAgent de décrire la scène courante quand un joueur rejoint en exploration."""
+    # Guard d'idempotence : atomique en asyncio (pas d'await avant cette ligne)
+    if active.state_data.get("welcome_narration_sent"):
+        return
+    active.state_data["welcome_narration_sent"] = True
+
     try:
         gm_response = await action_resolver._gm.narrate(
             game_state=active.state_data,

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import TtsSettingsPanel from '../components/ui/TtsSettingsPanel.vue'
-import OllamaStatusPanel from '../components/ui/OllamaStatusPanel.vue'
+import LlmProviderPanel from '../components/ui/LlmProviderPanel.vue'
 </script>
 
 <template>
@@ -12,9 +12,9 @@ import OllamaStatusPanel from '../components/ui/OllamaStatusPanel.vue'
         <p class="text-parchment/60 mt-1">Paramètres du serveur RpgMaster.</p>
       </div>
 
-      <!-- Panel LLM / Ollama -->
+      <!-- Panel LLM / Provider -->
       <div class="rounded-xl border border-parchment/10 bg-ink/60 p-6">
-        <OllamaStatusPanel />
+        <LlmProviderPanel />
       </div>
 
       <!-- Panel TTS -->

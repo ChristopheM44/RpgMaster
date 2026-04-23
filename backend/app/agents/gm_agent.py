@@ -8,7 +8,10 @@ from typing import Any, Optional
 from app.agents.base_agent import BaseAgent
 from app.agents.context_manager import ContextManager
 from app.agents.schemas import AgentContext, AgentResponse, GMAction, GMResponse
-from app.llm.ollama_client import OllamaClient, OllamaError
+from app.llm.base_client import LLMClient
+from app.llm.model_router import router
+from app.llm.ollama_client import OllamaError
+from app.llm.openai_compatible_client import OpenAICompatibleError
 
 logger = logging.getLogger(__name__)
 
@@ -22,15 +25,15 @@ class GMAgent(BaseAgent):
     """Agent Maître du Jeu : narration, gestion des scènes et des PNJ.
 
     Pipeline complet :
-    contexte → template Jinja2 → LLM (Ollama) → extraction JSON → GMResponse Pydantic
+    contexte → template Jinja2 → LLM → extraction JSON → GMResponse Pydantic
     """
 
     def __init__(
         self,
-        client: Optional[OllamaClient] = None,
+        client: Optional[LLMClient] = None,
         model: Optional[str] = None,
     ):
-        self._client = client or OllamaClient(model=model)
+        self._client: LLMClient = client or router.get_gm_client()
         self._system_prompt = self._load_system_prompt("gm_system.txt")
 
     # -------------------------------------------------------------------------
@@ -135,7 +138,7 @@ class GMAgent(BaseAgent):
 
         try:
             raw = await self._client.chat(messages=messages, temperature=0.75, max_tokens=2048)
-        except OllamaError as exc:
+        except (OllamaError, OpenAICompatibleError) as exc:
             logger.error("GMAgent : appel LLM échoué : %s", exc)
             return GMResponse(narration=_FALLBACK_NARRATION)
 

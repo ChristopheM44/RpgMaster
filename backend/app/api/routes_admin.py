@@ -1,12 +1,12 @@
-"""Routes d'administration — configuration TTS runtime + état LLM Ollama.
+"""Routes d'administration — configuration TTS runtime + état LLM.
 
 Endpoints :
     GET  /api/admin/settings          → paramètres TTS courants
     PUT  /api/admin/settings          → mise à jour partielle TTS
     GET  /api/admin/tts/health        → disponibilité de chaque backend TTS
     GET  /api/admin/llm/health        → état Ollama (disponibilité + modèles)
-    GET  /api/admin/llm/settings      → paramètres LLM courants
-    PUT  /api/admin/llm/settings      → mise à jour URL/modèles Ollama (runtime)
+    GET  /api/admin/llm/settings      → paramètres LLM courants (provider inclus)
+    PUT  /api/admin/llm/settings      → mise à jour provider/URL/modèles/clé API (runtime)
 """
 from __future__ import annotations
 
@@ -16,7 +16,16 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, field_validator
 
-from app.config import get_gm_model, get_ollama_url, get_player_model, update_llm_settings
+from app.config import (
+    get_gm_model,
+    get_llm_provider,
+    get_ollama_url,
+    get_openai_base_url,
+    get_player_model,
+    is_ollama_api_key_set,
+    is_openai_api_key_set,
+    update_llm_settings,
+)
 from app.llm.voxtral_client import tts_router
 
 router = APIRouter()
@@ -63,12 +72,27 @@ class LlmSettingsResponse(BaseModel):
     ollama_base_url: str
     gm_model: str
     player_model: str
+    llm_provider: str
+    openai_base_url: str
+    api_key_set: bool
+    ollama_api_key_set: bool
 
 
 class LlmSettingsUpdate(BaseModel):
     ollama_base_url: Optional[str] = None
     gm_model: Optional[str] = None
     player_model: Optional[str] = None
+    llm_provider: Optional[str] = None
+    openai_base_url: Optional[str] = None
+    openai_api_key: Optional[str] = None
+    ollama_api_key: Optional[str] = None
+
+    @field_validator("llm_provider")
+    @classmethod
+    def validate_provider(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in ("ollama", "openai_compatible"):
+            raise ValueError("llm_provider doit être 'ollama' ou 'openai_compatible'")
+        return v
 
 
 # ---------------------------------------------------------------------------
@@ -133,19 +157,31 @@ async def get_llm_settings() -> LlmSettingsResponse:
         ollama_base_url=get_ollama_url(),
         gm_model=get_gm_model(),
         player_model=get_player_model(),
+        llm_provider=get_llm_provider(),
+        openai_base_url=get_openai_base_url(),
+        api_key_set=is_openai_api_key_set(),
+        ollama_api_key_set=is_ollama_api_key_set(),
     )
 
 
 @router.put("/llm/settings", response_model=LlmSettingsResponse)
 async def update_llm_settings_endpoint(body: LlmSettingsUpdate) -> LlmSettingsResponse:
-    """Met à jour l'URL et/ou les modèles Ollama à chaud, sans redémarrage."""
+    """Met à jour le provider et/ou les paramètres LLM à chaud, sans redémarrage."""
     update_llm_settings(
         ollama_base_url=body.ollama_base_url,
         gm_model=body.gm_model,
         player_model=body.player_model,
+        llm_provider=body.llm_provider,
+        openai_base_url=body.openai_base_url,
+        openai_api_key=body.openai_api_key,
+        ollama_api_key=body.ollama_api_key,
     )
     return LlmSettingsResponse(
         ollama_base_url=get_ollama_url(),
         gm_model=get_gm_model(),
         player_model=get_player_model(),
+        llm_provider=get_llm_provider(),
+        openai_base_url=get_openai_base_url(),
+        api_key_set=is_openai_api_key_set(),
+        ollama_api_key_set=is_ollama_api_key_set(),
     )

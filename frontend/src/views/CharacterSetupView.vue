@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { characterApi, pregenApi, gameApi, sessionApi } from '../services/api'
 import type { Character, PregenTemplate, Session } from '../types'
+import AdventureStartModal from '../components/ui/AdventureStartModal.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -23,6 +24,7 @@ const startingGame = ref(false)
 const errorMsg = ref<string | null>(null)
 
 // Modal prétiré
+const showStartModal = ref(false)
 const showPregenModal = ref(false)
 const selectedPregen = ref<PregenTemplate | null>(null)
 const pregenCustomName = ref('')
@@ -166,12 +168,19 @@ async function deleteCharacter(id: string) {
 
 // ─── Start game ───────────────────────────────────────────────────────────────
 
-async function startGame() {
+async function startGame(mode: 'libre' | 'script' | 'auto', script?: string) {
   if (!canStart.value) return
+  showStartModal.value = false
   startingGame.value = true
   errorMsg.value = null
   try {
-    await gameApi.start(sessionId)
+    const body =
+      mode === 'script' && script
+        ? { adventure_script: script }
+        : mode === 'auto'
+          ? { auto_generate: true }
+          : undefined
+    await gameApi.start(sessionId, body)
     router.push({ name: 'game-session', params: { id: sessionId } })
   } catch {
     errorMsg.value = 'Impossible de lancer la partie. Vérifiez que le backend est démarré.'
@@ -328,7 +337,7 @@ function classIcon(classId: string): string {
         <button
           :disabled="!canStart || startingGame"
           class="w-full rounded-lg bg-blood py-4 text-xl font-bold text-parchment transition hover:bg-blood-light disabled:cursor-not-allowed disabled:opacity-40"
-          @click="startGame"
+          @click="showStartModal = true"
         >
           <span v-if="startingGame">Démarrage en cours...</span>
           <span v-else-if="!canStart">Ajoutez au moins un personnage pour commencer</span>
@@ -462,6 +471,15 @@ function classIcon(classId: string): string {
           </div>
         </div>
       </div>
+    </Teleport>
+
+    <!-- ─── Modal Lancement de l'aventure ────────────────────────────────────── -->
+    <Teleport to="body">
+      <AdventureStartModal
+        v-if="showStartModal"
+        @confirm="startGame"
+        @cancel="showStartModal = false"
+      />
     </Teleport>
 
   </div>

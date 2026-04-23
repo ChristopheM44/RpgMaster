@@ -21,6 +21,7 @@ import type {
   TtsHealthResponse,
   OllamaHealthResponse,
   LlmSettings,
+  LlmSettingsUpdate,
 } from '../types'
 
 const BASE_URL = 'http://localhost:8000/api'
@@ -216,7 +217,7 @@ export const adminApi = {
 
   getLlmSettings: () => request<LlmSettings>('/admin/llm/settings'),
 
-  updateLlmSettings: (data: Partial<LlmSettings>) =>
+  updateLlmSettings: (data: LlmSettingsUpdate) =>
     request<LlmSettings>('/admin/llm/settings', {
       method: 'PUT',
       body: JSON.stringify(data),

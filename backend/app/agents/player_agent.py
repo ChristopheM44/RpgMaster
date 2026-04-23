@@ -13,7 +13,10 @@ from app.agents.schemas import (
     PlayerActionChoice,
     PlayerPersonality,
 )
-from app.llm.ollama_client import OllamaClient, OllamaError
+from app.llm.base_client import LLMClient
+from app.llm.model_router import router
+from app.llm.ollama_client import OllamaError
+from app.llm.openai_compatible_client import OpenAICompatibleError
 
 logger = logging.getLogger(__name__)
 
@@ -87,13 +90,13 @@ class PlayerAgent(BaseAgent):
         character_id: str,
         character_name: str,
         personality: Optional[PlayerPersonality] = None,
-        client: Optional[OllamaClient] = None,
+        client: Optional[LLMClient] = None,
         model: Optional[str] = None,
     ):
         self._character_id = character_id
         self._character_name = character_name
         self._personality = personality or PlayerPersonality(traits=["brave"])
-        self._client = client or OllamaClient(model=model)
+        self._client: LLMClient = client or router.get_player_client()
         self._system_prompt = self._build_system_prompt()
 
     # -------------------------------------------------------------------------
@@ -251,7 +254,7 @@ class PlayerAgent(BaseAgent):
 
         try:
             raw = await self._client.chat(messages=messages, temperature=0.8, max_tokens=512)
-        except OllamaError as exc:
+        except (OllamaError, OpenAICompatibleError) as exc:
             logger.error("PlayerAgent[%s] : appel LLM échoué : %s", self._character_name, exc)
             return _FALLBACK_ACTION
 

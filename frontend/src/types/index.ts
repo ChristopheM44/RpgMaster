@@ -479,7 +479,9 @@ export interface HistoryResponse {
   total: number
 }
 
-// ─── LLM / Ollama ─────────────────────────────────────────────────────────────
+// ─── LLM / Provider ───────────────────────────────────────────────────────────
+
+export type LlmProvider = 'ollama' | 'openai_compatible'
 
 export interface OllamaHealthResponse {
   available: boolean
@@ -492,6 +494,20 @@ export interface LlmSettings {
   ollama_base_url: string
   gm_model: string
   player_model: string
+  llm_provider: LlmProvider
+  openai_base_url: string
+  api_key_set: boolean
+  ollama_api_key_set: boolean
+}
+
+export interface LlmSettingsUpdate {
+  ollama_base_url?: string
+  gm_model?: string
+  player_model?: string
+  llm_provider?: LlmProvider
+  openai_base_url?: string
+  openai_api_key?: string
+  ollama_api_key?: string
 }
 
 // ─── Campaign ─────────────────────────────────────────────────────────────────
