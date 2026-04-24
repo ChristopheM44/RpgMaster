@@ -22,9 +22,6 @@ from app.engine import combat as combat_engine
 from app.engine.ability_checks import ability_modifier, proficiency_bonus
 from app.engine.dice import roll
 from app.engine.spells import (
-    ConcentrationState,
-    SpellSlots,
-    cast_spell as engine_cast_spell,
     roll_spell_attack,
     spell_save_dc,
     upcast_damage,
@@ -278,14 +275,49 @@ class ActionResolver:
         # ----------------------------------------------------------------
         # 4. Traitement des actions mécaniques demandées par le GM
         # ----------------------------------------------------------------
+        pending_rolls: List[Dict[str, Any]] = []
         if gm_response:
             for gm_action in gm_response.actions:
-                # Fusionner gm_action.target dans params pour simplifier _apply_gm_action
+                # Fusionner gm_action.target dans params pour simplifier les handlers
                 merged_params: Dict[str, Any] = dict(gm_action.params)
                 if gm_action.target and "target" not in merged_params:
                     merged_params["target"] = gm_action.target
-                await self._apply_gm_action(
-                    session_id, gm_action.type, merged_params, active
+
+                if gm_action.type == "roll_request":
+                    roll_evt = self._execute_roll_request(merged_params, character_id, active)
+                    if roll_evt:
+                        pending_rolls.append(roll_evt)
+                        await event_bus.publish_to_session(
+                            session_id, EventType.ROLL_RESULT, roll_evt, source="action_resolver"
+                        )
+                else:
+                    await self._apply_gm_action(
+                        session_id, gm_action.type, merged_params, active
+                    )
+
+        # ----------------------------------------------------------------
+        # 5. Narration de l'issue si des jets ont été effectués
+        # ----------------------------------------------------------------
+        if pending_rolls:
+            outcome_text: Optional[str] = None
+            try:
+                outcome_text = await self._gm.narrate_outcome(context, pending_rolls)
+            except Exception as exc:
+                logger.error("ActionResolver : narrate_outcome échoué : %s", exc)
+
+            if outcome_text:
+                outcome_id = str(uuid.uuid4())
+                await event_bus.publish_to_session(
+                    session_id,
+                    EventType.NARRATION,
+                    {"text": outcome_text, "speaker": "Maître du Jeu", "narration_id": outcome_id},
+                    source="action_resolver",
+                )
+                if db is not None:
+                    from app.services.message_service import persist_narration as _persist
+                    await _persist(session_id, outcome_text, "Maître du Jeu", db)
+                asyncio.create_task(
+                    tts_router.synthesize_and_broadcast(outcome_text, session_id, outcome_id)
                 )
 
     # ------------------------------------------------------------------
@@ -845,6 +877,104 @@ class ActionResolver:
 
     # ------------------------------------------------------------------
     # Application des actions GM (dégâts, conditions, etc.)
+    # ------------------------------------------------------------------
+
+    def _execute_roll_request(
+        self,
+        params: Dict[str, Any],
+        fallback_character_id: Optional[str],
+        active: ActiveSession,
+    ) -> Optional[Dict[str, Any]]:
+        """Exécute un jet de compétence/caractéristique/sauvegarde demandé par le GM.
+
+        Retourne un payload prêt à être envoyé comme ROLL_RESULT, ou None si les
+        données nécessaires sont manquantes.
+        """
+        from app.engine.ability_checks import (
+            Ability,
+            Proficiency,
+            SKILL_ABILITY,
+            ability_check,
+            saving_throw,
+            skill_check,
+        )
+
+        ability_long_map: dict[str, str] = {
+            "strength": "str", "dexterity": "dex", "constitution": "con",
+            "intelligence": "int", "wisdom": "wis", "charisma": "cha",
+        }
+        ability_enum_map = {a.value: a for a in Ability}
+
+        skill_name = params.get("skill", "").lower().replace(" ", "_").replace("-", "_")
+        ability_str = params.get("ability", "").lower()
+        check_type = params.get("type", "check")
+        dc = params.get("dc")
+        target_id = params.get("target") or fallback_character_id
+
+        characters = active.state_data.get("characters", {})
+        combatants = active.state_data.get("combatants", {})
+        char_data = characters.get(target_id) or combatants.get(target_id)
+        if char_data is None and characters:
+            char_data = next(iter(characters.values()))
+        if not char_data:
+            logger.warning("roll_request: personnage '%s' introuvable dans state_data", target_id)
+            return None
+
+        ab_scores: dict[str, int] = char_data.get("ability_scores") or {
+            "str": int(char_data.get("str", 10)),
+            "dex": int(char_data.get("dex", 10)),
+            "con": 10, "int": 10, "wis": 10, "cha": 10,
+        }
+        level: int = int(char_data.get("level", 1))
+        skill_profs: list[str] = list(char_data.get("skill_proficiencies", []))
+        save_profs: list[str] = list(char_data.get("save_proficiencies", []))
+
+        # Normalise ability_str vers forme courte ("wisdom" → "wis")
+        ability_short: Optional[str] = (
+            ability_long_map.get(ability_str, ability_str[:3] if ability_str else None)
+            if ability_str else None
+        )
+
+        long_from_short = {v: k for k, v in ability_long_map.items()}
+
+        try:
+            if check_type == "save":
+                long_ab = long_from_short.get(ability_short or "", ability_str or "wisdom")
+                ability_enum = ability_enum_map.get(long_ab, Ability.WIS)
+                score = ab_scores.get(ability_short or "wis", 10)
+                result = saving_throw(score, ability_enum, level, long_ab in save_profs, dc)
+
+            elif skill_name and skill_name in SKILL_ABILITY:
+                gov = SKILL_ABILITY[skill_name]           # ex. Ability.WIS
+                ab_key = gov.value[:3]                    # "wis" depuis "wisdom"
+                score = ab_scores.get(ab_key, 10)
+                prof = Proficiency.PROFICIENT if skill_name in skill_profs else Proficiency.NONE
+                result = skill_check(score, skill_name, level, prof, dc)
+
+            else:
+                long_ab = long_from_short.get(ability_short or "", ability_str or "wisdom")
+                ability_enum = ability_enum_map.get(long_ab, Ability.WIS)
+                score = ab_scores.get(ability_short or "wis", 10)
+                result = ability_check(score, dc, ability=ability_enum)
+
+        except Exception as exc:
+            logger.error("roll_request: calcul du jet échoué : %s", exc)
+            return None
+
+        return {
+            "dice_notation": "1d20",
+            "rolls": result.all_rolls,
+            "d20": result.d20_roll,
+            "modifier": result.modifier,
+            "total": result.total,
+            "dc": result.dc,
+            "success": result.success,
+            "label": result.label,
+            "breakdown": result.breakdown,
+            "character_id": target_id,
+            "character_name": char_data.get("name", target_id or ""),
+        }
+
     # ------------------------------------------------------------------
 
     async def _apply_gm_action(

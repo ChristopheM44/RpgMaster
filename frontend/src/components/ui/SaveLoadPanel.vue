@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { saveApi } from '../../services/api'
 import { useGameStore } from '../../stores/game'
 import type { SaveSlot } from '../../types'
+import ConfirmDialog from '../common/ConfirmDialog.vue'
 
 const props = defineProps<{ sessionId: string }>()
 const emit = defineEmits<{ (e: 'load-complete'): void }>()
@@ -13,6 +14,11 @@ const saveName = ref('')
 const loading = ref(false)
 const error = ref<string | null>(null)
 const successMsg = ref<string | null>(null)
+const saveToDeleteId = ref<string | null>(null)
+
+const saveToDelete = computed(
+  () => saves.value.find((s) => s.id === saveToDeleteId.value) ?? null,
+)
 
 async function fetchSaves() {
   try {
@@ -55,7 +61,9 @@ async function loadSave(saveId: string) {
   }
 }
 
-async function deleteSave(saveId: string) {
+async function confirmDeleteSave() {
+  const saveId = saveToDeleteId.value
+  if (!saveId) return
   loading.value = true
   error.value = null
   try {
@@ -65,6 +73,7 @@ async function deleteSave(saveId: string) {
     error.value = e instanceof Error ? e.message : 'Erreur lors de la suppression.'
   } finally {
     loading.value = false
+    saveToDeleteId.value = null
   }
 }
 
@@ -137,12 +146,24 @@ onMounted(fetchSaves)
             :disabled="loading"
             class="rpg-btn-tonal tone-blood"
             title="Supprimer cette sauvegarde"
-            @click="deleteSave(save.id)"
+            @click="saveToDeleteId = save.id"
           >
             ✕
           </button>
         </div>
       </li>
     </ul>
+
+    <!-- Confirmation suppression -->
+    <ConfirmDialog
+      v-if="saveToDelete"
+      title="Supprimer cette sauvegarde ?"
+      :message="`« ${saveToDelete.name} » sera définitivement effacée.`"
+      confirm-label="Supprimer"
+      tone="danger"
+      :loading="loading"
+      @confirm="confirmDeleteSave"
+      @cancel="saveToDeleteId = null"
+    />
   </div>
 </template>

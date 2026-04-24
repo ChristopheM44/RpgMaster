@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { characterApi, pregenApi, gameApi, sessionApi } from '../services/api'
 import type { Character, PregenTemplate, Session } from '../types'
 import AdventureStartModal from '../components/ui/AdventureStartModal.vue'
+import ConfirmDialog from '../components/common/ConfirmDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -156,6 +157,10 @@ async function confirmPregen() {
 
 const confirmDeleteId = ref<string | null>(null)
 
+const characterToDelete = computed(
+  () => characters.value.find((c) => c.id === confirmDeleteId.value) ?? null,
+)
+
 async function deleteCharacter(id: string) {
   try {
     await characterApi.delete(id)
@@ -286,23 +291,7 @@ function classIcon(classId: string): string {
 
             <!-- Actions -->
             <div class="flex items-center gap-2">
-              <template v-if="confirmDeleteId === char.id">
-                <span class="mr-1 text-xs text-blood-light">Supprimer ?</span>
-                <button
-                  class="rounded bg-blood px-2 py-1 text-xs text-parchment transition hover:bg-blood-light"
-                  @click="deleteCharacter(char.id)"
-                >
-                  Oui
-                </button>
-                <button
-                  class="rounded border border-stone px-2 py-1 text-xs text-parchment-dark transition hover:text-parchment"
-                  @click="confirmDeleteId = null"
-                >
-                  Non
-                </button>
-              </template>
               <button
-                v-else
                 class="rounded border border-stone/50 px-2 py-1 text-xs text-parchment-dark transition hover:border-blood hover:text-blood-light"
                 @click="confirmDeleteId = char.id"
               >
@@ -481,6 +470,17 @@ function classIcon(classId: string): string {
         @cancel="showStartModal = false"
       />
     </Teleport>
+
+    <!-- ─── Confirmation de suppression de personnage ───────────────────────── -->
+    <ConfirmDialog
+      v-if="characterToDelete"
+      title="Retirer ce personnage ?"
+      :message="`« ${characterToDelete.name} » sera définitivement supprimé de cette session.`"
+      confirm-label="Retirer"
+      tone="danger"
+      @confirm="deleteCharacter(characterToDelete.id)"
+      @cancel="confirmDeleteId = null"
+    />
 
   </div>
 </template>

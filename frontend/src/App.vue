@@ -4,8 +4,8 @@ import { RouterView, useRoute } from 'vue-router'
 import AppNav from './components/common/AppNav.vue'
 
 const route = useRoute()
-const showNav = computed(() => route.name !== 'home')
-const isGameSession = computed(() => route.name === 'game-session')
+const showNav = computed(() => route.name !== 'home' && route.name !== 'game-session' && route.name !== 'character-sheet')
+const isGameSession = computed(() => route.name === 'game-session' || route.name === 'character-sheet')
 </script>
 
 <template>

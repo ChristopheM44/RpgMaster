@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useCampaignStore } from '../stores/campaign'
 import { useSessionStore } from '../stores/session'
 import type { Campaign } from '../types'
+import ConfirmDialog from '../components/common/ConfirmDialog.vue'
 
 const router = useRouter()
 const campaignStore = useCampaignStore()
@@ -65,6 +66,10 @@ async function handleDelete(id: string) {
   if (selectedCampaign.value?.id === id) selectedCampaign.value = null
   confirmDeleteId.value = null
 }
+
+const campaignToDelete = computed(
+  () => campaignStore.campaigns.find((c) => c.id === confirmDeleteId.value) ?? null,
+)
 
 function sessionLabel(campaign: Campaign, idx: number): string {
   const isCurrent = idx === campaign.current_session_index
@@ -167,14 +172,6 @@ function sessionLabel(campaign: Campaign, idx: number): string {
                 </p>
               </div>
               <button
-                v-if="confirmDeleteId === c.id"
-                class="ml-2 shrink-0 text-xs text-blood hover:text-blood/80"
-                @click.stop="handleDelete(c.id)"
-              >
-                Confirmer
-              </button>
-              <button
-                v-else
                 class="ml-2 shrink-0 text-xs text-parchment/30 hover:text-blood/70"
                 @click.stop="confirmDeleteId = c.id"
               >
@@ -284,5 +281,16 @@ function sessionLabel(campaign: Campaign, idx: number): string {
         </div>
       </div>
     </div>
+
+    <!-- Confirmation suppression campagne -->
+    <ConfirmDialog
+      v-if="campaignToDelete"
+      title="Supprimer cette campagne ?"
+      :message="`« ${campaignToDelete.name} » sera définitivement supprimée. Les sessions rattachées ne seront pas effacées.`"
+      confirm-label="Supprimer"
+      tone="danger"
+      @confirm="handleDelete(campaignToDelete.id)"
+      @cancel="confirmDeleteId = null"
+    />
   </div>
 </template>

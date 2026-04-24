@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useSessionStore } from '../stores/session'
 import { useCharacterStore } from '../stores/character'
 import type { Session } from '../types'
+import ConfirmDialog from '../components/common/ConfirmDialog.vue'
 
 const router = useRouter()
 const sessionStore = useSessionStore()
@@ -46,6 +47,10 @@ watch(selectedId, async (id) => {
 
 const selectedSession = computed<Session | null>(() =>
   sessionStore.sessions.find((s) => s.id === selectedId.value) ?? null,
+)
+
+const sessionToDeleteName = computed(
+  () => sessionStore.sessions.find((s) => s.id === confirmDeleteId.value)?.name ?? '',
 )
 
 async function handleCreate() {
@@ -416,26 +421,14 @@ function formatDate(dateStr: string): string {
             <button class="rpg-btn-secondary flex-1 justify-center">Exporter</button>
           </div>
 
-          <!-- Delete with inline confirmation -->
-          <template v-if="confirmDeleteId === selectedSession.id">
-            <div class="mt-1 flex items-center gap-2">
-              <span class="flex-1 text-center text-xs" :style="{ color: 'var(--color-text-muted)' }">
-                Supprimer définitivement ?
-              </span>
-              <button class="rpg-btn-tonal tone-blood" @click="handleDelete(selectedSession.id)">Oui</button>
-              <button class="rpg-btn-secondary" @click="confirmDeleteId = null">Non</button>
-            </div>
-          </template>
-          <template v-else>
-            <button
-              class="mt-1 rounded-md border py-2 text-[11px] font-semibold uppercase tracking-wider transition"
-              :style="{
-                borderColor: 'rgba(232,69,69,0.25)',
-                color: 'rgba(232,69,69,0.7)',
-              }"
-              @click="confirmDeleteId = selectedSession.id"
-            >Supprimer la session</button>
-          </template>
+          <button
+            class="mt-1 rounded-md border py-2 text-[11px] font-semibold uppercase tracking-wider transition"
+            :style="{
+              borderColor: 'rgba(232,69,69,0.25)',
+              color: 'rgba(232,69,69,0.7)',
+            }"
+            @click="confirmDeleteId = selectedSession.id"
+          >Supprimer la session</button>
         </div>
       </template>
 
@@ -449,5 +442,16 @@ function formatDate(dateStr: string): string {
         >Sélectionnez une session à gauche pour en voir le détail.</div>
       </template>
     </aside>
+
+    <!-- Confirmation de suppression -->
+    <ConfirmDialog
+      v-if="confirmDeleteId"
+      title="Supprimer cette session ?"
+      :message="`« ${sessionToDeleteName} » sera définitivement supprimée. Les personnages et l'historique seront effacés.`"
+      confirm-label="Supprimer"
+      tone="danger"
+      @confirm="handleDelete(confirmDeleteId)"
+      @cancel="confirmDeleteId = null"
+    />
   </div>
 </template>

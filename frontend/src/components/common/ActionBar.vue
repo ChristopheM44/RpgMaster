@@ -212,108 +212,102 @@ function onStabilize(targetId: string) {
     </div>
   </div>
 
-  <div class="shrink-0 border-t border-border bg-bg-elev px-4 py-3 space-y-2">
-    <!-- Actions de combat -->
-    <div v-if="gameStore.isInCombat" class="flex flex-wrap gap-2">
+  <div
+    class="shrink-0 border-t px-5 py-4"
+    :style="{
+      borderColor: 'var(--color-border)',
+      background: 'var(--color-bg-elev)',
+    }"
+  >
+    <!-- Character context line -->
+    <div
+      v-if="charStore.myCharacter"
+      class="mb-3 flex items-center gap-2.5"
+    >
+      <div
+        class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md font-display text-xs font-bold"
+        :style="{
+          background: 'linear-gradient(135deg, var(--color-ember), var(--color-gold))',
+          color: 'var(--color-bg)',
+        }"
+      >{{ charStore.myCharacter.name.charAt(0).toUpperCase() }}</div>
+      <span class="text-sm" :style="{ color: 'var(--color-text-muted)' }">
+        Vous incarnez
+        <strong class="font-display" :style="{ color: 'var(--color-parchment)' }">{{ charStore.myCharacter.name }}</strong>
+        <span v-if="isMyTurn && gameStore.isInCombat" :style="{ color: 'var(--color-ember)' }"> — c'est à vous de jouer</span>
+        <span v-else-if="gameStore.isInCombat && activeCombatantName" class="italic"> — tour de {{ activeCombatantName }}</span>
+      </span>
+    </div>
 
-      <!-- CAS 1 : Mon personnage est à 0 PV → jet de sauvegarde contre la mort uniquement -->
+    <!-- Unconscious state -->
+    <div
+      v-if="isDowned && isMyTurn"
+      class="mb-3 rounded-lg border px-3 py-2 text-sm italic"
+      :style="{ background: 'rgba(232,69,69,0.08)', borderColor: 'rgba(232,69,69,0.3)', color: 'rgba(232,69,69,0.8)' }"
+    >
+      Vous êtes inconscient(e). Effectuez votre jet de sauvegarde contre la mort.
+    </div>
+    <div
+      v-else-if="isDowned && !isMyTurn"
+      class="mb-3 rounded-lg border px-3 py-2 text-sm italic"
+      :style="{ background: 'rgba(232,69,69,0.06)', borderColor: 'rgba(232,69,69,0.2)', color: 'rgba(232,69,69,0.6)' }"
+    >
+      Inconscient(e) — en attente de votre tour.
+    </div>
+
+    <!-- Textarea + Envoyer -->
+    <div class="flex items-end gap-3">
+      <textarea
+        v-model="input"
+        rows="2"
+        :placeholder="gameStore.isProcessing ? 'Le Maître du Jeu répond…' : 'Décrivez votre action, parlez, ou posez une question au MJ…'"
+        :disabled="!canSend"
+        class="rpg-input flex-1 resize-none"
+        style="font-family: inherit; font-size: 14px;"
+        @keydown="onKeydown"
+      />
+      <button
+        class="rpg-btn-primary shrink-0 self-end !px-5 !py-3"
+        :disabled="!input.trim() || !canSend"
+        @click="submitText"
+      >Envoyer ↵</button>
+    </div>
+
+    <!-- Action chips row -->
+    <div class="mt-2.5 flex items-center gap-2 flex-wrap">
+      <!-- Death save -->
       <template v-if="isDowned && isMyTurn">
-        <div class="rpg-card w-full border-blood/40 bg-blood/10 px-3 py-2 text-sm text-blood/80 italic">
-          Vous êtes inconscient(e). Effectuez votre jet de sauvegarde contre la mort.
-        </div>
-        <button
-          class="rpg-btn-tonal tone-blood"
-          :disabled="!canSend"
-          @click="onDeathSave"
-        >
-          <span>💀</span>
-          <span>Jet de sauvegarde</span>
+        <button class="rpg-btn-tonal tone-blood !py-1 !text-[11px]" :disabled="!canSend" @click="onDeathSave">
+          💀 Jet de sauvegarde
         </button>
-        <button
-          class="rpg-btn-secondary"
-          @click="emit('action', 'end_turn')"
-        >
-          <span>⏭</span>
-          <span>Fin du tour</span>
+        <button class="rpg-btn-secondary !py-1 !text-[11px]" @click="emit('action', 'end_turn')">
+          ⏭ Fin du tour
         </button>
       </template>
 
-      <!-- CAS 2 : Mon tour normal -->
+      <!-- Normal actions (combat or exploration) -->
       <template v-else-if="!isDowned">
         <button
           v-for="action in combatActions"
           :key="action.type"
-          class="rpg-btn-tonal"
-          :class="[action.tone, !isMyTurn ? 'opacity-40 !cursor-not-allowed' : '']"
-          :disabled="!isMyTurn"
+          class="rpg-btn-tonal !py-1 !text-[11px]"
+          :class="[action.tone, (gameStore.isInCombat && !isMyTurn) ? 'opacity-40 !cursor-not-allowed' : '']"
+          :disabled="gameStore.isInCombat && !isMyTurn"
           @click="onCombatAction(action.type)"
         >
-          <span>{{ action.icon }}</span>
-          <span>{{ action.label }}</span>
+          {{ action.icon }} {{ action.label }}
         </button>
 
-        <!-- Boutons Stabiliser (alliés à terre) -->
         <template v-if="isMyTurn && downedAllies.length > 0">
           <button
             v-for="ally in downedAllies"
             :key="ally.id"
-            class="rpg-btn-tonal tone-arcane"
+            class="rpg-btn-tonal tone-arcane !py-1 !text-[11px]"
             :disabled="!canSend"
             @click="onStabilize(ally.id)"
-          >
-            <span>🩹</span>
-            <span>Stabiliser {{ ally.name }}</span>
-          </button>
+          >🩹 Stabiliser {{ ally.name }}</button>
         </template>
-
-        <span v-if="!isMyTurn" class="ml-auto text-xs text-parchment/30 self-center italic">
-          <template v-if="activeCombatantName">Tour de {{ activeCombatantName }}...</template>
-          <template v-else>En attente...</template>
-        </span>
       </template>
-
-      <!-- CAS 3 : Je suis à terre mais ce n'est pas mon tour -->
-      <template v-else>
-        <div class="rpg-card w-full border-blood/20 bg-blood/5 px-3 py-2 text-sm text-blood/60 italic">
-          Inconscient(e) — en attente de votre tour pour effectuer un jet de sauvegarde.
-        </div>
-      </template>
-    </div>
-
-    <!-- Free text input -->
-    <div class="flex gap-2">
-      <textarea
-        v-model="input"
-        rows="2"
-        :placeholder="gameStore.isProcessing ? 'Le Maître du Jeu répond...' : 'Décrivez votre action ou parlez à vos compagnons...'"
-        :disabled="!canSend"
-        class="rpg-input flex-1 resize-none"
-        @keydown="onKeydown"
-      />
-      <button
-        class="rpg-btn-primary self-end"
-        :disabled="!input.trim() || !canSend"
-        @click="submitText"
-      >
-        Envoyer
-      </button>
-    </div>
-
-    <!-- Connection status -->
-    <div class="flex items-center gap-1.5 text-xs">
-      <span
-        class="inline-block h-2 w-2 rounded-full"
-        :class="gameStore.connected ? 'bg-green-500' : 'bg-blood animate-pulse'"
-      />
-      <span class="text-parchment/40">
-        <template v-if="gameStore.connected">
-          Connecté · Phase : {{ gameStore.phase }}
-          <span v-if="gameStore.isProcessing" class="ml-1 text-gold/50">· MJ en cours...</span>
-        </template>
-        <template v-else>
-          Déconnecté
-        </template>
-      </span>
     </div>
   </div>
 </template>

@@ -7,12 +7,12 @@ import { useSessionStore } from '../stores/session'
 import { useWebSocket } from '../composables/useWebSocket'
 import { gameApi } from '../services/api'
 import NarrativeLog from '../components/narrative/NarrativeLog.vue'
-import CombatTracker from '../components/combat/CombatTracker.vue'
-import TacticalGrid from '../components/combat/TacticalGrid.vue'
-import CharacterSummary from '../components/character/CharacterSummary.vue'
+import CharacterPanel from '../components/character/CharacterPanel.vue'
+import PartyBar from '../components/character/PartyBar.vue'
 import ActionBar from '../components/common/ActionBar.vue'
 import SaveLoadPanel from '../components/ui/SaveLoadPanel.vue'
 import AdventureStartModal from '../components/ui/AdventureStartModal.vue'
+import ConfirmDialog from '../components/common/ConfirmDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -27,9 +27,7 @@ const { connect, disconnect, reconnect, sendAction, reconnectCount, isReconnecti
 const startingGame = ref(false)
 const showSaveLoad = ref(false)
 const showStartModal = ref(false)
-
-type MobileTab = 'recit' | 'combat' | 'perso'
-const activeTab = ref<MobileTab>('recit')
+const showLobbyConfirm = ref(false)
 
 async function initSession() {
   gameStore.reset()
@@ -68,6 +66,20 @@ async function handleLoadComplete() {
   await initSession()
 }
 
+function requestGoToLobby() {
+  if (!gameStore.connected) {
+    confirmGoToLobby()
+    return
+  }
+  showLobbyConfirm.value = true
+}
+
+function confirmGoToLobby() {
+  showLobbyConfirm.value = false
+  disconnect()
+  router.push({ name: 'lobby' })
+}
+
 const needsStart = computed(() =>
   ['lobby', 'character_creation'].includes(gameStore.phase),
 )
@@ -83,11 +95,9 @@ function handleAction(
   extra?: Record<string, unknown>,
 ) {
   const charId = charStore.myCharacter?.id
-
   if (actionType === 'free_text' && content) {
     gameStore.addPlayerEntry(content, charStore.myCharacter?.name)
   }
-
   sendAction(actionType, content, charId, targetId, extra)
 }
 
@@ -112,18 +122,7 @@ async function handleStartConfirm(mode: 'libre' | 'script' | 'auto', script?: st
 function startCombat() { sendAction('start_combat', undefined, charStore.myCharacter?.id) }
 function takeRest()    { sendAction('take_rest',    undefined, charStore.myCharacter?.id) }
 function resetCombat() { sendAction('reset_combat', undefined, charStore.myCharacter?.id) }
-
 function dismissError() { gameStore.setError(null) }
-
-function handleMove(col: number, row: number) {
-  const charId = charStore.myCharacter?.id
-  sendAction('move', `${col},${row}`, charId)
-}
-
-const isMyTurn = computed(() =>
-  gameStore.currentTurnId !== null &&
-  gameStore.currentTurnId === charStore.myCharacter?.id
-)
 
 watch(() => gameStore.currentTurnId, (turnId) => {
   if (!turnId) return
@@ -133,31 +132,32 @@ watch(() => gameStore.currentTurnId, (turnId) => {
   if (activeHuman) charStore.setMyCharacter(activeHuman)
 })
 
-const activeCombatantName = computed(() => {
-  const c = gameStore.combatants.find((c) => c.id === gameStore.currentTurnId)
-  return c?.name ?? null
-})
-
-const mySpeed = computed(() => {
-  const char = charStore.myCharacter
-  if (!char) return 9
-  return 9
-})
-
-/** Phase → libellé FR éditorial */
 const PHASE_LABELS: Record<string, string> = {
   lobby: 'Salle d\'attente',
-  character_creation: 'Création de personnage',
+  character_creation: 'Création',
   exploration: 'Exploration',
-  encounter_start: 'Début de rencontre',
+  encounter_start: 'Rencontre',
   combat: 'Combat',
-  encounter_end: 'Fin de rencontre',
+  encounter_end: 'Fin rencontre',
   rest: 'Repos',
-  level_up: 'Montée de niveau',
-  session_end: 'Session terminée',
+  level_up: 'Montée',
+  session_end: 'Terminée',
+}
+
+const PHASE_COLORS: Record<string, string> = {
+  lobby: 'var(--color-text-muted)',
+  character_creation: 'var(--color-arcane)',
+  exploration: 'var(--color-green)',
+  encounter_start: 'var(--color-blood)',
+  combat: 'var(--color-blood)',
+  encounter_end: 'var(--color-gold)',
+  rest: 'var(--color-teal)',
+  level_up: 'var(--color-gold)',
+  session_end: 'var(--color-text-dim)',
 }
 
 const phaseLabel = computed(() => PHASE_LABELS[gameStore.phase] ?? gameStore.phase)
+const phaseColor = computed(() => PHASE_COLORS[gameStore.phase] ?? 'var(--color-text-muted)')
 
 onMounted(initSession)
 onUnmounted(() => { disconnect() })
@@ -165,148 +165,136 @@ onUnmounted(() => { disconnect() })
 
 <template>
   <div
-    class="relative flex h-full flex-col overflow-hidden"
+    class="flex h-full flex-col overflow-hidden"
     :style="{ background: 'var(--color-bg)', color: 'var(--color-parchment)' }"
   >
-
-    <!-- Error banner -->
+    <!-- ─── Error / reconnect banners ─────────────────────────────────────── -->
     <div
       v-if="gameStore.error"
-      class="flex shrink-0 items-center justify-between gap-3 border-b px-4 py-2 text-sm"
-      :style="{
-        background: 'rgba(232,69,69,0.12)',
-        borderColor: 'rgba(232,69,69,0.3)',
-        color: 'var(--color-blood-light)',
-      }"
+      class="flex shrink-0 items-center justify-between gap-3 border-b px-6 py-2 text-sm"
+      :style="{ background: 'rgba(232,69,69,0.12)', borderColor: 'rgba(232,69,69,0.3)', color: 'var(--color-blood-light)' }"
     >
       <span>⚠ {{ gameStore.error }}</span>
-      <button class="opacity-70 transition hover:opacity-100" @click="dismissError">✕</button>
+      <button class="opacity-70 hover:opacity-100" @click="dismissError">✕</button>
     </div>
-
-    <!-- Reconnecting banner -->
     <div
       v-if="isReconnecting"
-      class="flex shrink-0 items-center gap-2 border-b px-4 py-1.5 text-xs"
-      :style="{
-        background: 'rgba(192,144,255,0.08)',
-        borderColor: 'rgba(192,144,255,0.25)',
-        color: 'var(--color-arcane-light)',
-      }"
+      class="flex shrink-0 items-center gap-2 border-b px-6 py-1.5 text-xs"
+      :style="{ background: 'rgba(192,144,255,0.08)', borderColor: 'rgba(192,144,255,0.25)', color: 'var(--color-arcane-light)' }"
     >
       <span class="rpg-pulse">◉</span>
-      <span class="tracking-wide">Reconnexion en cours… (tentative {{ reconnectCount }}/5)</span>
+      <span>Reconnexion… (tentative {{ reconnectCount }}/5)</span>
     </div>
-
-    <!-- Disconnected banner -->
     <div
       v-if="isDisconnected"
-      class="flex shrink-0 items-center justify-between gap-3 border-b px-4 py-1.5 text-xs"
-      :style="{
-        background: 'rgba(232,69,69,0.08)',
-        borderColor: 'rgba(232,69,69,0.25)',
-        color: 'var(--color-blood-light)',
-      }"
+      class="flex shrink-0 items-center justify-between gap-3 border-b px-6 py-1.5 text-xs"
+      :style="{ background: 'rgba(232,69,69,0.08)', borderColor: 'rgba(232,69,69,0.25)', color: 'var(--color-blood-light)' }"
     >
       <span>● Connexion perdue</span>
-      <button class="rpg-btn-tonal tone-blood !py-1 !px-3 !text-[10px]" @click="reconnect">
-        Reconnecter
-      </button>
+      <button class="rpg-btn-tonal tone-blood !py-1 !px-3 !text-[10px]" @click="reconnect">Reconnecter</button>
     </div>
 
-    <!-- Top bar -->
+    <!-- ─── Standalone header ─────────────────────────────────────────────── -->
     <header
-      class="flex shrink-0 items-center justify-between gap-3 border-b px-4 py-2.5"
+      class="flex h-14 shrink-0 items-center gap-6 border-b px-6"
       :style="{
         borderColor: 'var(--color-border)',
         background: 'linear-gradient(180deg, var(--color-bg-elev), rgba(24,22,35,0.9))',
       }"
     >
-      <!-- Left cluster : back + title -->
-      <div class="flex min-w-0 shrink-0 items-center gap-3">
+      <!-- Left: back + logo + session name -->
+      <div class="flex shrink-0 items-center gap-3">
         <button
-          class="text-base transition"
-          :style="{ color: 'var(--color-text-muted)' }"
-          @click="router.push({ name: 'lobby' })"
-        >←</button>
-        <div class="h-5 w-px" :style="{ background: 'var(--color-border-strong)' }" />
-        <h1
-          class="truncate font-display text-sm font-bold tracking-[0.1em]"
-          :style="{ color: 'var(--color-parchment)' }"
-        >{{ sessionStore.currentSession?.name ?? 'SESSION' }}</h1>
+          class="rpg-btn-secondary !py-1 !px-3 !text-[11px] shrink-0"
+          @click="requestGoToLobby"
+        >← Lobby</button>
+        <div
+          class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-bold"
+          :style="{
+            background: 'linear-gradient(135deg, var(--color-ember), var(--color-gold))',
+            color: 'var(--color-bg)',
+            boxShadow: '0 0 18px rgba(255,130,71,0.25)',
+          }"
+        >⚔</div>
+        <div>
+          <div class="font-display text-[15px] font-bold tracking-[0.1em]">RPGMASTER</div>
+          <div
+            class="text-[10px] font-semibold uppercase tracking-[0.2em] leading-none"
+            :style="{ color: 'var(--color-text-dim)' }"
+          >{{ sessionStore.currentSession?.name ?? '—' }}</div>
+        </div>
       </div>
 
-      <!-- Centre : game actions -->
-      <div class="flex shrink-0 items-center gap-1.5">
+      <!-- Centre: phase + actions -->
+      <div class="flex flex-1 items-center justify-center gap-2">
+        <!-- Phase info -->
+        <div class="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em]" :style="{ color: 'var(--color-text-muted)' }">
+          <span>Phase</span>
+          <span
+            class="font-display font-bold"
+            :style="{ color: phaseColor }"
+          >{{ phaseLabel }}</span>
+          <span v-if="gameStore.isInCombat" :style="{ color: 'var(--color-text-dim)' }">·</span>
+          <span
+            v-if="gameStore.isInCombat"
+            class="font-mono"
+            :style="{ color: 'var(--color-text-muted)' }"
+          >Tour {{ gameStore.roundNumber }}</span>
+        </div>
+
+        <div class="h-4 w-px mx-1" :style="{ background: 'var(--color-border-strong)' }" />
+
+        <!-- Action buttons -->
         <button
           v-if="needsStart"
           :disabled="startingGame || !gameStore.connected"
           class="rpg-btn-primary !py-1.5 !px-4 !text-[11px]"
           @click="showStartModal = true"
-        >
-          {{ startingGame ? '…' : 'Lancer ⚔' }}
-        </button>
+        >{{ startingGame ? '…' : 'Lancer ⚔' }}</button>
 
         <button
           v-if="canStartCombat"
-          class="rpg-btn-tonal tone-blood"
-          title="Déclencher un combat"
+          class="rpg-btn-tonal tone-blood !py-1.5 !text-[11px]"
           @click="startCombat"
         >⚔ Combat</button>
 
         <button
           v-if="canRest"
-          class="rpg-btn-tonal tone-arcane"
-          title="Prendre un repos"
+          class="rpg-btn-tonal tone-arcane !py-1.5 !text-[11px]"
           @click="takeRest"
         >☽ Repos</button>
 
         <button
           v-if="gameStore.isInCombat"
-          class="rpg-btn-tonal tone-gold !text-[10px]"
-          title="[TEST] Sortir du combat et restaurer les PV"
+          class="rpg-btn-tonal tone-gold !py-1.5 !text-[10px]"
           @click="resetCombat"
         >✕ Reset</button>
+
+        <!-- Save -->
+        <button
+          class="rpg-btn-secondary !py-1.5 !px-4 !text-[11px]"
+          @click="showSaveLoad = !showSaveLoad"
+        >💾 Sauvegarder</button>
       </div>
 
-      <!-- Right cluster : status + save -->
-      <div class="flex shrink-0 items-center gap-3">
-        <!-- Connection + phase -->
-        <div class="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.15em]">
-          <span
-            class="inline-block h-2 w-2 shrink-0 rounded-full"
-            :class="{ 'rpg-pulse': isReconnecting }"
-            :style="{
-              background: gameStore.connected
-                ? 'var(--color-green)'
-                : isReconnecting
-                  ? 'var(--color-arcane)'
-                  : isDisconnected
-                    ? 'var(--color-blood)'
-                    : 'var(--color-text-dim)',
-              boxShadow: gameStore.connected ? '0 0 6px var(--color-green)' : 'none',
-            }"
-            :title="gameStore.connected ? 'Connecté' : isReconnecting ? 'Reconnexion...' : 'Déconnecté'"
-          />
-          <span class="hidden md:inline" :style="{ color: 'var(--color-text-muted)' }">Phase</span>
-          <span
-            class="hidden md:inline font-display font-bold"
-            :style="{ color: 'var(--color-gold)' }"
-          >{{ phaseLabel }}</span>
-        </div>
-
-        <button
-          class="rpg-btn-secondary !py-1 !px-3 !text-[11px]"
-          @click="showSaveLoad = !showSaveLoad"
-        >
-          {{ showSaveLoad ? '✕ Fermer' : '💾 Sauver' }}
-        </button>
+      <!-- Right: connection status -->
+      <div class="flex shrink-0 items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em]" :style="{ color: 'var(--color-text-muted)' }">
+        <span
+          class="h-2 w-2 rounded-full"
+          :class="{ 'rpg-pulse': isReconnecting }"
+          :style="{
+            background: gameStore.connected ? 'var(--color-green)' : isReconnecting ? 'var(--color-arcane)' : 'var(--color-blood)',
+            boxShadow: gameStore.connected ? '0 0 6px var(--color-green)' : 'none',
+          }"
+        />
+        <span class="hidden md:inline">{{ gameStore.connected ? 'En ligne' : 'Hors ligne' }}</span>
       </div>
     </header>
 
-    <!-- Save/Load panel -->
+    <!-- Save/Load dropdown -->
     <div
       v-if="showSaveLoad"
-      class="absolute right-0 top-[54px] z-50 w-80 rounded-bl-xl border p-5 shadow-2xl"
+      class="absolute right-6 top-14 z-50 w-80 rounded-b-xl border p-5 shadow-2xl"
       :style="{
         borderColor: 'var(--color-border-strong)',
         background: 'var(--color-bg-elev)',
@@ -317,123 +305,57 @@ onUnmounted(() => { disconnect() })
       <SaveLoadPanel :session-id="sessionId" @load-complete="handleLoadComplete" />
     </div>
 
-    <!-- ─── Desktop layout: 3 panels (md+) ─────────────────────────────────── -->
+    <!-- ─── Main content (desktop: 2 columns) ────────────────────────────── -->
     <div class="hidden min-h-0 flex-1 overflow-hidden md:flex">
 
-      <!-- Left panel: NarrativeLog (60%) -->
+      <!-- Left: NarrativeLog -->
       <section
-        class="flex w-[60%] min-h-0 flex-col overflow-hidden border-r"
+        class="flex min-h-0 flex-1 flex-col overflow-hidden border-r"
         :style="{ borderColor: 'var(--color-border)' }"
       >
         <NarrativeLog />
       </section>
 
-      <!-- Right panel (40%) -->
-      <section class="flex w-[40%] min-h-0 flex-col overflow-hidden">
-
-        <!-- TacticalGrid (combat only) -->
-        <div
-          v-if="gameStore.isInCombat && gameStore.gridConfig"
-          class="shrink-0 border-b p-3"
-          :style="{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elev)' }"
-        >
-          <TacticalGrid
-            :my-character-id="charStore.myCharacter?.id"
-            :is-my-turn="isMyTurn"
-            :speed-m="mySpeed"
-            @move="handleMove"
-          />
-        </div>
-
-        <!-- CombatTracker (top right) -->
-        <div
-          class="flex flex-1 min-h-0 flex-col overflow-hidden border-b"
-          :style="{ borderColor: 'var(--color-border)' }"
-        >
-          <CombatTracker />
-        </div>
-
-        <!-- CharacterSummary (bottom right) -->
-        <div class="flex flex-1 min-h-0 flex-col overflow-hidden">
-          <CharacterSummary />
-        </div>
-
-      </section>
-    </div>
-
-    <!-- ─── Mobile layout: single panel with tab nav ────────────────────────── -->
-    <div class="flex min-h-0 flex-1 flex-col overflow-hidden md:hidden">
-
-      <!-- Active panel -->
-      <div class="flex flex-1 min-h-0 flex-col overflow-hidden">
-        <NarrativeLog v-if="activeTab === 'recit'" />
-        <CombatTracker v-else-if="activeTab === 'combat'" />
-        <CharacterSummary v-else-if="activeTab === 'perso'" />
-      </div>
-
-      <!-- Mobile tab bar -->
-      <nav
-        class="flex shrink-0 border-t"
-        :style="{
-          borderColor: 'var(--color-border)',
-          background: 'var(--color-bg-elev)',
-        }"
+      <!-- Right: CharacterPanel sidebar -->
+      <aside
+        class="flex w-[360px] shrink-0 min-h-0 flex-col overflow-hidden"
+        :style="{ background: 'var(--color-bg-elev)' }"
       >
-        <button
-          v-for="tab in ([
-            { id: 'recit',  label: 'Récit',  icon: '❦' },
-            { id: 'combat', label: 'Combat', icon: '⚔' },
-            { id: 'perso',  label: 'Perso',  icon: '✦' },
-          ] as const)"
-          :key="tab.id"
-          class="flex flex-1 flex-col items-center gap-1 py-2.5 text-[10px] font-bold uppercase tracking-[0.15em] transition-colors"
-          :style="{
-            color: activeTab === tab.id ? 'var(--color-gold)' : 'var(--color-text-muted)',
-            borderTop: activeTab === tab.id ? '2px solid var(--color-gold)' : '2px solid transparent',
-            marginTop: activeTab === tab.id ? '-1px' : '0',
-            background: activeTab === tab.id ? 'rgba(240,199,100,0.05)' : 'transparent',
-          }"
-          @click="activeTab = tab.id"
-        >
-          <span
-            class="text-base leading-none"
-            :style="{ color: activeTab === tab.id ? 'var(--color-ember)' : 'inherit' }"
-          >{{ tab.icon }}</span>
-          <span>{{ tab.label }}</span>
-        </button>
-      </nav>
+        <CharacterPanel
+          @start-combat="startCombat"
+          @open-sheet="(id: string) => $router.push({ name: 'character-sheet', params: { charId: id }, query: { session: sessionId } })"
+        />
+      </aside>
     </div>
 
-    <!-- Tour actif (hot-seat) -->
-    <div
-      v-if="gameStore.isInCombat && activeCombatantName"
-      class="shrink-0 border-t px-6 py-1.5 text-center text-[11px] tracking-[0.1em] font-semibold uppercase"
-      :style="{
-        borderColor: 'var(--color-border)',
-        background: isMyTurn ? 'rgba(255,130,71,0.1)' : 'rgba(14,13,20,0.6)',
-        color: isMyTurn ? 'var(--color-ember)' : 'var(--color-text-muted)',
-      }"
-    >
-      <span v-if="isMyTurn">
-        ▶ Tour de
-        <strong class="font-display" :style="{ color: 'var(--color-gold)' }">{{ activeCombatantName }}</strong>
-        — à vous de jouer !
-      </span>
-      <span v-else>
-        Tour de
-        <strong class="font-display" :style="{ color: 'var(--color-parchment)' }">{{ activeCombatantName }}</strong>
-        …
-      </span>
+    <!-- ─── Mobile layout ────────────────────────────────────────────────── -->
+    <div class="flex min-h-0 flex-1 flex-col overflow-hidden md:hidden">
+      <NarrativeLog />
     </div>
 
-    <!-- ActionBar pinned at bottom -->
+    <!-- ─── ActionBar ─────────────────────────────────────────────────────── -->
     <ActionBar @action="handleAction" />
+
+    <!-- ─── PartyBar (bottom group bar) ──────────────────────────────────── -->
+    <PartyBar />
 
     <!-- Adventure start modal -->
     <AdventureStartModal
       v-if="showStartModal"
       @confirm="handleStartConfirm"
       @cancel="showStartModal = false"
+    />
+
+    <!-- Quitter la session -->
+    <ConfirmDialog
+      v-if="showLobbyConfirm"
+      title="Quitter la session ?"
+      message="Vous serez déconnecté et retournerez au Lobby. La progression non sauvegardée peut être perdue."
+      confirm-label="Quitter"
+      cancel-label="Rester"
+      tone="warning"
+      @confirm="confirmGoToLobby"
+      @cancel="showLobbyConfirm = false"
     />
   </div>
 </template>

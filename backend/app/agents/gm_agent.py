@@ -124,6 +124,36 @@ class GMAgent(BaseAgent):
         )
         return await self._call_and_parse(user_prompt, context_manager)
 
+    async def narrate_outcome(
+        self,
+        context: AgentContext,
+        roll_results: list[dict[str, Any]],
+    ) -> str:
+        """Narre l'issue d'un ou plusieurs jets de dés après résolution par le moteur."""
+        rolls_text = "\n".join(
+            "- {label}: {breakdown} → {outcome}".format(
+                label=r.get("label", "Jet"),
+                breakdown=r.get("breakdown", ""),
+                outcome=(
+                    "SUCCÈS" if r.get("success") is True
+                    else "ÉCHEC" if r.get("success") is False
+                    else str(r.get("total", "?"))
+                ),
+            )
+            for r in roll_results
+        )
+        user_prompt = self._render_prompt(
+            "gm_narrate_outcome.txt",
+            {
+                "game_state": json.dumps(context.game_state, ensure_ascii=False, indent=2),
+                "recent_messages": self._format_messages(context.messages or []),
+                "player_action": context.player_action or "",
+                "roll_results": rolls_text,
+            },
+        )
+        gm_resp = await self._call_and_parse(user_prompt, None)
+        return gm_resp.narration
+
     # -------------------------------------------------------------------------
     # Helpers privés
     # -------------------------------------------------------------------------

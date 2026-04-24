@@ -103,6 +103,11 @@ async def start_game(
             "hp": c.hp_current,
             "hp_max": c.hp_max,
             "is_ai": c.is_ai,
+            "level": c.level,
+            "ability_scores": dict(c.ability_scores),
+            "skill_proficiencies": list(c.proficiencies.get("skills", [])),
+            "save_proficiencies": list(c.proficiencies.get("saving_throws", [])),
+            # Compat backward pour _resolve_attack (lecture via combatants)
             "dex": int(c.ability_scores.get("dex", 10)),
             "str": int(c.ability_scores.get("str", 10)),
             "equipment": list(c.equipment or []),

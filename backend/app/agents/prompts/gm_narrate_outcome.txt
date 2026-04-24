@@ -1,0 +1,21 @@
+ÉTAT DU JEU :
+{{ game_state }}
+
+MESSAGES RÉCENTS :
+{{ recent_messages }}
+
+ACTION DU JOUEUR :
+{{ player_action }}
+
+RÉSULTATS DES JETS :
+{{ roll_results }}
+
+En tant que Maître du Jeu, narre l'issue de ce(s) jet(s) de dés.
+
+Instructions :
+- Intègre le résultat naturellement : un SUCCÈS révèle ce que le personnage perçoit, découvre ou accomplit ; un ÉCHEC décrit ce qu'il ne parvient pas à voir, entendre ou faire — sans forcément annoncer explicitement l'échec.
+- Narration courte et immersive : 2 à 3 phrases en français médiéval fantastique.
+- Ne répète pas l'action déjà décrite dans les messages récents.
+- Si aucune action mécanique supplémentaire n'est requise, laisse le tableau "actions" vide [].
+
+Réponds avec UN SEUL objet JSON valide selon le schéma du system prompt. Pas de balises markdown.
