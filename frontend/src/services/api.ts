@@ -222,4 +222,10 @@ export const adminApi = {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
+
+  pingLlm: () =>
+    request<{ ok: boolean; provider: string; model: string; latency_ms?: number; sample_response?: string; error?: string }>(
+      '/admin/llm/ping',
+      { method: 'POST' },
+    ),
 }

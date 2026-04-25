@@ -8,6 +8,22 @@ const saving = ref(false)
 const error = ref<string | null>(null)
 const saveSuccess = ref(false)
 
+// LLM ping test
+const pinging = ref(false)
+const pingResult = ref<{ ok: boolean; provider: string; model: string; latency_ms?: number; sample_response?: string; error?: string } | null>(null)
+
+async function pingLlm() {
+  pinging.value = true
+  pingResult.value = null
+  try {
+    pingResult.value = await adminApi.pingLlm()
+  } catch (e) {
+    pingResult.value = { ok: false, provider: provider.value, model: '', error: e instanceof Error ? e.message : 'Erreur réseau' }
+  } finally {
+    pinging.value = false
+  }
+}
+
 // Provider actif
 const provider = ref<LlmProvider>('ollama')
 
@@ -384,6 +400,26 @@ onMounted(async () => {
     <p v-if="error" class="text-blood text-sm">{{ error }}</p>
     <p v-if="saveSuccess" class="text-green-400 text-sm">Paramètres sauvegardés.</p>
 
+    <!-- Résultat ping LLM -->
+    <div
+      v-if="pingResult"
+      class="flex items-start gap-3 p-3 rounded-lg border text-sm"
+      :class="pingResult.ok
+        ? 'bg-green-900/20 border-green-700/40 text-green-300'
+        : 'bg-red-900/20 border-red-700/40 text-red-300'"
+    >
+      <span class="shrink-0 text-base">{{ pingResult.ok ? '✓' : '✗' }}</span>
+      <div class="min-w-0">
+        <div class="font-semibold">
+          {{ pingResult.ok ? 'LLM opérationnel' : 'LLM inaccessible' }}
+          <span v-if="pingResult.latency_ms" class="font-normal opacity-70 ml-2">{{ pingResult.latency_ms }} ms</span>
+        </div>
+        <div class="font-mono text-xs opacity-70 mt-0.5">{{ pingResult.provider }} / {{ pingResult.model }}</div>
+        <div v-if="pingResult.sample_response" class="mt-1 opacity-60 text-xs italic truncate">« {{ pingResult.sample_response }} »</div>
+        <div v-if="pingResult.error" class="mt-1 text-xs">{{ pingResult.error }}</div>
+      </div>
+    </div>
+
     <!-- Actions -->
     <div class="flex gap-3">
       <button
@@ -393,6 +429,14 @@ onMounted(async () => {
         @click="testConnection"
       >
         {{ loading ? 'Test…' : 'Tester la connexion' }}
+      </button>
+
+      <button
+        class="px-4 py-2 rounded border border-arcane/30 text-arcane/80 hover:bg-arcane/10 transition-colors disabled:opacity-50"
+        :disabled="pinging"
+        @click="pingLlm"
+      >
+        {{ pinging ? 'Test LLM…' : '🤖 Tester le LLM' }}
       </button>
 
       <button

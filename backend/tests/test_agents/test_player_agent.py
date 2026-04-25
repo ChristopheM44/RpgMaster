@@ -289,8 +289,9 @@ async def test_decide_action_llm_error_returns_fallback(brave_agent: PlayerAgent
     ):
         action = await brave_agent.decide_action(game_state=_game_state())
 
-    assert action is _FALLBACK_ACTION
     assert action.action_type == "wait"
+    assert action.llm_error is not None
+    assert "Connection refused" in action.llm_error
 
 
 async def test_decide_action_non_json_response_uses_raw_text(brave_agent: PlayerAgent) -> None:

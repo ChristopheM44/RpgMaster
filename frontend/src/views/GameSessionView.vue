@@ -22,7 +22,7 @@ const gameStore = useGameStore()
 const charStore = useCharacterStore()
 const sessionStore = useSessionStore()
 
-const { connect, disconnect, reconnect, sendAction, reconnectCount, isReconnecting, isDisconnected } = useWebSocket(sessionId)
+const { connect, disconnect, reconnect, sendAction, toggleAiControl, triggerAiReactions, reconnectCount, isReconnecting, isDisconnected } = useWebSocket(sessionId)
 
 const startingGame = ref(false)
 const showSaveLoad = ref(false)
@@ -123,6 +123,16 @@ function startCombat() { sendAction('start_combat', undefined, charStore.myChara
 function takeRest()    { sendAction('take_rest',    undefined, charStore.myCharacter?.id) }
 function resetCombat() { sendAction('reset_combat', undefined, charStore.myCharacter?.id) }
 function dismissError() { gameStore.setError(null) }
+
+async function handleToggleAi(characterId: string, nextIsAi: boolean) {
+  // Optimistic local update via REST + store, then notify backend WS for live handoff
+  await charStore.toggleAiControl(characterId)
+  toggleAiControl(characterId, nextIsAi)
+}
+
+function handleTriggerAi() {
+  triggerAiReactions()
+}
 
 watch(() => gameStore.currentTurnId, (turnId) => {
   if (!turnId) return
@@ -270,6 +280,14 @@ onUnmounted(() => { disconnect() })
           @click="resetCombat"
         >✕ Reset</button>
 
+        <!-- AI reactions (exploration only) -->
+        <button
+          v-if="gameStore.phase === 'exploration' && charStore.sessionCharacters.some(c => c.is_ai)"
+          class="rpg-btn-tonal tone-arcane !py-1.5 !text-[11px]"
+          title="Demander aux compagnons IA de réagir maintenant"
+          @click="handleTriggerAi"
+        >🤖 IA réagit</button>
+
         <!-- Save -->
         <button
           class="rpg-btn-secondary !py-1.5 !px-4 !text-[11px]"
@@ -337,7 +355,7 @@ onUnmounted(() => { disconnect() })
     <ActionBar @action="handleAction" />
 
     <!-- ─── PartyBar (bottom group bar) ──────────────────────────────────── -->
-    <PartyBar />
+    <PartyBar @toggle-ai="handleToggleAi" @trigger-ai="handleTriggerAi" />
 
     <!-- Adventure start modal -->
     <AdventureStartModal

@@ -171,6 +171,19 @@ async function deleteCharacter(id: string) {
   }
 }
 
+// ─── Toggle IA ────────────────────────────────────────────────────────────────
+
+async function toggleCharacterAi(char: Character) {
+  const nextValue = !char.is_ai
+  try {
+    const updated = await characterApi.update(char.id, { is_ai: nextValue })
+    const idx = characters.value.findIndex((c) => c.id === char.id)
+    if (idx !== -1) characters.value[idx] = updated
+  } catch {
+    errorMsg.value = 'Impossible de modifier le contrôle IA du personnage.'
+  }
+}
+
 // ─── Start game ───────────────────────────────────────────────────────────────
 
 async function startGame(mode: 'libre' | 'script' | 'auto', script?: string) {
@@ -291,6 +304,18 @@ function classIcon(classId: string): string {
 
             <!-- Actions -->
             <div class="flex items-center gap-2">
+              <button
+                :class="[
+                  'rounded border px-2 py-1 text-xs transition',
+                  char.is_ai
+                    ? 'border-arcane/60 bg-arcane/20 text-arcane-light hover:bg-arcane/30'
+                    : 'border-gold/50 bg-gold/10 text-gold hover:bg-gold/20',
+                ]"
+                :title="char.is_ai ? 'Contrôlé par l\'IA (cliquer pour repasser en joueur)' : 'Contrôlé par un joueur (cliquer pour laisser l\'IA jouer)'"
+                @click="toggleCharacterAi(char)"
+              >
+                {{ char.is_ai ? '🤖 IA' : '👤 Joueur' }}
+              </button>
               <button
                 class="rounded border border-stone/50 px-2 py-1 text-xs text-parchment-dark transition hover:border-blood hover:text-blood-light"
                 @click="confirmDeleteId = char.id"

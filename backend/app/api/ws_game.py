@@ -479,24 +479,11 @@ async def _handle_start_combat(
         }
         npc_names.append(npc["name"])
 
-    # Enregistrer les PlayerAgent pour les compagnons IA (personnages avec is_ai=True)
-    # Si non enregistrés, ils tomberaient dans le chemin "monstre ennemi" de _handle_ai_turns.
-    from app.agents.player_agent import PlayerAgent, PlayerPersonality
+    # Enregistrer les PlayerAgent pour les compagnons IA (personnages avec is_ai=True).
+    # Idempotent : ne recrée pas les agents déjà présents (déjà restaurés par open_session).
+    from app.game.ai_player_manager import register_ai_player
     for char_id, cdata in characters_data.items():
-        if cdata.get("is_ai", False) and char_id not in active.ai_players:
-            personality_traits = cdata.get("personality", ["brave"])
-            if isinstance(personality_traits, str):
-                personality_traits = [personality_traits]
-            active.ai_players[char_id] = PlayerAgent(
-                character_id=char_id,
-                character_name=cdata["name"],
-                personality=PlayerPersonality(traits=personality_traits),
-            )
-            logger.info(
-                "_handle_start_combat: PlayerAgent enregistré pour compagnon IA '%s' (%s).",
-                cdata["name"],
-                char_id,
-            )
+        register_ai_player(active, char_id, cdata)
 
     # Roll initiative and set up TurnManager
     turn_entries = active.turn_manager.setup_combat(combatants_list)
@@ -1225,6 +1212,149 @@ async def _send_welcome_narration(session_id: str, active: Any, db: AsyncSession
 
 
 # ---------------------------------------------------------------------------
+# AI control toggle / manual reactions
+# ---------------------------------------------------------------------------
+
+
+async def _handle_toggle_ai_control(
+    session_id: str,
+    character_id: Optional[str],
+    next_is_ai: bool,
+    db: AsyncSession,
+) -> None:
+    """Toggle a character between human and AI control during a live session.
+
+    - Persists ``Character.is_ai`` in DB.
+    - Updates the in-memory snapshot (``state_data["characters"]``).
+    - Mutates the matching ``TurnEntry.is_ai_controlled`` in the turn order.
+    - Registers or unregisters the ``PlayerAgent`` accordingly.
+    - Broadcasts ``SESSION_STATE``.
+    - If the current turn belongs to the toggled character and it became AI,
+      triggers the AI turn loop (combat only) or the exploration reactions.
+    """
+    if not character_id:
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.ERROR,
+            {"message": "toggle_ai_control: character_id requis."},
+            source="ws_game",
+        )
+        return
+
+    active = session_manager.get_session(session_id)
+    if active is None:
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.ERROR,
+            {"message": f"Session '{session_id}' inactive."},
+            source="ws_game",
+        )
+        return
+
+    # --- DB update -------------------------------------------------------
+    result = await db.execute(select(Character).where(Character.id == character_id))
+    char = result.scalar_one_or_none()
+    if char is None:
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.ERROR,
+            {"message": f"Personnage '{character_id}' introuvable."},
+            source="ws_game",
+        )
+        return
+    char.is_ai = next_is_ai
+    await db.commit()
+
+    # --- In-memory state snapshot ---------------------------------------
+    chars_data: dict[str, Any] = active.state_data.setdefault("characters", {})
+    cdata = chars_data.setdefault(character_id, {})
+    cdata["is_ai"] = next_is_ai
+    cdata.setdefault("name", char.name)
+
+    # Combatants map (used in combat)
+    combatants_info: dict[str, Any] = active.state_data.get("combatants", {})
+    if character_id in combatants_info:
+        combatants_info[character_id]["is_ai"] = next_is_ai
+
+    # --- TurnManager ----------------------------------------------------
+    for entry in active.turn_manager._order:
+        if entry.combatant_id == character_id:
+            entry.is_ai_controlled = next_is_ai
+            break
+
+    # --- PlayerAgent registry ------------------------------------------
+    from app.game.ai_player_manager import register_ai_player, unregister_ai_player
+    if next_is_ai:
+        register_ai_player(active, character_id, cdata)
+    else:
+        unregister_ai_player(active, character_id)
+
+    active.mark_dirty()
+    await session_manager.save_state(session_id, db)
+
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.SESSION_STATE,
+        _build_session_state_payload(session_id),
+        source="ws_game",
+    )
+
+    # --- If the toggled character is currently up, hand over to AI -----
+    current = active.turn_manager.current_turn
+    if next_is_ai and current and current.combatant_id == character_id:
+        if active.phase == SessionStatus.COMBAT:
+            await _handle_ai_turns(session_id, active, db)
+        else:
+            from app.game.ai_player_manager import AIPlayerManager
+            try:
+                await AIPlayerManager().run_exploration_reactions(
+                    session_id, active, action_resolver, trigger_character_id=None
+                )
+            except Exception as exc:
+                logger.error("toggle_ai_control: exploration reactions failed: %s", exc)
+
+
+async def _handle_trigger_ai_reactions(
+    session_id: str,
+    trigger_character_id: Optional[str] = None,
+) -> None:
+    """Manual fallback: let AI companions react without a preceding human action."""
+    active = session_manager.get_session(session_id)
+    if active is None:
+        return
+
+    if not active.ai_players:
+        return
+
+    if active.phase == SessionStatus.COMBAT:
+        # In combat, only makes sense when the current turn is AI.
+        current = active.turn_manager.current_turn
+        if current is None or not current.is_ai_controlled:
+            return
+        # Reuse the standard combat loop — handled without db for read-only path;
+        # save_state inside may need db, so acquire a fresh session at caller site.
+        # Here we just delegate to the AIPlayerManager which uses action_resolver.
+        from app.game.ai_player_manager import AIPlayerManager
+        await AIPlayerManager().process_ai_turns(session_id, active, action_resolver)
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.SESSION_STATE,
+            _build_session_state_payload(session_id),
+            source="ws_game",
+        )
+        return
+
+    # Exploration: let each AI companion react once.
+    from app.game.ai_player_manager import AIPlayerManager
+    await AIPlayerManager().run_exploration_reactions(
+        session_id,
+        active,
+        action_resolver,
+        trigger_character_id=trigger_character_id,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Action dispatcher
 # ---------------------------------------------------------------------------
 
@@ -1343,6 +1473,24 @@ async def _dispatch_action(
             {"turn_number": active.turn_number},
             source="ws_game",
         )
+
+        # En exploration, laisser les compagnons IA réagir après l'action
+        # humaine. Désactivable via state_data["auto_ai_reactions"] = False
+        # (par exemple si l'utilisateur préfère déclencher manuellement via
+        # le bouton "Laisser l'IA réagir").
+        if active.state_data.get("auto_ai_reactions", True) and active.ai_players:
+            from app.game.ai_player_manager import AIPlayerManager
+            try:
+                await AIPlayerManager().run_exploration_reactions(
+                    session_id,
+                    active,
+                    action_resolver,
+                    trigger_character_id=action.character_id,
+                )
+            except Exception as exc:
+                logger.error(
+                    "Auto AI reactions failed in exploration: %s", exc, exc_info=True
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -1498,6 +1646,46 @@ async def game_websocket(
                         session_id,
                         EventType.ERROR,
                         {"message": "Une erreur interne s'est produite. Réessayez."},
+                        source="ws_game",
+                    )
+                continue
+
+            # --- toggle_ai_control --------------------------------------
+            if msg_type == "toggle_ai_control":
+                try:
+                    await _handle_toggle_ai_control(
+                        session_id,
+                        character_id=raw.get("character_id"),
+                        next_is_ai=bool(raw.get("is_ai", False)),
+                        db=db,
+                    )
+                except Exception as exc:
+                    logger.error(
+                        "Unhandled error in toggle_ai_control: %s", exc, exc_info=True
+                    )
+                    await event_bus.publish_to_session(
+                        session_id,
+                        EventType.ERROR,
+                        {"message": f"Erreur toggle IA : {exc}"},
+                        source="ws_game",
+                    )
+                continue
+
+            # --- trigger_ai_reactions -----------------------------------
+            if msg_type == "trigger_ai_reactions":
+                try:
+                    await _handle_trigger_ai_reactions(
+                        session_id,
+                        trigger_character_id=raw.get("character_id"),
+                    )
+                except Exception as exc:
+                    logger.error(
+                        "Unhandled error in trigger_ai_reactions: %s", exc, exc_info=True
+                    )
+                    await event_bus.publish_to_session(
+                        session_id,
+                        EventType.ERROR,
+                        {"message": f"Erreur déclenchement IA : {exc}"},
                         source="ws_game",
                     )
                 continue

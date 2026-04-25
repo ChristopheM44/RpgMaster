@@ -188,6 +188,14 @@ export function useWebSocket(sessionId: string) {
     })
   }
 
+  function toggleAiControl(characterId: string, nextIsAi: boolean) {
+    send({ type: 'toggle_ai_control', character_id: characterId, is_ai: nextIsAi })
+  }
+
+  function triggerAiReactions(triggerCharacterId?: string) {
+    send({ type: 'trigger_ai_reactions', character_id: triggerCharacterId })
+  }
+
   function reconnect() {
     reconnectCount.value = 0
     gameStore.setError(null)
@@ -209,5 +217,5 @@ export function useWebSocket(sessionId: string) {
 
   onUnmounted(disconnect)
 
-  return { connect, disconnect, reconnect, send, sendAction, reconnectCount, isReconnecting, isDisconnected }
+  return { connect, disconnect, reconnect, send, sendAction, toggleAiControl, triggerAiReactions, reconnectCount, isReconnecting, isDisconnected }
 }

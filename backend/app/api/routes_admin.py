@@ -7,9 +7,12 @@ Endpoints :
     GET  /api/admin/llm/health        → état Ollama (disponibilité + modèles)
     GET  /api/admin/llm/settings      → paramètres LLM courants (provider inclus)
     PUT  /api/admin/llm/settings      → mise à jour provider/URL/modèles/clé API (runtime)
+    POST /api/admin/llm/ping          → test rapide d'un appel LLM (provider courant)
 """
 from __future__ import annotations
 
+import logging
+import time
 from typing import List, Optional
 
 import httpx
@@ -26,7 +29,10 @@ from app.config import (
     is_openai_api_key_set,
     update_llm_settings,
 )
+from app.llm.model_router import router as llm_router
 from app.llm.voxtral_client import tts_router
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -76,6 +82,15 @@ class LlmSettingsResponse(BaseModel):
     openai_base_url: str
     api_key_set: bool
     ollama_api_key_set: bool
+
+
+class LlmPingResponse(BaseModel):
+    ok: bool
+    provider: str
+    model: str
+    latency_ms: Optional[int] = None
+    sample_response: Optional[str] = None
+    error: Optional[str] = None
 
 
 class LlmSettingsUpdate(BaseModel):
@@ -184,4 +199,46 @@ async def update_llm_settings_endpoint(body: LlmSettingsUpdate) -> LlmSettingsRe
         openai_base_url=get_openai_base_url(),
         api_key_set=is_openai_api_key_set(),
         ollama_api_key_set=is_ollama_api_key_set(),
+    )
+
+
+@router.post("/llm/ping", response_model=LlmPingResponse)
+async def ping_llm() -> LlmPingResponse:
+    """Envoie un prompt trivial au provider LLM actif pour vérifier la configuration.
+
+    Utile pour diagnostiquer rapidement un provider cloud mal configuré
+    (URL/clé/modèle incorrects) qui ferait taire silencieusement les
+    compagnons IA (fallback `wait`).
+    """
+    provider = get_llm_provider()
+    model = get_player_model()
+    client = llm_router.get_player_client()
+    start = time.perf_counter()
+    try:
+        raw = await client.chat(
+            messages=[
+                {"role": "system", "content": "Réponds simplement 'pong'."},
+                {"role": "user", "content": "ping"},
+            ],
+            temperature=0.0,
+            max_tokens=16,
+        )
+    except Exception as exc:
+        latency_ms = int((time.perf_counter() - start) * 1000)
+        logger.warning("ping_llm: provider=%s model=%s failed: %s", provider, model, exc)
+        return LlmPingResponse(
+            ok=False,
+            provider=provider,
+            model=model,
+            latency_ms=latency_ms,
+            error=f"{type(exc).__name__}: {exc}",
+        )
+    latency_ms = int((time.perf_counter() - start) * 1000)
+    sample = (raw or "").strip()[:200]
+    return LlmPingResponse(
+        ok=True,
+        provider=provider,
+        model=model,
+        latency_ms=latency_ms,
+        sample_response=sample,
     )

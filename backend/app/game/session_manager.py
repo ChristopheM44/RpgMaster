@@ -130,6 +130,13 @@ class SessionManager:
         if turn_data:
             active.turn_manager.load_dict(turn_data)
 
+        # Restore AI companion agents from state_data["characters"].
+        # Without this, after a backend restart / save reload, AI-controlled
+        # characters would fall through to the "enemy monster" branch of
+        # _handle_ai_turns and stop acting.
+        from app.game.ai_player_manager import rebuild_ai_players
+        rebuild_ai_players(active)
+
         self._sessions[session_id] = active
         logger.info("Session %s opened (phase=%s).", session_id, active.phase.value)
         return active

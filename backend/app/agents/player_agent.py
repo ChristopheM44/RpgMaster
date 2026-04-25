@@ -20,12 +20,23 @@ from app.llm.openai_compatible_client import OpenAICompatibleError
 
 logger = logging.getLogger(__name__)
 
-_FALLBACK_ACTION = PlayerActionChoice(
-    action_type="wait",
-    action_description="Le personnage attend, incertain.",
-    roleplay_text="(hésite, cherchant quoi faire)",
-    inner_reasoning="Le système LLM est indisponible.",
-)
+def _fallback_action(error: Optional[str] = None) -> PlayerActionChoice:
+    """Action de repli quand le LLM ne répond pas ou renvoie un JSON invalide.
+
+    ``error`` est propagé dans ``PlayerActionChoice.llm_error`` pour que la
+    couche appelante puisse remonter l'incident à l'utilisateur au lieu de
+    laisser le personnage « attendre » en silence.
+    """
+    return PlayerActionChoice(
+        action_type="wait",
+        action_description="Le personnage attend, incertain.",
+        roleplay_text="(hésite, cherchant quoi faire)",
+        inner_reasoning="Le système LLM est indisponible.",
+        llm_error=error,
+    )
+
+
+_FALLBACK_ACTION = _fallback_action()
 
 _PERSONALITY_DESCRIPTIONS: dict[str, str] = {
     "brave": (
@@ -256,7 +267,7 @@ class PlayerAgent(BaseAgent):
             raw = await self._client.chat(messages=messages, temperature=0.8, max_tokens=512)
         except (OllamaError, OpenAICompatibleError) as exc:
             logger.error("PlayerAgent[%s] : appel LLM échoué : %s", self._character_name, exc)
-            return _FALLBACK_ACTION
+            return _fallback_action(error=f"{type(exc).__name__}: {exc}")
 
         data = self._extract_json(raw)
         if data is None:
@@ -267,6 +278,7 @@ class PlayerAgent(BaseAgent):
                 action_type="wait",
                 action_description="Le personnage hésite.",
                 roleplay_text=raw.strip()[:300],
+                llm_error="Réponse LLM non parsable (JSON manquant).",
             )
 
         return self._parse_player_action(data, raw)
@@ -309,7 +321,7 @@ class PlayerAgent(BaseAgent):
                 self._character_name,
                 exc,
             )
-            return _FALLBACK_ACTION
+            return _fallback_action(error=f"ParseError: {exc}")
 
     def _extract_character(self, game_state: dict[str, Any]) -> dict[str, Any]:
         """Extrait les données du personnage depuis le game_state."""

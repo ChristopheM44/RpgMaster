@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import { useCharacterStore } from '../../stores/character'
 import type { Character } from '../../types'
+
+const emit = defineEmits<{
+  (e: 'toggle-ai', characterId: string, nextIsAi: boolean): void
+  (e: 'trigger-ai'): void
+}>()
 
 const charStore = useCharacterStore()
 
@@ -15,6 +19,11 @@ function hpColor(c: Character): string {
 }
 
 const isSelected = (c: Character) => c.id === charStore.myCharacter?.id
+
+function onToggleAi(e: Event, c: Character) {
+  e.stopPropagation()
+  emit('toggle-ai', c.id, !c.is_ai)
+}
 </script>
 
 <template>
@@ -47,7 +56,7 @@ const isSelected = (c: Character) => c.id === charStore.myCharacter?.id
       <div
         v-for="c in charStore.sessionCharacters"
         :key="c.id"
-        class="flex shrink-0 cursor-pointer items-center gap-2.5 rounded-[10px] border px-3 py-2 transition-all"
+        class="group relative flex shrink-0 cursor-pointer items-center gap-2.5 rounded-[10px] border px-3 py-2 transition-all"
         style="min-width: 160px;"
         :style="{
           borderColor: isSelected(c) ? 'var(--color-ember)' : 'var(--color-border)',
@@ -58,6 +67,17 @@ const isSelected = (c: Character) => c.id === charStore.myCharacter?.id
         }"
         @click="charStore.setMyCharacter(c)"
       >
+        <!-- Toggle IA/Joueur, shown on hover -->
+        <button
+          class="absolute top-1 right-1 z-10 rounded px-1.5 py-0.5 text-[9px] font-bold opacity-0 transition-opacity group-hover:opacity-100"
+          :style="{
+            background: c.is_ai ? 'rgba(192,144,255,0.15)' : 'rgba(240,199,100,0.12)',
+            color: c.is_ai ? 'var(--color-arcane)' : 'var(--color-gold)',
+            border: c.is_ai ? '1px solid rgba(192,144,255,0.35)' : '1px solid rgba(240,199,100,0.35)',
+          }"
+          :title="c.is_ai ? 'Reprendre le contrôle (joueur)' : 'Laisser l\'IA jouer ce personnage'"
+          @click="onToggleAi($event, c)"
+        >{{ c.is_ai ? '👤' : '🤖' }}</button>
         <!-- Avatar -->
         <div
           class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg font-display text-base font-bold"

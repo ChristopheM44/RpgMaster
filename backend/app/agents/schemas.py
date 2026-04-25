@@ -122,6 +122,14 @@ class PlayerActionChoice(BaseModel):
     inner_reasoning: Optional[str] = Field(
         None, description="Réflexion interne du personnage (non affichée aux autres)"
     )
+    llm_error: Optional[str] = Field(
+        None,
+        description=(
+            "Défini si l'action est un fallback dû à un échec LLM "
+            "(provider injoignable, JSON invalide…). Permet au gestionnaire "
+            "de remonter l'erreur à l'utilisateur."
+        ),
+    )
 
 
 class PlayerPersonality(BaseModel):
