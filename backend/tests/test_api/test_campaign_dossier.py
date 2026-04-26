@@ -217,6 +217,22 @@ async def test_campaign_scenario_returns_player_timeline(async_client):
 
 
 @pytest.mark.asyncio
+async def test_campaign_gm_dossier_endpoint_exposes_author_notes_only(async_client):
+    forged = await _forge_and_validate(async_client)
+    response = await async_client.get(f"/api/campaigns/{forged['campaign_id']}/gm-dossier")
+
+    assert response.status_code == 200
+    data = response.json()
+    serialized = json.dumps(data, ensure_ascii=False)
+    assert data["campaign_id"] == forged["campaign_id"]
+    assert data["generation_status"] == "validated"
+    assert data["active_chapter_id"] == "chapter_1"
+    assert data["gm_dossier"]["chapters"][0]["secrets"] == [SECRET]
+    assert SECRET in serialized
+    assert "import_sources" not in serialized
+
+
+@pytest.mark.asyncio
 async def test_start_game_injects_minimal_campaign_context(async_client, db_session):
     forged = await _forge_and_validate(async_client)
     campaign_id = forged["campaign_id"]

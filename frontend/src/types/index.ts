@@ -676,6 +676,46 @@ export interface CampaignScenario {
   played_summary: string
 }
 
+export interface CampaignGmChapter {
+  id?: string
+  title?: string
+  state?: 'done' | 'active' | 'planned' | string
+  objective?: string
+  stakes?: string
+  initial_state?: string
+  key_locations?: unknown[]
+  involved_npcs?: unknown[]
+  clues?: unknown[]
+  secrets?: unknown[]
+  complications?: unknown[]
+  possible_exits?: unknown[]
+  indicative_dcs?: unknown[]
+  possible_srd_encounters?: string[]
+}
+
+export interface CampaignGmDossier {
+  narrative_arc?: string
+  chapters?: CampaignGmChapter[]
+  important_npcs?: unknown[]
+  locations?: unknown[]
+  factions?: unknown[]
+  secrets?: unknown[]
+  revelations?: unknown[]
+  fronts?: unknown[]
+  quests?: unknown[]
+  complications?: unknown[]
+  clues?: unknown[]
+  light_mechanics?: unknown[]
+  [key: string]: unknown
+}
+
+export interface CampaignGmDossierResponse {
+  campaign_id: string
+  generation_status: CampaignGenerationStatus
+  active_chapter_id: string
+  gm_dossier: CampaignGmDossier
+}
+
 export interface CampaignForgeDraftResponse {
   campaign_id: string
   generation_status: CampaignGenerationStatus

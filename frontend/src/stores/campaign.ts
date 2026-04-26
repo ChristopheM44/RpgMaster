@@ -6,6 +6,7 @@ import type {
   CampaignAdvanceBody,
   CampaignAdvanceResponse,
   CampaignForgeDraftResponse,
+  CampaignGmDossierResponse,
   CampaignImportSourceBody,
   CampaignImportSourceResponse,
   CampaignPlayerContract,
@@ -18,6 +19,7 @@ export const useCampaignStore = defineStore('campaign', () => {
   const campaigns = ref<Campaign[]>([])
   const currentCampaign = ref<Campaign | null>(null)
   const scenarios = ref<Record<string, CampaignScenario>>({})
+  const gmDossiers = ref<Record<string, CampaignGmDossierResponse>>({})
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -72,6 +74,19 @@ export const useCampaignStore = defineStore('campaign', () => {
       return scenario
     } catch {
       error.value = 'Erreur de chargement du scénario'
+      return null
+    }
+  }
+
+  async function fetchGmDossier(id: string): Promise<CampaignGmDossierResponse | null> {
+    try {
+      const res = await fetch(`${API}/${id}/gm-dossier`)
+      if (!res.ok) throw new Error()
+      const dossier: CampaignGmDossierResponse = await res.json()
+      gmDossiers.value[id] = dossier
+      return dossier
+    } catch {
+      error.value = 'Erreur de chargement des notes MJ'
       return null
     }
   }
@@ -182,12 +197,14 @@ export const useCampaignStore = defineStore('campaign', () => {
     campaigns,
     currentCampaign,
     scenarios,
+    gmDossiers,
     loading,
     error,
     fetchCampaigns,
     createCampaign,
     fetchCampaign,
     fetchScenario,
+    fetchGmDossier,
     importSource,
     forgeDraft,
     validateContract,

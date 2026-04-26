@@ -224,6 +224,27 @@ async def scenario_view(campaign_id: str, db: AsyncSession) -> dict[str, Any]:
     }
 
 
+async def gm_dossier_view(campaign_id: str, db: AsyncSession) -> dict[str, Any]:
+    campaign = await _get_campaign_or_raise(campaign_id, db)
+    dossier = await get_dossier(campaign.id, db)
+    if dossier is None:
+        contract = sanitize_player_contract({}, campaign, brief={})
+        return {
+            "campaign_id": campaign.id,
+            "generation_status": "empty",
+            "active_chapter_id": "",
+            "gm_dossier": sanitize_gm_dossier({}, campaign, contract),
+        }
+
+    contract = sanitize_player_contract(dossier.player_contract or {}, campaign, brief={})
+    return {
+        "campaign_id": campaign.id,
+        "generation_status": dossier.generation_status,
+        "active_chapter_id": dossier.active_chapter_id,
+        "gm_dossier": sanitize_gm_dossier(dossier.gm_dossier or {}, campaign, contract),
+    }
+
+
 async def public_summary(campaign: Campaign, db: AsyncSession) -> dict[str, Any]:
     dossier = await get_dossier(campaign.id, db)
     if dossier is None:

@@ -4,6 +4,8 @@ import { useRouter } from 'vue-router'
 import { useCampaignStore } from '../stores/campaign'
 import type {
   Campaign,
+  CampaignGmDossier,
+  CampaignGmDossierResponse,
   CampaignImportSourceBody,
   CampaignPlayerContract,
   CampaignScenario,
@@ -28,6 +30,18 @@ const IMPORT_KINDS: Array<{ id: 'url' | 'text' | 'file_text'; label: string }> =
   { id: 'url', label: 'URL' },
   { id: 'file_text', label: 'Fichier' },
 ]
+const GM_SECTIONS: Array<{ key: keyof CampaignGmDossier; label: string }> = [
+  { key: 'important_npcs', label: 'PNJ importants' },
+  { key: 'locations', label: 'Lieux' },
+  { key: 'factions', label: 'Factions' },
+  { key: 'quests', label: 'Quêtes' },
+  { key: 'fronts', label: 'Fronts' },
+  { key: 'secrets', label: 'Secrets globaux' },
+  { key: 'revelations', label: 'Révélations' },
+  { key: 'complications', label: 'Complications' },
+  { key: 'clues', label: 'Indices' },
+  { key: 'light_mechanics', label: 'Mécaniques légères' },
+]
 
 const selectedCampaign = ref<Campaign | null>(null)
 const activeTab = ref<DetailTab>('sessions')
@@ -42,7 +56,10 @@ const sourceCount = ref(0)
 const isForging = ref(false)
 const isImporting = ref(false)
 const isValidating = ref(false)
+const authorMode = ref(false)
+const isLoadingGmDossier = ref(false)
 const modalError = ref<string | null>(null)
+const notesError = ref<string | null>(null)
 
 const forgeForm = reactive({
   name: '',
@@ -70,11 +87,26 @@ watch(activeTab, async (tab) => {
   if (tab === 'scenario' && selectedCampaign.value) {
     await campaignStore.fetchScenario(selectedCampaign.value.id)
   }
+  if (tab === 'notes' && selectedCampaign.value && authorMode.value) {
+    await loadGmDossier()
+  }
 })
 
 const scenario = computed<CampaignScenario | null>(() => {
   if (!selectedCampaign.value) return null
   return campaignStore.scenarios[selectedCampaign.value.id] ?? null
+})
+
+const gmDossierResponse = computed<CampaignGmDossierResponse | null>(() => {
+  if (!selectedCampaign.value) return null
+  return campaignStore.gmDossiers[selectedCampaign.value.id] ?? null
+})
+
+const gmDossier = computed<CampaignGmDossier | null>(() => gmDossierResponse.value?.gm_dossier ?? null)
+
+const gmDossierRaw = computed(() => {
+  if (!gmDossier.value) return ''
+  return JSON.stringify(gmDossier.value, null, 2)
 })
 
 const campaignToDelete = computed(
@@ -85,6 +117,7 @@ async function selectCampaign(campaign: Campaign) {
   const fresh = await campaignStore.fetchCampaign(campaign.id)
   selectedCampaign.value = fresh ?? campaign
   if (activeTab.value === 'scenario') await campaignStore.fetchScenario(campaign.id)
+  if (activeTab.value === 'notes' && authorMode.value) await loadGmDossier()
 }
 
 function openForge() {
@@ -279,6 +312,34 @@ function setActiveTab(tab: DetailTab) {
   activeTab.value = tab
 }
 
+async function loadGmDossier(force = false) {
+  if (!selectedCampaign.value) return
+  const campaignId = selectedCampaign.value.id
+  if (!force && campaignStore.gmDossiers[campaignId]) return
+  notesError.value = null
+  isLoadingGmDossier.value = true
+  try {
+    const result = await campaignStore.fetchGmDossier(campaignId)
+    if (!result) {
+      notesError.value = campaignStore.error ?? 'Notes MJ introuvables.'
+    }
+  } finally {
+    isLoadingGmDossier.value = false
+  }
+}
+
+async function setAuthorMode(value: boolean) {
+  authorMode.value = value
+  notesError.value = null
+  if (value) {
+    await loadGmDossier()
+  }
+}
+
+function handleAuthorModeChange(event: Event) {
+  void setAuthorMode((event.target as HTMLInputElement).checked)
+}
+
 function currentSessionId(campaign: Campaign): string | null {
   const ids = campaign.session_ids
   if (!ids.length) return null
@@ -354,6 +415,50 @@ function chipStateLabel(state: string): string {
   if (state === 'done') return 'Terminé'
   if (state === 'active') return 'En cours'
   return 'À venir'
+}
+
+function asList(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : []
+}
+
+function dossierList(key: keyof CampaignGmDossier): unknown[] {
+  if (!gmDossier.value) return []
+  return asList(gmDossier.value[key])
+}
+
+function formatGmValue(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  return JSON.stringify(value, null, 2)
+}
+
+function itemTitle(item: unknown, fallback: string): string {
+  if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean') {
+    return String(item)
+  }
+  if (item && typeof item === 'object' && !Array.isArray(item)) {
+    const record = item as Record<string, unknown>
+    return (
+      formatGmValue(record.title)
+      || formatGmValue(record.name)
+      || formatGmValue(record.label)
+      || formatGmValue(record.id)
+      || fallback
+    )
+  }
+  return fallback
+}
+
+function itemDetail(item: unknown): string {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return ''
+  const record = item as Record<string, unknown>
+  const preferred = record.summary ?? record.description ?? record.note ?? record.secret ?? record.objective
+  if (preferred !== undefined && preferred !== null && preferred !== '') return formatGmValue(preferred)
+  const rest = Object.fromEntries(
+    Object.entries(record).filter(([key]) => !['id', 'title', 'name', 'label', 'public'].includes(key)),
+  )
+  return Object.keys(rest).length ? JSON.stringify(rest, null, 2) : ''
 }
 
 function cloneContract(contract: CampaignPlayerContract): CampaignPlayerContract {
@@ -596,11 +701,159 @@ function cloneContract(contract: CampaignPlayerContract): CampaignPlayerContract
 
         <div v-else class="space-y-4">
           <div class="rounded-lg border border-border bg-surface p-4">
-            <div class="text-[9px] font-bold uppercase tracking-[0.22em] text-text-muted">✦ Notes du MJ</div>
-            <p class="mt-3 font-serif text-sm italic leading-relaxed text-parchment-dark">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <div class="text-[9px] font-bold uppercase tracking-[0.22em] text-text-muted">✦ Notes du MJ</div>
+                <div
+                  v-if="gmDossierResponse"
+                  class="mt-1 font-mono text-[10px] uppercase tracking-wider text-text-dim"
+                >
+                  {{ gmDossierResponse.generation_status }} · chapitre {{ gmDossierResponse.active_chapter_id || 'n/a' }}
+                </div>
+              </div>
+              <label class="inline-flex cursor-pointer items-center gap-2">
+                <span class="font-display text-[10px] font-bold uppercase tracking-[0.14em] text-parchment-dark">Mode auteur</span>
+                <input
+                  class="sr-only"
+                  type="checkbox"
+                  :checked="authorMode"
+                  @change="handleAuthorModeChange"
+                />
+                <span
+                  class="relative h-6 w-11 rounded-full border transition"
+                  :class="authorMode ? 'border-ember/50 bg-ember/25' : 'border-border-strong bg-black/30'"
+                >
+                  <span
+                    class="absolute top-1 h-4 w-4 rounded-full transition"
+                    :class="authorMode ? 'left-6 bg-ember' : 'left-1 bg-text-dim'"
+                  />
+                </span>
+              </label>
+            </div>
+
+            <p
+              v-if="!authorMode"
+              class="mt-3 font-serif text-sm italic leading-relaxed text-parchment-dark"
+            >
               Mode auteur verrouillé. Les secrets, fronts, twists et sources importées restent côté MJ IA.
             </p>
+            <p v-else-if="notesError" class="mt-3 rounded border border-blood/30 bg-blood/10 px-3 py-2 text-sm text-blood-light">
+              {{ notesError }}
+            </p>
+            <p v-else-if="isLoadingGmDossier" class="mt-3 font-serif text-sm italic text-text-muted">
+              Chargement des notes MJ...
+            </p>
+            <p v-else-if="!gmDossier" class="mt-3 font-serif text-sm italic text-text-muted">
+              Aucun dossier MJ disponible.
+            </p>
           </div>
+
+          <template v-if="authorMode && gmDossier">
+            <div class="rounded-lg border border-ember/25 bg-[linear-gradient(135deg,rgba(255,130,71,0.08),var(--color-surface))] p-4">
+              <div class="text-[9px] font-bold uppercase tracking-[0.22em] text-ember">Arc narratif privé</div>
+              <p class="mt-2 font-serif text-sm leading-relaxed text-parchment-dark">
+                {{ gmDossier.narrative_arc || 'Aucun arc privé.' }}
+              </p>
+            </div>
+
+            <div v-if="gmDossier.chapters?.length" class="space-y-3">
+              <div class="text-[9px] font-bold uppercase tracking-[0.22em] text-text-muted">
+                Chapitres privés — {{ gmDossier.chapters.length }}
+              </div>
+              <div
+                v-for="(chapter, chapterIdx) in gmDossier.chapters"
+                :key="chapter.id || chapter.title || chapterIdx"
+                class="rounded-lg border p-4"
+                :class="gmDossierResponse?.active_chapter_id === chapter.id
+                  ? 'border-ember/35 bg-[linear-gradient(135deg,rgba(255,130,71,0.08),var(--color-surface))]'
+                  : 'border-border bg-surface'"
+              >
+                <div class="flex items-start gap-2">
+                  <div class="min-w-0 flex-1">
+                    <h3 class="font-display text-[14px] font-bold">{{ chapter.title || `Chapitre ${chapterIdx + 1}` }}</h3>
+                    <div class="mt-0.5 font-mono text-[9px] uppercase tracking-wider text-text-dim">
+                      {{ chipStateLabel(chapter.state || 'planned') }} · {{ chapter.id || 'sans-id' }}
+                    </div>
+                  </div>
+                </div>
+                <div class="mt-3 space-y-2 font-serif text-xs leading-relaxed text-parchment-dark">
+                  <p v-if="chapter.objective"><span class="font-bold text-parchment">Objectif.</span> {{ chapter.objective }}</p>
+                  <p v-if="chapter.stakes"><span class="font-bold text-parchment">Enjeux.</span> {{ chapter.stakes }}</p>
+                  <p v-if="chapter.initial_state"><span class="font-bold text-parchment">État initial.</span> {{ chapter.initial_state }}</p>
+                </div>
+                <div class="mt-3 grid gap-2 md:grid-cols-2">
+                  <div
+                    v-if="asList(chapter.secrets).length"
+                    class="rounded border border-blood/20 bg-blood/10 p-2"
+                  >
+                    <div class="font-display text-[9px] font-bold uppercase tracking-[0.16em] text-blood-light">Secrets</div>
+                    <ul class="mt-1 space-y-1 font-serif text-xs text-parchment-dark">
+                      <li v-for="(secret, secretIdx) in asList(chapter.secrets)" :key="'secret-' + secretIdx">
+                        {{ formatGmValue(secret) }}
+                      </li>
+                    </ul>
+                  </div>
+                  <div
+                    v-if="asList(chapter.clues).length"
+                    class="rounded border border-gold/20 bg-gold/10 p-2"
+                  >
+                    <div class="font-display text-[9px] font-bold uppercase tracking-[0.16em] text-gold">Indices</div>
+                    <ul class="mt-1 space-y-1 font-serif text-xs text-parchment-dark">
+                      <li v-for="(clue, clueIdx) in asList(chapter.clues)" :key="'clue-' + clueIdx">
+                        {{ formatGmValue(clue) }}
+                      </li>
+                    </ul>
+                  </div>
+                  <div
+                    v-if="asList(chapter.involved_npcs).length"
+                    class="rounded border border-border bg-black/20 p-2"
+                  >
+                    <div class="font-display text-[9px] font-bold uppercase tracking-[0.16em] text-text-muted">PNJ</div>
+                    <p class="mt-1 font-serif text-xs text-parchment-dark">
+                      {{ asList(chapter.involved_npcs).map((npc) => formatGmValue(npc)).join(', ') }}
+                    </p>
+                  </div>
+                  <div
+                    v-if="asList(chapter.key_locations).length"
+                    class="rounded border border-border bg-black/20 p-2"
+                  >
+                    <div class="font-display text-[9px] font-bold uppercase tracking-[0.16em] text-text-muted">Lieux</div>
+                    <p class="mt-1 font-serif text-xs text-parchment-dark">
+                      {{ asList(chapter.key_locations).map((place) => formatGmValue(place)).join(', ') }}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <template v-for="section in GM_SECTIONS" :key="section.key">
+              <div v-if="dossierList(section.key).length" class="rounded-lg border border-border bg-surface p-4">
+                <div class="text-[9px] font-bold uppercase tracking-[0.22em] text-text-muted">
+                  {{ section.label }} — {{ dossierList(section.key).length }}
+                </div>
+                <div class="mt-3 space-y-2">
+                  <div
+                    v-for="(item, itemIdx) in dossierList(section.key)"
+                    :key="String(section.key) + '-' + itemIdx"
+                    class="rounded border border-border bg-black/20 p-2"
+                  >
+                    <div class="font-display text-[12px] font-bold text-parchment">
+                      {{ itemTitle(item, section.label + ' ' + (itemIdx + 1)) }}
+                    </div>
+                    <pre
+                      v-if="itemDetail(item)"
+                      class="mt-1 whitespace-pre-wrap break-words font-serif text-xs leading-relaxed text-parchment-dark"
+                    >{{ itemDetail(item) }}</pre>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <div class="rounded-lg border border-border bg-surface p-4">
+              <div class="text-[9px] font-bold uppercase tracking-[0.22em] text-text-muted">JSON brut</div>
+              <pre class="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded border border-border bg-black/35 p-3 font-mono text-[10px] leading-relaxed text-parchment-dark">{{ gmDossierRaw }}</pre>
+            </div>
+          </template>
           <button class="w-full rounded-lg border border-blood/25 bg-transparent px-4 py-2.5 font-display text-[11px] font-bold uppercase tracking-[0.12em] text-blood/70" @click="confirmDeleteId = selectedCampaign.id">
             Supprimer la campagne
           </button>

@@ -199,6 +199,14 @@ async def get_campaign_scenario(campaign_id: str, db: AsyncSession = Depends(get
         raise HTTPException(status_code=404, detail=str(exc))
 
 
+@router.get("/{campaign_id}/gm-dossier")
+async def get_campaign_gm_dossier(campaign_id: str, db: AsyncSession = Depends(get_db)):
+    try:
+        return await campaign_dossier_service.gm_dossier_view(campaign_id, db)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
 @router.post("/{campaign_id}/synthesize-canon")
 async def synthesize_campaign_canon(
     campaign_id: str,
