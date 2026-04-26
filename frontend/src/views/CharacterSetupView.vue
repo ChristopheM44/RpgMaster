@@ -351,7 +351,7 @@ function classIcon(classId: string): string {
         <button
           :disabled="!canStart || startingGame"
           class="w-full rounded-lg bg-blood py-4 text-xl font-bold text-parchment transition hover:bg-blood-light disabled:cursor-not-allowed disabled:opacity-40"
-          @click="showStartModal = true"
+          @click="backRoute === 'campaigns' ? startGame('libre') : showStartModal = true"
         >
           <span v-if="startingGame">Démarrage en cours...</span>
           <span v-else-if="!canStart">Ajoutez au moins un personnage pour commencer</span>

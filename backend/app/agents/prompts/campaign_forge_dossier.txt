@@ -1,0 +1,78 @@
+Génère un dossier de campagne complet depuis ces entrées.
+
+CAMPAGNE :
+{{ campaign }}
+
+BRIEF :
+{{ brief }}
+
+OPTIONS :
+{{ options }}
+
+SOURCES IMPORTÉES PRIVÉES :
+{{ import_sources }}
+
+Réponds avec ce JSON exact :
+{
+  "player_contract": {
+    "title": "Titre public",
+    "pitch_public": "Pitch public sans spoiler",
+    "tones": ["Mystère"],
+    "duration": "3-5 sessions",
+    "hook": "Accroche publique",
+    "visible_chapters": [
+      {
+        "id": "chapter_1",
+        "num": "I",
+        "title": "Titre public",
+        "state": "active",
+        "sessions": 0,
+        "summary": "Résumé visible sans spoiler"
+      }
+    ],
+    "known_objectives": ["Objectif connu"],
+    "played_summary": ""
+  },
+  "gm_dossier": {
+    "narrative_arc": "Arc privé",
+    "chapters": [
+      {
+        "id": "chapter_1",
+        "title": "Titre",
+        "state": "active",
+        "objective": "Objectif ouvert",
+        "stakes": "Enjeux",
+        "initial_state": "Situation initiale",
+        "key_locations": ["Lieu"],
+        "involved_npcs": ["PNJ"],
+        "clues": ["Indice"],
+        "secrets": ["Secret privé"],
+        "complications": ["Complication"],
+        "possible_exits": ["Sortie possible"],
+        "indicative_dcs": [{"label": "Observer", "ability": "wis", "dc": 13}],
+        "possible_srd_encounters": ["goblin"]
+      }
+    ],
+    "important_npcs": [],
+    "locations": [],
+    "factions": [],
+    "secrets": [],
+    "revelations": [],
+    "fronts": [],
+    "quests": [],
+    "complications": [],
+    "clues": [],
+    "light_mechanics": []
+  },
+  "played_canon": {
+    "established_facts": [],
+    "player_decisions": [],
+    "quests": [],
+    "npc_relationships": [],
+    "revealed_secrets": [],
+    "plan_changes": [],
+    "rolling_summary": "",
+    "chapter_progression": []
+  },
+  "active_chapter_id": "chapter_1"
+}

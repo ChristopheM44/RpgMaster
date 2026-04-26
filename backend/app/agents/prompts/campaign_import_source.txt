@@ -1,0 +1,16 @@
+Convertis cette source privée en notes structurées pour un dossier MJ.
+
+SOURCE :
+{{ source }}
+
+Réponds avec :
+{
+  "title": "Titre source",
+  "summary_private": "Résumé privé court",
+  "public_hook": "Accroche publique sans spoiler",
+  "locations": [],
+  "npcs": [],
+  "secrets": [],
+  "quests": [],
+  "encounters": []
+}

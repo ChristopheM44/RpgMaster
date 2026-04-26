@@ -1,12 +1,23 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { Campaign, CampaignCreate, CampaignAdvanceBody, CampaignAdvanceResponse } from '../types'
+import type {
+  Campaign,
+  CampaignCreate,
+  CampaignAdvanceBody,
+  CampaignAdvanceResponse,
+  CampaignForgeDraftResponse,
+  CampaignImportSourceBody,
+  CampaignImportSourceResponse,
+  CampaignPlayerContract,
+  CampaignScenario,
+} from '../types'
 
 const API = 'http://localhost:8000/api/campaigns'
 
 export const useCampaignStore = defineStore('campaign', () => {
   const campaigns = ref<Campaign[]>([])
   const currentCampaign = ref<Campaign | null>(null)
+  const scenarios = ref<Record<string, CampaignScenario>>({})
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -48,6 +59,81 @@ export const useCampaignStore = defineStore('campaign', () => {
       currentCampaign.value = campaign
       return campaign
     } catch {
+      return null
+    }
+  }
+
+  async function fetchScenario(id: string): Promise<CampaignScenario | null> {
+    try {
+      const res = await fetch(`${API}/${id}/scenario`)
+      if (!res.ok) throw new Error()
+      const scenario: CampaignScenario = await res.json()
+      scenarios.value[id] = scenario
+      return scenario
+    } catch {
+      error.value = 'Erreur de chargement du scénario'
+      return null
+    }
+  }
+
+  async function importSource(
+    campaignId: string,
+    body: CampaignImportSourceBody,
+  ): Promise<CampaignImportSourceResponse | null> {
+    try {
+      const res = await fetch(`${API}/${campaignId}/import-source`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) throw new Error()
+      return await res.json()
+    } catch {
+      error.value = "Erreur lors de l'import de la source"
+      return null
+    }
+  }
+
+  async function forgeDraft(
+    campaignId: string,
+    brief: Record<string, unknown>,
+    options: Record<string, unknown>,
+  ): Promise<CampaignForgeDraftResponse | null> {
+    try {
+      const res = await fetch(`${API}/${campaignId}/forge-draft`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brief, options }),
+      })
+      if (!res.ok) throw new Error()
+      return await res.json()
+    } catch {
+      error.value = 'Erreur lors de la forge de campagne'
+      return null
+    }
+  }
+
+  async function validateContract(
+    campaignId: string,
+    playerContract: CampaignPlayerContract,
+  ): Promise<CampaignForgeDraftResponse | null> {
+    try {
+      const res = await fetch(`${API}/${campaignId}/validate-contract`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ player_contract: playerContract }),
+      })
+      if (!res.ok) throw new Error()
+      const data: CampaignForgeDraftResponse = await res.json()
+      const updated = await fetchCampaign(campaignId)
+      if (updated) {
+        const idx = campaigns.value.findIndex((c) => c.id === campaignId)
+        if (idx !== -1) campaigns.value[idx] = updated
+      }
+      await fetchScenario(campaignId)
+      return data
+    } catch {
+      error.value = 'Erreur lors de la validation du contrat'
       return null
     }
   }
@@ -95,11 +181,16 @@ export const useCampaignStore = defineStore('campaign', () => {
   return {
     campaigns,
     currentCampaign,
+    scenarios,
     loading,
     error,
     fetchCampaigns,
     createCampaign,
     fetchCampaign,
+    fetchScenario,
+    importSource,
+    forgeDraft,
+    validateContract,
     attachSession,
     advance,
     deleteCampaign,

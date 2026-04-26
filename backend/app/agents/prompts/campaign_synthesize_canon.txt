@@ -1,0 +1,32 @@
+Mets à jour le canon joué d'une campagne.
+
+CONTRAT JOUEUR :
+{{ player_contract }}
+
+DOSSIER MJ PRIVÉ :
+{{ gm_dossier }}
+
+CANON ACTUEL :
+{{ played_canon }}
+
+ÉTAT DE JEU :
+{{ game_state }}
+
+MESSAGES RÉCENTS :
+{{ recent_messages }}
+
+Priorité canonique : joué > révélé > prévu.
+Si les joueurs ont contredit le plan, conserve la divergence dans plan_changes et adapte le résumé roulant.
+Ne révèle un secret dans revealed_secrets que s'il a été explicitement gagné en jeu ou affiché aux joueurs.
+
+Réponds uniquement avec le nouveau played_canon :
+{
+  "established_facts": [],
+  "player_decisions": [],
+  "quests": [],
+  "npc_relationships": [],
+  "revealed_secrets": [],
+  "plan_changes": [],
+  "rolling_summary": "",
+  "chapter_progression": []
+}

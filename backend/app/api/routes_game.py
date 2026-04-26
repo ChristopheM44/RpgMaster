@@ -114,8 +114,16 @@ async def start_game(
     active.state_data.setdefault("quests", [])
     active.state_data.setdefault("chronicle", [])
 
-    active.mark_dirty()
-    await session_manager.save_state(session_id, db)
+    from app.services import campaign_dossier_service
+
+    campaign_context = await campaign_dossier_service.compile_campaign_context_for_session(
+        session_id,
+        db,
+    )
+    if campaign_context is not None:
+        active.state_data["campaign_context"] = campaign_context
+    else:
+        active.state_data.pop("campaign_context", None)
 
     # Store adventure context for the GM agent
     if body.adventure_script:
@@ -123,6 +131,7 @@ async def start_game(
     if body.auto_generate:
         active.state_data["auto_generate_adventure"] = True
     active.mark_dirty()
+    await session_manager.save_state(session_id, db)
 
     # Notify any already-connected WebSocket clients
     await event_bus.publish_to_session(

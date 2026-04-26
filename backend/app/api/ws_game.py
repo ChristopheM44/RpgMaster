@@ -627,6 +627,17 @@ async def _handle_combat_end(
         source="ws_game",
     )
     await persist_narration(session_id, victory_text, "Maître du Jeu", db)
+    try:
+        from app.services import campaign_dossier_service
+
+        await campaign_dossier_service.synthesize_canon_for_session(
+            session_id,
+            active.state_data,
+            [{"speaker": "Maître du Jeu", "content": victory_text}],
+            db,
+        )
+    except Exception as exc:
+        logger.warning("Synthèse canon campagne après combat ignorée : %s", exc)
     await event_bus.publish_to_session(
         session_id,
         EventType.SESSION_STATE,

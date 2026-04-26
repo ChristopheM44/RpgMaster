@@ -616,11 +616,91 @@ export interface Campaign {
   xp_pool: Record<string, number>
   created_at: string
   updated_at: string
+  tagline: string
+  generation_status: CampaignGenerationStatus
+  active_chapter: CampaignVisibleChapter | Record<string, never>
+  progress: CampaignProgress
+  counts: CampaignCounts
 }
 
 export interface CampaignCreate {
   name: string
   description?: string
+}
+
+export type CampaignGenerationStatus = 'empty' | 'drafting' | 'draft' | 'validated' | 'failed'
+
+export interface CampaignVisibleChapter {
+  id: string
+  num: string
+  title: string
+  state: 'done' | 'active' | 'planned'
+  sessions: number
+  summary: string
+}
+
+export interface CampaignProgress {
+  done: number
+  total: number
+}
+
+export interface CampaignCounts {
+  sessions: number
+  characters: number
+  quests_active: number
+  quests_done: number
+  chronicle_entries: number
+  npcs: number
+  places: number
+}
+
+export interface CampaignPlayerContract {
+  title: string
+  pitch_public: string
+  tones: string[]
+  duration: string
+  hook: string
+  visible_chapters: CampaignVisibleChapter[]
+  known_objectives: string[]
+  played_summary: string
+}
+
+export interface CampaignScenario {
+  campaign_id: string
+  generation_status: CampaignGenerationStatus
+  player_contract: CampaignPlayerContract
+  timeline: CampaignVisibleChapter[]
+  current_chapter: CampaignVisibleChapter | Record<string, never>
+  known_objectives: string[]
+  quests: Array<Record<string, unknown>>
+  played_summary: string
+}
+
+export interface CampaignForgeDraftResponse {
+  campaign_id: string
+  generation_status: CampaignGenerationStatus
+  player_contract: CampaignPlayerContract
+  active_chapter_id: string
+}
+
+export interface CampaignImportSourceBody {
+  kind: 'url' | 'text' | 'file_text'
+  title?: string
+  url?: string
+  content?: string
+  filename?: string
+}
+
+export interface CampaignImportSourceResponse {
+  source: {
+    id: string
+    kind: string
+    title: string
+    url?: string | null
+    filename?: string | null
+    created_at: string
+  }
+  source_count: number
 }
 
 export interface CampaignAdvanceBody {

@@ -301,6 +301,7 @@ class ActionResolver:
         # 4. Traitement des actions mécaniques demandées par le GM
         # ----------------------------------------------------------------
         pending_rolls: List[Dict[str, Any]] = []
+        canon_dirty = False
         if gm_response:
             for gm_action in gm_response.actions:
                 # Fusionner gm_action.target dans params pour simplifier les handlers
@@ -319,6 +320,13 @@ class ActionResolver:
                     await self._apply_gm_action(
                         session_id, gm_action.type, merged_params, active
                     )
+                    if gm_action.type in {
+                        "journal_update",
+                        "quest_add",
+                        "chronicle_add",
+                        "state_transition",
+                    }:
+                        canon_dirty = True
 
         # ----------------------------------------------------------------
         # 5. Narration de l'issue si des jets ont été effectués
@@ -386,6 +394,26 @@ class ActionResolver:
                     await self._apply_gm_action(
                         session_id, gm_action.type, merged_params, active
                     )
+                    if gm_action.type in {
+                        "journal_update",
+                        "quest_add",
+                        "chronicle_add",
+                        "state_transition",
+                    }:
+                        canon_dirty = True
+
+        if canon_dirty and db is not None:
+            try:
+                from app.services import campaign_dossier_service
+
+                await campaign_dossier_service.synthesize_canon_for_session(
+                    session_id,
+                    active.state_data,
+                    [],
+                    db,
+                )
+            except Exception as exc:
+                logger.warning("Synthèse canon campagne ignorée : %s", exc)
 
     # ------------------------------------------------------------------
     # Conclusion sociale (compagnons ont déjà parlé)
