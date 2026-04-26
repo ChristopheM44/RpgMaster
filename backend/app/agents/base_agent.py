@@ -58,7 +58,7 @@ class BaseAgent(ABC):
     # Extraction JSON
     # -------------------------------------------------------------------------
 
-    def _extract_json(self, text: str) -> Optional[dict[str, Any]]:
+    def _extract_json(self, text: str, *, log_failure: bool = True) -> Optional[dict[str, Any]]:
         """Extrait le premier objet JSON valide depuis la sortie brute du LLM.
 
         Tente dans l'ordre :
@@ -112,7 +112,9 @@ class BaseAgent(ABC):
                         except json.JSONDecodeError:
                             break
 
-        logger.warning("Impossible d'extraire du JSON depuis la sortie LLM : %s…", stripped[:200])
+        if log_failure:
+            preview = stripped[:200] or "<vide>"
+            logger.warning("Impossible d'extraire du JSON depuis la sortie LLM : %s…", preview)
         return None
 
     # -------------------------------------------------------------------------

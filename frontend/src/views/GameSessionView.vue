@@ -7,7 +7,8 @@ import { useSessionStore } from '../stores/session'
 import { useWebSocket } from '../composables/useWebSocket'
 import { gameApi } from '../services/api'
 import NarrativeLog from '../components/narrative/NarrativeLog.vue'
-import CharacterPanel from '../components/character/CharacterPanel.vue'
+import ExplorationLayout from '../components/character/ExplorationLayout.vue'
+import CombatLayout from '../components/combat/CombatLayout.vue'
 import PartyBar from '../components/character/PartyBar.vue'
 import ActionBar from '../components/common/ActionBar.vue'
 import SaveLoadPanel from '../components/ui/SaveLoadPanel.vue'
@@ -28,6 +29,7 @@ const startingGame = ref(false)
 const showSaveLoad = ref(false)
 const showStartModal = ref(false)
 const showLobbyConfirm = ref(false)
+const showEndCombatConfirm = ref(false)
 
 async function initSession() {
   gameStore.reset()
@@ -123,6 +125,16 @@ function startCombat() { sendAction('start_combat', undefined, charStore.myChara
 function takeRest()    { sendAction('take_rest',    undefined, charStore.myCharacter?.id) }
 function resetCombat() { sendAction('reset_combat', undefined, charStore.myCharacter?.id) }
 function dismissError() { gameStore.setError(null) }
+function handleEndTurn() { sendAction('end_turn', undefined, charStore.myCharacter?.id) }
+function confirmEndCombat() { showEndCombatConfirm.value = true }
+function openSheet(id: string) {
+  router.push({ name: 'character-sheet', params: { charId: id }, query: { session: sessionId } })
+}
+
+function endCombat() {
+  showEndCombatConfirm.value = false
+  resetCombat()
+}
 
 async function handleToggleAi(characterId: string, nextIsAi: boolean) {
   // Optimistic local update via REST + store, then notify backend WS for live handoff
@@ -244,6 +256,14 @@ onUnmounted(() => { disconnect() })
             class="font-display font-bold"
             :style="{ color: phaseColor }"
           >{{ phaseLabel }}</span>
+          <template v-if="gameStore.isGmThinking">
+            <span :style="{ color: 'var(--color-text-dim)' }">·</span>
+            <span class="rpg-pulse" :style="{ color: 'var(--color-gold)' }">MJ</span>
+          </template>
+          <template v-else-if="gameStore.isAnyAiThinking">
+            <span :style="{ color: 'var(--color-text-dim)' }">·</span>
+            <span class="rpg-pulse" :style="{ color: 'var(--color-gold)' }">IA</span>
+          </template>
           <span v-if="gameStore.isInCombat" :style="{ color: 'var(--color-text-dim)' }">·</span>
           <span
             v-if="gameStore.isInCombat"
@@ -276,9 +296,15 @@ onUnmounted(() => { disconnect() })
 
         <button
           v-if="gameStore.isInCombat"
-          class="rpg-btn-tonal tone-gold !py-1.5 !text-[10px]"
-          @click="resetCombat"
-        >✕ Reset</button>
+          class="rpg-btn-primary !py-1.5 !text-[11px]"
+          @click="handleEndTurn"
+        >◐ Tour suivant</button>
+
+        <button
+          v-if="gameStore.isInCombat"
+          class="rpg-btn-tonal tone-blood !py-1.5 !text-[10px]"
+          @click="confirmEndCombat"
+        >✕ Fin de combat</button>
 
         <!-- AI reactions (exploration only) -->
         <button
@@ -323,28 +349,18 @@ onUnmounted(() => { disconnect() })
       <SaveLoadPanel :session-id="sessionId" @load-complete="handleLoadComplete" />
     </div>
 
-    <!-- ─── Main content (desktop: 2 columns) ────────────────────────────── -->
-    <div class="hidden min-h-0 flex-1 overflow-hidden md:flex">
-
-      <!-- Left: NarrativeLog -->
-      <section
-        class="flex min-h-0 flex-1 flex-col overflow-hidden border-r"
-        :style="{ borderColor: 'var(--color-border)' }"
-      >
-        <NarrativeLog />
-      </section>
-
-      <!-- Right: CharacterPanel sidebar -->
-      <aside
-        class="flex w-[360px] shrink-0 min-h-0 flex-col overflow-hidden"
-        :style="{ background: 'var(--color-bg-elev)' }"
-      >
-        <CharacterPanel
-          @start-combat="startCombat"
-          @open-sheet="(id: string) => $router.push({ name: 'character-sheet', params: { charId: id }, query: { session: sessionId } })"
-        />
-      </aside>
-    </div>
+    <CombatLayout
+      v-if="gameStore.isInCombat"
+      @action="handleAction"
+      @end-combat="confirmEndCombat"
+      @next-turn="handleEndTurn"
+      @open-sheet="openSheet"
+    />
+    <ExplorationLayout
+      v-else
+      @start-combat="startCombat"
+      @open-sheet="openSheet"
+    />
 
     <!-- ─── Mobile layout ────────────────────────────────────────────────── -->
     <div class="flex min-h-0 flex-1 flex-col overflow-hidden md:hidden">
@@ -352,10 +368,17 @@ onUnmounted(() => { disconnect() })
     </div>
 
     <!-- ─── ActionBar ─────────────────────────────────────────────────────── -->
-    <ActionBar @action="handleAction" />
+    <ActionBar v-if="!gameStore.isInCombat" @action="handleAction" />
+    <div v-else class="md:hidden">
+      <ActionBar @action="handleAction" />
+    </div>
 
     <!-- ─── PartyBar (bottom group bar) ──────────────────────────────────── -->
-    <PartyBar @toggle-ai="handleToggleAi" @trigger-ai="handleTriggerAi" />
+    <PartyBar
+      v-if="!gameStore.isInCombat"
+      @toggle-ai="handleToggleAi"
+      @trigger-ai="handleTriggerAi"
+    />
 
     <!-- Adventure start modal -->
     <AdventureStartModal
@@ -374,6 +397,17 @@ onUnmounted(() => { disconnect() })
       tone="warning"
       @confirm="confirmGoToLobby"
       @cancel="showLobbyConfirm = false"
+    />
+
+    <ConfirmDialog
+      v-if="showEndCombatConfirm"
+      title="Terminer le combat ?"
+      message="Le combat sera annulé et la session reviendra en exploration."
+      confirm-label="Terminer"
+      cancel-label="Continuer"
+      tone="warning"
+      @confirm="endCombat"
+      @cancel="showEndCombatConfirm = false"
     />
   </div>
 </template>

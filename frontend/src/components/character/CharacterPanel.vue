@@ -106,6 +106,14 @@ const isMyTurn = computed(() =>
         <div class="rpg-eyebrow mb-3 relative" :style="{ color: isMyTurn ? 'var(--color-ember)' : 'var(--color-arcane)' }">
           ✦ {{ isMyTurn ? 'Votre tour' : 'Votre personnage' }}
         </div>
+        <div
+          v-if="gameStore.isCharacterThinking(ch.id)"
+          class="relative mb-3 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[10px] font-bold tracking-[0.08em]"
+          :style="{ color: 'var(--color-gold)', borderColor: 'rgba(240,199,100,0.3)', background: 'rgba(240,199,100,0.08)' }"
+        >
+          <span class="rpg-pulse">◉</span>
+          <span>IA en réflexion</span>
+        </div>
 
         <div class="relative flex items-center gap-3">
           <!-- Avatar -->

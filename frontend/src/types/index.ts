@@ -273,15 +273,52 @@ export type WsEventType =
   | 'equipment_updated'
   | 'player_joined'
   | 'player_left'
+  | 'ai_thinking'
   | 'audio'
   | 'error'
   | 'pong'
+  | 'journal_updated'
+  | 'quest_updated'
+  | 'chronicle_updated'
 
 export interface WsEvent<T = unknown> {
   event_type: WsEventType
+  event_id?: string
   session_id?: string
   payload: T
   timestamp?: string
+}
+
+export type TimeOfDay = 'dawn' | 'morning' | 'noon' | 'afternoon' | 'dusk' | 'night'
+
+export interface AdventureJournal {
+  location_region: string | null
+  location_place: string | null
+  time_of_day: TimeOfDay
+  day_number: number
+  calendar_date: string | null
+  weather: string | null
+}
+
+export type QuestCategory = 'principale' | 'secondaire' | 'rumeur'
+export type QuestStatus = 'active' | 'completed' | 'failed'
+
+export interface Quest {
+  id: string
+  category: QuestCategory
+  title: string
+  summary: string
+  urgency?: string | null
+  status: QuestStatus
+}
+
+export type ChronicleKind = 'npc' | 'location'
+
+export interface ChronicleEntry {
+  id: string
+  kind: ChronicleKind
+  name: string
+  note: string
 }
 
 export interface SessionStatePayload {
@@ -292,6 +329,9 @@ export interface SessionStatePayload {
   turn_order: TurnEntry[]
   current_turn_index: number
   valid_transitions: string[]
+  adventure_journal?: AdventureJournal
+  quests?: Quest[]
+  chronicle?: ChronicleEntry[]
 }
 
 export interface TurnEntry {
@@ -299,6 +339,7 @@ export interface TurnEntry {
   name: string
   initiative: number
   is_ai: boolean
+  is_ai_controlled?: boolean
   is_player: boolean
 }
 
@@ -331,6 +372,13 @@ export interface TurnStartPayload {
   combatant_name?: string
 }
 
+export interface AiThinkingPayload {
+  agent_kind: 'gm' | 'player_ai'
+  thinking: boolean
+  character_id?: string
+  character_name?: string
+}
+
 // ─── Game UI State ────────────────────────────────────────────────────────────
 
 export type NarrativeEntryType = 'narration' | 'roll' | 'system' | 'player' | 'combat_action'
@@ -356,6 +404,11 @@ export interface GridConfig {
   cell_size_m: number
 }
 
+export interface GridDecoration {
+  obstacles?: GridPosition[]
+  zones?: Array<{ id: string; name: string; cells: GridPosition[]; kind?: string }>
+}
+
 export interface CombatantMovedPayload {
   combatant_id: string
   position: GridPosition
@@ -374,11 +427,34 @@ export interface CombatantState {
   initiative: number
   hp_current: number
   hp_max: number
+  kind: 'pc' | 'monster'
   conditions: string[]
   is_ai: boolean
+  is_ai_controlled?: boolean
   is_active: boolean
   position?: GridPosition
   death_saves?: DeathSaves
+  ac: number
+  attack_bonus?: number
+  damage_notation?: string
+  species?: string
+  cr?: number | string
+  token?: string
+  color?: string
+  ability_scores?: Record<string, number>
+  actions?: Array<{
+    name: string
+    attack_bonus?: number
+    damage_dice?: string
+    description?: string
+  }>
+  description?: string
+  action_economy?: {
+    action: boolean
+    bonus_action: boolean
+    reaction: boolean
+    movement: number
+  }
 }
 
 export interface HpChangedPayload {
@@ -406,6 +482,7 @@ export interface SpellSlotUpdatedPayload {
 export interface CombatStartPayload {
   combatants: CombatantState[]
   grid_config?: GridConfig
+  grid_decoration?: GridDecoration | null
 }
 
 export interface CombatActionPayload {

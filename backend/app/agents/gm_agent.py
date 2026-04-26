@@ -60,6 +60,7 @@ class GMAgent(BaseAgent):
         return AgentResponse(
             content=gm_resp.narration,
             actions=gm_resp.actions,
+            action_intent=gm_resp.action_intent,
         )
 
     # -------------------------------------------------------------------------
@@ -120,6 +121,27 @@ class GMAgent(BaseAgent):
                 "npc_personality": npc_personality,
                 "player_message": player_message,
                 "recent_messages": self._format_messages(messages),
+            },
+        )
+        return await self._call_and_parse(user_prompt, context_manager)
+
+    async def narrate_social_conclude(
+        self,
+        game_state: dict[str, Any],
+        player_action: str,
+        companion_responses: list[dict[str, str]],
+        context_manager: Optional[ContextManager] = None,
+    ) -> GMResponse:
+        """Narre la conclusion d'une scène sociale après les réponses des compagnons."""
+        responses_text = "\n".join(
+            f"[{r['speaker']}] {r['text']}" for r in companion_responses
+        )
+        user_prompt = self._render_prompt(
+            "gm_social_conclude.txt",
+            {
+                "game_state": json.dumps(game_state, ensure_ascii=False, indent=2),
+                "player_action": player_action,
+                "companion_responses": responses_text,
             },
         )
         return await self._call_and_parse(user_prompt, context_manager)
@@ -207,11 +229,18 @@ class GMAgent(BaseAgent):
                 for a in data.get("actions", [])
                 if isinstance(a, dict)
             ]
+            raw_intent = data.get("action_intent")
+            action_intent = (
+                str(raw_intent)
+                if raw_intent in ("social", "environmental", "mixed")
+                else None
+            )
             return GMResponse(
                 narration=str(data.get("narration", raw.strip())),
                 actions=actions,
                 mood=str(data.get("mood", "neutral")),
                 inner_reasoning=data.get("inner_reasoning"),
+                action_intent=action_intent,
             )
         except Exception as exc:
             logger.error("GMAgent : échec parsing GMResponse : %s — data=%s", exc, data)

@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 import logging
+import re
+import unicodedata
+from collections.abc import Sequence
 from typing import Any, Optional
 
 from app.agents.base_agent import BaseAgent
@@ -19,6 +22,54 @@ from app.llm.ollama_client import OllamaError
 from app.llm.openai_compatible_client import OpenAICompatibleError
 
 logger = logging.getLogger(__name__)
+
+_NON_JSON_LLM_ERROR = "Réponse LLM non parsable (JSON manquant)."
+
+_ELLIPSIS_ONLY_RESPONSES = {"...", "…"}
+
+_ACTION_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "attack",
+        (
+            "attaque",
+            "attaquer",
+            "frappe",
+            "frapper",
+            "coup",
+            "charge",
+            "fonce",
+            "tire",
+            "tir",
+            "decoche",
+            "epee",
+            "marteau",
+            "hache",
+            "lame",
+        ),
+    ),
+    (
+        "cast_spell",
+        (
+            "lance un sort",
+            "incante",
+            "sort",
+            "magie",
+            "projectile magique",
+            "boule de feu",
+            "soin",
+            "guerison",
+        ),
+    ),
+    ("dodge", ("esquive", "defensive", "defense", "se protege", "a couvert")),
+    ("help", ("aide", "assiste", "soutient", "protege")),
+    ("dash", ("sprinte", "court", "se precipite", "dash")),
+    ("disengage", ("desengage", "se replie", "retrait prudent")),
+    ("hide", ("se cache", "cache", "furtif")),
+    ("move", ("avance", "recule", "se deplace", "rejoint", "va vers")),
+    ("talk", ("dit", "crie", "previent", "previens", "avertit", "parle", "hurle")),
+    ("wait", ("attend", "observe", "reste immobile")),
+)
+
 
 def _fallback_action(error: Optional[str] = None) -> PlayerActionChoice:
     """Action de repli quand le LLM ne répond pas ou renvoie un JSON invalide.
@@ -86,6 +137,15 @@ def _describe_personality(personality: PlayerPersonality) -> str:
     if personality.speech_style:
         lines.append(f"- STYLE DE DISCOURS : {personality.speech_style}")
     return "\n".join(lines) if lines else "- Personnalité équilibrée, sans traits marqués."
+
+
+def _normalize_for_match(value: Any) -> str:
+    """Normalise un texte pour des comparaisons simples et accent-insensibles."""
+    normalized = unicodedata.normalize("NFKD", str(value).lower())
+    without_accents = "".join(
+        ch for ch in normalized if not unicodedata.combining(ch)
+    )
+    return re.sub(r"[^a-z0-9_]+", " ", without_accents).strip()
 
 
 class PlayerAgent(BaseAgent):
@@ -162,7 +222,13 @@ class PlayerAgent(BaseAgent):
                 "recent_messages": self._format_messages(messages),
             },
         )
-        return await self._call_and_parse_action(user_prompt, context_manager)
+        return await self._call_and_parse_action(
+            user_prompt,
+            context_manager,
+            game_state=game_state,
+            available_actions=actions_list,
+            combat_mode=True,
+        )
 
     async def roleplay(
         self,
@@ -173,6 +239,9 @@ class PlayerAgent(BaseAgent):
     ) -> PlayerActionChoice:
         """Génère une réaction narrative / roleplay hors combat."""
         character_data = self._extract_character(game_state)
+        recent_messages = self._format_messages(messages)
+        if recent_messages == "(aucun message récent)":
+            recent_messages = self._summarize_recent_narrative(game_state)
 
         user_prompt = self._render_prompt(
             "player_roleplay.txt",
@@ -182,10 +251,16 @@ class PlayerAgent(BaseAgent):
                 "personality_description": _describe_personality(self._personality),
                 "game_state": json.dumps(game_state, ensure_ascii=False, indent=2),
                 "scene_context": scene_context,
-                "recent_messages": self._format_messages(messages),
+                "recent_messages": recent_messages,
             },
         )
-        return await self._call_and_parse_action(user_prompt, context_manager)
+        return await self._call_and_parse_action(
+            user_prompt,
+            context_manager,
+            game_state=game_state,
+            available_actions=("talk", "move", "use_item", "wait", "examine"),
+            combat_mode=False,
+        )
 
     # -------------------------------------------------------------------------
     # Validation des actions
@@ -213,7 +288,7 @@ class PlayerAgent(BaseAgent):
             if not spell_name:
                 return False, "cast_spell sans spell_name dans params"
             spell_slots = character_data.get("spell_slots", {})
-            if not any(v > 0 for v in spell_slots.values()):
+            if not self._has_available_spell_slot(spell_slots):
                 return False, f"{self._character_name} n'a plus d'emplacements de sorts"
 
         # Vérification de l'utilisation d'objet : l'objet doit être dans l'inventaire
@@ -255,21 +330,70 @@ class PlayerAgent(BaseAgent):
             f"TA PERSONNALITÉ :\n{personality_block}\n"
         )
 
+    @staticmethod
+    def _has_available_spell_slot(spell_slots: Any) -> bool:
+        if not isinstance(spell_slots, dict):
+            return False
+        for slot in spell_slots.values():
+            if isinstance(slot, dict):
+                try:
+                    total = int(slot.get("total", 0))
+                    used = int(slot.get("used", 0))
+                except (TypeError, ValueError):
+                    continue
+                if total - used > 0:
+                    return True
+                continue
+            try:
+                if int(slot) > 0:
+                    return True
+            except (TypeError, ValueError):
+                continue
+        return False
+
     async def _call_and_parse_action(
         self,
         user_prompt: str,
         context_manager: Optional[ContextManager],
+        *,
+        game_state: Optional[dict[str, Any]] = None,
+        available_actions: Optional[Sequence[str]] = None,
+        combat_mode: bool = False,
     ) -> PlayerActionChoice:
         """Appelle le LLM et parse la réponse en PlayerActionChoice."""
         messages = self._build_messages(user_prompt, context_manager)
 
         try:
-            raw = await self._client.chat(messages=messages, temperature=0.8, max_tokens=512)
+            raw = await self._client.chat(messages=messages, temperature=0.6, max_tokens=1024)
         except (OllamaError, OpenAICompatibleError) as exc:
             logger.error("PlayerAgent[%s] : appel LLM échoué : %s", self._character_name, exc)
             return _fallback_action(error=f"{type(exc).__name__}: {exc}")
 
-        data = self._extract_json(raw)
+        data = self._extract_json(raw, log_failure=False)
+        if data is None:
+            data = await self._repair_json_response(raw)
+
+        if data is None:
+            data = self._recover_partial_json_response(raw)
+
+        if data is None:
+            data = self._recover_structured_text_response(raw)
+
+        if data is None:
+            data = self._recover_prose_action_response(
+                raw,
+                game_state=game_state or {},
+                available_actions=available_actions,
+                combat_mode=combat_mode,
+            )
+
+        if data is None and combat_mode:
+            data = self._build_default_combat_action(
+                raw,
+                game_state=game_state or {},
+                available_actions=available_actions,
+            )
+
         if data is None:
             logger.warning(
                 "PlayerAgent[%s] : pas de JSON dans la réponse LLM", self._character_name
@@ -278,10 +402,416 @@ class PlayerAgent(BaseAgent):
                 action_type="wait",
                 action_description="Le personnage hésite.",
                 roleplay_text=raw.strip()[:300],
-                llm_error="Réponse LLM non parsable (JSON manquant).",
+                llm_error=_NON_JSON_LLM_ERROR,
             )
 
-        return self._parse_player_action(data, raw)
+        return self._parse_player_action(data, raw, game_state=game_state or {})
+
+    async def _repair_json_response(self, raw: str) -> Optional[dict[str, Any]]:
+        """Second passage léger : demande au modèle de convertir sa prose en JSON.
+
+        Certains petits modèles suivent le rôle mais oublient le format. On tente
+        une conversion stricte à basse température avant de tomber en fallback.
+        """
+        stripped = raw.strip()
+        if not stripped or stripped in _ELLIPSIS_ONLY_RESPONSES:
+            return None
+
+        repair_messages = [
+            {
+                "role": "system",
+                "content": (
+                    "Tu es un convertisseur de réponse. Retourne uniquement un objet JSON valide, "
+                    "sans markdown ni commentaire."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    "Convertis cette réponse de joueur IA D&D en JSON selon ce schéma exact :\n"
+                    "{\n"
+                    '  "action_type": "attack|cast_spell|dash|dodge|help|use_item|move|talk|'
+                    'wait|disengage|hide|shove|examine",\n'
+                    '  "action_description": "description courte",\n'
+                    '  "target": null,\n'
+                    '  "params": {},\n'
+                    '  "roleplay_text": "texte en français",\n'
+                    '  "inner_reasoning": "raison brève"\n'
+                    "}\n\n"
+                    "Si l'action n'est pas claire, utilise action_type='wait'.\n\n"
+                    f"Réponse brute :\n{stripped[:1200]}"
+                ),
+            },
+        ]
+        try:
+            repaired = await self._client.chat(
+                messages=repair_messages,
+                temperature=0.0,
+                max_tokens=600,
+            )
+        except (OllamaError, OpenAICompatibleError) as exc:
+            logger.warning(
+                "PlayerAgent[%s] : réparation JSON impossible : %s",
+                self._character_name,
+                exc,
+            )
+            return None
+        return self._extract_json(repaired, log_failure=False)
+
+    def _recover_partial_json_response(self, raw: str) -> Optional[dict[str, Any]]:
+        """Recover useful fields from a truncated JSON-like response.
+
+        Local models sometimes stop mid-string after producing valid-looking
+        keys. This keeps the turn moving without surfacing a false provider
+        error or forcing a silent wait.
+        """
+        if "action_type" not in raw and "roleplay_text" not in raw:
+            return None
+
+        def _field(name: str) -> Optional[str]:
+            match = re.search(rf'"{name}"\s*:\s*"((?:[^"\\]|\\.)*)', raw, re.DOTALL)
+            if not match:
+                return None
+            try:
+                return json.loads(f'"{match.group(1)}"')
+            except json.JSONDecodeError:
+                return match.group(1).replace('\\"', '"').replace("\\n", "\n")
+
+        action_type = _field("action_type")
+        action_description = _field("action_description")
+        roleplay_text = _field("roleplay_text")
+        target = _field("target")
+        inner_reasoning = _field("inner_reasoning")
+
+        if not any([action_type, action_description, roleplay_text, target, inner_reasoning]):
+            return None
+
+        roleplay_source = (
+            roleplay_text
+            or action_description
+            or "Le personnage réagit prudemment."
+        )
+        return {
+            "action_type": action_type or "wait",
+            "action_description": action_description or "Le personnage réagit prudemment.",
+            "target": None if target in (None, "null") else target,
+            "params": {},
+            "roleplay_text": roleplay_source.strip()[:500],
+            "inner_reasoning": inner_reasoning,
+        }
+
+    def _recover_structured_text_response(self, raw: str) -> Optional[dict[str, Any]]:
+        """Recover useful fields from loosely structured text answers."""
+        stripped = raw.strip()
+        if not stripped or ":" not in stripped:
+            return None
+
+        def _match(pattern: str) -> Optional[str]:
+            match = re.search(pattern, raw, re.IGNORECASE | re.DOTALL)
+            if not match:
+                return None
+            value = match.group(1).strip().strip(' "\'')
+            return value or None
+
+        action_type = _match(r"(?:action_type|type_action|action)\s*[:=]\s*([a-z_]+)")
+        action_description = _match(
+            r"(?:action_description|description_action|description)\s*[:=]\s*(.+?)(?:\n[\w_]+\s*[:=]|\Z)"
+        )
+        roleplay_text = _match(
+            r"(?:roleplay_text|roleplay|texte|dialogue)\s*[:=]\s*(.+?)(?:\n[\w_]+\s*[:=]|\Z)"
+        )
+        target = _match(r"(?:target|cible)\s*[:=]\s*(.+?)(?:\n[\w_]+\s*[:=]|\Z)")
+        reasoning = _match(
+            r"(?:inner_reasoning|reasoning|raisonnement)\s*[:=]\s*(.+?)(?:\n[\w_]+\s*[:=]|\Z)"
+        )
+
+        if not any([action_type, action_description, roleplay_text, target, reasoning]):
+            return None
+
+        return {
+            "action_type": action_type or "wait",
+            "action_description": action_description or "Le personnage réagit prudemment.",
+            "target": None if target in (None, "null") else target,
+            "params": {},
+            "roleplay_text": (roleplay_text or action_description or stripped)[:500],
+            "inner_reasoning": reasoning,
+        }
+
+    def _recover_prose_action_response(
+        self,
+        raw: str,
+        *,
+        game_state: dict[str, Any],
+        available_actions: Optional[Sequence[str]],
+        combat_mode: bool,
+    ) -> Optional[dict[str, Any]]:
+        """Infer an action from plain prose when the model ignored JSON format."""
+        stripped = raw.strip()
+        if not stripped or stripped in _ELLIPSIS_ONLY_RESPONSES:
+            return None
+
+        available = self._available_action_set(available_actions)
+        action_type = self._infer_action_type_from_text(stripped, available)
+        target = self._find_referenced_combatant(stripped, game_state)
+
+        if combat_mode and action_type is None and target and "attack" in available:
+            action_type = "attack"
+
+        if action_type is None:
+            return None
+
+        if combat_mode and action_type in {"attack", "cast_spell", "shove", "help"}:
+            target = target or self._select_default_enemy_target(game_state)
+
+        if action_type == "cast_spell":
+            spell_name = self._infer_spell_name_from_text(stripped, game_state)
+            if spell_name is None:
+                if combat_mode and "attack" in available:
+                    action_type = "attack"
+                else:
+                    return None
+            params = {"spell_name": spell_name} if action_type == "cast_spell" else {}
+        else:
+            params = {}
+
+        if combat_mode and action_type in {"attack", "cast_spell", "shove", "help"}:
+            if target is None:
+                if "dodge" in available:
+                    action_type = "dodge"
+                elif "wait" in available:
+                    action_type = "wait"
+                else:
+                    return None
+                params = {}
+
+        if action_type not in available:
+            return None
+
+        target_name = self._combatant_name(game_state, target)
+        description = self._describe_inferred_action(action_type, target_name, stripped)
+        return {
+            "action_type": action_type,
+            "action_description": description,
+            "target": target,
+            "params": params,
+            "roleplay_text": stripped[:500],
+            "inner_reasoning": "Action récupérée depuis une réponse non-JSON du LLM.",
+        }
+
+    def _build_default_combat_action(
+        self,
+        raw: str,
+        *,
+        game_state: dict[str, Any],
+        available_actions: Optional[Sequence[str]],
+    ) -> Optional[dict[str, Any]]:
+        """Create a deterministic combat action when the LLM output is unusable."""
+        available = self._available_action_set(available_actions)
+        target = self._select_default_enemy_target(game_state)
+        target_name = self._combatant_name(game_state, target)
+        stripped = raw.strip()
+
+        if target and "attack" in available:
+            roleplay_text = (
+                stripped[:500]
+                if stripped and stripped not in _ELLIPSIS_ONLY_RESPONSES
+                else f"{self._character_name} reprend l'initiative et attaque {target_name}."
+            )
+            return {
+                "action_type": "attack",
+                "action_description": f"Attaque {target_name}",
+                "target": target,
+                "params": {},
+                "roleplay_text": roleplay_text,
+                "inner_reasoning": (
+                    "Fallback combat : la réponse LLM était inexploitable, "
+                    "attaque de la cible ennemie vivante la plus fragile."
+                ),
+            }
+
+        for fallback_type, description in (
+            ("dodge", "Se met en défense"),
+            ("wait", "Attend sur la défensive"),
+        ):
+            if fallback_type in available:
+                return {
+                    "action_type": fallback_type,
+                    "action_description": description,
+                    "target": None,
+                    "params": {},
+                    "roleplay_text": (
+                        stripped[:500]
+                        if stripped and stripped not in _ELLIPSIS_ONLY_RESPONSES
+                        else f"{self._character_name} se remet en garde."
+                    ),
+                    "inner_reasoning": (
+                        "Fallback combat : aucune cible ennemie exploitable trouvée."
+                    ),
+                }
+
+        if available:
+            action_type = sorted(available)[0]
+            return {
+                "action_type": action_type,
+                "action_description": f"Action de secours : {action_type}",
+                "target": None,
+                "params": {},
+                "roleplay_text": stripped[:500] or f"{self._character_name} agit prudemment.",
+                "inner_reasoning": "Fallback combat : première action disponible.",
+            }
+
+        return None
+
+    @staticmethod
+    def _available_action_set(available_actions: Optional[Sequence[str]]) -> set[str]:
+        if not available_actions:
+            return set(PLAYER_ACTION_TYPES)
+        return {str(action).strip() for action in available_actions if str(action).strip()}
+
+    @staticmethod
+    def _infer_action_type_from_text(raw: str, available_actions: set[str]) -> Optional[str]:
+        haystack = f" {_normalize_for_match(raw)} "
+        for action_type, keywords in _ACTION_KEYWORDS:
+            if action_type not in available_actions:
+                continue
+            for keyword in keywords:
+                needle = f" {_normalize_for_match(keyword)} "
+                if needle in haystack:
+                    return action_type
+        return None
+
+    def _find_referenced_combatant(
+        self,
+        raw: str,
+        game_state: dict[str, Any],
+    ) -> Optional[str]:
+        combatants = game_state.get("combatants", {})
+        if not isinstance(combatants, dict):
+            return None
+
+        haystack = f" {_normalize_for_match(raw).replace('_', ' ')} "
+        for cid, cdata in combatants.items():
+            if cid == self._character_id or not self._is_alive_combatant(cdata):
+                continue
+            aliases = [cid, str(cid).replace("_", " ")]
+            if isinstance(cdata, dict) and cdata.get("name"):
+                aliases.append(str(cdata["name"]))
+            for alias in aliases:
+                needle = f" {_normalize_for_match(alias).replace('_', ' ')} "
+                if needle.strip() and needle in haystack:
+                    return str(cid)
+        return None
+
+    def _select_default_enemy_target(self, game_state: dict[str, Any]) -> Optional[str]:
+        combatants = game_state.get("combatants", {})
+        if not isinstance(combatants, dict):
+            return None
+
+        characters = game_state.get("characters", {})
+        character_ids = set(characters) if isinstance(characters, dict) else set()
+        candidates: list[tuple[int, str]] = []
+        for cid, cdata in combatants.items():
+            if cid == self._character_id or not self._is_alive_combatant(cdata):
+                continue
+            if not self._looks_like_enemy_combatant(str(cid), cdata, character_ids):
+                continue
+            hp = self._combatant_hp(cdata)
+            candidates.append((hp if hp is not None else 9999, str(cid)))
+
+        if not candidates:
+            return None
+        candidates.sort(key=lambda item: (item[0], item[1]))
+        return candidates[0][1]
+
+    @staticmethod
+    def _looks_like_enemy_combatant(
+        combatant_id: str,
+        cdata: Any,
+        character_ids: set[str],
+    ) -> bool:
+        if isinstance(cdata, dict):
+            if cdata.get("is_player") is True:
+                return False
+            if cdata.get("is_player") is False:
+                return True
+            if cdata.get("monster_id") or cdata.get("cr") is not None:
+                return True
+        return combatant_id not in character_ids
+
+    @staticmethod
+    def _combatant_hp(cdata: Any) -> Optional[int]:
+        if not isinstance(cdata, dict):
+            return None
+        raw_hp = cdata.get("hp", cdata.get("current_hp"))
+        if raw_hp is None:
+            return None
+        try:
+            return int(raw_hp)
+        except (TypeError, ValueError):
+            return None
+
+    @classmethod
+    def _is_alive_combatant(cls, cdata: Any) -> bool:
+        hp = cls._combatant_hp(cdata)
+        return hp is None or hp > 0
+
+    @staticmethod
+    def _combatant_name(game_state: dict[str, Any], target: Optional[str]) -> str:
+        if target is None:
+            return "la cible"
+        combatants = game_state.get("combatants", {})
+        if isinstance(combatants, dict):
+            cdata = combatants.get(target, {})
+            if isinstance(cdata, dict) and cdata.get("name"):
+                return str(cdata["name"])
+        return target
+
+    def _normalize_target_reference(
+        self,
+        raw_target: Any,
+        game_state: dict[str, Any],
+    ) -> Optional[str]:
+        if raw_target is None:
+            return None
+        if not isinstance(raw_target, str):
+            return str(raw_target)
+
+        stripped = raw_target.strip()
+        if not stripped or stripped.lower() in {"null", "none", "aucun"}:
+            return None
+
+        resolved = self._find_referenced_combatant(stripped, game_state)
+        return resolved or stripped
+
+    def _infer_spell_name_from_text(
+        self,
+        raw: str,
+        game_state: dict[str, Any],
+    ) -> Optional[str]:
+        character = self._extract_character(game_state)
+        known_spells = character.get("known_spells", [])
+        if not isinstance(known_spells, list):
+            return None
+        haystack = f" {_normalize_for_match(raw).replace('_', ' ')} "
+        for spell in known_spells:
+            needle = f" {_normalize_for_match(spell).replace('_', ' ')} "
+            if needle.strip() and needle in haystack:
+                return str(spell)
+        return None
+
+    @staticmethod
+    def _describe_inferred_action(
+        action_type: str,
+        target_name: str,
+        raw: str,
+    ) -> str:
+        if action_type == "attack":
+            return f"Attaque {target_name}"
+        if action_type == "cast_spell":
+            return f"Lance un sort sur {target_name}"
+        if action_type in {"shove", "help"}:
+            return f"{action_type} {target_name}"
+        return raw.strip()[:160] or f"Action {action_type}"
 
     def _build_messages(
         self,
@@ -295,9 +825,15 @@ class PlayerAgent(BaseAgent):
         msgs.append({"role": "user", "content": user_prompt})
         return msgs
 
-    def _parse_player_action(self, data: dict[str, Any], raw: str) -> PlayerActionChoice:
+    def _parse_player_action(
+        self,
+        data: dict[str, Any],
+        raw: str,
+        *,
+        game_state: Optional[dict[str, Any]] = None,
+    ) -> PlayerActionChoice:
         """Convertit le dict JSON parsé en PlayerActionChoice Pydantic."""
-        action_type = str(data.get("action_type", "wait"))
+        action_type = str(data.get("action_type", "wait")).strip().lower()
         if action_type not in PLAYER_ACTION_TYPES:
             logger.warning(
                 "PlayerAgent[%s] : action_type '%s' invalide, fallback wait",
@@ -306,12 +842,18 @@ class PlayerAgent(BaseAgent):
             )
             action_type = "wait"
 
+        params = data.get("params", {})
+        if not isinstance(params, dict):
+            params = {}
+
+        target = self._normalize_target_reference(data.get("target"), game_state or {})
+
         try:
             return PlayerActionChoice(
                 action_type=action_type,
                 action_description=str(data.get("action_description", "")),
-                target=data.get("target"),
-                params=data.get("params", {}),
+                target=target,
+                params=params,
                 roleplay_text=str(data.get("roleplay_text", raw.strip()[:300])),
                 inner_reasoning=data.get("inner_reasoning"),
             )
@@ -338,6 +880,16 @@ class PlayerAgent(BaseAgent):
             content = getattr(msg, "content", "")
             lines.append(f"[{speaker}] {content}")
         return "\n".join(lines)
+
+    @staticmethod
+    def _summarize_recent_narrative(game_state: dict[str, Any]) -> str:
+        phase = str(game_state.get("phase") or "").upper()
+        if phase == "EXPLORATION":
+            return (
+                "[Système] La scène actuelle est hors combat. "
+                "Si un combat vient de se terminer, les ennemis sont vaincus et le calme revient."
+            )
+        return "(aucun message récent)"
 
     # -------------------------------------------------------------------------
     # Propriétés

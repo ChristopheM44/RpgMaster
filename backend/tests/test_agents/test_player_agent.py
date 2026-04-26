@@ -14,10 +14,13 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.agents.player_agent import PlayerAgent, _FALLBACK_ACTION, _describe_personality
+from app.agents.player_agent import (
+    _FALLBACK_ACTION,
+    PlayerAgent,
+    _describe_personality,
+)
 from app.agents.schemas import AgentContext, PlayerActionChoice, PlayerPersonality
 from app.llm.ollama_client import OllamaClient, OllamaError
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -183,6 +186,19 @@ def test_validate_action_cast_spell_has_slots(arcane_agent: PlayerAgent) -> None
     assert is_valid
 
 
+def test_validate_action_cast_spell_structured_slots(arcane_agent: PlayerAgent) -> None:
+    state = _game_state()
+    state["characters"]["elara_1"]["spell_slots"] = {"1": {"total": 2, "used": 1}}
+    action = PlayerActionChoice(
+        action_type="cast_spell",
+        action_description="Lance un sort",
+        params={"spell_name": "Projectile magique"},
+        roleplay_text="Elara projette des dards de force.",
+    )
+    is_valid, reason = arcane_agent.validate_action(action, state)
+    assert is_valid, reason
+
+
 def test_validate_action_cast_spell_missing_spell_name(arcane_agent: PlayerAgent) -> None:
     action = PlayerActionChoice(
         action_type="cast_spell",
@@ -260,13 +276,34 @@ def test_validate_action_wait_allowed_when_unconscious(brave_agent: PlayerAgent)
 
 async def test_decide_action_success(brave_agent: PlayerAgent) -> None:
     """decide_action() parse correctement une réponse JSON valide."""
-    with patch.object(brave_agent._client, "chat", new=AsyncMock(return_value=_valid_action_json())):
+    with patch.object(
+        brave_agent._client,
+        "chat",
+        new=AsyncMock(return_value=_valid_action_json()),
+    ):
         action = await brave_agent.decide_action(game_state=_game_state())
 
     assert isinstance(action, PlayerActionChoice)
     assert action.action_type == "attack"
     assert action.target == "goblin_1"
     assert "Thorin" in action.roleplay_text
+
+
+async def test_decide_action_normalizes_named_target(brave_agent: PlayerAgent) -> None:
+    """Une cible nommée en JSON est convertie vers l'id du combattant."""
+    state = _game_state(
+        phase="COMBAT",
+        combatants={
+            "thorin_1": {"name": "Thorin", "hp": 20, "is_player": True},
+            "goblin_2": {"name": "Gobelin 2", "hp": 5, "is_player": False},
+        },
+    )
+    payload = _valid_action_json(target="Gobelin 2")
+    with patch.object(brave_agent._client, "chat", new=AsyncMock(return_value=payload)):
+        action = await brave_agent.decide_action(game_state=state)
+
+    assert action.action_type == "attack"
+    assert action.target == "goblin_2"
 
 
 async def test_decide_action_invalid_action_type_falls_back_to_wait(
@@ -301,8 +338,117 @@ async def test_decide_action_non_json_response_uses_raw_text(brave_agent: Player
     ):
         action = await brave_agent.decide_action(game_state=_game_state())
 
-    assert action.action_type == "wait"
+    assert action.action_type == "dodge"
     assert "fonce" in action.roleplay_text
+
+
+async def test_decide_action_repairs_non_json_response(brave_agent: PlayerAgent) -> None:
+    """Si le LLM répond en prose puis répare en JSON, l'action réparée est utilisée."""
+    repaired = _valid_action_json(
+        action_type="attack",
+        action_description="Attaque le gobelin le plus proche",
+        roleplay_text="Thorin transforme son élan en coup de marteau.",
+    )
+    with patch.object(
+        brave_agent._client,
+        "chat",
+        new=AsyncMock(side_effect=["Je charge le gobelin avec mon marteau !", repaired]),
+    ):
+        action = await brave_agent.decide_action(game_state=_game_state())
+
+    assert action.action_type == "attack"
+    assert action.llm_error is None
+    assert "marteau" in action.roleplay_text
+
+
+async def test_decide_action_recovers_truncated_json_response(brave_agent: PlayerAgent) -> None:
+    """Si le JSON est tronqué après des champs utiles, l'agent récupère l'action."""
+    raw = (
+        '{\n'
+        '  "action_type": "talk",\n'
+        '  "action_description": "Avertir les compagnons",\n'
+        '  "target": "Aria",\n'
+        '  "params": {},\n'
+        '  "roleplay_text": "Thorin lève son bouclier et prévient le groupe'
+    )
+    with patch.object(
+        brave_agent._client,
+        "chat",
+        new=AsyncMock(side_effect=[raw, "réparation impossible"]),
+    ):
+        action = await brave_agent.decide_action(game_state=_game_state())
+
+    assert action.action_type == "talk"
+    assert action.target == "Aria"
+    assert "Thorin" in action.roleplay_text
+
+
+async def test_decide_action_recovers_labeled_text_response(brave_agent: PlayerAgent) -> None:
+    """Les réponses semi-structurées sans JSON restent exploitables."""
+    raw = (
+        "action_type: talk\n"
+        "action_description: Prévenir les alliés\n"
+        "target: Aria\n"
+        "roleplay_text: Thorin lève la main pour faire signe au groupe.\n"
+        "inner_reasoning: Mieux vaut avertir tout le monde."
+    )
+    with patch.object(
+        brave_agent._client,
+        "chat",
+        new=AsyncMock(side_effect=[raw, "réparation impossible"]),
+    ):
+        action = await brave_agent.decide_action(game_state=_game_state())
+
+    assert action.action_type == "talk"
+    assert action.target == "Aria"
+    assert "Thorin" in action.roleplay_text
+
+
+async def test_decide_action_recovers_plain_combat_prose_with_target(
+    brave_agent: PlayerAgent,
+) -> None:
+    """Une prose de combat sans JSON est convertie en action mécanique."""
+    state = _game_state(
+        phase="COMBAT",
+        combatants={
+            "thorin_1": {"name": "Thorin", "hp": 20, "is_player": True},
+            "goblin_1": {"name": "Gobelin 1", "hp": 7, "is_player": False},
+            "goblin_2": {"name": "Gobelin 2", "hp": 5, "is_player": False},
+        },
+    )
+    raw = "Thorin frappe Gobelin 2 de son marteau en criant de tenir bon !"
+    with patch.object(
+        brave_agent._client,
+        "chat",
+        new=AsyncMock(side_effect=[raw, "réparation impossible"]),
+    ):
+        action = await brave_agent.decide_action(game_state=state)
+
+    assert action.action_type == "attack"
+    assert action.target == "goblin_2"
+    assert "marteau" in action.roleplay_text
+    assert action.llm_error is None
+
+
+async def test_decide_action_uses_default_combat_action_on_empty_llm_response(
+    brave_agent: PlayerAgent,
+) -> None:
+    """Même une réponse vide/ellipsis déclenche une action de combat utile."""
+    state = _game_state(
+        phase="COMBAT",
+        combatants={
+            "thorin_1": {"name": "Thorin", "hp": 20, "is_player": True},
+            "goblin_1": {"name": "Gobelin 1", "hp": 7, "is_player": False},
+            "goblin_2": {"name": "Gobelin 2", "hp": 3, "is_player": False},
+        },
+    )
+    with patch.object(brave_agent._client, "chat", new=AsyncMock(return_value="…")):
+        action = await brave_agent.decide_action(game_state=state)
+
+    assert action.action_type == "attack"
+    assert action.target == "goblin_2"
+    assert "Thorin" in action.roleplay_text
+    assert action.llm_error is None
 
 
 # ---------------------------------------------------------------------------

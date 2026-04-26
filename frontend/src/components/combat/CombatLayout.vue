@@ -1,0 +1,54 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import { useCharacterStore } from '../../stores/character'
+import { useGameStore } from '../../stores/game'
+import NarrativeLog from '../narrative/NarrativeLog.vue'
+import ActionBar from '../common/ActionBar.vue'
+import Battlemap from './Battlemap.vue'
+import InitiativeTracker from './InitiativeTracker.vue'
+import SelectedDetailPanel from './SelectedDetailPanel.vue'
+
+const emit = defineEmits<{
+  action: [actionType: string, content?: string, targetId?: string, extra?: Record<string, unknown>]
+  endCombat: []
+  nextTurn: []
+  openSheet: [id: string]
+}>()
+
+const gameStore = useGameStore()
+const charStore = useCharacterStore()
+
+const isMyTurn = computed(() => gameStore.currentTurnId === charStore.myCharacter?.id)
+const speedM = computed(() => {
+  const movement = gameStore.combatants.find((c) => c.id === charStore.myCharacter?.id)?.action_economy?.movement
+  return movement ? movement * 0.3048 : 9
+})
+</script>
+
+<template>
+  <div class="hidden min-h-0 flex-1 overflow-hidden md:flex">
+    <InitiativeTracker @next-turn="emit('nextTurn')" />
+
+    <main class="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <div class="flex min-h-0 flex-[1.45] overflow-hidden">
+        <Battlemap
+          :my-character-id="charStore.myCharacter?.id"
+          :is-my-turn="isMyTurn"
+          :speed-m="speedM"
+          @move="(col, row) => emit('action', 'move', undefined, undefined, { col, row })"
+        />
+      </div>
+
+      <section
+        class="flex min-h-[220px] flex-1 flex-col overflow-hidden border-t"
+        :style="{ borderColor: 'var(--color-border)' }"
+      >
+        <NarrativeLog />
+      </section>
+
+      <ActionBar variant="combat-immersive" @action="(...args) => emit('action', ...args)" />
+    </main>
+
+    <SelectedDetailPanel @open-sheet="(id) => emit('openSheet', id)" />
+  </div>
+</template>

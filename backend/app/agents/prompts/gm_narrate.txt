@@ -14,8 +14,18 @@ ACTION DU JOUEUR :
 En tant que Maître du Jeu, décris ce qui se passe et ce que les personnages perçoivent.
 
 Instructions :
+- Détermine action_intent selon l'action du joueur :
+  * "social" si le joueur s'adresse à ses compagnons (question, demande d'avis, proposition de plan).
+  * "environmental" si le joueur agit sur le monde (explorer, examiner, bouger, utiliser).
+  * "mixed" si les deux à la fois.
+- Si action_intent = "social" : écris une narration COURTE (1-2 phrases), contexte d'ambiance uniquement.
+  Ne décris PAS les réactions des compagnons — ils vont parler eux-mêmes juste après.
 - Varie les registres sensoriels : vue, ouïe, odorat, toucher, ressenti émotionnel.
 - Si l'action du joueur nécessite un jet de dés (escalader, persuader, crocheter, percevoir…), inclus un roll_request.
+- Si la scène introduit un nouveau lieu ou change l'heure/météo/le jour : émets journal_update avec uniquement les champs qui changent.
+- Si la narration introduit une quête ou rumeur (donnée par un PNJ, découverte, mystère) : émets quest_add avec un id court en snake_case.
+- Si la narration nomme un nouveau PNJ ou lieu important : émets chronicle_add (kind="npc" ou "location"). Pas les monstres de combat, pas les personnages joueurs.
+- N'émets journal_update, quest_add, chronicle_add QUE quand l'état change. Pas à chaque tour.
 - Si la narration décrit l'apparition d'ennemis hostiles qui veulent attaquer le groupe, inclus OBLIGATOIREMENT ces deux actions dans cet ordre exact :
     1. encounter_setup avec la liste précise des monster_ids correspondant aux ennemis décrits.
     2. state_transition vers COMBAT.

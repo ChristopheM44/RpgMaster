@@ -8,6 +8,7 @@ import type {
   NarrationPayload,
   RollResultPayload,
   TurnStartPayload,
+  AiThinkingPayload,
   PhaseChangePayload,
   CombatStartPayload,
   HpChangedPayload,
@@ -91,6 +92,8 @@ export function useWebSocket(sessionId: string) {
   }
 
   function handleEvent(msg: WsEvent) {
+    if (!gameStore.consumeEventId(msg.event_id)) return
+
     switch (msg.event_type) {
       case 'session_state':
         gameStore.applySessionState(msg.payload as SessionStatePayload)
@@ -103,6 +106,9 @@ export function useWebSocket(sessionId: string) {
         break
       case 'turn_start':
         gameStore.applyTurnStart(msg.payload as TurnStartPayload)
+        break
+      case 'ai_thinking':
+        gameStore.applyAiThinking(msg.payload as AiThinkingPayload)
         break
       case 'phase_change':
         gameStore.setProcessing(false)
@@ -148,13 +154,22 @@ export function useWebSocket(sessionId: string) {
         break
       case 'combat_end':
         gameStore.setProcessing(false)
-        gameStore.setCombatants([])
+        gameStore.applyPhaseChange('exploration')
         break
       case 'audio':
         audio.playAudioB64((msg.payload as AudioPayload).audio_b64)
         break
       case 'error':
         gameStore.setError((msg.payload as { message: string }).message)
+        break
+      case 'journal_updated':
+        gameStore.applyJournalUpdated(msg.payload as { journal: import('../types').AdventureJournal })
+        break
+      case 'quest_updated':
+        gameStore.applyQuestUpdated(msg.payload as { quests: import('../types').Quest[] })
+        break
+      case 'chronicle_updated':
+        gameStore.applyChronicleUpdated(msg.payload as { chronicle: import('../types').ChronicleEntry[] })
         break
       case 'pong':
         break
@@ -193,6 +208,9 @@ export function useWebSocket(sessionId: string) {
   }
 
   function triggerAiReactions(triggerCharacterId?: string) {
+    if (gameStore.connected) {
+      gameStore.setProcessing(true)
+    }
     send({ type: 'trigger_ai_reactions', character_id: triggerCharacterId })
   }
 

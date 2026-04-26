@@ -210,7 +210,7 @@ async function startGame(mode: 'libre' | 'script' | 'auto', script?: string) {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getConMod(scores: Record<string, number>): number {
-  return Math.floor((scores.con - 10) / 2)
+  return Math.floor(((scores.con ?? 10) - 10) / 2)
 }
 
 function speciesLabel(s: string): string {

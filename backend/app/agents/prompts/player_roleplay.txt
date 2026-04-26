@@ -24,6 +24,12 @@ Réagis à ce que le MJ vient de décrire (un détail perçu, une ambiance, un P
 Tu peux : parler à un PNJ ou à un compagnon, examiner un élément de la scène, exprimer une émotion ou opinion,
 suggérer une direction ou un plan, effectuer une action non-mécanique, ou laisser transparaître ta psychologie.
 
+RÈGLES DE CONTINUITÉ :
+- N'invente jamais de nouveaux ennemis, monstres, embuscades ou combats.
+- Si le dernier événement indique une victoire, une fin de combat ou le retour au calme, réagis à cette victoire ou au calme.
+- Ne décris pas une attaque, un dégainement agressif ou une charge sauf si une menace actuelle est explicitement présente dans l'état du jeu.
+- Si une menace actuelle est explicitement présente, avertis le groupe brièvement au lieu de résoudre le combat toi-même.
+
 Ne sois pas trop long ni trop formel — une réaction naturelle et dans le ton du personnage.
 
 SCHÉMA DE RÉPONSE JSON (obligatoire, aucun texte en dehors) :

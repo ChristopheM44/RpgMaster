@@ -62,6 +62,9 @@ class ActiveSession:
     # Maps combatant_id → PlayerAgent for AI-controlled companion players.
     # Type is Any to avoid circular imports; callers should use PlayerAgent instances.
     ai_players: Dict[str, Any] = field(default_factory=dict)
+    # Intent classifié par le MJ pour la dernière action joueur :
+    # 'social' | 'environmental' | 'mixed' | None
+    last_gm_intent: Optional[str] = None
 
     def mark_dirty(self) -> None:
         self.is_dirty = True

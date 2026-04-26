@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.agents.schemas import AgentResponse, GMAction
+from app.agents.schemas import AgentResponse, GMAction, GMResponse
 
 
 # ---------------------------------------------------------------------------
@@ -395,6 +395,114 @@ class TestResilienceGMFailure:
 
 
 class TestAutoCombatTrigger:
+    def test_hostile_narration_without_actions_triggers_combat_automatically(
+        self, ws_client
+    ) -> None:
+        """Même sans actions JSON, une embuscade hostile narrée démarre le combat."""
+        session_id = _create_session(ws_client)
+
+        mock_response = AgentResponse(
+            content="Deux bandits surgissent des fourrés, lames au clair !",
+            actions=[],
+        )
+
+        from app.game.action_resolver import ActionResolver
+        from app.api import ws_game
+        from app.models.session import SessionStatus
+
+        mock_gm = MagicMock()
+        mock_gm.think = AsyncMock(return_value=mock_response)
+        mock_gm.run_combat_turn = AsyncMock(return_value=GMResponse(narration="Le bandit frappe."))
+        ws_game.action_resolver = ActionResolver(gm_agent=mock_gm)
+
+        with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
+            ws.receive_json()  # session_state initial
+
+            active = ws_game.session_manager.get_session(session_id)
+            assert active is not None
+            active.state_data["characters"] = {
+                "hero-1": {
+                    "name": "Thorvald",
+                    "level": 1,
+                    "hp": 10,
+                    "hp_max": 10,
+                    "dex": 14,
+                    "is_ai": False,
+                    "equipment": [],
+                }
+            }
+
+            ws.send_json({
+                "type": "action",
+                "action_type": "free_text",
+                "content": "Nous avançons prudemment.",
+            })
+
+            events = _collect_all(ws, 6)
+
+        event_types = [e["event_type"] for e in events]
+        assert "phase_change" in event_types
+        assert "combat_start" in event_types
+
+        combat_start = next(e for e in events if e["event_type"] == "combat_start")
+        monsters = [
+            c for c in combat_start["payload"]["combatants"] if c["kind"] == "monster"
+        ]
+        assert len(monsters) == 2
+        assert all(m["name"].startswith("Bandit") for m in monsters)
+
+        active = ws_game.session_manager.get_session(session_id)
+        assert active is not None
+        assert active.phase == SessionStatus.COMBAT
+
+    def test_explicit_attack_text_in_exploration_starts_combat(
+        self, ws_client
+    ) -> None:
+        """Si le joueur écrit « j'attaque le bandit », on entre en combat."""
+        session_id = _create_session(ws_client)
+
+        from app.api import ws_game
+        from app.agents.schemas import GMResponse as _GMResponse
+        from app.models.session import SessionStatus
+
+        ws_game.action_resolver._gm.run_combat_turn = AsyncMock(
+            return_value=_GMResponse(narration="Le bandit riposte.")
+        )
+
+        with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
+            ws.receive_json()  # session_state initial
+
+            active = ws_game.session_manager.get_session(session_id)
+            assert active is not None
+            active.state_data["characters"] = {
+                "hero-1": {
+                    "name": "Thorvald",
+                    "level": 1,
+                    "hp": 10,
+                    "hp_max": 10,
+                    "dex": 14,
+                    "is_ai": False,
+                    "equipment": [],
+                }
+            }
+
+            ws.send_json({
+                "type": "action",
+                "action_type": "free_text",
+                "content": "J'attaque le bandit le plus proche.",
+                "character_id": "hero-1",
+            })
+
+            events = _collect_all(ws, 5)
+
+        event_types = [e["event_type"] for e in events]
+        assert "phase_change" in event_types
+        assert "combat_start" in event_types
+
+        active = ws_game.session_manager.get_session(session_id)
+        assert active is not None
+        assert active.phase == SessionStatus.COMBAT
+
     def test_hostile_narration_triggers_combat_automatically(self, ws_client) -> None:
         """GM émet encounter_setup + state_transition COMBAT → phase devient COMBAT
         et combat_start est diffusé, sans action manuelle 'start_combat'.

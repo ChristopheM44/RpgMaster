@@ -53,7 +53,7 @@ async def start_game(
     db: AsyncSession = Depends(get_db),
 ):
     """Start a game session — transition to EXPLORATION and set up participants."""
-    from app.api.ws_game import _build_session_state_payload, session_manager
+    from app.api.ws_game import _build_session_state_payload, _character_snapshot, session_manager
 
     try:
         active = await session_manager.open_session(session_id, db)
@@ -98,22 +98,22 @@ async def start_game(
 
     # Store character snapshots in state_data for later combat use
     active.state_data["characters"] = {
-        c.id: {
-            "name": c.name,
-            "hp": c.hp_current,
-            "hp_max": c.hp_max,
-            "is_ai": c.is_ai,
-            "level": c.level,
-            "ability_scores": dict(c.ability_scores),
-            "skill_proficiencies": list(c.proficiencies.get("skills", [])),
-            "save_proficiencies": list(c.proficiencies.get("saving_throws", [])),
-            # Compat backward pour _resolve_attack (lecture via combatants)
-            "dex": int(c.ability_scores.get("dex", 10)),
-            "str": int(c.ability_scores.get("str", 10)),
-            "equipment": list(c.equipment or []),
-        }
+        c.id: _character_snapshot(c)
         for c in characters
     }
+
+    # Seed world-state slices (idempotent — setdefault preserves existing saves)
+    active.state_data.setdefault("adventure_journal", {
+        "location_region": None,
+        "location_place": None,
+        "time_of_day": "morning",
+        "day_number": 1,
+        "calendar_date": None,
+        "weather": None,
+    })
+    active.state_data.setdefault("quests", [])
+    active.state_data.setdefault("chronicle", [])
+
     active.mark_dirty()
     await session_manager.save_state(session_id, db)
 
@@ -428,10 +428,11 @@ async def get_history(
     msgs_result = await db.execute(
         select(Message)
         .where(Message.session_id == session_id)
-        .order_by(Message.created_at.asc())
+        .order_by(Message.created_at.desc())
         .limit(limit)
     )
-    messages = msgs_result.scalars().all()
+    messages = list(msgs_result.scalars().all())
+    messages.reverse()
 
     return {
         "messages": [

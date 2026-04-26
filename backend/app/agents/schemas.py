@@ -35,6 +35,15 @@ class GMResponse(BaseModel):
     inner_reasoning: Optional[str] = Field(
         None, description="Réflexion interne du MJ, non affichée aux joueurs"
     )
+    action_intent: Optional[str] = Field(
+        None,
+        description=(
+            "Classification de l'action du joueur : "
+            "'social' (adresse aux compagnons), "
+            "'environmental' (interaction avec le monde), "
+            "'mixed' (les deux)"
+        ),
+    )
 
 
 class ContextMessage(BaseModel):
@@ -64,6 +73,9 @@ class AgentResponse(BaseModel):
     actions: list[GMAction] = Field(default_factory=list)
     raw_llm_output: Optional[str] = Field(
         None, description="Sortie brute du LLM avant parsing"
+    )
+    action_intent: Optional[str] = Field(
+        None, description="Relayé depuis GMResponse : 'social' | 'environmental' | 'mixed'"
     )
 
 
@@ -95,6 +107,7 @@ PLAYER_ACTION_TYPES = (
     "disengage",
     "hide",
     "shove",
+    "examine",
 )
 
 
@@ -105,7 +118,7 @@ class PlayerActionChoice(BaseModel):
         ...,
         description=(
             "Type d'action : attack | cast_spell | dash | dodge | help | "
-            "use_item | move | talk | wait | disengage | hide | shove"
+            "use_item | move | talk | wait | disengage | hide | shove | examine"
         ),
     )
     action_description: str = Field(

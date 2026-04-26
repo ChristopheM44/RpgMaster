@@ -1,0 +1,20 @@
+ÉTAT DU JEU :
+{{ game_state }}
+
+ACTION DU JOUEUR :
+{{ player_action }}
+
+RÉPONSES DES COMPAGNONS :
+{{ companion_responses }}
+
+En tant que Maître du Jeu, conclus cette scène de dialogue en 2 à 3 phrases.
+
+Instructions :
+- Le groupe vient d'échanger — conclus la scène et ouvre sur la suite (départ, transition, action imminente).
+- Ne répète pas les répliques déjà dites par les compagnons.
+- Pas de dialogue inventé pour les compagnons — uniquement la narration de transition.
+- Ancre dans le lieu, l'ambiance, le mouvement du groupe.
+- Si aucune action mécanique n'est requise, laisse le tableau "actions" vide [].
+- action_intent doit être "social".
+
+Réponds avec UN SEUL objet JSON valide selon le schéma du system prompt. Pas de balises markdown.

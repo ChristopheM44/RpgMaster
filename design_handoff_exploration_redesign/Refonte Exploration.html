@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>RPGMaster — Refonte Exploration</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Fraunces:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<style>
+:root {
+  --color-bg: #0e0d14;
+  --color-bg-elev: #181623;
+  --color-surface: #1f1c2e;
+  --color-surface-raised: #2a2640;
+  --color-parchment: #f7ecd0;
+  --color-parchment-dark: rgba(247,236,208,0.75);
+  --color-text-muted: rgba(247,236,208,0.50);
+  --color-text-dim: rgba(247,236,208,0.32);
+  --color-border: rgba(255,235,180,0.07);
+  --color-border-strong: rgba(255,235,180,0.18);
+  --color-ember: #ff8247;
+  --color-gold: #f0c764;
+  --color-blood: #e84545;
+  --color-arcane: #c090ff;
+  --color-teal: #4fd8c0;
+  --color-green: #6fd96f;
+  --font-display: "Cinzel", serif;
+  --font-serif: "Fraunces", Georgia, serif;
+  --font-body: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+html, body, #root { height: 100%; margin: 0; }
+body { background: #0a0911; color: var(--color-parchment); font-family: var(--font-body); font-size: 14px; }
+
+.font-display { font-family: var(--font-display); }
+.font-serif { font-family: var(--font-serif); }
+.font-mono { font-family: var(--font-mono); }
+
+.rpg-eyebrow { font-size: 10px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--color-ember); }
+.rpg-btn-primary { display: inline-flex; align-items: center; gap: 6px; padding: 10px 20px; background: linear-gradient(135deg, var(--color-ember), var(--color-gold)); color: var(--color-bg); border: none; border-radius: 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; box-shadow: 0 2px 12px rgba(255,130,71,0.3); }
+.rpg-btn-secondary { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; background: transparent; color: var(--color-gold); border: 1px solid var(--color-border-strong); border-radius: 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; }
+.rpg-btn-tonal { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; transition: background 120ms ease; }
+.tone-blood { color: var(--color-blood); background: rgba(232,69,69,0.08); border: 1px solid rgba(232,69,69,0.3); }
+.tone-arcane { color: var(--color-arcane); background: rgba(192,144,255,0.10); border: 1px solid rgba(192,144,255,0.3); }
+.tone-teal { color: var(--color-teal); background: rgba(79,216,192,0.08); border: 1px solid rgba(79,216,192,0.3); }
+.tone-gold { color: var(--color-gold); background: rgba(240,199,100,0.10); border: 1px solid rgba(240,199,100,0.3); }
+.rpg-input { padding: 10px 14px; background: rgba(0,0,0,0.35); border: 1px solid var(--color-border-strong); border-radius: 6px; color: var(--color-parchment); font-family: var(--font-serif); font-size: 14px; outline: none; }
+.rpg-input::placeholder { color: var(--color-text-muted); }
+.rpg-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid; }
+
+.exp-frame {
+  background: var(--color-bg);
+  color: var(--color-parchment);
+  font-family: var(--font-body);
+  position: relative;
+  overflow: hidden;
+}
+.exp-frame::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background-image: radial-gradient(circle at 1px 1px, rgba(255,235,180,0.025) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="shared/data.js"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="shared/shell.jsx"></script>
+<script type="text/babel" src="variations/var-a-group.jsx"></script>
+<script type="text/babel" src="variations/var-b-tabs.jsx"></script>
+<script type="text/babel" src="variations/var-c-logbook.jsx"></script>
+<script type="text/babel" src="variations/var-d-editorial.jsx"></script>
+<script type="text/babel" src="variations/var-e-banner.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState } = React;
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "density": "detailed",
+  "actionSet": "minimal",
+  "panelWidth": 390,
+  "showPartyBar": false
+}/*EDITMODE-END*/;
+
+/* Frame commun pour chaque variation */
+function ExplorationFrame({ children, width = 1280, height = 820 }) {
+  return (
+    <div className="exp-frame flex flex-col" style={{ width, height }}>
+      {children}
+    </div>
+  );
+}
+
+/* PartyBar bas réutilisable (pour le tweak showPartyBar) */
+function PartyBarBottom() {
+  return (
+    <div className="flex shrink-0 items-stretch border-t" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elev)', height: 80 }}>
+      <div className="flex items-center px-2 border-r" style={{ borderColor: 'var(--color-border)' }}>
+        <span className="font-mono text-[9px] font-bold uppercase tracking-[0.25em]" style={{ color: 'var(--color-text-dim)', writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>Groupe</span>
+      </div>
+      <div className="flex flex-1 items-center gap-2 overflow-x-auto px-3 py-2">
+        {window.PARTY.map(c => (
+          <div key={c.id} className="flex shrink-0 items-center gap-2.5 rounded-[10px] border px-3 py-2" style={{ minWidth: 160, borderColor: c.is_self ? 'var(--color-ember)' : 'var(--color-border)', background: 'var(--color-surface)' }}>
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg font-display text-base font-bold" style={{ background: c.is_ai ? 'linear-gradient(135deg, var(--color-arcane), #7050b0)' : 'linear-gradient(135deg, var(--color-ember), var(--color-gold))', color: 'var(--color-bg)' }}>{c.initial}</div>
+            <div className="min-w-0 flex-1">
+              <div className="font-display text-xs font-semibold truncate" style={{ color: c.is_self ? 'var(--color-gold)' : 'var(--color-parchment)' }}>{c.name}</div>
+              <div className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>{c.char_class}</div>
+              <div className="font-mono text-[9px]" style={{ color: 'var(--color-text-dim)' }}>{c.hp_current}/{c.hp_max}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* Wrapper réutilisable : applique panelWidth via CSS variable + injecte PartyBar */
+function Right({ children, width }) {
+  return React.cloneElement(children, { ...children.props, panelWidth: width });
+}
+
+/* Variation A — Tableau de bord groupe */
+function VariationA({ tweaks }) {
+  return (
+    <ExplorationFrame>
+      <ExplorationHeader />
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        <NarrativeColumn />
+        <div style={{ width: tweaks.panelWidth, flexShrink: 0, display: 'flex' }}>
+          <VarA_GroupDashboard density={tweaks.density} />
+        </div>
+      </div>
+      <ExplorationActionBar density={tweaks.density === 'compact' ? 'compact' : 'normal'} actionSet={tweaks.actionSet} />
+      {tweaks.showPartyBar && <PartyBarBottom />}
+    </ExplorationFrame>
+  );
+}
+
+/* Variation B — Onglets */
+function VariationB({ tweaks }) {
+  return (
+    <ExplorationFrame>
+      <ExplorationHeader />
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        <NarrativeColumn />
+        <div style={{ width: tweaks.panelWidth, flexShrink: 0, display: 'flex' }}>
+          <VarB_TabbedCompanion density={tweaks.density} />
+        </div>
+      </div>
+      <ExplorationActionBar actionSet={tweaks.actionSet} />
+      {tweaks.showPartyBar && <PartyBarBottom />}
+    </ExplorationFrame>
+  );
+}
+
+/* Variation C — Carnet */
+function VariationC({ tweaks }) {
+  return (
+    <ExplorationFrame>
+      <ExplorationHeader />
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        <NarrativeColumn />
+        <div style={{ width: tweaks.panelWidth, flexShrink: 0, display: 'flex' }}>
+          <VarC_AdventureLog density={tweaks.density} />
+        </div>
+      </div>
+      <ExplorationActionBar actionSet={tweaks.actionSet} />
+      {tweaks.showPartyBar && <PartyBarBottom />}
+    </ExplorationFrame>
+  );
+}
+
+/* Variation D — Éditoriale */
+function VariationD({ tweaks }) {
+  return (
+    <ExplorationFrame>
+      <ExplorationHeader />
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        <NarrativeColumn />
+        <div style={{ width: tweaks.panelWidth, flexShrink: 0, display: 'flex' }}>
+          <VarD_Editorial density={tweaks.density} />
+        </div>
+      </div>
+      <ExplorationActionBar actionSet={tweaks.actionSet} />
+      {tweaks.showPartyBar && <PartyBarBottom />}
+    </ExplorationFrame>
+  );
+}
+
+/* Variation E — Bandeau supérieur */
+function VariationE({ tweaks }) {
+  return (
+    <ExplorationFrame>
+      <ExplorationHeader />
+      <VarE_TopBanner density={tweaks.density} />
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        <NarrativeColumn />
+        <VarE_RightSlim />
+      </div>
+      <ExplorationActionBar actionSet={tweaks.actionSet} />
+      {tweaks.showPartyBar && <PartyBarBottom />}
+    </ExplorationFrame>
+  );
+}
+
+/* Variation F — Avant/Actuel (rappel : ce qui existe aujourd'hui, pour comparer) */
+function VariationCurrent() {
+  return (
+    <ExplorationFrame height={900}>
+      <ExplorationHeader />
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        <NarrativeColumn />
+        {/* CharacterPanel (panneau actuel, recréé en mode allégé) */}
+        <aside className="flex shrink-0 min-h-0 flex-col overflow-hidden" style={{ width: 360, background: 'var(--color-bg-elev)', overflowY: 'auto' }}>
+          <div className="px-5 pt-5 pb-4" style={{ background: 'linear-gradient(180deg, rgba(192,144,255,0.08), transparent)' }}>
+            <div className="rpg-eyebrow mb-3" style={{ color: 'var(--color-arcane)' }}>✦ Votre personnage</div>
+            <div className="flex items-center gap-3">
+              <div className="flex h-14 w-14 items-center justify-center rounded-[10px] font-display text-[26px] font-bold" style={{ background: 'linear-gradient(135deg, var(--color-ember), var(--color-gold))', color: 'var(--color-bg)' }}>T</div>
+              <div>
+                <div className="font-display text-xl font-bold" style={{ color: 'var(--color-parchment)' }}>Thorvald</div>
+                <div className="text-[12px]" style={{ color: 'var(--color-text-muted)' }}>Niv. 1 · Fighter · Human</div>
+              </div>
+            </div>
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              {[{l:'PV',v:'12/12'},{l:'CA',v:'12'},{l:'Init.',v:'+2'}].map(s=>(
+                <div key={s.l} className="flex flex-col items-center rounded-lg border py-2" style={{ background: 'rgba(0,0,0,0.25)', borderColor: 'var(--color-border)' }}>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.2em]" style={{ color: 'var(--color-text-dim)' }}>{s.l}</div>
+                  <div className="font-mono text-base font-bold" style={{ color: 'var(--color-parchment)' }}>{s.v}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="px-5 py-3 grid grid-cols-6 gap-1">
+            {[['FOR',16,'+3'],['DEX',14,'+2'],['CON',15,'+2'],['INT',9,'-1'],['SAG',11,'+0'],['CHA',13,'+1']].map(([abbr,v,m])=>(
+              <div key={abbr} className="flex flex-col items-center rounded-md border py-2" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+                <span className="text-[8px] font-bold uppercase" style={{ color: 'var(--color-text-dim)' }}>{abbr}</span>
+                <span className="font-display text-sm font-bold" style={{ color: 'var(--color-parchment)' }}>{v}</span>
+                <span className="font-mono text-[10px] font-bold" style={{ color: 'var(--color-gold)' }}>{m}</span>
+              </div>
+            ))}
+          </div>
+          <div className="px-5 pb-3"><button className="rpg-btn-secondary w-full justify-center !text-[11px]">Ouvrir la fiche complète →</button></div>
+          <div className="mx-5 border-t" style={{ borderColor: 'var(--color-border)' }} />
+          <div className="px-5 py-4" style={{ outline: '2px dashed rgba(232,69,69,0.5)', outlineOffset: '-12px', borderRadius: 8 }}>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="rpg-eyebrow" style={{ color: 'var(--color-blood)' }}>⚔ Combat</span>
+              <span className="text-[11px]" style={{ color: 'var(--color-text-dim)' }}>— Hors combat</span>
+            </div>
+            <div className="rounded-lg border px-4 py-4 text-center" style={{ background: 'rgba(0,0,0,0.2)', borderColor: 'var(--color-border)' }}>
+              <div className="mb-3 text-[11px]" style={{ color: 'var(--color-text-dim)' }}>Aucun ennemi à l'horizon</div>
+              <button className="rpg-btn-tonal tone-blood !text-[10px] !py-1.5 !px-3">Déclencher une rencontre</button>
+            </div>
+            <div className="mt-3 text-[10px] italic text-center" style={{ color: 'var(--color-blood)' }}>↑ redondant avec écran Combat</div>
+          </div>
+        </aside>
+      </div>
+      {/* Action bar actuelle (combat actions) */}
+      <div className="shrink-0 border-t px-5 py-4" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elev)', outline: '2px dashed rgba(232,69,69,0.5)', outlineOffset: '-8px' }}>
+        <div className="mb-3 flex items-center gap-2.5">
+          <div className="flex h-7 w-7 items-center justify-center rounded-md font-display text-xs font-bold" style={{ background: 'linear-gradient(135deg, var(--color-ember), var(--color-gold))', color: 'var(--color-bg)' }}>T</div>
+          <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Vous incarnez <strong style={{ color: 'var(--color-parchment)' }}>Thorvald</strong></span>
+        </div>
+        <div className="flex items-end gap-3">
+          <textarea rows={2} placeholder="Décrivez votre action…" className="rpg-input flex-1 resize-none" />
+          <button className="rpg-btn-primary shrink-0 self-end !px-5 !py-3">Envoyer ↵</button>
+        </div>
+        <div className="mt-2.5 flex items-center gap-2 flex-wrap">
+          <button className="rpg-btn-tonal tone-blood !py-1 !text-[11px]">⚔ Attaquer</button>
+          <button className="rpg-btn-tonal tone-arcane !py-1 !text-[11px]">✦ Sort</button>
+          <button className="rpg-btn-tonal tone-gold !py-1 !text-[11px]">🎒 Objet</button>
+          <button className="rpg-btn-tonal tone-teal !py-1 !text-[11px]">💨 Foncer</button>
+          <button className="rpg-btn-tonal tone-gold !py-1 !text-[11px]">⏭ Fin du tour</button>
+          <span className="ml-2 text-[10px] italic" style={{ color: 'var(--color-blood)' }}>← actions de combat affichées hors combat</span>
+        </div>
+      </div>
+      {/* PartyBar du bas */}
+      <div className="flex shrink-0 items-stretch border-t" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elev)', height: 80, outline: '2px dashed rgba(232,69,69,0.5)', outlineOffset: '-4px' }}>
+        <div className="flex items-center px-2 border-r" style={{ borderColor: 'var(--color-border)' }}>
+          <span className="font-mono text-[9px] font-bold uppercase tracking-[0.25em]" style={{ color: 'var(--color-text-dim)', writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>Groupe</span>
+        </div>
+        <div className="flex flex-1 items-center gap-2 overflow-x-auto px-3 py-2">
+          {window.PARTY.map(c => (
+            <div key={c.id} className="flex shrink-0 items-center gap-2.5 rounded-[10px] border px-3 py-2" style={{ minWidth: 160, borderColor: c.is_self ? 'var(--color-ember)' : 'var(--color-border)', background: 'var(--color-surface)' }}>
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg font-display text-base font-bold" style={{ background: c.is_ai ? 'linear-gradient(135deg, var(--color-arcane), #7050b0)' : 'linear-gradient(135deg, var(--color-ember), var(--color-gold))', color: 'var(--color-bg)' }}>{c.initial}</div>
+              <div className="min-w-0 flex-1">
+                <div className="font-display text-xs font-semibold truncate" style={{ color: c.is_self ? 'var(--color-gold)' : 'var(--color-parchment)' }}>{c.name}</div>
+                <div className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>{c.char_class}</div>
+                <div className="font-mono text-[9px]" style={{ color: 'var(--color-text-dim)' }}>{c.hp_current}/{c.hp_max}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </ExplorationFrame>
+  );
+}
+
+/* App principale : design canvas avec sections + Tweaks */
+function App() {
+  const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+
+  return (
+    <>
+      <DesignCanvas
+        title="Refonte Exploration — RPGMaster"
+        subtitle="5 directions pour libérer le panneau droit (combat est sur son propre écran), repenser la barre d'actions du bas et supprimer la PartyBar redondante."
+      >
+        <DCSection id="diagnostic" title="Diagnostic — l'écran actuel">
+          <DCArtboard id="current" label="Aujourd'hui · 3 zones redondantes (signalées en rouge)" width={1280} height={900}>
+            <VariationCurrent />
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="proposals" title="Propositions">
+          <DCArtboard id="A" label="A · Tableau de bord groupe — 4 fiches détaillées + focus tour" width={1280} height={820}>
+            <VariationA tweaks={tweaks} />
+          </DCArtboard>
+          <DCArtboard id="B" label="B · Onglets Groupe / Quêtes / Mémoire — un panneau, trois sujets" width={1280} height={820}>
+            <VariationB tweaks={tweaks} />
+          </DCArtboard>
+          <DCArtboard id="C" label="C · Carnet d'aventure — narratif, lieu et journal du chroniqueur" width={1280} height={820}>
+            <VariationC tweaks={tweaks} />
+          </DCArtboard>
+          <DCArtboard id="D" label="D · Éditoriale — moment central + tuiles compagnons" width={1280} height={820}>
+            <VariationD tweaks={tweaks} />
+          </DCArtboard>
+          <DCArtboard id="E" label="E · Bandeau supérieur — groupe en haut, panneau droit allégé" width={1280} height={860}>
+            <VariationE tweaks={tweaks} />
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="notes" title="Notes de design">
+          <DCArtboard id="rationale" label="Décisions" width={680} height={620}>
+            <div style={{ background: 'var(--color-bg)', color: 'var(--color-parchment)', padding: 32, height: '100%', overflow: 'auto', fontFamily: 'var(--font-serif)' }}>
+              <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 22, marginBottom: 16, color: 'var(--color-parchment)' }}>
+                <span style={{ color: 'var(--color-ember)' }}>✦</span> Ce qui change
+              </h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14, fontSize: 14, lineHeight: 1.6 }}>
+                <div>
+                  <div className="rpg-eyebrow" style={{ marginBottom: 4 }}>Panneau droit</div>
+                  <p style={{ color: 'var(--color-parchment-dark)' }}>Plus de bloc « ⚔ Combat — Hors combat / Déclencher une rencontre ». Le combat vit maintenant sur son écran dédié. La place est rendue au <strong>groupe complet</strong>, aux <strong>quêtes</strong> et à la <strong>mémoire de campagne</strong>.</p>
+                </div>
+                <div>
+                  <div className="rpg-eyebrow" style={{ marginBottom: 4 }}>Bouton « Combat » du header</div>
+                  <p style={{ color: 'var(--color-parchment-dark)' }}>Reste l'unique point d'entrée pour <em>Déclencher une rencontre</em> (test/debug). Visible dans toutes les variations.</p>
+                </div>
+                <div>
+                  <div className="rpg-eyebrow" style={{ marginBottom: 4 }}>Barre d'actions du bas</div>
+                  <p style={{ color: 'var(--color-parchment-dark)' }}>En exploration, on retire <strong>Attaquer / Foncer / Fin du tour</strong> (notions de tour). On garde au choix : <strong>suggestions contextuelles</strong> (Parler, Fouiller, Voyager, Consulter), ou un set <strong>utilitaire</strong> (Sort de rituel, Objet, Repos court). Tweakable.</p>
+                </div>
+                <div>
+                  <div className="rpg-eyebrow" style={{ marginBottom: 4 }}>PartyBar (bandeau bas)</div>
+                  <p style={{ color: 'var(--color-parchment-dark)' }}>Supprimée — le groupe est désormais à droite (ou en haut pour la variation E). Plus de duplication. Tu peux la rétablir via les Tweaks pour comparer.</p>
+                </div>
+                <div>
+                  <div className="rpg-eyebrow" style={{ marginBottom: 4 }}>Header</div>
+                  <p style={{ color: 'var(--color-parchment-dark)' }}>Aucun changement structurel. Toujours <em>Phase Exploration · ⚔ Combat · ☽ Repos · 🤖 IA réagit · 💾 Sauvegarder</em>.</p>
+                </div>
+              </div>
+            </div>
+          </DCArtboard>
+        </DCSection>
+      </DesignCanvas>
+      <TweaksPanel title="Tweaks · Exploration">
+        <TweakSection label="Affichage" />
+        <TweakRadio
+          label="Densité du panneau groupe"
+          value={tweaks.density}
+          options={['compact', 'detailed']}
+          onChange={(v) => setTweak('density', v)}
+        />
+        <TweakSelect
+          label="Actions barre du bas"
+          value={tweaks.actionSet}
+          options={[
+            { value: 'minimal', label: 'Minimale (texte seul)' },
+            { value: 'utility', label: 'Utilitaire (Sort, Objet, Repos)' },
+            { value: 'contextual', label: 'Suggestions contextuelles' },
+            { value: 'classic', label: 'Classique combat (avant)' },
+          ]}
+          onChange={(v) => setTweak('actionSet', v)}
+        />
+        <TweakSlider
+          label="Largeur panneau droit"
+          value={tweaks.panelWidth}
+          min={300}
+          max={460}
+          step={10}
+          unit="px"
+          onChange={(v) => setTweak('panelWidth', v)}
+        />
+        <TweakToggle
+          label="Garder PartyBar (bas)"
+          value={tweaks.showPartyBar}
+          onChange={(v) => setTweak('showPartyBar', v)}
+        />
+      </TweaksPanel>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+
+<script type="text/babel" data-presets="react">
+/* Tweaks panel — défini après App pour que useTweaks/TweaksPanel soient prêts */
+</script>
+</body>
+</html>

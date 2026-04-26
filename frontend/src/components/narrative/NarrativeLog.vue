@@ -7,7 +7,7 @@ const gameStore = useGameStore()
 const logEl = ref<HTMLElement | null>(null)
 
 watch(
-  () => gameStore.narrativeLog.length + (gameStore.isProcessing ? 1 : 0),
+  () => gameStore.narrativeLog.length + ((gameStore.isProcessing || gameStore.isGmThinking) ? 1 : 0),
   async () => {
     await nextTick()
     if (logEl.value) {
@@ -126,7 +126,7 @@ watch(
 
       <!-- GM pense -->
       <div
-        v-if="gameStore.isProcessing"
+        v-if="gameStore.isProcessing || gameStore.isGmThinking"
         class="flex items-center gap-3 rounded-lg border-l-2 py-3 pl-4"
         :style="{ borderColor: 'rgba(240,199,100,0.3)', background: 'rgba(240,199,100,0.04)' }"
       >

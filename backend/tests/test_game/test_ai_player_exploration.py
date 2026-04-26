@@ -18,6 +18,8 @@ from app.agents.schemas import PlayerPersonality
 from app.game.ai_player_manager import AIPlayerManager, rebuild_ai_players, register_ai_player
 from app.game.session_manager import ActiveSession
 from app.game.turn_manager import TurnEntry
+from app.models.character import Character
+from app.models.session import Session
 from app.models.session import SessionStatus
 
 
@@ -35,6 +37,18 @@ def _roleplay_json(character_name: str) -> str:
         "params": {},
         "roleplay_text": f"{character_name} regarde autour de lui, méfiant.",
         "inner_reasoning": "Observer l'environnement.",
+    }, ensure_ascii=False)
+
+
+def _attack_roleplay_json(character_name: str) -> str:
+    import json
+    return json.dumps({
+        "action_type": "attack",
+        "action_description": f"{character_name} attaque la menace la plus proche.",
+        "target": None,
+        "params": {},
+        "roleplay_text": f"{character_name} dégaine et se jette dans la mêlée.",
+        "inner_reasoning": "La situation bascule en combat.",
     }, ensure_ascii=False)
 
 
@@ -78,7 +92,10 @@ def _make_exploration_session() -> ActiveSession:
 
 @pytest.mark.asyncio
 async def test_exploration_reactions_calls_roleplay_for_ai() -> None:
-    """run_exploration_reactions() déclenche le roleplay du compagnon IA."""
+    """run_exploration_reactions() déclenche le roleplay du compagnon IA.
+
+    Pour un action 'talk', le MJ n'est PAS appelé (pas d'arbitrage nécessaire).
+    """
     active = _make_exploration_session()
 
     thorin_agent = PlayerAgent(
@@ -95,17 +112,22 @@ async def test_exploration_reactions_calls_roleplay_for_ai() -> None:
         resolver = MagicMock()
         resolver.resolve = AsyncMock()
 
-        with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=AsyncMock()):
+        publish = AsyncMock()
+        with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=publish):
             ai_manager = AIPlayerManager()
-            reacted = await ai_manager.run_exploration_reactions(
+            reacted, _ = await ai_manager.run_exploration_reactions(
                 "expl_session", active, resolver, trigger_character_id="human_1"
             )
 
     assert reacted == 1
-    resolver.resolve.assert_called_once()
-    call_kwargs = resolver.resolve.call_args.kwargs
-    assert call_kwargs["character_id"] == "ai_1"
-    assert call_kwargs["action_type"] == "free_action"
+    # talk action → MJ non appelé
+    resolver.resolve.assert_not_called()
+    thinking_flags = [
+        call.args[2]["thinking"]
+        for call in publish.await_args_list
+        if call.args[1] == "ai_thinking"
+    ]
+    assert thinking_flags == [True, False]
 
 
 @pytest.mark.asyncio
@@ -128,12 +150,126 @@ async def test_exploration_reactions_skips_trigger_character() -> None:
         with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=AsyncMock()):
             ai_manager = AIPlayerManager()
             # Thorin himself triggers: should skip himself
-            reacted = await ai_manager.run_exploration_reactions(
+            reacted, _ = await ai_manager.run_exploration_reactions(
                 "expl_session", active, resolver, trigger_character_id="ai_1"
             )
 
     assert reacted == 0
     resolver.resolve.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_exploration_reactions_attack_without_encounter_converts_to_wait() -> None:
+    """Sans pending_encounter, une action agressive est remplacée par une hésitation.
+
+    Le compagnon IA ne peut pas introduire unilatéralement une nouvelle menace —
+    seul le MJ peut établir un encounter via 'pending_encounter'.
+    """
+    active = _make_exploration_session()
+    # pas de pending_encounter dans state_data
+
+    ai_agent = PlayerAgent(
+        character_id="ai_1",
+        character_name="Thorin",
+        personality=PlayerPersonality(traits=["brave"]),
+        client=MagicMock(),
+    )
+    active.ai_players["ai_1"] = ai_agent
+
+    with patch.object(
+        ai_agent._client, "chat", new=AsyncMock(return_value=_attack_roleplay_json("Thorin"))
+    ):
+        resolver = MagicMock()
+        resolver.resolve = AsyncMock()
+
+        publish = AsyncMock()
+        with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=publish):
+            ai_manager = AIPlayerManager()
+            reacted, _ = await ai_manager.run_exploration_reactions(
+                "expl_session", active, resolver, trigger_character_id="human_1"
+            )
+
+    assert reacted == 1
+    assert "pending_phase_transition" not in active.state_data
+    resolver.resolve.assert_not_called()
+    # Le texte publié doit être celui de l'hésitation, pas l'attaque originale
+    narration_calls = [
+        call for call in publish.await_args_list if call.args[1] == "narration"
+    ]
+    assert narration_calls, "Au moins une narration doit être publiée"
+    published_text = narration_calls[-1].args[2]["text"]
+    assert "dégainer" in published_text or "méfiant" in published_text
+
+
+@pytest.mark.asyncio
+async def test_exploration_reactions_attack_with_pending_encounter_triggers_combat() -> None:
+    """Avec un pending_encounter confirmé par le MJ, une action agressive déclenche COMBAT."""
+    active = _make_exploration_session()
+    active.state_data["pending_encounter"] = {"monster_ids": ["goblin_1"]}
+
+    ai_agent = PlayerAgent(
+        character_id="ai_1",
+        character_name="Thorin",
+        personality=PlayerPersonality(traits=["brave"]),
+        client=MagicMock(),
+    )
+    active.ai_players["ai_1"] = ai_agent
+
+    with patch.object(
+        ai_agent._client, "chat", new=AsyncMock(return_value=_attack_roleplay_json("Thorin"))
+    ):
+        resolver = MagicMock()
+        resolver.resolve = AsyncMock()
+
+        with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=AsyncMock()):
+            ai_manager = AIPlayerManager()
+            reacted, _ = await ai_manager.run_exploration_reactions(
+                "expl_session", active, resolver, trigger_character_id="human_1"
+            )
+
+    assert reacted == 1
+    assert active.state_data["pending_phase_transition"] == "COMBAT"
+    resolver.resolve.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_exploration_reactions_examine_triggers_gm_arbitrage() -> None:
+    """Une action 'examine' déclenche le pipeline MJ (arbitrage monde requis)."""
+    import json
+
+    active = _make_exploration_session()
+    ai_agent = PlayerAgent(
+        character_id="ai_1",
+        character_name="Thorin",
+        personality=PlayerPersonality(traits=["cautious"]),
+        client=MagicMock(),
+    )
+    active.ai_players["ai_1"] = ai_agent
+
+    examine_json = json.dumps({
+        "action_type": "examine",
+        "action_description": "Thorin examine la porte suspecte.",
+        "target": None,
+        "params": {},
+        "roleplay_text": "Thorin s'approche lentement et inspecte la porte.",
+        "inner_reasoning": "Cherche des pièges.",
+    }, ensure_ascii=False)
+
+    with patch.object(ai_agent._client, "chat", new=AsyncMock(return_value=examine_json)):
+        resolver = MagicMock()
+        resolver.resolve = AsyncMock()
+
+        with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=AsyncMock()):
+            ai_manager = AIPlayerManager()
+            reacted, _ = await ai_manager.run_exploration_reactions(
+                "expl_session", active, resolver, trigger_character_id="human_1"
+            )
+
+    assert reacted == 1
+    resolver.resolve.assert_called_once()
+    call_kwargs = resolver.resolve.call_args.kwargs
+    assert call_kwargs["character_id"] == "ai_1"
+    assert call_kwargs["action_type"] == "examine"
 
 
 @pytest.mark.asyncio
@@ -146,11 +282,12 @@ async def test_exploration_reactions_no_ai_players_returns_zero() -> None:
     resolver.resolve = AsyncMock()
 
     ai_manager = AIPlayerManager()
-    reacted = await ai_manager.run_exploration_reactions(
+    reacted, responses = await ai_manager.run_exploration_reactions(
         "expl_session", active, resolver, trigger_character_id="human_1"
     )
 
     assert reacted == 0
+    assert responses == []
     resolver.resolve.assert_not_called()
 
 
@@ -317,3 +454,66 @@ def test_toggle_ai_control_ws_updates_state(ws_client) -> None:
     resp = ws_client.get(f"/api/characters/{character_id}")
     assert resp.status_code == 200
     assert resp.json()["is_ai"] is True
+
+
+@pytest.mark.asyncio
+async def test_sync_ai_control_from_db_repairs_stale_combat_state(db_session) -> None:
+    """If REST/DB says a character is AI but the saved combat snapshot is stale,
+    the live TurnEntry and combatant payload are repaired before combat proceeds.
+    """
+    from app.api import ws_game
+
+    session = Session(id="sync_ai_session", name="Sync AI", status=SessionStatus.COMBAT)
+    sunwing = Character(
+        id="sunwing_1",
+        session_id=session.id,
+        name="Sunwing",
+        char_class="monk",
+        species="human",
+        level=1,
+        is_ai=True,
+        ability_scores={"str": 13, "dex": 16, "con": 12, "int": 10, "wis": 14, "cha": 8},
+        hp_current=10,
+        hp_max=10,
+    )
+    db_session.add_all([session, sunwing])
+    await db_session.commit()
+
+    active = ActiveSession(
+        session_id=session.id,
+        phase=SessionStatus.COMBAT,
+        state_data={
+            "characters": {
+                "sunwing_1": {
+                    "name": "Sunwing",
+                    "is_ai": False,
+                    "hp": 10,
+                    "hp_max": 10,
+                },
+            },
+            "combatants": {
+                "sunwing_1": {
+                    "name": "Sunwing",
+                    "is_player": True,
+                    "is_ai": False,
+                    "hp": 10,
+                    "hp_max": 10,
+                },
+            },
+        },
+    )
+    active.turn_manager._order = [TurnEntry("sunwing_1", "Sunwing", 13, True, False)]
+    active.turn_manager._index = 0
+    ws_game.session_manager._sessions[session.id] = active
+
+    try:
+        changed = await ws_game._sync_ai_control_from_db(session.id, active, db_session)
+    finally:
+        ws_game.session_manager._sessions.pop(session.id, None)
+
+    assert changed is True
+    assert active.state_data["characters"]["sunwing_1"]["is_ai"] is True
+    assert active.state_data["combatants"]["sunwing_1"]["is_ai"] is True
+    assert active.turn_manager.current_turn is not None
+    assert active.turn_manager.current_turn.is_ai_controlled is True
+    assert "sunwing_1" in active.ai_players

@@ -4,6 +4,12 @@ import { useGameStore } from '../../stores/game'
 import { useCharacterStore } from '../../stores/character'
 import SpellCastPanel from '../ui/SpellCastPanel.vue'
 
+const props = withDefaults(defineProps<{
+  variant?: 'default' | 'combat-immersive'
+}>(), {
+  variant: 'default',
+})
+
 const emit = defineEmits<{
   action: [actionType: string, content?: string, targetId?: string, extra?: Record<string, unknown>]
 }>()
@@ -38,16 +44,16 @@ const isDowned = computed(
     !myCombatant.value.death_saves?.stable,
 )
 
-// Alliés à 0 PV (is_ai=false = personnage joueur, pas monstre) que je peux stabiliser
+// Alliés à 0 PV (personnages joueurs, pas monstres) que je peux stabiliser
 const downedAllies = computed(() =>
   gameStore.combatants.filter(
-    (c) => !c.is_ai && c.id !== charStore.myCharacter?.id && c.hp_current <= 0,
+    (c) => c.kind === 'pc' && c.id !== charStore.myCharacter?.id && c.hp_current <= 0,
   ),
 )
 
 const attackTargets = computed(() => {
   const myId = charStore.myCharacter?.id
-  return gameStore.combatants.filter((c) => c.id !== myId && c.is_ai && c.hp_current > 0)
+  return gameStore.combatants.filter((c) => c.id !== myId && c.kind === 'monster' && c.hp_current > 0)
 })
 
 const combatActions = [
@@ -61,6 +67,8 @@ const combatActions = [
 const canSend = computed(
   () => gameStore.connected && !gameStore.isProcessing,
 )
+
+const isCombatImmersive = computed(() => props.variant === 'combat-immersive')
 
 function submitText() {
   const text = input.value.trim()
@@ -213,10 +221,14 @@ function onStabilize(targetId: string) {
   </div>
 
   <div
-    class="shrink-0 border-t px-5 py-4"
+    class="shrink-0 border-t"
+    :class="isCombatImmersive ? 'px-4 py-3' : 'px-5 py-4'"
     :style="{
-      borderColor: 'var(--color-border)',
-      background: 'var(--color-bg-elev)',
+      borderColor: isCombatImmersive ? 'rgba(232,69,69,0.26)' : 'var(--color-border)',
+      background: isCombatImmersive
+        ? 'linear-gradient(180deg, rgba(44,28,28,0.96), var(--color-bg-elev))'
+        : 'var(--color-bg-elev)',
+      boxShadow: isCombatImmersive ? '0 -12px 30px rgba(232,69,69,0.08)' : 'none',
     }"
   >
     <!-- Character context line -->
@@ -259,22 +271,23 @@ function onStabilize(targetId: string) {
     <div class="flex items-end gap-3">
       <textarea
         v-model="input"
-        rows="2"
+        :rows="isCombatImmersive ? 2 : 2"
         :placeholder="gameStore.isProcessing ? 'Le Maître du Jeu répond…' : 'Décrivez votre action, parlez, ou posez une question au MJ…'"
         :disabled="!canSend"
         class="rpg-input flex-1 resize-none"
-        style="font-family: inherit; font-size: 14px;"
+        :style="{ fontFamily: 'inherit', fontSize: isCombatImmersive ? '13px' : '14px' }"
         @keydown="onKeydown"
       />
       <button
-        class="rpg-btn-primary shrink-0 self-end !px-5 !py-3"
+        class="rpg-btn-primary shrink-0 self-end"
+        :class="isCombatImmersive ? '!px-5 !py-2.5 !text-[12px]' : '!px-5 !py-3'"
         :disabled="!input.trim() || !canSend"
         @click="submitText"
-      >Envoyer ↵</button>
+      >{{ isCombatImmersive ? 'Lancer ↵' : 'Envoyer ↵' }}</button>
     </div>
 
     <!-- Action chips row -->
-    <div class="mt-2.5 flex items-center gap-2 flex-wrap">
+    <div class="mt-2.5 flex items-center gap-2 flex-wrap" :class="{ 'justify-between': isCombatImmersive }">
       <!-- Death save -->
       <template v-if="isDowned && isMyTurn">
         <button class="rpg-btn-tonal tone-blood !py-1 !text-[11px]" :disabled="!canSend" @click="onDeathSave">

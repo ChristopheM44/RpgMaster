@@ -14,6 +14,10 @@ function hpPct(cur: number, max: number): number {
 }
 
 const isInCombat = computed(() => gameStore.isInCombat)
+
+function isAiCompanion(combatant: (typeof gameStore.combatants)[0]): boolean {
+  return combatant.kind === 'pc' && Boolean(combatant.is_ai_controlled ?? combatant.is_ai)
+}
 </script>
 
 <template>
@@ -71,10 +75,15 @@ const isInCombat = computed(() => gameStore.isInCombat)
             :style="{ color: combatant.is_active ? 'var(--color-gold)' : 'var(--color-parchment)' }"
           >{{ combatant.name }}</span>
           <span
-            v-if="combatant.is_ai"
+            v-if="isAiCompanion(combatant)"
             class="shrink-0 text-[9px] font-bold tracking-[0.1em]"
-            :style="{ color: 'var(--color-text-dim)' }"
+            :style="{ color: 'var(--color-arcane)' }"
           >IA</span>
+          <span
+            v-if="gameStore.isCharacterThinking(combatant.id)"
+            class="shrink-0 text-[9px] font-bold tracking-[0.08em]"
+            :style="{ color: 'var(--color-gold)' }"
+          >PENSE…</span>
 
           <!-- Active turn diamond -->
           <span v-if="combatant.is_active" class="shrink-0 text-xs" :style="{ color: 'var(--color-gold)' }">◆</span>

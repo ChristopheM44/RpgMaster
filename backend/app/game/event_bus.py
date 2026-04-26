@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from datetime import datetime, timezone
 from enum import auto
 from typing import Any, Dict, List, Optional
@@ -64,10 +65,18 @@ class EventType(str):
     # Audio TTS
     AUDIO = "audio"
 
+    # Agent activity
+    AI_THINKING = "ai_thinking"
+
     # Character updates
     SPELL_SLOT_UPDATED = "spell_slot_updated"
     EQUIPMENT_UPDATED = "equipment_updated"
     DEATH_SAVE_UPDATED = "death_save_updated"
+
+    # World state (journal, quests, chronicle)
+    JOURNAL_UPDATED = "journal_updated"
+    QUEST_UPDATED = "quest_updated"
+    CHRONICLE_UPDATED = "chronicle_updated"
 
     # Errors
     ERROR = "error"
@@ -91,6 +100,7 @@ class GameEvent(BaseModel):
 
     event_type: str
     session_id: str
+    event_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     payload: Dict[str, Any] = Field(default_factory=dict)
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     source: Optional[str] = None

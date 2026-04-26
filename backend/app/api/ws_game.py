@@ -47,6 +47,7 @@ from app.db.database import get_db
 from app.engine.combat import roll_attack, roll_damage
 from app.engine.tactical_grid import initialize_positions, validate_move, GridPosition
 from app.game.action_resolver import ActionResolver
+from app.game.combat_triggers import prime_combat_from_aggressive_action
 from app.game.event_bus import EventType, GameEvent, event_bus
 from app.game.session_manager import SessionManager
 from app.game.turn_manager import CombatantInfo
@@ -184,8 +185,18 @@ def _build_session_state_payload(session_id: str) -> dict[str, Any]:
             "name": e.get("name", ""),
             "initiative": e.get("initiative_total", 0),
             "is_ai": e.get("is_ai_controlled", False),
+            "is_ai_controlled": e.get("is_ai_controlled", False),
             "is_player": e.get("is_player", True),
         }
+
+    _default_journal = {
+        "location_region": None,
+        "location_place": None,
+        "time_of_day": "morning",
+        "day_number": 1,
+        "calendar_date": None,
+        "weather": None,
+    }
 
     return {
         "session_id": session_id,
@@ -197,6 +208,9 @@ def _build_session_state_payload(session_id: str) -> dict[str, Any]:
         "valid_transitions": [
             s.value for s in active.game_loop.get_valid_transitions(active.phase)
         ],
+        "adventure_journal": active.state_data.get("adventure_journal", _default_journal),
+        "quests": active.state_data.get("quests", []),
+        "chronicle": active.state_data.get("chronicle", []),
     }
 
 
@@ -206,6 +220,22 @@ def _build_session_state_payload(session_id: str) -> dict[str, Any]:
 
 
 _ARMOR_CATS = {"light", "medium", "heavy"}
+_MONSTER_TYPE_COLORS = {
+    "aberration": "#8f5cf7",
+    "beast": "#7f8a78",
+    "celestial": "#f4c95d",
+    "construct": "#9aa4b2",
+    "dragon": "#d94841",
+    "elemental": "#3aa6b9",
+    "fey": "#d16ba5",
+    "fiend": "#b42318",
+    "giant": "#b7791f",
+    "humanoid": "#4d9f64",
+    "monstrosity": "#8b5e3c",
+    "ooze": "#6b7280",
+    "plant": "#2f855a",
+    "undead": "#6d597a",
+}
 
 
 def _compute_ac_from_equipment(equipment: list, dex_mod: int) -> int:
@@ -229,6 +259,169 @@ def _compute_ac_from_equipment(equipment: list, dex_mod: int) -> int:
         return armor["base_ac"] + dex_applied + shield_bonus
 
     return 10 + dex_mod + shield_bonus
+
+
+def _monster_base_id(combatant_id: str) -> str:
+    return "_".join(combatant_id.rsplit("_", 1)[:-1]) if "_" in combatant_id else combatant_id
+
+
+def _monster_token(name: str, count: int) -> str:
+    letters = "".join(part[0] for part in name.replace("-", " ").split() if part)
+    prefix = (letters or name[:1] or "?").upper()[:2]
+    return f"{prefix}{count}"
+
+
+def _monster_color(monster_type: str | None) -> str:
+    return _MONSTER_TYPE_COLORS.get((monster_type or "").lower(), "#b45309")
+
+
+def _format_monster_actions(actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    formatted: list[dict[str, Any]] = []
+    for action in actions:
+        formatted.append({
+            "name": action.get("name_fr") or action.get("name") or "Action",
+            "attack_bonus": action.get("attack_bonus"),
+            "damage_dice": action.get("damage_dice"),
+            "description": action.get("description") or action.get("description_fr"),
+        })
+    return formatted
+
+
+def _character_snapshot(char: Character) -> dict[str, Any]:
+    """Build the in-memory character snapshot used by game/combat state."""
+    return {
+        "name": char.name,
+        "hp": char.hp_current,
+        "hp_max": char.hp_max,
+        "is_ai": char.is_ai,
+        "level": char.level,
+        "ability_scores": dict(char.ability_scores),
+        "skill_proficiencies": list(char.proficiencies.get("skills", [])),
+        "save_proficiencies": list(char.proficiencies.get("saving_throws", [])),
+        "dex": int(char.ability_scores.get("dex", 10)),
+        "str": int(char.ability_scores.get("str", 10)),
+        "equipment": list(char.equipment or []),
+        "personality": dict(char.personality or {}),
+    }
+
+
+async def _sync_ai_control_from_db(
+    session_id: str,
+    active: Any,
+    db: AsyncSession,
+) -> bool:
+    """Reconcile live AI-control flags with the Character table.
+
+    Character control can be changed from REST screens before or during a live
+    session. The combat engine relies on the persisted game snapshot and the
+    TurnManager, so this keeps those copies aligned with the DB source of truth.
+    """
+    result = await db.execute(select(Character).where(Character.session_id == session_id))
+    characters = result.scalars().all()
+    if not characters:
+        return False
+
+    from app.game.ai_player_manager import register_ai_player, unregister_ai_player
+
+    changed = False
+    chars_data: dict[str, Any] = active.state_data.setdefault("characters", {})
+    combatants_info: dict[str, Any] = active.state_data.get("combatants", {})
+
+    for char in characters:
+        if char.id not in chars_data:
+            chars_data[char.id] = _character_snapshot(char)
+            changed = True
+        cdata = chars_data[char.id]
+        if cdata.get("is_ai") != char.is_ai:
+            cdata["is_ai"] = char.is_ai
+            changed = True
+        cdata.setdefault("name", char.name)
+        cdata.setdefault("personality", dict(char.personality or {}))
+
+        if char.id in combatants_info and combatants_info[char.id].get("is_ai") != char.is_ai:
+            combatants_info[char.id]["is_ai"] = char.is_ai
+            changed = True
+
+        for entry in active.turn_manager._order:
+            if entry.combatant_id == char.id:
+                if entry.is_ai_controlled != char.is_ai:
+                    entry.is_ai_controlled = char.is_ai
+                    changed = True
+                break
+
+        if char.is_ai:
+            before = len(active.ai_players)
+            register_ai_player(active, char.id, cdata)
+            changed = changed or len(active.ai_players) != before
+        else:
+            had_agent = char.id in active.ai_players
+            unregister_ai_player(active, char.id)
+            changed = changed or had_agent
+
+    if changed:
+        active.mark_dirty()
+        await session_manager.save_state(session_id, db)
+
+    return changed
+
+
+def _build_combat_start_payload(active: Any) -> dict[str, Any]:
+    combatants_info: dict[str, Any] = active.state_data.get("combatants", {})
+    grid_cfg: dict[str, Any] = active.state_data.get(
+        "grid_config", {"cols": 10, "rows": 8, "cell_size_m": 1.5}
+    )
+    grid_positions: dict[str, Any] = active.state_data.get("grid_positions", {})
+    turn_data = active.turn_manager.to_dict()
+    current_idx = turn_data.get("index", 0)
+    type_counts: dict[str, int] = {}
+
+    encounter_service._ensure_loaded()
+
+    combat_combatants = []
+    for i, entry in enumerate(turn_data.get("order", [])):
+        cid = entry.get("combatant_id", "")
+        info = combatants_info.get(cid, {})
+        is_player = bool(info.get("is_player", entry.get("is_player", True)))
+        is_ai_controlled = bool(entry.get("is_ai_controlled", False)) if is_player else False
+        payload = {
+            "id": cid,
+            "name": entry.get("name") or info.get("name", ""),
+            "initiative": entry.get("initiative_total", 0),
+            "hp_current": info.get("hp", 0),
+            "hp_max": info.get("hp_max", 0),
+            "kind": "pc" if is_player else "monster",
+            "is_ai": entry.get("is_ai_controlled", False) if is_player else True,
+            "is_ai_controlled": is_ai_controlled,
+            "conditions": info.get("conditions", []),
+            "is_active": (i == current_idx),
+            "position": grid_positions.get(cid, {"col": 0, "row": 0}),
+            "death_saves": info.get("death_saves"),
+            "ac": info.get("ac", 10),
+            "attack_bonus": info.get("attack_bonus"),
+            "damage_notation": info.get("damage_notation"),
+            "action_economy": entry.get("action_economy"),
+        }
+        if not is_player:
+            base_id = info.get("monster_id") or _monster_base_id(cid)
+            monster_data = encounter_service._monsters_by_id.get(base_id, {})
+            type_counts[base_id] = type_counts.get(base_id, 0) + 1
+            monster_name = monster_data.get("name_fr") or monster_data.get("name") or payload["name"]
+            payload.update({
+                "species": monster_data.get("type"),
+                "cr": monster_data.get("cr"),
+                "token": info.get("token") or _monster_token(monster_name, type_counts[base_id]),
+                "color": info.get("color") or _monster_color(monster_data.get("type")),
+                "ability_scores": monster_data.get("ability_scores", {}),
+                "actions": _format_monster_actions(monster_data.get("actions", [])),
+                "description": monster_data.get("description") or monster_data.get("alignment"),
+            })
+        combat_combatants.append(payload)
+
+    return {
+        "combatants": combat_combatants,
+        "grid_config": grid_cfg,
+        "grid_decoration": active.state_data.get("grid_decoration"),
+    }
 
 
 async def _auto_death_save(
@@ -327,9 +520,20 @@ async def _handle_combat_end(session_id: str, active: Any, db: AsyncSession) -> 
     active.turn_manager.reset()
     active.phase = SessionStatus.EXPLORATION
     active.state_data.pop("combatants", None)
+    active.state_data.pop("grid_positions", None)
+    active.state_data.pop("grid_config", None)
+    active.state_data.pop("grid_decoration", None)
+    active.state_data.pop("pending_encounter", None)
+    active.state_data["phase"] = SessionStatus.EXPLORATION.value
     active.mark_dirty()
     await session_manager.save_state(session_id, db)
 
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.COMBAT_END,
+        {"reason": "victory"},
+        source="ws_game",
+    )
     await event_bus.publish_to_session(
         session_id,
         EventType.PHASE_CHANGE,
@@ -377,6 +581,8 @@ async def _handle_start_combat(
             session_id,
         )
         return
+
+    await _sync_ai_control_from_db(session_id, active, db)
 
     # Resolve party levels from characters in state_data
     characters_data: dict[str, Any] = active.state_data.get("characters", {})
@@ -473,9 +679,15 @@ async def _handle_start_combat(
             "hp_max": npc["hp_max"],
             "is_player": False,
             "is_ai": True,
+            "monster_id": monster_id_base,
             "ac": npc["ac"],
             "attack_bonus": npc["attack_bonus"],
             "damage_notation": npc["damage_notation"],
+            "species": monster_data.get("type"),
+            "cr": monster_data.get("cr"),
+            "ability_scores": monster_data.get("ability_scores", {}),
+            "actions": _format_monster_actions(monster_data.get("actions", [])),
+            "color": _monster_color(monster_data.get("type")),
         }
         npc_names.append(npc["name"])
 
@@ -514,28 +726,11 @@ async def _handle_start_combat(
         source="ws_game",
     )
 
-    # Broadcast full combatant list for CombatTracker
-    combat_combatants = [
-        {
-            "id": entry.combatant_id,
-            "name": combatants_info[entry.combatant_id]["name"],
-            "initiative": entry.initiative_total,
-            "hp_current": combatants_info[entry.combatant_id]["hp"],
-            "hp_max": combatants_info[entry.combatant_id]["hp_max"],
-            "is_ai": not combatants_info[entry.combatant_id]["is_player"],
-            "conditions": [],
-            "is_active": (i == 0),
-            "position": grid_positions.get(entry.combatant_id, GridPosition(0, 0)).to_dict(),
-        }
-        for i, entry in enumerate(turn_entries)
-    ]
+    # Broadcast full combatant list for the combat UI.
     await event_bus.publish_to_session(
         session_id,
         "combat_start",
-        {
-            "combatants": combat_combatants,
-            "grid_config": {"cols": grid_cols, "rows": grid_rows, "cell_size_m": 1.5},
-        },
+        _build_combat_start_payload(active),
         source="ws_game",
     )
 
@@ -581,6 +776,8 @@ async def _handle_end_turn(session_id: str, active: Any, db: AsyncSession) -> No
     """Advance to the next combatant's turn; end combat if all NPCs are down."""
     if not active.turn_manager._order:
         return
+
+    await _sync_ai_control_from_db(session_id, active, db)
 
     # Remove any newly-dead NPCs before advancing
     await _remove_dead_combatants(session_id, active)
@@ -649,8 +846,9 @@ async def _handle_ai_turns(session_id: str, active: Any, db: AsyncSession) -> No
             from app.game.ai_player_manager import AIPlayerManager
             ai_manager = AIPlayerManager()
             await ai_manager.process_ai_turns(session_id, active, action_resolver)
-            # process_ai_turns already stopped at a non-AI turn — fall through to broadcast
-            break
+            # Continue the loop: the next AI-controlled entry may be a monster,
+            # which is resolved below by the deterministic monster branch.
+            continue
 
         # Enemy monster: deterministic mechanical resolution first, then GM prose narration
         combatants_info: dict[str, Any] = active.state_data.get("combatants", {})
@@ -735,6 +933,12 @@ async def _handle_ai_turns(session_id: str, active: Any, db: AsyncSession) -> No
             "damage_notation": damage_notation,
         }
         try:
+            await event_bus.publish_to_session(
+                session_id,
+                EventType.AI_THINKING,
+                {"agent_kind": "gm", "thinking": True},
+                source="ws_game",
+            )
             gm_response = await action_resolver._gm.run_combat_turn(
                 game_state=active.state_data,
                 player_action=f"[Tour du monstre] {current.name} attaque {target_name}.",
@@ -752,6 +956,13 @@ async def _handle_ai_turns(session_id: str, active: Any, db: AsyncSession) -> No
                 )
             else:
                 narration_text = f"{current.name} attaque {target_name} mais rate !"
+        finally:
+            await event_bus.publish_to_session(
+                session_id,
+                EventType.AI_THINKING,
+                {"agent_kind": "gm", "thinking": False},
+                source="ws_game",
+            )
 
         await event_bus.publish_to_session(
             session_id,
@@ -796,6 +1007,11 @@ async def _handle_reset_combat(session_id: str, active: Any, db: AsyncSession) -
     active.turn_manager.reset()
     active.phase = SessionStatus.EXPLORATION
     active.state_data.pop("combatants", None)
+    active.state_data.pop("grid_positions", None)
+    active.state_data.pop("grid_config", None)
+    active.state_data.pop("grid_decoration", None)
+    active.state_data.pop("pending_encounter", None)
+    active.state_data["phase"] = SessionStatus.EXPLORATION.value
 
     # Restore HP in characters snapshot
     characters_data: dict[str, Any] = active.state_data.get("characters", {})
@@ -814,6 +1030,12 @@ async def _handle_reset_combat(session_id: str, active: Any, db: AsyncSession) -
     active.mark_dirty()
     await session_manager.save_state(session_id, db)
 
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.COMBAT_END,
+        {"reason": "manual_reset"},
+        source="ws_game",
+    )
     await event_bus.publish_to_session(
         session_id,
         EventType.PHASE_CHANGE,
@@ -1191,6 +1413,12 @@ async def _send_welcome_narration(session_id: str, active: Any, db: AsyncSession
     active.state_data["welcome_narration_sent"] = True
 
     try:
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.AI_THINKING,
+            {"agent_kind": "gm", "thinking": True},
+            source="ws_game",
+        )
         gm_response = await action_resolver._gm.narrate(
             game_state=active.state_data,
             player_action=None,
@@ -1201,6 +1429,13 @@ async def _send_welcome_narration(session_id: str, active: Any, db: AsyncSession
     except Exception as exc:
         logger.warning("_send_welcome_narration: GMAgent failed: %s", exc)
         welcome_text = "Bienvenue dans l'aventure ! Décrivez votre action pour commencer."
+    finally:
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.AI_THINKING,
+            {"agent_kind": "gm", "thinking": False},
+            source="ws_game",
+        )
 
     await event_bus.publish_to_session(
         session_id,
@@ -1308,14 +1543,18 @@ async def _handle_toggle_ai_control(
             from app.game.ai_player_manager import AIPlayerManager
             try:
                 await AIPlayerManager().run_exploration_reactions(
-                    session_id, active, action_resolver, trigger_character_id=None
+                    session_id, active, action_resolver, trigger_character_id=None, db=db
                 )
+                pending_transition = active.state_data.pop("pending_phase_transition", None)
+                if pending_transition == "COMBAT" and active.phase != SessionStatus.COMBAT:
+                    await _handle_start_combat(session_id, active, db, encounter_id=None)
             except Exception as exc:
                 logger.error("toggle_ai_control: exploration reactions failed: %s", exc)
 
 
 async def _handle_trigger_ai_reactions(
     session_id: str,
+    db: AsyncSession,
     trigger_character_id: Optional[str] = None,
 ) -> None:
     """Manual fallback: let AI companions react without a preceding human action."""
@@ -1351,7 +1590,11 @@ async def _handle_trigger_ai_reactions(
         active,
         action_resolver,
         trigger_character_id=trigger_character_id,
+        db=db,
     )
+    pending_transition = active.state_data.pop("pending_phase_transition", None)
+    if pending_transition == "COMBAT" and active.phase != SessionStatus.COMBAT:
+        await _handle_start_combat(session_id, active, db, encounter_id=None)
 
 
 # ---------------------------------------------------------------------------
@@ -1374,6 +1617,29 @@ async def _dispatch_action(
             source="ws_game",
         )
         return
+
+    if (
+        active.phase in (SessionStatus.EXPLORATION, SessionStatus.ENCOUNTER_START)
+        and prime_combat_from_aggressive_action(
+            active,
+            action_type=action.action_type,
+            content=action.content,
+            target_id=action.target_id,
+        )
+    ):
+        await _handle_start_combat(session_id, active, db, encounter_id=None)
+        return
+
+    if active.phase == SessionStatus.COMBAT:
+        await _sync_ai_control_from_db(session_id, active, db)
+        current = active.turn_manager.current_turn
+        if (
+            action.action_type == "end_turn"
+            and current is not None
+            and current.is_ai_controlled
+        ):
+            await _handle_ai_turns(session_id, active, db)
+            return
 
     # ----------------------------------------------------------------
     # Guard : un joueur inconscient ne peut pas attaquer ni lancer de sort
@@ -1474,19 +1740,38 @@ async def _dispatch_action(
             source="ws_game",
         )
 
-        # En exploration, laisser les compagnons IA réagir après l'action
-        # humaine. Désactivable via state_data["auto_ai_reactions"] = False
-        # (par exemple si l'utilisateur préfère déclencher manuellement via
-        # le bouton "Laisser l'IA réagir").
+        # En exploration, laisser les compagnons IA réagir après l'action humaine.
+        # L'ordre dépend de l'intent classifié par le MJ :
+        #   - "social" (adresse aux compagnons) : compagnons d'abord, MJ conclut après.
+        #   - autres : MJ a déjà narré, compagnons réagissent ensuite (comportement actuel).
+        # Désactivable via state_data["auto_ai_reactions"] = False.
         if active.state_data.get("auto_ai_reactions", True) and active.ai_players:
             from app.game.ai_player_manager import AIPlayerManager
+            gm_intent = active.last_gm_intent
             try:
-                await AIPlayerManager().run_exploration_reactions(
+                _, companion_responses = await AIPlayerManager().run_exploration_reactions(
                     session_id,
                     active,
                     action_resolver,
                     trigger_character_id=action.character_id,
+                    db=db,
                 )
+                pending_transition = active.state_data.pop("pending_phase_transition", None)
+                if pending_transition == "COMBAT" and active.phase != SessionStatus.COMBAT:
+                    await _handle_start_combat(session_id, active, db, encounter_id=None)
+                    return
+
+                # Après une action sociale avec des compagnons qui ont répondu,
+                # le MJ produit une narration de conclusion (transition de scène).
+                if gm_intent == "social" and companion_responses:
+                    player_action_text = action.content or action.action_type
+                    await action_resolver.social_conclude(
+                        session_id=session_id,
+                        active=active,
+                        player_action=player_action_text,
+                        companion_responses=companion_responses,
+                        db=db,
+                    )
             except Exception as exc:
                 logger.error(
                     "Auto AI reactions failed in exploration: %s", exc, exc_info=True
@@ -1584,38 +1869,18 @@ async def game_websocket(
 
                 # Si la session est déjà en exploration, le MJ décrit la scène
                 active_on_join = session_manager.get_session(session_id)
+                if active_on_join:
+                    await _sync_ai_control_from_db(session_id, active_on_join, db)
                 if active_on_join and active_on_join.phase == SessionStatus.EXPLORATION:
                     asyncio.create_task(
                         _send_welcome_narration(session_id, active_on_join, db)
                     )
                 elif active_on_join and active_on_join.phase == SessionStatus.COMBAT:
                     # Rejouer l'état de combat pour ce client qui se (re)connecte
-                    combatants_info: dict[str, Any] = active_on_join.state_data.get("combatants", {})
-                    grid_cfg: dict[str, Any] = active_on_join.state_data.get("grid_config", {"cols": 10, "rows": 8, "cell_size_m": 1.5})
-                    grid_positions: dict[str, Any] = active_on_join.state_data.get("grid_positions", {})
-                    turn_data = active_on_join.turn_manager.to_dict()
-                    current_idx = turn_data.get("index", 0)
-                    combat_combatants = [
-                        {
-                            "id": entry.get("combatant_id", ""),
-                            "name": entry.get("name", ""),
-                            "initiative": entry.get("initiative_total", 0),
-                            "hp_current": combatants_info.get(entry.get("combatant_id", ""), {}).get("hp", 0),
-                            "hp_max": combatants_info.get(entry.get("combatant_id", ""), {}).get("hp_max", 0),
-                            "is_ai": entry.get("is_ai_controlled", False),
-                            "conditions": [],
-                            "is_active": (i == current_idx),
-                            "position": grid_positions.get(entry.get("combatant_id", ""), {"col": 0, "row": 0}),
-                        }
-                        for i, entry in enumerate(turn_data.get("order", []))
-                    ]
                     await websocket.send_json({
                         "event_type": "combat_start",
                         "session_id": session_id,
-                        "payload": {
-                            "combatants": combat_combatants,
-                            "grid_config": grid_cfg,
-                        },
+                        "payload": _build_combat_start_payload(active_on_join),
                     })
                     current = active_on_join.turn_manager.current_turn
                     if current:
@@ -1624,6 +1889,8 @@ async def game_websocket(
                             "session_id": session_id,
                             "payload": {"combatant_id": current.combatant_id, "combatant_name": current.name},
                         })
+                        if current.is_ai_controlled:
+                            await _handle_ai_turns(session_id, active_on_join, db)
                 continue
 
             # --- action -------------------------------------------------
@@ -1676,6 +1943,7 @@ async def game_websocket(
                 try:
                     await _handle_trigger_ai_reactions(
                         session_id,
+                        db,
                         trigger_character_id=raw.get("character_id"),
                     )
                 except Exception as exc:

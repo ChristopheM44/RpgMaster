@@ -373,6 +373,36 @@ async def test_process_ai_turns_no_agent_registered_skips_entry() -> None:
     assert active.turn_manager.current_turn.combatant_id == "aria_1"
 
 
+async def test_process_ai_turns_stops_at_ai_controlled_monster() -> None:
+    """Les monstres automatiques ne passent pas par PlayerAgent.
+
+    Ils restent au tour courant pour que ws_game._handle_ai_turns les résolve
+    via la branche mécanique des monstres.
+    """
+    state = _build_game_state()
+    active = _make_active_session(state)
+
+    from app.game.turn_manager import TurnEntry
+
+    active.turn_manager._order = [
+        TurnEntry("poisonous_snake_1", "Serpent venimeux", 18, False, True),
+        TurnEntry("aria_1", "Aria", 12, True, False),
+    ]
+    active.turn_manager._index = 0
+
+    resolver = MagicMock()
+    resolver.resolve = AsyncMock()
+
+    with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=AsyncMock()):
+        ai_manager = AIPlayerManager()
+        triggered = await ai_manager.process_ai_turns("test_session", active, resolver)
+
+    assert triggered == 0
+    resolver.resolve.assert_not_called()
+    assert active.turn_manager.current_turn.combatant_id == "poisonous_snake_1"
+    assert active.turn_manager.current_turn.is_player is False
+
+
 # ---------------------------------------------------------------------------
 # Scénario complet : 1 humain + 2 IA vs gobelins (1 round)
 # ---------------------------------------------------------------------------
@@ -400,9 +430,9 @@ async def test_full_combat_round_human_then_ai_then_monsters() -> None:
         TurnEntry("aria_1", "Aria", 20, True, False),
         TurnEntry("thorin_1", "Thorin", 16, True, True),
         TurnEntry("elara_1", "Elara", 14, True, True),
-        TurnEntry("goblin_1", "Gobelin 1", 10, False, False),
-        TurnEntry("goblin_2", "Gobelin 2", 8, False, False),
-        TurnEntry("goblin_3", "Gobelin 3", 6, False, False),
+        TurnEntry("goblin_1", "Gobelin 1", 10, False, True),
+        TurnEntry("goblin_2", "Gobelin 2", 8, False, True),
+        TurnEntry("goblin_3", "Gobelin 3", 6, False, True),
     ]
     active.turn_manager._index = 0
     active.turn_manager._mode = "combat"
@@ -448,8 +478,8 @@ async def test_full_combat_round_human_then_ai_then_monsters() -> None:
     assert triggered == 2, "Thorin et Elara doivent avoir agi"
     assert resolver.resolve.call_count == 2
 
-    # --- Step 3 : current turn should be Gobelin 1 (not AI-controlled) ---
+    # --- Step 3 : current turn should be Gobelin 1 (monster handled by ws_game) ---
     current = active.turn_manager.current_turn
     assert current.combatant_id == "goblin_1"
     assert current.is_player is False
-    assert current.is_ai_controlled is False
+    assert current.is_ai_controlled is True

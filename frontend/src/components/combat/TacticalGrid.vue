@@ -76,7 +76,8 @@ function cellClasses(col: number, row: number) {
 
 function tokenClasses(combatant: (typeof gameStore.combatants)[0]) {
   if (combatant.id === props.myCharacterId) return 'bg-arcane border-arcane/80 text-white'
-  if (!combatant.is_ai) return 'bg-emerald-700 border-emerald-500 text-white'
+  if (combatant.kind === 'pc' && (combatant.is_ai_controlled ?? combatant.is_ai)) return 'bg-arcane/90 border-arcane text-white'
+  if (combatant.kind === 'pc') return 'bg-emerald-700 border-emerald-500 text-white'
   return 'bg-blood/90 border-blood text-white'
 }
 

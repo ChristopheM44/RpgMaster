@@ -1,6 +1,6 @@
 {
   "_license": "D&D SRD 5.2 — CC-BY-4.0 (https://www.dndbeyond.com/srd)",
-  "_note": "35 monsters CR 0-13 covering diverse types. Stats include all fields needed by the combat engine.",
+  "_note": "37 monsters CR 0-13 covering diverse types. Stats include all fields needed by the combat engine.",
   "monsters": [
     {
       "id": "rat",
@@ -118,6 +118,132 @@
         }
       ],
       "legendary_actions": []
+    },
+    {
+      "id": "bandit",
+      "name": "Bandit",
+      "name_fr": "Bandit",
+      "cr": 0.125,
+      "xp": 25,
+      "size": "Medium",
+      "type": "humanoid",
+      "subtype": "any race",
+      "alignment": "any non-lawful alignment",
+      "ac": 12,
+      "ac_source": "leather armor",
+      "hp": 11,
+      "hit_dice": "2d8+2",
+      "speed": {
+        "walk": 9
+      },
+      "ability_scores": {
+        "strength": 11,
+        "dexterity": 12,
+        "constitution": 12,
+        "intelligence": 10,
+        "wisdom": 10,
+        "charisma": 10
+      },
+      "saving_throws": {},
+      "skills": {},
+      "damage_immunities": [],
+      "damage_resistances": [],
+      "condition_immunities": [],
+      "senses": {
+        "passive_perception": 10
+      },
+      "languages": [
+        "common"
+      ],
+      "proficiency_bonus": 2,
+      "traits": [],
+      "actions": [
+        {
+          "name": "Scimitar",
+          "name_fr": "Cimeterre",
+          "type": "melee_attack",
+          "attack_bonus": 3,
+          "targets": 1,
+          "damage_dice": "1d6+1",
+          "damage_type": "slashing",
+          "reach_m": 1.5
+        },
+        {
+          "name": "Light Crossbow",
+          "name_fr": "Arbalète légère",
+          "type": "ranged_attack",
+          "attack_bonus": 3,
+          "targets": 1,
+          "damage_dice": "1d8+1",
+          "damage_type": "piercing",
+          "range_normal_m": 24,
+          "range_long_m": 96
+        }
+      ],
+      "legendary_actions": [],
+      "description": "Un hors-la-loi armé légèrement, dangereux surtout en groupe et dans les embuscades."
+    },
+    {
+      "id": "cultist",
+      "name": "Cultist",
+      "name_fr": "Cultiste",
+      "cr": 0.125,
+      "xp": 25,
+      "size": "Medium",
+      "type": "humanoid",
+      "subtype": "any race",
+      "alignment": "any non-good alignment",
+      "ac": 12,
+      "ac_source": "leather armor",
+      "hp": 9,
+      "hit_dice": "2d8",
+      "speed": {
+        "walk": 9
+      },
+      "ability_scores": {
+        "strength": 11,
+        "dexterity": 12,
+        "constitution": 10,
+        "intelligence": 10,
+        "wisdom": 11,
+        "charisma": 10
+      },
+      "saving_throws": {},
+      "skills": {
+        "deception": 2,
+        "religion": 2
+      },
+      "damage_immunities": [],
+      "damage_resistances": [],
+      "condition_immunities": [],
+      "senses": {
+        "passive_perception": 10
+      },
+      "languages": [
+        "common"
+      ],
+      "proficiency_bonus": 2,
+      "traits": [
+        {
+          "name": "Dark Devotion",
+          "name_fr": "Dévotion sombre",
+          "description": "Le cultiste a l'avantage aux jets de sauvegarde contre l'état charmé ou effrayé."
+        }
+      ],
+      "actions": [
+        {
+          "name": "Scimitar",
+          "name_fr": "Cimeterre",
+          "type": "melee_attack",
+          "attack_bonus": 3,
+          "targets": 1,
+          "damage_dice": "1d6+1",
+          "damage_type": "slashing",
+          "reach_m": 1.5
+        }
+      ],
+      "legendary_actions": [],
+      "description": "Un adepte fanatique prêt à tuer pour son culte."
     },
     {
       "id": "goblin",

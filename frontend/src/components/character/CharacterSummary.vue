@@ -4,6 +4,10 @@ import { useRouter, useRoute } from 'vue-router'
 import { useCharacterStore } from '../../stores/character'
 import type { Character } from '../../types'
 
+const emit = defineEmits<{
+  (e: 'toggle-ai', characterId: string, nextIsAi: boolean): void
+}>()
+
 const charStore = useCharacterStore()
 const router = useRouter()
 const route = useRoute()
@@ -148,7 +152,7 @@ const selected = computed(
         <button
           class="rpg-btn-tonal w-full text-left px-3 py-2"
           :class="selected.is_ai ? 'tone-arcane' : 'tone-gold'"
-          @click="charStore.toggleAiControl(selected.id)"
+          @click="emit('toggle-ai', selected.id, !selected.is_ai)"
         >
           <span class="font-semibold">{{ selected.is_ai ? '🤖 Géré par l\'IA' : '👤 Joueur humain' }}</span>
           <span class="ml-2 opacity-60 text-xs">— {{ selected.is_ai ? 'reprendre le contrôle' : 'confier à l\'IA' }}</span>

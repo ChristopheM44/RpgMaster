@@ -229,6 +229,65 @@ class TestConversationHistory:
 
 
 class TestStateTransition:
+    async def test_hostile_narration_without_actions_primes_combat(
+        self, db_session, active_session
+    ) -> None:
+        """Une embuscade hostile racontée sans JSON mécanique démarre quand même."""
+        resolver = _mock_resolver(
+            "Une douzaine de bandits surgissent des buissons, lames au clair."
+        )
+
+        await resolver.resolve(
+            session_id=active_session.session_id,
+            action_type="free_text",
+            content="Nous avançons vers le camp.",
+            character_id="hero-1",
+            target_id=None,
+            active=active_session,
+            db=db_session,
+        )
+
+        assert active_session.state_data.get("pending_phase_transition") == "COMBAT"
+        pending = active_session.state_data.get("pending_encounter")
+        assert pending is not None
+        assert pending["monster_ids"] == ["bandit"] * 12
+
+    async def test_hostile_roll_outcome_without_actions_primes_combat(
+        self, db_session, active_session
+    ) -> None:
+        """Une embuscade révélée par l'issue d'un jet déclenche aussi le combat."""
+        mock_gm = MagicMock()
+        mock_gm.think = AsyncMock(return_value=AgentResponse(
+            content="Le passage semble dangereusement silencieux.",
+            actions=[
+                GMAction(
+                    type="roll_request",
+                    target="hero-1",
+                    params={"ability": "wis", "type": "check", "dc": 13},
+                )
+            ],
+        ))
+        mock_gm.narrate_outcome = AsyncMock(return_value=(
+            "Des flèches pleuvent depuis les rochers ; trois bandits surgissent, "
+            "lames au clair."
+        ))
+        resolver = ActionResolver(gm_agent=mock_gm)
+
+        await resolver.resolve(
+            session_id=active_session.session_id,
+            action_type="free_text",
+            content="Je cherche des signes de danger.",
+            character_id="hero-1",
+            target_id=None,
+            active=active_session,
+            db=db_session,
+        )
+
+        assert active_session.state_data.get("pending_phase_transition") == "COMBAT"
+        pending = active_session.state_data.get("pending_encounter")
+        assert pending is not None
+        assert pending["monster_ids"] == ["bandit", "bandit", "bandit"]
+
     async def test_state_transition_combat_sets_flag_with_encounter_setup(
         self, db_session, active_session
     ) -> None:

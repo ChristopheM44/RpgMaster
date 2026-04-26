@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useCharacterStore } from '../../stores/character'
+import { useGameStore } from '../../stores/game'
 import type { Character } from '../../types'
 
 const emit = defineEmits<{
@@ -8,6 +9,7 @@ const emit = defineEmits<{
 }>()
 
 const charStore = useCharacterStore()
+const gameStore = useGameStore()
 
 function hpPct(c: Character): number {
   return Math.max(0, c.hp_max > 0 ? (c.hp_current / c.hp_max) * 100 : 0)
@@ -101,6 +103,11 @@ function onToggleAi(e: Event, c: Character) {
               class="shrink-0 text-[8px] font-bold tracking-[0.1em]"
               :style="{ color: 'var(--color-arcane)' }"
             >IA</span>
+            <span
+              v-if="gameStore.isCharacterThinking(c.id)"
+              class="shrink-0 text-[8px] font-bold tracking-[0.08em]"
+              :style="{ color: 'var(--color-gold)' }"
+            >PENSE…</span>
           </div>
           <div class="text-[10px]" :style="{ color: 'var(--color-text-muted)' }">{{ c.char_class }}</div>
 

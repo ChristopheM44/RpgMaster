@@ -51,7 +51,7 @@ const availableSlots = computed<{ level: number; remaining: number }[]>(() => {
 // Cibles disponibles en combat (ennemis uniquement)
 const combatTargets = computed(() => {
   const myId = charStore.myCharacter?.id
-  return gameStore.combatants.filter((c) => c.id !== myId && c.is_ai)
+  return gameStore.combatants.filter((c) => c.id !== myId && c.kind === 'monster')
 })
 
 // Un sort nécessite de choisir une cible si : jet d'attaque, auto_hit ou save+dégâts

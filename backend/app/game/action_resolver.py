@@ -26,6 +26,7 @@ from app.engine.spells import (
     spell_save_dc,
     upcast_damage,
 )
+from app.game.combat_triggers import prime_combat_from_hostile_narration
 from app.game.event_bus import EventType, event_bus
 from app.game.session_manager import ActiveSession
 from app.llm.voxtral_client import tts_router
@@ -233,9 +234,33 @@ class ActionResolver:
 
         gm_response: Optional[AgentResponse] = None
         try:
+            await event_bus.publish_to_session(
+                session_id,
+                EventType.AI_THINKING,
+                {"agent_kind": "gm", "thinking": True},
+                source="action_resolver",
+            )
             gm_response = await self._gm.think(context)
         except Exception as exc:
             logger.error("ActionResolver : GMAgent échoué : %s", exc)
+        finally:
+            await event_bus.publish_to_session(
+                session_id,
+                EventType.AI_THINKING,
+                {"agent_kind": "gm", "thinking": False},
+                source="action_resolver",
+            )
+
+        # Stocker l'intent classifié pour que ws_game puisse orchestrer
+        # l'ordre d'exécution (social : compagnons d'abord, MJ conclut).
+        active.last_gm_intent = gm_response.action_intent if gm_response else None
+
+        if gm_response:
+            prime_combat_from_hostile_narration(
+                active,
+                gm_response.content,
+                source="gm_narration",
+            )
 
         # ----------------------------------------------------------------
         # 3. Publication des événements sur le bus
@@ -301,11 +326,29 @@ class ActionResolver:
         if pending_rolls:
             outcome_text: Optional[str] = None
             try:
+                await event_bus.publish_to_session(
+                    session_id,
+                    EventType.AI_THINKING,
+                    {"agent_kind": "gm", "thinking": True},
+                    source="action_resolver",
+                )
                 outcome_text = await self._gm.narrate_outcome(context, pending_rolls)
             except Exception as exc:
                 logger.error("ActionResolver : narrate_outcome échoué : %s", exc)
+            finally:
+                await event_bus.publish_to_session(
+                    session_id,
+                    EventType.AI_THINKING,
+                    {"agent_kind": "gm", "thinking": False},
+                    source="action_resolver",
+                )
 
             if outcome_text:
+                prime_combat_from_hostile_narration(
+                    active,
+                    outcome_text,
+                    source="gm_roll_outcome",
+                )
                 outcome_id = str(uuid.uuid4())
                 await event_bus.publish_to_session(
                     session_id,
@@ -319,6 +362,63 @@ class ActionResolver:
                 asyncio.create_task(
                     tts_router.synthesize_and_broadcast(outcome_text, session_id, outcome_id)
                 )
+
+    # ------------------------------------------------------------------
+    # Conclusion sociale (compagnons ont déjà parlé)
+    # ------------------------------------------------------------------
+
+    async def social_conclude(
+        self,
+        session_id: str,
+        active: ActiveSession,
+        player_action: str,
+        companion_responses: "List[Dict[str, str]]",
+        db: Optional[Any] = None,
+    ) -> None:
+        """Appelle le MJ pour conclure une scène sociale après les réponses des compagnons.
+
+        Publie et persiste la narration de conclusion, sans ré-exécuter
+        la mécanique (les jets et transitions ont déjà été traités).
+        """
+        try:
+            await event_bus.publish_to_session(
+                session_id,
+                EventType.AI_THINKING,
+                {"agent_kind": "gm", "thinking": True},
+                source="action_resolver",
+            )
+            gm_resp = await self._gm.narrate_social_conclude(
+                game_state=active.state_data,
+                player_action=player_action,
+                companion_responses=companion_responses,
+            )
+        except Exception as exc:
+            logger.error("ActionResolver.social_conclude : GMAgent échoué : %s", exc)
+            gm_resp = None
+        finally:
+            await event_bus.publish_to_session(
+                session_id,
+                EventType.AI_THINKING,
+                {"agent_kind": "gm", "thinking": False},
+                source="action_resolver",
+            )
+
+        if gm_resp is None:
+            return
+
+        narration_id = str(uuid.uuid4())
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.NARRATION,
+            {"text": gm_resp.narration, "speaker": "Maître du Jeu", "narration_id": narration_id},
+            source="action_resolver",
+        )
+        if db is not None:
+            from app.services.message_service import persist_narration
+            await persist_narration(session_id, gm_resp.narration, "Maître du Jeu", db)
+        asyncio.create_task(
+            tts_router.synthesize_and_broadcast(gm_resp.narration, session_id, narration_id)
+        )
 
     # ------------------------------------------------------------------
     # Résolution mécanique (délègue au moteur)
@@ -1091,6 +1191,82 @@ class ActionResolver:
                 )
             else:
                 logger.debug("state_transition reçue sans phase cible : %s", params)
+
+        elif action_type == "journal_update":
+            journal: dict[str, Any] = active.state_data.setdefault("adventure_journal", {
+                "location_region": None,
+                "location_place": None,
+                "time_of_day": "morning",
+                "day_number": 1,
+                "calendar_date": None,
+                "weather": None,
+            })
+            for key in ("location_region", "location_place", "time_of_day",
+                        "day_number", "calendar_date", "weather"):
+                if key in params and params[key] is not None:
+                    journal[key] = params[key]
+            active.mark_dirty()
+            await event_bus.publish_to_session(
+                session_id,
+                EventType.JOURNAL_UPDATED,
+                {"journal": dict(journal)},
+                source="action_resolver",
+            )
+
+        elif action_type == "quest_add":
+            quest_id = params.get("id")
+            if not quest_id:
+                logger.warning("quest_add ignoré : id manquant — params=%s", params)
+                return
+            quests: list[dict[str, Any]] = active.state_data.setdefault("quests", [])
+            idx = next((i for i, q in enumerate(quests) if q.get("id") == quest_id), -1)
+            quest_entry: dict[str, Any] = {
+                "id": quest_id,
+                "category": params.get("category", "secondaire"),
+                "title": params.get("title", quest_id),
+                "summary": params.get("summary", ""),
+                "urgency": params.get("urgency"),
+                "status": params.get("status", "active"),
+            }
+            if idx >= 0:
+                quests[idx] = {**quests[idx], **quest_entry}
+            else:
+                quests.append(quest_entry)
+            active.mark_dirty()
+            await event_bus.publish_to_session(
+                session_id,
+                EventType.QUEST_UPDATED,
+                {"quests": list(quests)},
+                source="action_resolver",
+            )
+
+        elif action_type == "chronicle_add":
+            chron_id = params.get("id")
+            kind = params.get("kind")
+            if not chron_id or kind not in ("npc", "location"):
+                logger.warning(
+                    "chronicle_add ignoré : id ou kind invalide — params=%s", params
+                )
+                return
+            chronicle: list[dict[str, Any]] = active.state_data.setdefault("chronicle", [])
+            idx = next((i for i, e in enumerate(chronicle) if e.get("id") == chron_id), -1)
+            entry: dict[str, Any] = {
+                "id": chron_id,
+                "kind": kind,
+                "name": params.get("name", chron_id),
+                "note": params.get("note", ""),
+            }
+            if idx >= 0:
+                chronicle[idx] = {**chronicle[idx], **entry}
+            else:
+                chronicle.append(entry)
+            active.mark_dirty()
+            await event_bus.publish_to_session(
+                session_id,
+                EventType.CHRONICLE_UPDATED,
+                {"chronicle": list(chronicle)},
+                source="action_resolver",
+            )
 
         else:
             logger.warning("ActionResolver : type d'action GM inconnu '%s'.", action_type)

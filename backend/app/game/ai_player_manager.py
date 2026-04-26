@@ -1,8 +1,9 @@
 """AI player manager — triggers PlayerAgent actions during AI combatant turns.
 
 Integrates with TurnManager: when the current turn belongs to an AI-controlled
-combatant, this module calls PlayerAgent.decide_action() (or .roleplay()),
-validates the result, and dispatches it through ActionResolver.
+player character, this module calls PlayerAgent.decide_action() (or .roleplay()),
+validates the result, and dispatches it through ActionResolver. Monster turns
+are handled by the combat WebSocket loop, not by PlayerAgent.
 
 Usage::
 
@@ -18,10 +19,13 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Optional
 
+from app.agents.player_agent import _NON_JSON_LLM_ERROR
 from app.agents.schemas import PlayerActionChoice
 from app.game.event_bus import EventType, event_bus
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from app.game.action_resolver import ActionResolver
     from app.game.session_manager import ActiveSession
 
@@ -33,6 +37,33 @@ _WAIT_ACTION = PlayerActionChoice(
     roleplay_text="(attend, sur la défensive)",
     inner_reasoning="Fallback : aucune action valide disponible.",
 )
+
+_COMBAT_STARTING_ACTIONS = {"attack", "cast_spell", "shove"}
+
+# Actions d'exploration qui nécessitent un arbitrage MJ (résolution moteur + narration).
+# talk/wait sont purement narratifs et ne déclenchent PAS le pipeline MJ.
+_EXPLORATION_ARBITRAGE_ACTIONS = {"examine", "move", "use_item", "help"}
+
+
+def _build_scene_context(messages: list) -> str:
+    """Construit un résumé de scène à partir des derniers messages persistés.
+
+    Extrait le dernier message du MJ et le dernier message joueur pour que le
+    compagnon IA sache ce qui vient de se passer sans ingérer l'historique entier.
+    """
+    last_gm: Optional[str] = None
+    last_player: Optional[str] = None
+    for msg in reversed(messages):
+        role = getattr(msg, "role", None)
+        role_val = role.value if hasattr(role, "value") else str(role)
+        if last_gm is None and role_val == "gm":
+            last_gm = f"[Narration MJ] {msg.content}"
+        if last_player is None and role_val == "player":
+            speaker = getattr(msg, "speaker", "Joueur")
+            last_player = f"[{speaker}] {msg.content}"
+        if last_gm and last_player:
+            break
+    return "\n".join(p for p in [last_gm, last_player] if p)
 
 
 def register_ai_player(active: "ActiveSession", char_id: str, cdata: dict[str, Any]) -> None:
@@ -99,10 +130,11 @@ class AIPlayerManager:
     """Orchestrates AI companion turns within a game session.
 
     After each human player action, call :meth:`process_ai_turns` to let all
-    consecutive AI-controlled combatants act before the next human turn.
+    consecutive AI-controlled player characters act before the next human or
+    monster turn.
 
-    The method stops as soon as a non-AI combatant's turn is reached (or the
-    order is exhausted), so it is safe to call unconditionally.
+    The method stops as soon as a non-player, non-AI, or missing turn is reached
+    (or the order is exhausted), so it is safe to call unconditionally.
     """
 
     async def process_ai_turns(
@@ -111,7 +143,7 @@ class AIPlayerManager:
         active: "ActiveSession",
         action_resolver: "ActionResolver",
     ) -> int:
-        """Trigger all consecutive AI-controlled turns starting from the current entry.
+        """Trigger all consecutive AI-controlled PC turns from the current entry.
 
         Args:
             session_id: Active session identifier (for event publishing).
@@ -127,6 +159,8 @@ class AIPlayerManager:
             current = active.turn_manager.current_turn
             if current is None or not current.is_ai_controlled:
                 break
+            if not current.is_player:
+                break
 
             agent = active.ai_players.get(current.combatant_id)
             if agent is None:
@@ -138,12 +172,25 @@ class AIPlayerManager:
                 continue
 
             # Ask the agent for an action
-            action = await self._get_action(agent, active)
+            await self._publish_thinking(
+                session_id,
+                True,
+                character_id=current.combatant_id,
+                character_name=current.name,
+            )
+            try:
+                action = await self._get_action(agent, active)
+            finally:
+                await self._publish_thinking(
+                    session_id,
+                    False,
+                    character_id=current.combatant_id,
+                    character_name=current.name,
+                )
 
-            # Si l'agent a remonté un échec LLM (provider injoignable, JSON
-            # invalide…), le signaler explicitement à l'utilisateur au lieu
-            # de laisser le personnage « attendre » en silence.
-            if action.llm_error:
+            # Les erreurs provider doivent rester visibles. Le JSON invalide,
+            # lui, dégrade en attente silencieuse après tentative de réparation.
+            if action.llm_error and action.llm_error != _NON_JSON_LLM_ERROR:
                 await event_bus.publish_to_session(
                     session_id,
                     EventType.ERROR,
@@ -207,39 +254,47 @@ class AIPlayerManager:
         active: "ActiveSession",
         action_resolver: "ActionResolver",
         trigger_character_id: Optional[str] = None,
-    ) -> int:
+        db: Optional["AsyncSession"] = None,
+    ) -> "tuple[int, list[dict[str, str]]]":
         """Fait réagir une fois chaque compagnon IA en exploration.
 
         Contrairement à :meth:`process_ai_turns` (pensé pour le combat), cette
         méthode **ne modifie pas l'index** du turn manager : l'exploration reste
         en flux libre. Pour chaque entrée ``is_ai_controlled=True`` de l'ordre,
-        on appelle ``agent.roleplay()`` puis on laisse le MJ réagir via
-        ``action_resolver.resolve()``.
+        on appelle ``agent.roleplay()`` avec l'historique récent puis, selon le
+        type d'action :
+          - talk / wait : publication + persistance, pas de pipeline MJ.
+          - examine / move / use_item / help : pipeline MJ complet.
+          - attack / cast_spell / shove : transition COMBAT si pending_encounter,
+            sinon remplacement par une hésitation prudente.
 
         Args:
             session_id: session active.
             active: état mémoire.
             action_resolver: pour faire réagir le MJ après le roleplay IA.
-            trigger_character_id: si défini, on saute ce personnage (c'est le
-                personnage qui vient d'agir — il ne doit pas se répondre à
-                lui-même).
+            trigger_character_id: si défini, on saute ce personnage.
+            db: session DB async pour charger l'historique et persister les actions.
 
         Returns:
-            Nombre de compagnons IA qui ont réagi.
+            Tuple (nombre de compagnons ayant réagi,
+                   liste de dicts {"speaker": nom, "text": roleplay_text}).
         """
         if not active.ai_players:
-            return 0
+            return 0, []
+
+        # Charger l'historique une seule fois pour tous les compagnons
+        recent_messages: list = []
+        scene_context = ""
+        if db is not None:
+            from app.services.message_service import load_recent_messages
+            recent_messages = await load_recent_messages(session_id, db)
+            scene_context = _build_scene_context(recent_messages)
 
         order = list(active.turn_manager._order)
-        if not order:
-            # Pas de turn_manager initialisé : on réagit dans l'ordre des
-            # ai_players (dict insertion order = ordre de création).
-            order = []
-
         reacted = 0
+        companion_responses: list[dict[str, str]] = []
         seen: set[str] = set()
         iterable = [e.combatant_id for e in order if e.is_ai_controlled]
-        # Fallback si l'ordre n'est pas configuré
         if not iterable:
             iterable = list(active.ai_players.keys())
 
@@ -251,10 +306,34 @@ class AIPlayerManager:
             if agent is None:
                 continue
 
-            action = await self._get_action(agent, active)
             char_name = getattr(agent, "character_name", char_id)
+            await self._publish_thinking(
+                session_id, True, character_id=char_id, character_name=char_name,
+            )
+            try:
+                action = await agent.roleplay(
+                    game_state=active.state_data,
+                    scene_context=scene_context,
+                    messages=recent_messages,
+                )
+            except Exception as exc:
+                logger.error(
+                    "run_exploration_reactions: agent '%s' raised exception: %s",
+                    char_name, exc,
+                )
+                action = PlayerActionChoice(
+                    action_type="wait",
+                    action_description=_WAIT_ACTION.action_description,
+                    roleplay_text=_WAIT_ACTION.roleplay_text,
+                    llm_error=f"{type(exc).__name__}: {exc}",
+                )
+            finally:
+                await self._publish_thinking(
+                    session_id, False, character_id=char_id, character_name=char_name,
+                )
 
-            if action.llm_error:
+            # Provider error → visible event, skip this companion
+            if action.llm_error and action.llm_error != _NON_JSON_LLM_ERROR:
                 await event_bus.publish_to_session(
                     session_id,
                     EventType.ERROR,
@@ -270,7 +349,42 @@ class AIPlayerManager:
                 )
                 continue
 
-            # Publier le roleplay
+            # Combat guard BEFORE publishing: only allow combat transition if
+            # an encounter is already pending (GM-established), otherwise the
+            # companion cannot unilaterally introduce a new threat.
+            if (
+                active.phase.value == "exploration"
+                and action.action_type in _COMBAT_STARTING_ACTIONS
+            ):
+                if active.state_data.get("pending_encounter"):
+                    # Legitimate: publish the aggressive action, flag transition, stop
+                    await event_bus.publish_to_session(
+                        session_id,
+                        EventType.NARRATION,
+                        {
+                            "text": action.roleplay_text,
+                            "speaker": char_name,
+                            "action_type": action.action_type,
+                            "is_ai_player": True,
+                        },
+                        source="ai_player_manager",
+                    )
+                    active.state_data["pending_phase_transition"] = "COMBAT"
+                    active.mark_dirty()
+                    reacted += 1
+                    break
+                else:
+                    # No confirmed threat: replace with cautious hesitation
+                    action = PlayerActionChoice(
+                        action_type="wait",
+                        action_description="Le personnage hésite prudemment.",
+                        roleplay_text=(
+                            f"(jette un regard méfiant, la main sur l'arme, mais sans dégainer)"
+                        ),
+                        inner_reasoning="Pas de menace confirmée par le MJ — attente.",
+                    )
+
+            # Publish post-guard roleplay
             await event_bus.publish_to_session(
                 session_id,
                 EventType.NARRATION,
@@ -283,31 +397,80 @@ class AIPlayerManager:
                 source="ai_player_manager",
             )
 
-            # Laisser le MJ réagir à l'intervention du compagnon
-            try:
-                await action_resolver.resolve(
-                    session_id=session_id,
-                    action_type="free_action",
-                    content=f"[Compagnon IA] {action.roleplay_text}",
-                    character_id=char_id,
-                    target_id=action.target,
-                    active=active,
+            # Collecter la réponse pour la conclusion sociale éventuelle
+            companion_responses.append({"speaker": char_name, "text": action.roleplay_text})
+
+            # Persist to DB
+            if db is not None:
+                from app.models.message import MessageRole, MessageType
+                from app.services.message_service import persist_narration
+                msg_type = (
+                    MessageType.ACTION
+                    if action.action_type in _EXPLORATION_ARBITRAGE_ACTIONS
+                    else MessageType.DIALOGUE
                 )
-            except Exception as exc:
-                logger.error(
-                    "run_exploration_reactions: action_resolver a échoué "
-                    "pour %s : %s",
+                await persist_narration(
+                    session_id,
+                    action.roleplay_text,
                     char_name,
-                    exc,
+                    db,
+                    role=MessageRole.PLAYER,
+                    message_type=msg_type,
+                    metadata={
+                        "is_ai_player": True,
+                        "character_id": char_id,
+                        "action_type": action.action_type,
+                    },
                 )
+
+            # GM pipeline only for actions requiring world arbitration
+            if action.action_type in _EXPLORATION_ARBITRAGE_ACTIONS:
+                try:
+                    await action_resolver.resolve(
+                        session_id=session_id,
+                        action_type=action.action_type,
+                        content=f"[Compagnon IA] {action.action_description}",
+                        character_id=char_id,
+                        target_id=action.target,
+                        active=active,
+                        db=db,
+                    )
+                except Exception as exc:
+                    logger.error(
+                        "run_exploration_reactions: action_resolver a échoué pour %s : %s",
+                        char_name, exc,
+                    )
 
             reacted += 1
 
-        return reacted
+            if active.state_data.get("pending_phase_transition") == "COMBAT":
+                break
+
+        return reacted, companion_responses
 
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    async def _publish_thinking(
+        session_id: str,
+        thinking: bool,
+        *,
+        character_id: Optional[str] = None,
+        character_name: Optional[str] = None,
+    ) -> None:
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.AI_THINKING,
+            {
+                "agent_kind": "player_ai",
+                "thinking": thinking,
+                "character_id": character_id,
+                "character_name": character_name,
+            },
+            source="ai_player_manager",
+        )
 
     @staticmethod
     async def _get_action(
