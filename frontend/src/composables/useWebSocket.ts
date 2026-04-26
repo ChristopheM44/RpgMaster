@@ -19,6 +19,8 @@ import type {
   AudioPayload,
   CombatActionPayload,
   CombatantMovedPayload,
+  CombatantStatusChangedPayload,
+  CombatantRemovedPayload,
 } from '../types'
 
 const WS_BASE = 'ws://localhost:8000'
@@ -151,6 +153,12 @@ export function useWebSocket(sessionId: string) {
         break
       case 'combatant_moved':
         gameStore.moveCombatant(msg.payload as CombatantMovedPayload)
+        break
+      case 'combatant_status_changed':
+        gameStore.applyCombatantStatusChanged(msg.payload as CombatantStatusChangedPayload)
+        break
+      case 'combatant_removed':
+        gameStore.removeCombatant((msg.payload as CombatantRemovedPayload).combatant_id)
         break
       case 'combat_end':
         gameStore.setProcessing(false)

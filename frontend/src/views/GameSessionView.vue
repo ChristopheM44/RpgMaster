@@ -9,7 +9,6 @@ import { gameApi } from '../services/api'
 import NarrativeLog from '../components/narrative/NarrativeLog.vue'
 import ExplorationLayout from '../components/character/ExplorationLayout.vue'
 import CombatLayout from '../components/combat/CombatLayout.vue'
-import PartyBar from '../components/character/PartyBar.vue'
 import ActionBar from '../components/common/ActionBar.vue'
 import SaveLoadPanel from '../components/ui/SaveLoadPanel.vue'
 import AdventureStartModal from '../components/ui/AdventureStartModal.vue'
@@ -136,12 +135,6 @@ function endCombat() {
   resetCombat()
 }
 
-async function handleToggleAi(characterId: string, nextIsAi: boolean) {
-  // Optimistic local update via REST + store, then notify backend WS for live handoff
-  await charStore.toggleAiControl(characterId)
-  toggleAiControl(characterId, nextIsAi)
-}
-
 function handleTriggerAi() {
   triggerAiReactions()
 }
@@ -224,12 +217,8 @@ onUnmounted(() => { disconnect() })
         background: 'linear-gradient(180deg, var(--color-bg-elev), rgba(24,22,35,0.9))',
       }"
     >
-      <!-- Left: back + logo + session name -->
+      <!-- Left: logo + session name -->
       <div class="flex shrink-0 items-center gap-3">
-        <button
-          class="rpg-btn-secondary !py-1 !px-3 !text-[11px] shrink-0"
-          @click="requestGoToLobby"
-        >← Lobby</button>
         <div
           class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-bold"
           :style="{
@@ -321,17 +310,23 @@ onUnmounted(() => { disconnect() })
         >💾 Sauvegarder</button>
       </div>
 
-      <!-- Right: connection status -->
-      <div class="flex shrink-0 items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em]" :style="{ color: 'var(--color-text-muted)' }">
-        <span
-          class="h-2 w-2 rounded-full"
-          :class="{ 'rpg-pulse': isReconnecting }"
-          :style="{
-            background: gameStore.connected ? 'var(--color-green)' : isReconnecting ? 'var(--color-arcane)' : 'var(--color-blood)',
-            boxShadow: gameStore.connected ? '0 0 6px var(--color-green)' : 'none',
-          }"
-        />
-        <span class="hidden md:inline">{{ gameStore.connected ? 'En ligne' : 'Hors ligne' }}</span>
+      <!-- Right: Lobby + connection status -->
+      <div class="flex shrink-0 items-center gap-3">
+        <button
+          class="rpg-btn-secondary !py-1 !px-3 !text-[11px] shrink-0"
+          @click="requestGoToLobby"
+        >← Lobby</button>
+        <div class="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em]" :style="{ color: 'var(--color-text-muted)' }">
+          <span
+            class="h-2 w-2 rounded-full"
+            :class="{ 'rpg-pulse': isReconnecting }"
+            :style="{
+              background: gameStore.connected ? 'var(--color-green)' : isReconnecting ? 'var(--color-arcane)' : 'var(--color-blood)',
+              boxShadow: gameStore.connected ? '0 0 6px var(--color-green)' : 'none',
+            }"
+          />
+          <span class="hidden md:inline">{{ gameStore.connected ? 'En ligne' : 'Hors ligne' }}</span>
+        </div>
       </div>
     </header>
 
@@ -372,13 +367,6 @@ onUnmounted(() => { disconnect() })
     <div v-else class="md:hidden">
       <ActionBar @action="handleAction" />
     </div>
-
-    <!-- ─── PartyBar (bottom group bar) ──────────────────────────────────── -->
-    <PartyBar
-      v-if="!gameStore.isInCombat"
-      @toggle-ai="handleToggleAi"
-      @trigger-ai="handleTriggerAi"
-    />
 
     <!-- Adventure start modal -->
     <AdventureStartModal

@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 import app.models  # noqa: F401 — enregistre les tables
-from app.agents.schemas import AgentContext, AgentResponse, GMAction
+from app.agents.schemas import AgentContext, AgentResponse, GMAction, GMResponse
 from app.db.database import Base
 from app.game.action_resolver import ActionResolver
 from app.game.session_manager import ActiveSession
@@ -335,6 +335,123 @@ class TestStateTransition:
 
         assert "pending_phase_transition" not in active_session.state_data
         assert any("pending_encounter" in rec.message for rec in caplog.records)
+
+
+class TestCombatStateActions:
+    async def test_roll_outcome_can_mark_npc_surrendered(
+        self, db_session, session_row
+    ) -> None:
+        """Une issue de jet social peut retirer un PNJ hostile via combatant_status."""
+        active = ActiveSession(
+            session_id=session_row,
+            phase=SessionStatus.COMBAT,
+            state_data={
+                "characters": {
+                    "hero-1": {
+                        "name": "Thorvald",
+                        "level": 1,
+                        "hp": 10,
+                        "hp_max": 10,
+                        "ability_scores": {"cha": 16},
+                    },
+                },
+                "combatants": {
+                    "hero-1": {"name": "Thorvald", "hp": 10, "is_player": True},
+                    "bandit_1": {
+                        "name": "Bandit 1",
+                        "hp": 7,
+                        "is_player": False,
+                        "status": "active",
+                    },
+                },
+            },
+        )
+        mock_gm = MagicMock()
+        mock_gm.think = AsyncMock(return_value=AgentResponse(
+            content="Le bandit hésite.",
+            actions=[
+                GMAction(
+                    type="roll_request",
+                    target="hero-1",
+                    params={"ability": "cha", "type": "check", "dc": 1},
+                )
+            ],
+        ))
+        mock_gm.narrate_outcome_response = AsyncMock(return_value=GMResponse(
+            narration="Le bandit laisse tomber son arme et se rend.",
+            actions=[
+                GMAction(
+                    type="combatant_status",
+                    target="bandit_1",
+                    params={"status": "surrendered", "reason": "reddition"},
+                )
+            ],
+        ))
+
+        resolver = ActionResolver(gm_agent=mock_gm)
+        await resolver.resolve(
+            session_id=session_row,
+            action_type="free_text",
+            content="Rends-toi ou meurs.",
+            character_id="hero-1",
+            target_id=None,
+            active=active,
+            db=db_session,
+        )
+
+        assert active.state_data["combatants"]["bandit_1"]["status"] == "surrendered"
+
+    async def test_condition_actions_mutate_state_data(
+        self, db_session, active_session
+    ) -> None:
+        """condition_add/remove doit modifier state_data, pas seulement publier un event."""
+        active_session.phase = SessionStatus.COMBAT
+        active_session.state_data["combatants"] = {
+            "hero-1": {
+                "name": "Thorvald",
+                "hp": 10,
+                "is_player": True,
+                "conditions": [],
+            },
+        }
+        actions = [
+            GMAction(type="condition_add", target="hero-1", params={"condition": "prone"}),
+        ]
+        resolver = _mock_resolver("Thorvald tombe au sol.", actions=actions)
+
+        await resolver.resolve(
+            session_id=active_session.session_id,
+            action_type="free_text",
+            content="Je glisse.",
+            character_id="hero-1",
+            target_id=None,
+            active=active_session,
+            db=db_session,
+        )
+
+        assert active_session.state_data["combatants"]["hero-1"]["conditions"] == ["prone"]
+
+        remove_resolver = _mock_resolver(
+            "Thorvald se relève.",
+            actions=[
+                GMAction(
+                    type="condition_remove",
+                    target="hero-1",
+                    params={"condition": "prone"},
+                )
+            ],
+        )
+        await remove_resolver.resolve(
+            session_id=active_session.session_id,
+            action_type="free_text",
+            content="Je me relève.",
+            character_id="hero-1",
+            target_id=None,
+            active=active_session,
+            db=db_session,
+        )
+
+        assert active_session.state_data["combatants"]["hero-1"]["conditions"] == []
 
     async def test_state_transition_accepts_phase_and_target_keys(
         self, db_session, active_session

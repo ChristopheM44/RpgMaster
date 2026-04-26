@@ -311,6 +311,7 @@ async def test_process_ai_turns_validates_and_falls_back_to_wait() -> None:
     state = _build_game_state()
     # Thorin at 0 HP — any action except 'wait' is invalid
     state["characters"]["thorin_1"]["current_hp"] = 0
+    state["combatants"]["thorin_1"]["hp"] = 0
 
     active = _make_active_session(state)
     thorin_agent = PlayerAgent(
@@ -344,6 +345,149 @@ async def test_process_ai_turns_validates_and_falls_back_to_wait() -> None:
     # The resolver was still called, but with 'wait'
     call_kwargs = resolver.resolve.call_args.kwargs
     assert call_kwargs["action_type"] == "wait"
+
+
+async def test_process_ai_turns_invalid_spell_falls_back_to_attack() -> None:
+    """Un cast_spell inexploitable en combat devient une attaque fiable."""
+    state = _build_game_state()
+    active = _make_active_session(state)
+
+    elara_agent = PlayerAgent(
+        character_id="elara_1",
+        character_name="Elara",
+        personality=PlayerPersonality(traits=["arcane"]),
+        client=MagicMock(),
+    )
+    active.ai_players["elara_1"] = elara_agent
+
+    from app.game.turn_manager import TurnEntry
+
+    active.turn_manager._order = [
+        TurnEntry("elara_1", "Elara", 18, True, True),
+        TurnEntry("aria_1", "Aria", 12, True, False),
+    ]
+    active.turn_manager._index = 0
+
+    invalid_spell = json.dumps({
+        "action_type": "cast_spell",
+        "action_description": "Elara lance un sort vague",
+        "target": "goblin_1",
+        "params": {},
+        "roleplay_text": "Elara murmure une formule confuse.",
+    }, ensure_ascii=False)
+    with patch.object(elara_agent._client, "chat", new=AsyncMock(return_value=invalid_spell)):
+        resolver = MagicMock()
+        resolver.resolve = AsyncMock()
+
+        with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=AsyncMock()):
+            ai_manager = AIPlayerManager()
+            triggered = await ai_manager.process_ai_turns("test_session", active, resolver)
+
+    assert triggered == 1
+    call_kwargs = resolver.resolve.call_args.kwargs
+    assert call_kwargs["action_type"] == "attack"
+    assert call_kwargs["target_id"] == "goblin_1"
+
+
+async def test_process_ai_turns_persists_ai_combat_action(db_session) -> None:
+    """Les actions visibles des compagnons IA sont écrites dans l'historique."""
+    from sqlalchemy import select
+
+    from app.models.message import Message, MessageRole, MessageType
+    from app.models.session import Session
+
+    session = Session(id="ai_history_session", name="AI history", status=SessionStatus.COMBAT)
+    db_session.add(session)
+    await db_session.commit()
+
+    state = _build_game_state()
+    active = _make_active_session(state)
+    active.session_id = session.id
+
+    thorin_agent = PlayerAgent(
+        character_id="thorin_1",
+        character_name="Thorin",
+        personality=PlayerPersonality(traits=["brave"]),
+        client=MagicMock(),
+    )
+    active.ai_players["thorin_1"] = thorin_agent
+
+    from app.game.turn_manager import TurnEntry
+
+    active.turn_manager._order = [
+        TurnEntry("thorin_1", "Thorin", 18, True, True),
+        TurnEntry("aria_1", "Aria", 12, True, False),
+    ]
+    active.turn_manager._index = 0
+
+    with patch.object(thorin_agent._client, "chat", new=AsyncMock(
+        return_value=_attack_json("Thorin")
+    )):
+        resolver = MagicMock()
+        resolver.resolve = AsyncMock()
+
+        with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=AsyncMock()):
+            ai_manager = AIPlayerManager()
+            triggered = await ai_manager.process_ai_turns(
+                session.id,
+                active,
+                resolver,
+                db=db_session,
+            )
+
+    assert triggered == 1
+    rows = (
+        await db_session.execute(
+            select(Message).where(Message.session_id == session.id)
+        )
+    ).scalars().all()
+    ai_messages = [
+        row
+        for row in rows
+        if row.role == MessageRole.PLAYER
+        and row.message_type == MessageType.ACTION
+        and (row.metadata_ or {}).get("is_ai_player") is True
+    ]
+    assert len(ai_messages) == 1
+    assert ai_messages[0].speaker == "Thorin"
+    assert (ai_messages[0].metadata_ or {}).get("action_type") == "attack"
+
+
+async def test_cleanup_after_ai_kill_skips_dead_next_monster() -> None:
+    """Si l'IA tue le prochain monstre, le nettoyage place le tour sur le suivant."""
+    from app.api import ws_game
+    from app.game.turn_manager import TurnEntry
+
+    state = _build_game_state()
+    state["combatants"]["goblin_1"]["hp"] = 0
+    state["combatants"]["goblin_1"]["status"] = "active"
+    state["combatants"]["goblin_1"]["is_player"] = False
+    state["combatants"]["goblin_2"]["is_player"] = False
+    state["combatants"]["goblin_3"]["is_player"] = False
+    state["grid_positions"] = {"goblin_1": {"col": 5, "row": 5}}
+    active = ActiveSession(
+        session_id="cleanup_session",
+        phase=SessionStatus.COMBAT,
+        state_data=state,
+    )
+    active.turn_manager._order = [
+        TurnEntry("elara_1", "Elara", 18, True, True),
+        TurnEntry("goblin_1", "Gobelin 1", 12, False, True),
+        TurnEntry("goblin_2", "Gobelin 2", 10, False, True),
+        TurnEntry("aria_1", "Aria", 8, True, False),
+    ]
+    active.turn_manager._mode = "combat"
+    active.turn_manager._round = 1
+    active.turn_manager._index = 1
+
+    with patch("app.api.ws_game.event_bus.publish_to_session", new=AsyncMock()):
+        removed = await ws_game._cleanup_inactive_npcs("cleanup_session", active)
+
+    assert removed == [
+        {"combatant_id": "goblin_1", "name": "goblin_1", "status": "defeated"}
+    ]
+    assert active.turn_manager.current_turn.combatant_id == "goblin_2"
+    assert "goblin_1" not in active.state_data["grid_positions"]
 
 
 async def test_process_ai_turns_no_agent_registered_skips_entry() -> None:

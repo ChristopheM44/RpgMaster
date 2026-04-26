@@ -17,6 +17,8 @@ Usage::
 from __future__ import annotations
 
 import logging
+import re
+import unicodedata
 from typing import TYPE_CHECKING, Any, Optional
 
 from app.agents.player_agent import _NON_JSON_LLM_ERROR
@@ -39,6 +41,7 @@ _WAIT_ACTION = PlayerActionChoice(
 )
 
 _COMBAT_STARTING_ACTIONS = {"attack", "cast_spell", "shove"}
+_INACTIVE_NPC_STATUSES = {"defeated", "surrendered", "fled"}
 
 # Actions d'exploration qui nécessitent un arbitrage MJ (résolution moteur + narration).
 # talk/wait sont purement narratifs et ne déclenchent PAS le pipeline MJ.
@@ -142,6 +145,7 @@ class AIPlayerManager:
         session_id: str,
         active: "ActiveSession",
         action_resolver: "ActionResolver",
+        db: Optional["AsyncSession"] = None,
     ) -> int:
         """Trigger all consecutive AI-controlled PC turns from the current entry.
 
@@ -179,7 +183,11 @@ class AIPlayerManager:
                 character_name=current.name,
             )
             try:
-                action = await self._get_action(agent, active)
+                available_actions = self._available_combat_actions(
+                    current.combatant_id,
+                    active.state_data,
+                )
+                action = await self._get_action(agent, active, available_actions)
             finally:
                 await self._publish_thinking(
                     session_id,
@@ -205,16 +213,39 @@ class AIPlayerManager:
                     source="ai_player_manager",
                 )
 
+            spell_id: Optional[str] = None
+            slot_level: Optional[int] = None
+            if active.phase.value == "combat":
+                action, spell_id, slot_level = self._normalize_combat_action(
+                    action,
+                    current.combatant_id,
+                    active.state_data,
+                    available_actions,
+                )
+
             # Pre-validate before dispatching to the engine
             is_valid, reason = agent.validate_action(action, active.state_data)
             if not is_valid:
                 logger.warning(
-                    "AIPlayerManager: action '%s' invalid for '%s': %s — using wait.",
+                    "AIPlayerManager: action '%s' invalid for '%s': %s — using fallback.",
                     action.action_type,
                     current.name,
                     reason,
                 )
-                action = _WAIT_ACTION
+                if active.phase.value == "combat":
+                    if self._character_can_act(current.combatant_id, active.state_data):
+                        action = self._build_fallback_combat_action(
+                            current.combatant_id,
+                            current.name,
+                            active.state_data,
+                            available_actions,
+                        )
+                    else:
+                        action = _WAIT_ACTION
+                    spell_id = None
+                    slot_level = None
+                else:
+                    action = _WAIT_ACTION
 
             # Broadcast the AI player's in-character text first
             await event_bus.publish_to_session(
@@ -229,6 +260,24 @@ class AIPlayerManager:
                 source="ai_player_manager",
             )
 
+            if db is not None:
+                from app.models.message import MessageRole, MessageType
+                from app.services.message_service import persist_narration
+                await persist_narration(
+                    session_id,
+                    action.roleplay_text,
+                    current.name,
+                    db,
+                    role=MessageRole.PLAYER,
+                    message_type=MessageType.ACTION,
+                    metadata={
+                        "is_ai_player": True,
+                        "character_id": current.combatant_id,
+                        "action_type": action.action_type,
+                        "target": action.target,
+                    },
+                )
+
             # Full engine + GM pipeline
             await action_resolver.resolve(
                 session_id=session_id,
@@ -237,6 +286,9 @@ class AIPlayerManager:
                 character_id=current.combatant_id,
                 target_id=action.target,
                 active=active,
+                db=db,
+                spell_id=spell_id,
+                slot_level=slot_level,
             )
 
             active.turn_number += 1
@@ -476,13 +528,17 @@ class AIPlayerManager:
     async def _get_action(
         agent: Any,
         active: "ActiveSession",
+        available_actions: Optional[list[str]] = None,
     ) -> PlayerActionChoice:
         """Ask the agent for an action based on the current game phase."""
         from app.models.session import SessionStatus
 
         try:
             if active.phase == SessionStatus.COMBAT:
-                return await agent.decide_action(game_state=active.state_data)
+                return await agent.decide_action(
+                    game_state=active.state_data,
+                    available_actions=available_actions,
+                )
             else:
                 return await agent.roleplay(game_state=active.state_data)
         except Exception as exc:
@@ -498,3 +554,296 @@ class AIPlayerManager:
                 inner_reasoning=_WAIT_ACTION.inner_reasoning,
                 llm_error=f"{type(exc).__name__}: {exc}",
             )
+
+    @classmethod
+    def _available_combat_actions(
+        cls,
+        character_id: str,
+        state_data: dict[str, Any],
+    ) -> list[str]:
+        actions = ["attack"]
+        if cls._has_castable_spell(character_id, state_data):
+            actions.append("cast_spell")
+        actions.extend(["dodge", "wait"])
+        return actions
+
+    @classmethod
+    def _has_castable_spell(cls, character_id: str, state_data: dict[str, Any]) -> bool:
+        cdata = cls._character_data(character_id, state_data)
+        known_spells = cdata.get("known_spells", [])
+        if not isinstance(known_spells, list) or not known_spells:
+            return False
+        try:
+            from app.game.action_resolver import _load_spells
+            spells = _load_spells()
+        except Exception:
+            return False
+        for spell_id in known_spells:
+            spell = spells.get(str(spell_id))
+            if not spell:
+                continue
+            if int(spell.get("level", 0)) == 0:
+                return True
+            if cls._slot_level_available(cdata.get("spell_slots", {}), int(spell["level"])):
+                return True
+        return False
+
+    @classmethod
+    def _normalize_combat_action(
+        cls,
+        action: PlayerActionChoice,
+        character_id: str,
+        state_data: dict[str, Any],
+        available_actions: list[str],
+    ) -> tuple[PlayerActionChoice, Optional[str], Optional[int]]:
+        if action.action_type not in set(available_actions):
+            return (
+                cls._build_fallback_combat_action(
+                    character_id,
+                    cls._character_data(character_id, state_data).get("name", character_id),
+                    state_data,
+                    available_actions,
+                ),
+                None,
+                None,
+            )
+
+        if action.action_type != "cast_spell":
+            return action, None, None
+
+        spell_choice = cls._resolve_spell_choice(action, character_id, state_data)
+        if spell_choice is None:
+            return (
+                cls._build_fallback_combat_action(
+                    character_id,
+                    cls._character_data(character_id, state_data).get("name", character_id),
+                    state_data,
+                    available_actions,
+                ),
+                None,
+                None,
+            )
+
+        spell_id, spell_name, slot_level = spell_choice
+        action.params["spell_id"] = spell_id
+        action.params["spell_name"] = spell_name
+        if action.target is None:
+            action.target = cls._select_default_enemy_target(character_id, state_data)
+        return action, spell_id, slot_level
+
+    @classmethod
+    def _resolve_spell_choice(
+        cls,
+        action: PlayerActionChoice,
+        character_id: str,
+        state_data: dict[str, Any],
+    ) -> Optional[tuple[str, str, int]]:
+        cdata = cls._character_data(character_id, state_data)
+        known_spells = cdata.get("known_spells", [])
+        if not isinstance(known_spells, list) or not known_spells:
+            return None
+
+        raw_spell = (
+            action.params.get("spell_id")
+            or action.params.get("spell_name")
+            or action.action_description
+        )
+        if not raw_spell:
+            return None
+
+        try:
+            from app.game.action_resolver import _load_spells
+            spells = _load_spells()
+        except Exception:
+            return None
+
+        wanted = cls._normalize_text(raw_spell)
+        known_ids = {str(s) for s in known_spells}
+        for spell_id in known_ids:
+            spell = spells.get(spell_id)
+            if not spell:
+                continue
+            aliases = [
+                spell_id,
+                spell.get("name", ""),
+                spell.get("name_fr", ""),
+            ]
+            if not any(
+                cls._normalize_text(alias) in wanted
+                or wanted in cls._normalize_text(alias)
+                for alias in aliases
+                if alias
+            ):
+                continue
+
+            spell_level = int(spell.get("level", 0))
+            if spell_level == 0:
+                spell_name = str(spell.get("name_fr") or spell.get("name") or spell_id)
+                return spell_id, spell_name, 0
+
+            slot_level = cls._choose_slot_level(
+                cdata.get("spell_slots", {}),
+                spell_level,
+                requested=action.params.get("slot_level") or action.params.get("level"),
+            )
+            if slot_level is None:
+                return None
+            spell_name = str(spell.get("name_fr") or spell.get("name") or spell_id)
+            return spell_id, spell_name, slot_level
+
+        return None
+
+    @classmethod
+    def _build_fallback_combat_action(
+        cls,
+        character_id: str,
+        character_name: str,
+        state_data: dict[str, Any],
+        available_actions: list[str],
+    ) -> PlayerActionChoice:
+        target = cls._select_default_enemy_target(character_id, state_data)
+        target_name = cls._combatant_name(state_data, target)
+        if target and "attack" in available_actions:
+            return PlayerActionChoice(
+                action_type="attack",
+                action_description=f"Attaque {target_name}",
+                target=target,
+                params={},
+                roleplay_text=f"{character_name} reprend l'initiative et attaque {target_name}.",
+                inner_reasoning="Fallback combat : attaque fiable sur une cible hostile active.",
+            )
+        if "dodge" in available_actions:
+            return PlayerActionChoice(
+                action_type="dodge",
+                action_description="Se met en défense",
+                roleplay_text=f"{character_name} se remet en garde.",
+                inner_reasoning="Fallback combat : aucune cible hostile active.",
+            )
+        return PlayerActionChoice(
+            action_type="wait",
+            action_description=_WAIT_ACTION.action_description,
+            roleplay_text=_WAIT_ACTION.roleplay_text,
+            inner_reasoning=_WAIT_ACTION.inner_reasoning,
+        )
+
+    @staticmethod
+    def _character_data(character_id: str, state_data: dict[str, Any]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        characters = state_data.get("characters", {})
+        if isinstance(characters, dict):
+            cdata = characters.get(character_id)
+            if isinstance(cdata, dict):
+                result.update(cdata)
+        combatants = state_data.get("combatants", {})
+        if isinstance(combatants, dict):
+            cdata = combatants.get(character_id)
+            if isinstance(cdata, dict):
+                result.setdefault("name", cdata.get("name", character_id))
+                result["current_hp"] = cdata.get(
+                    "hp",
+                    result.get("current_hp", result.get("hp", 1)),
+                )
+                result.setdefault("hp", result["current_hp"])
+                result.setdefault("hp_max", cdata.get("hp_max"))
+                result.setdefault("conditions", cdata.get("conditions", []))
+                result.setdefault("status", cdata.get("status", "active"))
+        return result
+
+    @classmethod
+    def _character_can_act(cls, character_id: str, state_data: dict[str, Any]) -> bool:
+        cdata = cls._character_data(character_id, state_data)
+        if str(cdata.get("status", "active")).lower() in _INACTIVE_NPC_STATUSES:
+            return False
+        try:
+            hp = int(cdata.get("current_hp", cdata.get("hp", 1)))
+        except (TypeError, ValueError):
+            hp = 1
+        return hp > 0
+
+    @staticmethod
+    def _normalize_text(value: Any) -> str:
+        normalized = unicodedata.normalize("NFKD", str(value).lower())
+        without_accents = "".join(
+            ch for ch in normalized if not unicodedata.combining(ch)
+        )
+        return re.sub(r"[^a-z0-9_]+", " ", without_accents).strip()
+
+    @classmethod
+    def _choose_slot_level(
+        cls,
+        spell_slots: Any,
+        minimum_level: int,
+        requested: Any = None,
+    ) -> Optional[int]:
+        if requested is not None:
+            try:
+                requested_level = max(minimum_level, int(requested))
+            except (TypeError, ValueError):
+                requested_level = minimum_level
+            if cls._slot_level_available(spell_slots, requested_level):
+                return requested_level
+
+        for level in range(minimum_level, 10):
+            if cls._slot_level_available(spell_slots, level):
+                return level
+        return None
+
+    @staticmethod
+    def _slot_level_available(spell_slots: Any, level: int) -> bool:
+        if not isinstance(spell_slots, dict):
+            return False
+        slot = spell_slots.get(str(level), spell_slots.get(level))
+        if isinstance(slot, dict):
+            try:
+                return int(slot.get("total", 0)) - int(slot.get("used", 0)) > 0
+            except (TypeError, ValueError):
+                return False
+        try:
+            return int(slot) > 0
+        except (TypeError, ValueError):
+            return False
+
+    @classmethod
+    def _select_default_enemy_target(
+        cls,
+        character_id: str,
+        state_data: dict[str, Any],
+    ) -> Optional[str]:
+        combatants = state_data.get("combatants", {})
+        if not isinstance(combatants, dict):
+            return None
+        characters = state_data.get("characters", {})
+        character_ids = set(characters) if isinstance(characters, dict) else set()
+        candidates: list[tuple[int, str]] = []
+        for cid, cdata in combatants.items():
+            if cid == character_id or not isinstance(cdata, dict):
+                continue
+            is_enemy = cdata.get("is_player") is False or (
+                cdata.get("is_player") is not True and cid not in character_ids
+            )
+            if not is_enemy:
+                continue
+            if str(cdata.get("status", "active")).lower() in _INACTIVE_NPC_STATUSES:
+                continue
+            try:
+                hp = int(cdata.get("hp", 0))
+            except (TypeError, ValueError):
+                hp = 0
+            if hp <= 0:
+                continue
+            candidates.append((hp, str(cid)))
+        if not candidates:
+            return None
+        candidates.sort(key=lambda item: (item[0], item[1]))
+        return candidates[0][1]
+
+    @staticmethod
+    def _combatant_name(state_data: dict[str, Any], target: Optional[str]) -> str:
+        if target is None:
+            return "la cible"
+        combatants = state_data.get("combatants", {})
+        if isinstance(combatants, dict):
+            cdata = combatants.get(target, {})
+            if isinstance(cdata, dict) and cdata.get("name"):
+                return str(cdata["name"])
+        return target

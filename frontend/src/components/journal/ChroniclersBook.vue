@@ -18,11 +18,6 @@ const KIND_COLOR: Record<string, string> = {
 
 <template>
   <div class="px-5 py-4">
-    <div class="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em]" style="color: var(--color-gold)">
-      <span>◉ Carnet du chroniqueur</span>
-      <span v-if="chronicle.length" class="font-mono text-[11px]">[{{ chronicle.length }}]</span>
-    </div>
-
     <div
       v-if="!chronicle.length"
       class="py-4 text-center text-[12px] italic"

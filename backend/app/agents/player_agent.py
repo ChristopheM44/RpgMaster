@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 _NON_JSON_LLM_ERROR = "Réponse LLM non parsable (JSON manquant)."
 
 _ELLIPSIS_ONLY_RESPONSES = {"...", "…"}
+_INACTIVE_NPC_STATUSES = {"defeated", "surrendered", "fled"}
 
 _ACTION_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
@@ -210,6 +211,7 @@ class PlayerAgent(BaseAgent):
         """
         actions_list = available_actions or list(PLAYER_ACTION_TYPES)
         character_data = self._extract_character(game_state)
+        prompt_game_state = self._compact_combat_state(game_state)
 
         user_prompt = self._render_prompt(
             "player_decide.txt",
@@ -217,7 +219,7 @@ class PlayerAgent(BaseAgent):
                 "character_name": self._character_name,
                 "character_data": json.dumps(character_data, ensure_ascii=False, indent=2),
                 "personality_description": _describe_personality(self._personality),
-                "game_state": json.dumps(game_state, ensure_ascii=False, indent=2),
+                "game_state": json.dumps(prompt_game_state, ensure_ascii=False, indent=2),
                 "available_actions": ", ".join(actions_list),
                 "recent_messages": self._format_messages(messages),
             },
@@ -374,7 +376,7 @@ class PlayerAgent(BaseAgent):
             data = await self._repair_json_response(raw)
 
         if data is None:
-            data = self._recover_partial_json_response(raw)
+            data = self._recover_partial_json_response(raw, game_state=game_state or {})
 
         if data is None:
             data = self._recover_structured_text_response(raw)
@@ -458,7 +460,12 @@ class PlayerAgent(BaseAgent):
             return None
         return self._extract_json(repaired, log_failure=False)
 
-    def _recover_partial_json_response(self, raw: str) -> Optional[dict[str, Any]]:
+    def _recover_partial_json_response(
+        self,
+        raw: str,
+        *,
+        game_state: Optional[dict[str, Any]] = None,
+    ) -> Optional[dict[str, Any]]:
         """Recover useful fields from a truncated JSON-like response.
 
         Local models sometimes stop mid-string after producing valid-looking
@@ -468,29 +475,49 @@ class PlayerAgent(BaseAgent):
         if "action_type" not in raw and "roleplay_text" not in raw:
             return None
 
-        def _field(name: str) -> Optional[str]:
-            match = re.search(rf'"{name}"\s*:\s*"((?:[^"\\]|\\.)*)', raw, re.DOTALL)
+        def _field(name: str) -> tuple[Optional[str], bool]:
+            complete = re.search(
+                rf'"{name}"\s*:\s*"((?:[^"\\]|\\.)*)"',
+                raw,
+                re.DOTALL,
+            )
+            match = complete or re.search(
+                rf'"{name}"\s*:\s*"((?:[^"\\]|\\.)*)',
+                raw,
+                re.DOTALL,
+            )
             if not match:
-                return None
+                return None, False
             try:
-                return json.loads(f'"{match.group(1)}"')
+                return json.loads(f'"{match.group(1)}"'), complete is not None
             except json.JSONDecodeError:
-                return match.group(1).replace('\\"', '"').replace("\\n", "\n")
+                return (
+                    match.group(1).replace('\\"', '"').replace("\\n", "\n"),
+                    complete is not None,
+                )
 
-        action_type = _field("action_type")
-        action_description = _field("action_description")
-        roleplay_text = _field("roleplay_text")
-        target = _field("target")
-        inner_reasoning = _field("inner_reasoning")
+        action_type, _ = _field("action_type")
+        action_description, _ = _field("action_description")
+        roleplay_text, roleplay_complete = _field("roleplay_text")
+        target, _ = _field("target")
+        inner_reasoning, _ = _field("inner_reasoning")
 
         if not any([action_type, action_description, roleplay_text, target, inner_reasoning]):
             return None
 
-        roleplay_source = (
-            roleplay_text
-            or action_description
-            or "Le personnage réagit prudemment."
-        )
+        if roleplay_text and roleplay_complete:
+            roleplay_source = roleplay_text
+        else:
+            logger.warning(
+                "PlayerAgent[%s] : réponse JSON tronquée récupérée sans texte affichable complet.",
+                self._character_name,
+            )
+            roleplay_source = self._safe_recovered_roleplay(
+                action_type,
+                action_description,
+                target,
+                game_state or {},
+            )
         return {
             "action_type": action_type or "wait",
             "action_description": action_description or "Le personnage réagit prudemment.",
@@ -752,6 +779,10 @@ class PlayerAgent(BaseAgent):
 
     @classmethod
     def _is_alive_combatant(cls, cdata: Any) -> bool:
+        if isinstance(cdata, dict):
+            status = str(cdata.get("status", "active")).lower()
+            if status in _INACTIVE_NPC_STATUSES:
+                return False
         hp = cls._combatant_hp(cdata)
         return hp is None or hp > 0
 
@@ -813,6 +844,64 @@ class PlayerAgent(BaseAgent):
             return f"{action_type} {target_name}"
         return raw.strip()[:160] or f"Action {action_type}"
 
+    def _compact_combat_state(self, game_state: dict[str, Any]) -> dict[str, Any]:
+        """Return a small combat prompt state while preserving full state for parsing."""
+        combatants = game_state.get("combatants", {})
+        if not isinstance(combatants, dict):
+            return game_state
+
+        characters = game_state.get("characters", {})
+        character_ids = set(characters) if isinstance(characters, dict) else set()
+        allies: list[dict[str, Any]] = []
+        enemies: list[dict[str, Any]] = []
+
+        for cid, cdata in combatants.items():
+            if not isinstance(cdata, dict):
+                continue
+            status = str(cdata.get("status", "active")).lower()
+            try:
+                hp = int(cdata.get("hp", cdata.get("current_hp", 0)))
+            except (TypeError, ValueError):
+                hp = 0
+            entry = {
+                "id": cid,
+                "name": cdata.get("name", cid),
+                "hp": hp,
+                "hp_max": cdata.get("hp_max"),
+                "ac": cdata.get("ac"),
+                "status": status,
+                "conditions": cdata.get("conditions", []),
+            }
+            if cdata.get("is_player") is True or cid in character_ids:
+                allies.append(entry)
+            elif hp > 0 and status not in _INACTIVE_NPC_STATUSES:
+                enemies.append(entry)
+
+        return {
+            "phase": game_state.get("phase", "COMBAT"),
+            "round": game_state.get("round_number"),
+            "self_id": self._character_id,
+            "allies": allies,
+            "enemies": enemies,
+        }
+
+    def _safe_recovered_roleplay(
+        self,
+        action_type: Optional[str],
+        action_description: Optional[str],
+        target: Optional[str],
+        game_state: dict[str, Any],
+    ) -> str:
+        target_name = self._combatant_name(game_state, target)
+        clean_description = (action_description or "").strip().rstrip(".!?")
+        if action_type == "attack" and target:
+            return f"{self._character_name} reprend l'initiative et attaque {target_name}."
+        if action_type == "cast_spell" and target:
+            return f"{self._character_name} concentre sa magie vers {target_name}."
+        if clean_description:
+            return f"{self._character_name} agit avec prudence : {clean_description}."
+        return f"{self._character_name} se remet en garde."
+
     def _build_messages(
         self,
         user_prompt: str,
@@ -868,7 +957,22 @@ class PlayerAgent(BaseAgent):
     def _extract_character(self, game_state: dict[str, Any]) -> dict[str, Any]:
         """Extrait les données du personnage depuis le game_state."""
         characters = game_state.get("characters", {})
-        return characters.get(self._character_id, {})
+        character = characters.get(self._character_id, {}) if isinstance(characters, dict) else {}
+        result = dict(character) if isinstance(character, dict) else {}
+        combatants = game_state.get("combatants", {})
+        if isinstance(combatants, dict):
+            cdata = combatants.get(self._character_id, {})
+            if isinstance(cdata, dict):
+                result.setdefault("name", cdata.get("name", self._character_name))
+                result["current_hp"] = cdata.get(
+                    "hp",
+                    result.get("current_hp", result.get("hp", 1)),
+                )
+                result.setdefault("max_hp", cdata.get("hp_max"))
+                result.setdefault("conditions", cdata.get("conditions", []))
+        if "current_hp" not in result and "hp" in result:
+            result["current_hp"] = result["hp"]
+        return result
 
     @staticmethod
     def _format_messages(messages: Optional[list]) -> str:

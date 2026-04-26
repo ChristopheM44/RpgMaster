@@ -220,6 +220,7 @@ def _build_session_state_payload(session_id: str) -> dict[str, Any]:
 
 
 _ARMOR_CATS = {"light", "medium", "heavy"}
+_INACTIVE_NPC_STATUSES = {"defeated", "surrendered", "fled"}
 _MONSTER_TYPE_COLORS = {
     "aberration": "#8f5cf7",
     "beast": "#7f8a78",
@@ -298,6 +299,8 @@ def _character_snapshot(char: Character) -> dict[str, Any]:
         "ability_scores": dict(char.ability_scores),
         "skill_proficiencies": list(char.proficiencies.get("skills", [])),
         "save_proficiencies": list(char.proficiencies.get("saving_throws", [])),
+        "spell_slots": dict(char.spell_slots or {}),
+        "known_spells": list(char.known_spells or []),
         "dex": int(char.ability_scores.get("dex", 10)),
         "str": int(char.ability_scores.get("str", 10)),
         "equipment": list(char.equipment or []),
@@ -393,6 +396,7 @@ def _build_combat_start_payload(active: Any) -> dict[str, Any]:
             "is_ai": entry.get("is_ai_controlled", False) if is_player else True,
             "is_ai_controlled": is_ai_controlled,
             "conditions": info.get("conditions", []),
+            "status": info.get("status", "active"),
             "is_active": (i == current_idx),
             "position": grid_positions.get(cid, {"col": 0, "row": 0}),
             "death_saves": info.get("death_saves"),
@@ -494,28 +498,103 @@ async def _auto_death_save(
     )
 
 
-async def _remove_dead_combatants(session_id: str, active: Any) -> None:
-    """Remove NPCs with hp <= 0 from the turn order and broadcast narration."""
+def _combat_end_reason_from_removed(removed: list[dict[str, Any]]) -> str:
+    statuses = {str(item.get("status", "defeated")) for item in removed}
+    if not statuses:
+        return "victory"
+    if statuses == {"surrendered"}:
+        return "surrender"
+    if statuses == {"fled"}:
+        return "fled"
+    if statuses & {"surrendered", "fled"}:
+        return "resolved"
+    return "victory"
+
+
+def _combat_end_text(reason: str) -> str:
+    if reason == "surrender":
+        return "Le dernier adversaire se rend. Le combat prend fin et le calme revient."
+    if reason == "fled":
+        return "Les derniers adversaires prennent la fuite. Le combat prend fin."
+    if reason == "resolved":
+        return "La menace est neutralisée. Le combat prend fin."
+    return "Victoire ! Tous les ennemis ont été vaincus. Le calme revient."
+
+
+async def _cleanup_inactive_npcs(session_id: str, active: Any) -> list[dict[str, Any]]:
+    """Remove defeated, surrendered, or fled NPCs from initiative and grid state."""
     combatants: dict[str, Any] = active.state_data.get("combatants", {})
-    dead_ids = [
-        cid
-        for cid, cdata in combatants.items()
-        if int(cdata.get("hp", 1)) <= 0 and not cdata.get("is_player", True)
-    ]
-    for cid in dead_ids:
+    grid_positions: dict[str, Any] = active.state_data.get("grid_positions", {})
+    removed_entries: list[dict[str, Any]] = []
+
+    for cid, cdata in list(combatants.items()):
+        if cdata.get("is_player", True):
+            continue
+
+        status = str(cdata.get("status", "active")).lower()
+        try:
+            hp = int(cdata.get("hp", 1))
+        except (TypeError, ValueError):
+            hp = 1
+
+        if hp <= 0 and status == "active":
+            status = "defeated"
+            cdata["status"] = status
+            await event_bus.publish_to_session(
+                session_id,
+                EventType.COMBATANT_STATUS_CHANGED,
+                {
+                    "combatant_id": cid,
+                    "combatant_name": cdata.get("name", cid),
+                    "status": status,
+                    "reason": "hp_zero",
+                },
+                source="ws_game",
+            )
+
+        if status not in _INACTIVE_NPC_STATUSES:
+            continue
+
         removed = active.turn_manager.remove_combatant(cid)
         if removed:
-            name = combatants[cid].get("name", cid)
+            name = cdata.get("name", cid)
+            grid_positions.pop(cid, None)
             await event_bus.publish_to_session(
                 session_id,
                 EventType.NARRATION,
-                {"text": f"{name} a été vaincu !", "speaker": "Maître du Jeu"},
+                {"text": _npc_removed_text(name, status), "speaker": "Maître du Jeu"},
                 source="ws_game",
             )
+            await event_bus.publish_to_session(
+                session_id,
+                EventType.COMBATANT_REMOVED,
+                {
+                    "combatant_id": cid,
+                    "combatant_name": name,
+                    "status": status,
+                },
+                source="ws_game",
+            )
+            removed_entries.append({"combatant_id": cid, "name": name, "status": status})
             active.mark_dirty()
 
+    return removed_entries
 
-async def _handle_combat_end(session_id: str, active: Any, db: AsyncSession) -> None:
+
+def _npc_removed_text(name: str, status: str) -> str:
+    if status == "surrendered":
+        return f"{name} se rend et quitte l'initiative."
+    if status == "fled":
+        return f"{name} fuit le combat !"
+    return f"{name} a été vaincu !"
+
+
+async def _handle_combat_end(
+    session_id: str,
+    active: Any,
+    db: AsyncSession,
+    reason: str = "victory",
+) -> None:
     """Wrap up combat: transition to EXPLORATION and notify clients."""
     active.turn_manager.reset()
     active.phase = SessionStatus.EXPLORATION
@@ -531,7 +610,7 @@ async def _handle_combat_end(session_id: str, active: Any, db: AsyncSession) -> 
     await event_bus.publish_to_session(
         session_id,
         EventType.COMBAT_END,
-        {"reason": "victory"},
+        {"reason": reason},
         source="ws_game",
     )
     await event_bus.publish_to_session(
@@ -540,7 +619,7 @@ async def _handle_combat_end(session_id: str, active: Any, db: AsyncSession) -> 
         {"phase": SessionStatus.EXPLORATION.value},
         source="ws_game",
     )
-    victory_text = "Victoire ! Tous les ennemis ont été vaincus. Le calme revient."
+    victory_text = _combat_end_text(reason)
     await event_bus.publish_to_session(
         session_id,
         EventType.NARRATION,
@@ -651,6 +730,7 @@ async def _handle_start_combat(
             "hp_max": int(cdata.get("hp_max", 10)),
             "is_player": True,
             "is_ai": bool(cdata.get("is_ai", False)),
+            "status": "active",
             "ac": _compute_ac_from_equipment(char_equipment, dex_mod),
             "attack_bonus": 3,
             "damage_notation": "1d6+2",
@@ -679,6 +759,7 @@ async def _handle_start_combat(
             "hp_max": npc["hp_max"],
             "is_player": False,
             "is_ai": True,
+            "status": "active",
             "monster_id": monster_id_base,
             "ac": npc["ac"],
             "attack_bonus": npc["attack_bonus"],
@@ -779,11 +860,16 @@ async def _handle_end_turn(session_id: str, active: Any, db: AsyncSession) -> No
 
     await _sync_ai_control_from_db(session_id, active, db)
 
-    # Remove any newly-dead NPCs before advancing
-    await _remove_dead_combatants(session_id, active)
+    # Remove defeated, surrendered, or fled NPCs before advancing.
+    removed_npcs = await _cleanup_inactive_npcs(session_id, active)
 
     if active.turn_manager.all_npcs_removed():
-        await _handle_combat_end(session_id, active, db)
+        await _handle_combat_end(
+            session_id,
+            active,
+            db,
+            reason=_combat_end_reason_from_removed(removed_npcs),
+        )
         return
 
     next_entry = active.turn_manager.next_turn()
@@ -845,13 +931,27 @@ async def _handle_ai_turns(session_id: str, active: Any, db: AsyncSession) -> No
             # AI companion: delegate to AIPlayerManager (handles its own next_turn() loop)
             from app.game.ai_player_manager import AIPlayerManager
             ai_manager = AIPlayerManager()
-            await ai_manager.process_ai_turns(session_id, active, action_resolver)
+            await ai_manager.process_ai_turns(session_id, active, action_resolver, db=db)
+            removed_npcs = await _cleanup_inactive_npcs(session_id, active)
+            if active.turn_manager.all_npcs_removed():
+                await _handle_combat_end(
+                    session_id,
+                    active,
+                    db,
+                    reason=_combat_end_reason_from_removed(removed_npcs),
+                )
+                return
             # Continue the loop: the next AI-controlled entry may be a monster,
             # which is resolved below by the deterministic monster branch.
             continue
 
         # Enemy monster: deterministic mechanical resolution first, then GM prose narration
         combatants_info: dict[str, Any] = active.state_data.get("combatants", {})
+        monster_info = combatants_info.get(current.combatant_id, {})
+        if str(monster_info.get("status", "active")).lower() in _INACTIVE_NPC_STATUSES:
+            active.turn_manager.remove_combatant(current.combatant_id)
+            active.mark_dirty()
+            continue
 
         # Pick target: first alive player
         target_id: Optional[str] = None
@@ -864,7 +964,6 @@ async def _handle_ai_turns(session_id: str, active: Any, db: AsyncSession) -> No
                 target_ac = int(cdata.get("ac", 10))
                 break
 
-        monster_info = combatants_info.get(current.combatant_id, {})
         attack_bonus = int(monster_info.get("attack_bonus", 0))
         damage_notation = monster_info.get("damage_notation", "1d4")
 
@@ -971,10 +1070,15 @@ async def _handle_ai_turns(session_id: str, active: Any, db: AsyncSession) -> No
             source="ws_game",
         )
 
-        # Check for newly dead combatants after monster action
-        await _remove_dead_combatants(session_id, active)
+        # Check for newly inactive combatants after monster action
+        removed_npcs = await _cleanup_inactive_npcs(session_id, active)
         if active.turn_manager.all_npcs_removed():
-            await _handle_combat_end(session_id, active, db)
+            await _handle_combat_end(
+                session_id,
+                active,
+                db,
+                reason=_combat_end_reason_from_removed(removed_npcs),
+            )
             return
 
         # Advance past the monster's turn
@@ -1570,11 +1674,18 @@ async def _handle_trigger_ai_reactions(
         current = active.turn_manager.current_turn
         if current is None or not current.is_ai_controlled:
             return
-        # Reuse the standard combat loop — handled without db for read-only path;
-        # save_state inside may need db, so acquire a fresh session at caller site.
-        # Here we just delegate to the AIPlayerManager which uses action_resolver.
         from app.game.ai_player_manager import AIPlayerManager
-        await AIPlayerManager().process_ai_turns(session_id, active, action_resolver)
+        await AIPlayerManager().process_ai_turns(session_id, active, action_resolver, db=db)
+        removed_npcs = await _cleanup_inactive_npcs(session_id, active)
+        if active.turn_manager.all_npcs_removed():
+            await _handle_combat_end(
+                session_id,
+                active,
+                db,
+                reason=_combat_end_reason_from_removed(removed_npcs),
+            )
+            return
+        await session_manager.save_state(session_id, db)
         await event_bus.publish_to_session(
             session_id,
             EventType.SESSION_STATE,
@@ -1722,11 +1833,16 @@ async def _dispatch_action(
         await _handle_start_combat(session_id, active, db, encounter_id=None)
         return
 
-    # After resolution: check for dead NPC combatants
+    # After resolution: check for inactive NPC combatants
     if active.phase == SessionStatus.COMBAT:
-        await _remove_dead_combatants(session_id, active)
+        removed_npcs = await _cleanup_inactive_npcs(session_id, active)
         if active.turn_manager.all_npcs_removed():
-            await _handle_combat_end(session_id, active, db)
+            await _handle_combat_end(
+                session_id,
+                active,
+                db,
+                reason=_combat_end_reason_from_removed(removed_npcs),
+            )
             return
         # Auto-advance turn: one action = end of turn
         await _handle_end_turn(session_id, active, db)

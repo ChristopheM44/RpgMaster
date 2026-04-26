@@ -286,8 +286,12 @@ function onStabilize(targetId: string) {
       >{{ isCombatImmersive ? 'Lancer ↵' : 'Envoyer ↵' }}</button>
     </div>
 
-    <!-- Action chips row -->
-    <div class="mt-2.5 flex items-center gap-2 flex-wrap" :class="{ 'justify-between': isCombatImmersive }">
+    <!-- Action chips row (combat only) -->
+    <div
+      v-if="gameStore.isInCombat"
+      class="mt-2.5 flex items-center gap-2 flex-wrap"
+      :class="{ 'justify-between': isCombatImmersive }"
+    >
       <!-- Death save -->
       <template v-if="isDowned && isMyTurn">
         <button class="rpg-btn-tonal tone-blood !py-1 !text-[11px]" :disabled="!canSend" @click="onDeathSave">
@@ -298,14 +302,14 @@ function onStabilize(targetId: string) {
         </button>
       </template>
 
-      <!-- Normal actions (combat or exploration) -->
+      <!-- Combat actions -->
       <template v-else-if="!isDowned">
         <button
           v-for="action in combatActions"
           :key="action.type"
           class="rpg-btn-tonal !py-1 !text-[11px]"
-          :class="[action.tone, (gameStore.isInCombat && !isMyTurn) ? 'opacity-40 !cursor-not-allowed' : '']"
-          :disabled="gameStore.isInCombat && !isMyTurn"
+          :class="[action.tone, !isMyTurn ? 'opacity-40 !cursor-not-allowed' : '']"
+          :disabled="!isMyTurn"
           @click="onCombatAction(action.type)"
         >
           {{ action.icon }} {{ action.label }}

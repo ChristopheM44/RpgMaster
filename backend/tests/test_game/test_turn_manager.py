@@ -173,6 +173,22 @@ class TestRemoveCombatant:
         assert "goblin_1" not in ids
         assert len(manager._order) == 3
 
+    def test_removing_current_entry_keeps_turn_on_next_combatant(self, manager) -> None:
+        """Retirer le monstre courant ne doit pas rembobiner sur l'IA précédente."""
+        manager._order = [
+            TurnEntry("elara_1", "Elara", 18, True, True),
+            TurnEntry("goblin_1", "Gobelin 1", 12, False, True),
+            TurnEntry("goblin_2", "Gobelin 2", 10, False, True),
+            TurnEntry("aria_1", "Aria", 8, True, False),
+        ]
+        manager._mode = "combat"
+        manager._round = 1
+        manager._index = 1
+
+        assert manager.current_turn.combatant_id == "goblin_1"
+        assert manager.remove_combatant("goblin_1") is True
+        assert manager.current_turn.combatant_id == "goblin_2"
+
     def test_all_npcs_removed_after_removing_all_npcs(
         self, manager, all_combatants, seeded_rng
     ) -> None:

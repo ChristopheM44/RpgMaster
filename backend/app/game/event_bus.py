@@ -55,6 +55,8 @@ class EventType(str):
     COMBAT_END = "combat_end"
     COMBAT_ACTION = "combat_action"
     COMBATANT_MOVED = "combatant_moved"
+    COMBATANT_STATUS_CHANGED = "combatant_status_changed"
+    COMBATANT_REMOVED = "combatant_removed"
 
     # Session lifecycle
     PHASE_CHANGE = "phase_change"

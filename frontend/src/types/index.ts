@@ -266,6 +266,8 @@ export type WsEventType =
   | 'combat_end'
   | 'combat_action'
   | 'combatant_moved'
+  | 'combatant_status_changed'
+  | 'combatant_removed'
   | 'hp_changed'
   | 'condition_changed'
   | 'death_save_updated'
@@ -415,6 +417,19 @@ export interface CombatantMovedPayload {
   movement_used_m: number
 }
 
+export interface CombatantStatusChangedPayload {
+  combatant_id: string
+  combatant_name?: string
+  status: 'active' | 'defeated' | 'surrendered' | 'fled' | string
+  reason?: string
+}
+
+export interface CombatantRemovedPayload {
+  combatant_id: string
+  combatant_name?: string
+  status: 'defeated' | 'surrendered' | 'fled' | string
+}
+
 export interface DeathSaves {
   successes: number
   failures: number
@@ -428,6 +443,7 @@ export interface CombatantState {
   hp_current: number
   hp_max: number
   kind: 'pc' | 'monster'
+  status?: 'active' | 'defeated' | 'surrendered' | 'fled' | string
   conditions: string[]
   is_ai: boolean
   is_ai_controlled?: boolean

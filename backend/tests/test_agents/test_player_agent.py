@@ -381,6 +381,8 @@ async def test_decide_action_recovers_truncated_json_response(brave_agent: Playe
     assert action.action_type == "talk"
     assert action.target == "Aria"
     assert "Thorin" in action.roleplay_text
+    assert action.roleplay_text.endswith(".")
+    assert "prévient le groupe" not in action.roleplay_text
 
 
 async def test_decide_action_recovers_labeled_text_response(brave_agent: PlayerAgent) -> None:

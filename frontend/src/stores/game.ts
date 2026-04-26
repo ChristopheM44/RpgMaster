@@ -13,6 +13,7 @@ import type {
   HpChangedPayload,
   HistoryMessage,
   CombatActionPayload,
+  CombatantStatusChangedPayload,
   AdventureJournal,
   Quest,
   ChronicleEntry,
@@ -202,6 +203,24 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
+  function applyCombatantStatusChanged(payload: CombatantStatusChangedPayload) {
+    const idx = combatants.value.findIndex((c) => c.id === payload.combatant_id)
+    if (idx !== -1) {
+      combatants.value[idx] = { ...combatants.value[idx]!, status: payload.status }
+    }
+  }
+
+  function removeCombatant(id: string) {
+    combatants.value = combatants.value.filter((c) => c.id !== id)
+    if (selectedCombatantId.value === id) {
+      selectedCombatantId.value =
+        combatants.value.find((c) => c.is_active)?.id ?? combatants.value[0]?.id ?? null
+    }
+    if (currentTurnId.value === id) {
+      currentTurnId.value = combatants.value.find((c) => c.is_active)?.id ?? null
+    }
+  }
+
   function applyHpChanged(payload: HpChangedPayload) {
     const idx = combatants.value.findIndex((c) => c.id === payload.combatant_id)
     if (idx !== -1) {
@@ -365,6 +384,8 @@ export const useGameStore = defineStore('game', () => {
     setSelectedCombatant,
     setGridConfig,
     moveCombatant,
+    applyCombatantStatusChanged,
+    removeCombatant,
     applyHpChanged,
     applyConditionChanged,
     applyDeathSaveUpdated,

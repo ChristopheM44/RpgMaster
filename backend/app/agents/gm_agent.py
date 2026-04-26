@@ -152,6 +152,15 @@ class GMAgent(BaseAgent):
         roll_results: list[dict[str, Any]],
     ) -> str:
         """Narre l'issue d'un ou plusieurs jets de dés après résolution par le moteur."""
+        gm_resp = await self.narrate_outcome_response(context, roll_results)
+        return gm_resp.narration
+
+    async def narrate_outcome_response(
+        self,
+        context: AgentContext,
+        roll_results: list[dict[str, Any]],
+    ) -> GMResponse:
+        """Narre l'issue de jets et conserve les actions mécaniques éventuelles."""
         rolls_text = "\n".join(
             "- {label}: {breakdown} → {outcome}".format(
                 label=r.get("label", "Jet"),
@@ -173,8 +182,7 @@ class GMAgent(BaseAgent):
                 "roll_results": rolls_text,
             },
         )
-        gm_resp = await self._call_and_parse(user_prompt, None)
-        return gm_resp.narration
+        return await self._call_and_parse(user_prompt, None)
 
     # -------------------------------------------------------------------------
     # Helpers privés

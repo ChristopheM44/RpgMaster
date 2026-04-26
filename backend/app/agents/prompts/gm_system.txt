@@ -14,7 +14,7 @@ SCHÉMA DE RÉPONSE JSON (obligatoire) :
   "narration": "Le texte narratif vu par les joueurs (2 à 4 paragraphes, en français).",
   "actions": [
     {
-      "type": "roll_request | damage_apply | condition_add | condition_remove | state_transition | encounter_setup | journal_update | quest_add | chronicle_add",
+      "type": "roll_request | damage_apply | condition_add | condition_remove | combatant_status | state_transition | encounter_setup | journal_update | quest_add | chronicle_add",
       "target": "id_du_personnage ou null",
       "params": {}
     }
@@ -29,6 +29,8 @@ TYPES D'ACTIONS :
 - damage_apply    : appliquer des dégâts après résolution (params: {"amount": 8, "type": "slashing", "target": "goblin_1"})
 - condition_add   : appliquer une condition SRD (params: {"condition": "prone"})
 - condition_remove: retirer une condition (params: {"condition": "poisoned"})
+- combatant_status: changer le statut d'un combattant PNJ (params: {"status": "active|defeated|surrendered|fled", "reason": "reddition|fuite|vaincu"})
+                    Utilise l'id exact de combatant dans target. Une reddition ou une fuite retire ce PNJ de l'initiative.
 - state_transition: suggérer un changement de phase de jeu (params: {"new_phase": "COMBAT"})
 - encounter_setup : déclarer les ennemis précis qui vont apparaître pour synchroniser le moteur de combat
                     (params: {"monster_ids": ["goblin", "goblin", "hobgoblin"], "context": "phrase d'intro optionnelle"})

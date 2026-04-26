@@ -209,6 +209,113 @@ class TestPlayerAction:
             assert exploration_seen
             assert active.phase == SessionStatus.EXPLORATION
 
+    def test_surrendered_last_bandit_ends_combat(self, ws_client) -> None:
+        from unittest.mock import AsyncMock, MagicMock
+
+        from app.agents.schemas import AgentResponse, GMAction, GMResponse
+        from app.api import ws_game
+        from app.game.action_resolver import ActionResolver
+        from app.game.turn_manager import TurnEntry
+        from app.models.session import SessionStatus
+
+        session_id = _create_session(ws_client)
+        mock_gm = MagicMock()
+        mock_gm.think = AsyncMock(return_value=AgentResponse(
+            content="Le bandit hésite, son arme tremblante à la main.",
+            actions=[
+                GMAction(
+                    type="roll_request",
+                    target="hero-1",
+                    params={"ability": "cha", "type": "check", "dc": 1},
+                )
+            ],
+        ))
+        mock_gm.narrate_outcome_response = AsyncMock(return_value=GMResponse(
+            narration="Le bandit laisse tomber son cimeterre et lève les mains.",
+            actions=[
+                GMAction(
+                    type="combatant_status",
+                    target="bandit_1",
+                    params={"status": "surrendered", "reason": "reddition"},
+                )
+            ],
+        ))
+        previous_resolver = ws_game.action_resolver
+        ws_game.action_resolver = ActionResolver(gm_agent=mock_gm)
+
+        try:
+            with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
+                ws.receive_json()  # session_state
+
+                active = ws_game.session_manager.get_session(session_id)
+                assert active is not None
+                active.phase = SessionStatus.COMBAT
+                active.state_data["phase"] = "COMBAT"
+                active.state_data["characters"] = {
+                    "hero-1": {
+                        "name": "Thorvald",
+                        "level": 1,
+                        "hp": 10,
+                        "hp_max": 10,
+                        "ability_scores": {"cha": 16},
+                        "is_ai": False,
+                        "equipment": [],
+                    }
+                }
+                active.state_data["combatants"] = {
+                    "hero-1": {
+                        "name": "Thorvald",
+                        "hp": 10,
+                        "hp_max": 10,
+                        "is_player": True,
+                        "is_ai": False,
+                        "ac": 18,
+                    },
+                    "bandit_1": {
+                        "name": "Bandit 1",
+                        "hp": 7,
+                        "hp_max": 7,
+                        "is_player": False,
+                        "is_ai": True,
+                        "status": "active",
+                        "ac": 12,
+                    },
+                }
+                active.turn_manager._order = [
+                    TurnEntry("hero-1", "Thorvald", 15, True, False),
+                    TurnEntry("bandit_1", "Bandit 1", 10, False, True),
+                ]
+                active.turn_manager._index = 0
+                active.turn_manager._mode = "combat"
+                active.turn_manager._round = 1
+
+                ws.send_json({
+                    "type": "action",
+                    "action_type": "free_text",
+                    "content": "Rends-toi bandit.",
+                    "character_id": "hero-1",
+                })
+
+                events = []
+                for _ in range(18):
+                    evt = ws.receive_json()
+                    events.append(evt)
+                    if evt["event_type"] == "session_state" and evt["payload"]["phase"] == "exploration":
+                        break
+
+            event_types = [evt["event_type"] for evt in events]
+            assert "combatant_status_changed" in event_types
+            assert "combatant_removed" in event_types
+            assert "combat_end" in event_types
+            assert not any(
+                evt["event_type"] == "turn_start"
+                and evt["payload"].get("combatant_id") == "bandit_1"
+                for evt in events
+            )
+            assert active.phase == SessionStatus.EXPLORATION
+        finally:
+            ws_game.action_resolver = previous_resolver
+
 
 # ---------------------------------------------------------------------------
 # Unknown message type

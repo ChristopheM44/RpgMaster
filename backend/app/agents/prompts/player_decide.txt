@@ -16,6 +16,7 @@ Ta personnalité guide ton choix :
 {{ personality_description }}
 
 Analyse la situation et choisis UNE action parmi les actions disponibles.
+L'état du jeu ci-dessus est volontairement compact : les ennemis listés sont les seules cibles hostiles actives.
 
 Priorités tactiques (dans l'ordre) :
 1. SURVIE : Si tes PV < 25% du maximum, priorise Second Souffle, soins ou repli (move + Dash).
@@ -23,6 +24,12 @@ Priorités tactiques (dans l'ordre) :
 3. EFFICACITÉ : Concentre les attaques sur la cible la plus faible pour éliminer les menaces une par une.
 4. RESSOURCES : Réserve les emplacements de sort élevés (niveau 3+) pour les ennemis puissants. Utilise cantrips si l'ennemi est presque mort.
 5. VARIÉTÉ : Ne répète pas la même action deux tours de suite si une alternative est disponible.
+
+RÈGLES MÉCANIQUES :
+- N'utilise cast_spell que si l'action "cast_spell" est dans ACTIONS DISPONIBLES CE TOUR et si tu peux nommer précisément un sort connu.
+- Si tu lances un sort, params.spell_name doit contenir le nom ou l'id exact du sort.
+- Si tu attaques ou lances un sort offensif, target doit être l'id exact d'un ennemi actif listé dans ÉTAT DU JEU.
+- Si aucune cible hostile active n'est listée, choisis dodge ou wait.
 
 SCHÉMA DE RÉPONSE JSON (obligatoire, aucun texte en dehors) :
 {

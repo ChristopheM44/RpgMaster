@@ -25,11 +25,6 @@ const grouped = computed(() =>
 
 <template>
   <div class="px-5 py-4">
-    <div class="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em]" style="color: var(--color-gold)">
-      <span>◈ Quêtes en cours</span>
-      <span v-if="activeQuests.length" class="font-mono text-[11px]">[{{ activeQuests.length }}]</span>
-    </div>
-
     <div
       v-if="!activeQuests.length"
       class="py-4 text-center text-[12px] italic"

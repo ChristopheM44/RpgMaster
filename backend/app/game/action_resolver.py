@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from app.agents.gm_agent import GMAgent
-from app.agents.schemas import AgentContext, AgentResponse
+from app.agents.schemas import AgentContext, AgentResponse, GMResponse
 from app.engine import combat as combat_engine
 from app.engine.ability_checks import ability_modifier, proficiency_bonus
 from app.engine.dice import roll
@@ -324,7 +324,7 @@ class ActionResolver:
         # 5. Narration de l'issue si des jets ont été effectués
         # ----------------------------------------------------------------
         if pending_rolls:
-            outcome_text: Optional[str] = None
+            outcome_response: Optional[GMResponse] = None
             try:
                 await event_bus.publish_to_session(
                     session_id,
@@ -332,7 +332,23 @@ class ActionResolver:
                     {"agent_kind": "gm", "thinking": True},
                     source="action_resolver",
                 )
-                outcome_text = await self._gm.narrate_outcome(context, pending_rolls)
+                try:
+                    outcome_candidate = await self._gm.narrate_outcome_response(
+                        context, pending_rolls
+                    )
+                except (AttributeError, TypeError):
+                    outcome_candidate = await self._gm.narrate_outcome(context, pending_rolls)
+
+                if isinstance(outcome_candidate, GMResponse):
+                    outcome_response = outcome_candidate
+                elif isinstance(outcome_candidate, AgentResponse):
+                    outcome_response = GMResponse(
+                        narration=outcome_candidate.content,
+                        actions=outcome_candidate.actions,
+                        action_intent=outcome_candidate.action_intent,
+                    )
+                elif outcome_candidate is not None:
+                    outcome_response = GMResponse(narration=str(outcome_candidate))
             except Exception as exc:
                 logger.error("ActionResolver : narrate_outcome échoué : %s", exc)
             finally:
@@ -343,7 +359,8 @@ class ActionResolver:
                     source="action_resolver",
                 )
 
-            if outcome_text:
+            if outcome_response and outcome_response.narration:
+                outcome_text = outcome_response.narration
                 prime_combat_from_hostile_narration(
                     active,
                     outcome_text,
@@ -362,6 +379,13 @@ class ActionResolver:
                 asyncio.create_task(
                     tts_router.synthesize_and_broadcast(outcome_text, session_id, outcome_id)
                 )
+                for gm_action in outcome_response.actions:
+                    merged_params: Dict[str, Any] = dict(gm_action.params)
+                    if gm_action.target and "target" not in merged_params:
+                        merged_params["target"] = gm_action.target
+                    await self._apply_gm_action(
+                        session_id, gm_action.type, merged_params, active
+                    )
 
     # ------------------------------------------------------------------
     # Conclusion sociale (compagnons ont déjà parlé)
@@ -1089,6 +1113,7 @@ class ActionResolver:
         Les types supportés :
         - ``damage_apply`` : réduit les PV d'un combattant dans state_data.
         - ``condition_add`` / ``condition_remove`` : publie un événement de condition.
+        - ``combatant_status`` : marque un PNJ comme actif, vaincu, rendu ou en fuite.
         - ``state_transition`` : ignoré ici (géré par SessionManager).
         """
         if action_type == "damage_apply":
@@ -1133,6 +1158,15 @@ class ActionResolver:
         elif action_type in ("condition_add", "condition_remove"):
             target_id = params.get("target")
             condition = params.get("condition", "")
+            combatants: Dict[str, Any] = active.state_data.setdefault("combatants", {})
+            if target_id and target_id in combatants and condition:
+                conditions: List[str] = list(combatants[target_id].get("conditions", []))
+                if action_type == "condition_add" and condition not in conditions:
+                    conditions.append(condition)
+                elif action_type == "condition_remove":
+                    conditions = [c for c in conditions if c != condition]
+                combatants[target_id]["conditions"] = conditions
+                active.mark_dirty()
             await event_bus.publish_to_session(
                 session_id,
                 EventType.CONDITION_CHANGED,
@@ -1140,6 +1174,42 @@ class ActionResolver:
                     "combatant_id": target_id,
                     "condition": condition,
                     "added": action_type == "condition_add",
+                },
+                source="action_resolver",
+            )
+
+        elif action_type == "combatant_status":
+            target_id = params.get("target")
+            status = str(params.get("status", "")).strip().lower()
+            reason = str(params.get("reason", status or "resolved"))
+            valid_statuses = {"active", "defeated", "surrendered", "fled"}
+            if status not in valid_statuses:
+                logger.warning(
+                    "combatant_status ignoré : statut invalide '%s' — params=%s",
+                    status,
+                    params,
+                )
+                return
+
+            combatants: Dict[str, Any] = active.state_data.setdefault("combatants", {})
+            if not target_id or target_id not in combatants:
+                logger.warning(
+                    "combatant_status ignoré : cible '%s' introuvable — params=%s",
+                    target_id,
+                    params,
+                )
+                return
+
+            combatants[target_id]["status"] = status
+            active.mark_dirty()
+            await event_bus.publish_to_session(
+                session_id,
+                EventType.COMBATANT_STATUS_CHANGED,
+                {
+                    "combatant_id": target_id,
+                    "combatant_name": combatants[target_id].get("name", target_id),
+                    "status": status,
+                    "reason": reason,
                 },
                 source="action_resolver",
             )

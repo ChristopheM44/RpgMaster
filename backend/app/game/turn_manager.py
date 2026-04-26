@@ -243,11 +243,13 @@ class TurnManager:
         for i, entry in enumerate(self._order):
             if entry.combatant_id == combatant_id:
                 self._order.pop(i)
-                # Keep index valid: if we removed an entry before or at the
-                # current position, step back so the next call to next_turn
-                # doesn't skip someone.
-                if i <= self._index and self._index > 0:
+                # Keep index valid: if we removed an entry before the current
+                # position, step back. If we removed the current entry, keep the
+                # same index so it now points at the next combatant.
+                if i < self._index and self._index > 0:
                     self._index -= 1
+                if self._index >= len(self._order) and self._order:
+                    self._index = 0
                 return True
         return False
 
