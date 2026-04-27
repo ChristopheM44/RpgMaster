@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_db
 from app.engine.dice import roll
 from app.engine.spells import FULL_CASTER_SLOTS, HALF_CASTER_SLOTS
+from app.game.constants import ARMOR_CATEGORIES
 from app.models.character import Character
 from app.schemas.character import (
     CharacterCreate,
@@ -21,8 +22,6 @@ from app.schemas.character import (
 )
 
 # ── Equipment SRD helpers ───────────────────────────────────────────────────────
-
-_ARMOR_CATEGORIES = {"light", "medium", "heavy"}
 
 _EQUIPMENT_JSON_PATH = Path(__file__).parent.parent / "engine" / "srd_data" / "equipment.json"
 _EQUIPMENT_LOOKUP: Optional[Dict[str, Any]] = None
@@ -96,7 +95,7 @@ def _resolve_equipment(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
         # Auto-équiper la première armure et le premier bouclier
         category = enriched.get("category", "")
-        if category in _ARMOR_CATEGORIES and not armor_equipped:
+        if category in ARMOR_CATEGORIES and not armor_equipped:
             enriched["equipped"] = True
             armor_equipped = True
         elif category == "shield" and not shield_equipped:
@@ -258,9 +257,9 @@ async def equip_item(
     new_equipped = not item.get("equipped", False)
 
     # Si on équipe une armure, retirer les autres armures
-    if new_equipped and item.get("category", "") in _ARMOR_CATEGORIES:
+    if new_equipped and item.get("category", "") in ARMOR_CATEGORIES:
         for i, eq in enumerate(equipment):
-            if i != idx and eq.get("category", "") in _ARMOR_CATEGORIES:
+            if i != idx and eq.get("category", "") in ARMOR_CATEGORIES:
                 equipment[i] = {**eq, "equipped": False}
 
     equipment[idx] = {**item, "equipped": new_equipped}

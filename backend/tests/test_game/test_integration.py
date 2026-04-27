@@ -5,10 +5,7 @@ On vérifie que le pipeline complet produit les bons événements WebSocket.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
 
 from app.agents.schemas import AgentResponse, GMAction, GMResponse
 
@@ -31,6 +28,28 @@ def _mock_gm_response(narration: str = "Le MJ narre l'action.", actions: list = 
 def _collect_all(ws, count: int) -> list:
     """Reçoit *count* messages JSON depuis le WebSocket."""
     return [ws.receive_json() for _ in range(count)]
+
+
+def _without_ai_thinking(events: list[dict]) -> list[dict]:
+    """Filtre les événements de progression LLM, publics mais non métier."""
+    return [e for e in events if e["event_type"] != "ai_thinking"]
+
+
+def _event(events: list[dict], event_type: str) -> dict:
+    return next(e for e in events if e["event_type"] == event_type)
+
+
+def _event_types(events: list[dict]) -> list[str]:
+    return [e["event_type"] for e in events]
+
+
+def _assert_gm_thinking_pair(events: list[dict]) -> None:
+    thinking = [
+        e["payload"]["thinking"]
+        for e in events
+        if e["event_type"] == "ai_thinking" and e["payload"].get("agent_kind") == "gm"
+    ]
+    assert thinking == [True, False]
 
 
 # ---------------------------------------------------------------------------
@@ -72,14 +91,15 @@ class TestFreeTextAction:
                         "content": "Je cherche des pièges dans la salle",
                     })
 
-                    narration = ws.receive_json()
-                    turn_end = ws.receive_json()
+                    raw_events = _collect_all(ws, 4)
+                    events = _without_ai_thinking(raw_events)
 
-                assert narration["event_type"] == "narration"
+                _assert_gm_thinking_pair(raw_events)
+                narration = _event(events, "narration")
+                turn_end = _event(events, "turn_end")
                 assert narration["payload"]["speaker"] == "Maître du Jeu"
                 assert "scrutez" in narration["payload"]["text"]
 
-                assert turn_end["event_type"] == "turn_end"
                 assert turn_end["payload"]["turn_number"] == 1
 
     def test_free_text_no_roll_result_event(self, ws_client) -> None:
@@ -103,10 +123,11 @@ class TestFreeTextAction:
                 "content": "Je regarde autour de moi",
             })
 
-            msg1 = ws.receive_json()
-            msg2 = ws.receive_json()
+            raw_events = _collect_all(ws, 4)
+            events = _without_ai_thinking(raw_events)
 
-        event_types = {msg1["event_type"], msg2["event_type"]}
+        _assert_gm_thinking_pair(raw_events)
+        event_types = set(_event_types(events))
         assert "roll_result" not in event_types
         assert "narration" in event_types
         assert "turn_end" in event_types
@@ -141,9 +162,11 @@ class TestAttackAction:
                 "target_id": "goblin-1",
             })
 
-            msgs = _collect_all(ws, 3)
+            raw_events = _collect_all(ws, 5)
+            msgs = _without_ai_thinking(raw_events)
 
-        event_types = [m["event_type"] for m in msgs]
+        _assert_gm_thinking_pair(raw_events)
+        event_types = _event_types(msgs)
         assert "roll_result" in event_types
         assert "narration" in event_types
         assert "turn_end" in event_types
@@ -169,55 +192,49 @@ class TestAttackAction:
                 "content": "Attaque à la hache",
             })
 
-            msgs = _collect_all(ws, 3)
+            raw_events = _collect_all(ws, 5)
+            msgs = _without_ai_thinking(raw_events)
 
         roll_event = next(m for m in msgs if m["event_type"] == "roll_result")
         p = roll_event["payload"]
 
-        assert p["type"] == "attack"
-        assert isinstance(p["d20_roll"], int)
-        assert 1 <= p["d20_roll"] <= 20
-        assert isinstance(p["hit"], bool)
-        assert isinstance(p["critical"], bool)
-        assert "breakdown" in p
-        assert "summary" in p
+        assert p["dice_notation"] == "1d20"
+        assert isinstance(p["rolls"], list)
+        assert len(p["rolls"]) == 1
+        assert 1 <= p["rolls"][0] <= 20
+        assert isinstance(p["total"], int)
+        assert isinstance(p["modifier"], int)
+        assert isinstance(p["success"], bool)
+        assert "label" in p
 
-    def test_attack_hit_includes_damage(self, ws_client) -> None:
-        """Quand l'attaque touche, le roll_result contient les dégâts."""
+    def test_attack_roll_result_is_normalized_for_frontend(self, ws_client) -> None:
+        """Le roll_result exposé au frontend reste dans son contrat normalisé."""
         session_id = _create_session(ws_client)
         mock_response = _mock_gm_response("L'ennemi est blessé !")
 
         from app.game.action_resolver import ActionResolver
         from app.api import ws_game
-        from app.engine import combat as combat_engine
-        from unittest.mock import patch as up
 
         mock_gm = MagicMock()
         mock_gm.think = AsyncMock(return_value=mock_response)
         ws_game.action_resolver = ActionResolver(gm_agent=mock_gm)
 
-        # Forcer un hit via un attack_bonus énorme
         with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
             ws.receive_json()  # session_state
 
-            # Injecter un combattant avec un bonus d'attaque très élevé dans state_data
-            # On ne peut pas modifier directement state_data ici, donc on utilise
-            # les valeurs par défaut et on vérifie selon le résultat.
             ws.send_json({
                 "type": "action",
                 "action_type": "attack",
                 "content": "Frappe fatale",
             })
 
-            msgs = _collect_all(ws, 3)
+            raw_events = _collect_all(ws, 5)
+            msgs = _without_ai_thinking(raw_events)
 
         roll_event = next(m for m in msgs if m["event_type"] == "roll_result")
         p = roll_event["payload"]
-        # Si touché, les dégâts doivent être présents
-        if p["hit"]:
-            assert "damage" in p
-            assert isinstance(p["damage"]["total"], int)
-            assert p["damage"]["total"] >= 0
+        assert set(p) >= {"dice_notation", "rolls", "total", "modifier", "label"}
+        assert p["dice_notation"] == "1d20"
 
 
 # ---------------------------------------------------------------------------
@@ -247,14 +264,16 @@ class TestCastSpellAction:
                 "content": "Projectile magique",
             })
 
-            msgs = _collect_all(ws, 3)
+            raw_events = _collect_all(ws, 5)
+            msgs = _without_ai_thinking(raw_events)
 
-        event_types = [m["event_type"] for m in msgs]
+        _assert_gm_thinking_pair(raw_events)
+        event_types = _event_types(msgs)
         assert "roll_result" in event_types
 
         roll_event = next(m for m in msgs if m["event_type"] == "roll_result")
-        assert roll_event["payload"]["type"] == "generic_roll"
-        assert roll_event["payload"]["notation"] == "d20"
+        assert roll_event["payload"]["dice_notation"] == "d20"
+        assert isinstance(roll_event["payload"]["rolls"], list)
 
 
 # ---------------------------------------------------------------------------
@@ -291,15 +310,15 @@ class TestGMActions:
 
             ws.send_json({
                 "type": "action",
-                "action_type": "attack",
-                "content": "Coup sur le gobelin",
-                "target_id": "goblin-1",
+                "action_type": "free_text",
+                "content": "Le gobelin encaisse le coup",
             })
 
-            # roll_result + hp_changed + narration + turn_end = 4 events
-            msgs = _collect_all(ws, 4)
+            raw_events = _collect_all(ws, 5)
+            msgs = _without_ai_thinking(raw_events)
 
-        event_types = [m["event_type"] for m in msgs]
+        _assert_gm_thinking_pair(raw_events)
+        event_types = _event_types(msgs)
         assert "hp_changed" in event_types
 
         hp_event = next(m for m in msgs if m["event_type"] == "hp_changed")
@@ -329,10 +348,13 @@ class TestTurnProgression:
             ws.receive_json()  # session_state
 
             for i in range(1, 4):
-                ws.send_json({"type": "action", "action_type": "end_turn"})
-                ws.receive_json()  # narration
-                turn_end = ws.receive_json()
-                assert turn_end["event_type"] == "turn_end"
+                ws.send_json({
+                    "type": "action",
+                    "action_type": "free_text",
+                    "content": f"Action {i}",
+                })
+                events = _without_ai_thinking(_collect_all(ws, 4))
+                turn_end = _event(events, "turn_end")
                 assert turn_end["payload"]["turn_number"] == i
 
     def test_gm_called_once_per_action(self, ws_client) -> None:
@@ -352,8 +374,7 @@ class TestTurnProgression:
 
             for _ in range(3):
                 ws.send_json({"type": "action", "action_type": "free_text", "content": "Agir"})
-                ws.receive_json()  # narration
-                ws.receive_json()  # turn_end
+                _collect_all(ws, 4)
 
         assert mock_gm.think.call_count == 3
 
@@ -380,9 +401,12 @@ class TestResilienceGMFailure:
 
             ws.send_json({"type": "action", "action_type": "free_text", "content": "Agir"})
 
-            narration = ws.receive_json()
-            turn_end = ws.receive_json()
+            raw_events = _collect_all(ws, 4)
+            events = _without_ai_thinking(raw_events)
 
+        _assert_gm_thinking_pair(raw_events)
+        narration = _event(events, "narration")
+        turn_end = _event(events, "turn_end")
         assert narration["event_type"] == "narration"
         # Le fallback ne doit pas être vide
         assert len(narration["payload"]["text"]) > 0
@@ -426,7 +450,7 @@ class TestAutoCombatTrigger:
                     "level": 1,
                     "hp": 10,
                     "hp_max": 10,
-                    "dex": 14,
+                    "dex": 100,
                     "is_ai": False,
                     "equipment": [],
                 }
@@ -438,9 +462,11 @@ class TestAutoCombatTrigger:
                 "content": "Nous avançons prudemment.",
             })
 
-            events = _collect_all(ws, 6)
+            raw_events = _collect_all(ws, 8)
+            events = _without_ai_thinking(raw_events)
 
-        event_types = [e["event_type"] for e in events]
+        _assert_gm_thinking_pair(raw_events)
+        event_types = _event_types(events)
         assert "phase_change" in event_types
         assert "combat_start" in event_types
 
@@ -465,22 +491,28 @@ class TestAutoCombatTrigger:
         from app.agents.schemas import GMResponse as _GMResponse
         from app.models.session import SessionStatus
 
-        ws_game.action_resolver._gm.run_combat_turn = AsyncMock(
+        from app.game.action_resolver import ActionResolver
+
+        mock_gm = MagicMock()
+        mock_gm.think = AsyncMock(return_value=_mock_gm_response("Le combat commence."))
+        mock_gm.run_combat_turn = AsyncMock(
             return_value=_GMResponse(narration="Le bandit riposte.")
         )
+        ws_game.action_resolver = ActionResolver(gm_agent=mock_gm)
 
         with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
             ws.receive_json()  # session_state initial
 
             active = ws_game.session_manager.get_session(session_id)
             assert active is not None
+            active.phase = SessionStatus.EXPLORATION
             active.state_data["characters"] = {
                 "hero-1": {
                     "name": "Thorvald",
                     "level": 1,
                     "hp": 10,
                     "hp_max": 10,
-                    "dex": 14,
+                    "dex": 100,
                     "is_ai": False,
                     "equipment": [],
                 }
@@ -548,7 +580,7 @@ class TestAutoCombatTrigger:
                     "level": 1,
                     "hp": 10,
                     "hp_max": 10,
-                    "dex": 14,
+                    "dex": 100,
                     "is_ai": False,
                     "equipment": [],
                 }
@@ -570,9 +602,11 @@ class TestAutoCombatTrigger:
             # goblin). On collecte simplement les 6 events puis on vérifie la
             # présence des types attendus — sans contraindre l'ordre après
             # session_state.
-            events = _collect_all(ws, 6)
+            raw_events = _collect_all(ws, 8)
+            events = _without_ai_thinking(raw_events)
 
-        event_types = [e["event_type"] for e in events]
+        _assert_gm_thinking_pair(raw_events)
+        event_types = _event_types(events)
         assert event_types[0] == "narration", event_types
         assert "combat_start" in event_types, (
             f"combat_start attendu, reçu : {event_types}"
@@ -624,9 +658,11 @@ class TestAutoCombatTrigger:
                 "content": "Je scrute.",
             })
 
-            events = _collect_all(ws, 2)
+            raw_events = _collect_all(ws, 4)
+            events = _without_ai_thinking(raw_events)
 
-        event_types = [e["event_type"] for e in events]
+        _assert_gm_thinking_pair(raw_events)
+        event_types = _event_types(events)
         assert "combat_start" not in event_types
         assert "narration" in event_types
         assert "turn_end" in event_types

@@ -9,7 +9,7 @@ Le GMAgent est mocké (on n'appelle jamais le vrai LLM).
 """
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
@@ -221,6 +221,126 @@ class TestConversationHistory:
         i2n = next(i for i, c in enumerate(contents) if "Narration 2" in c)
         i3a = next(i for i, c in enumerate(contents) if "Action 3" in c)
         assert i1a < i1n < i2a < i2n < i3a
+
+
+# ---------------------------------------------------------------------------
+# Flux narratif fluide — roll_request interne, narration unique après jet
+# ---------------------------------------------------------------------------
+
+
+class TestFluidNarrativeFlow:
+    async def test_roll_request_publishes_only_outcome_narration(
+        self, db_session, active_session
+    ) -> None:
+        """roll_request : le jet est visible, puis une seule narration MJ finale."""
+        from sqlalchemy import select
+
+        from app.game.event_bus import EventType
+        from app.models.message import Message, MessageRole
+
+        mock_gm = MagicMock()
+        mock_gm.think = AsyncMock(return_value=AgentResponse(
+            content="Thorvald se penche sur les traces.",
+            actions=[
+                GMAction(
+                    type="roll_request",
+                    target="hero-1",
+                    params={"ability": "wis", "type": "check", "dc": 10},
+                )
+            ],
+        ))
+        mock_gm.narrate_outcome_response = AsyncMock(return_value=GMResponse(
+            narration="La boue révèle seulement des passages confus, impossibles à dater.",
+            actions=[],
+        ))
+        resolver = ActionResolver(gm_agent=mock_gm)
+        published: list[tuple[str, dict]] = []
+
+        async def publish(session_id, event_type, payload, source=None):
+            published.append((event_type, payload))
+
+        with patch("app.game.action_resolver.event_bus.publish_to_session", new=publish), patch(
+            "app.game.action_resolver.tts_router.synthesize_and_broadcast",
+            new=AsyncMock(),
+        ):
+            await resolver.resolve(
+                session_id=active_session.session_id,
+                action_type="free_text",
+                content="J'inspecte les traces.",
+                character_id="hero-1",
+                target_id=None,
+                active=active_session,
+                db=db_session,
+            )
+
+        visible_events = [
+            event_type
+            for event_type, _payload in published
+            if event_type in {EventType.ROLL_RESULT, EventType.NARRATION}
+        ]
+        assert visible_events == [EventType.ROLL_RESULT, EventType.NARRATION]
+
+        narrations = [
+            payload["text"]
+            for event_type, payload in published
+            if event_type == EventType.NARRATION
+        ]
+        assert narrations == [
+            "La boue révèle seulement des passages confus, impossibles à dater."
+        ]
+        assert all("se penche" not in text for text in narrations)
+
+        rows = (
+            await db_session.execute(
+                select(Message)
+                .where(Message.session_id == active_session.session_id)
+                .order_by(Message.created_at.asc())
+            )
+        ).scalars().all()
+        gm_messages = [row.content for row in rows if row.role == MessageRole.GM]
+        assert gm_messages == [
+            "La boue révèle seulement des passages confus, impossibles à dater."
+        ]
+
+    async def test_action_without_roll_request_keeps_initial_narration(
+        self, db_session, active_session
+    ) -> None:
+        """Sans roll_request, le comportement existant reste une narration directe."""
+        from app.game.event_bus import EventType
+
+        mock_gm = MagicMock()
+        mock_gm.think = AsyncMock(return_value=AgentResponse(
+            content="Le sentier descend vers les ruines.",
+            actions=[],
+        ))
+        mock_gm.narrate_outcome_response = AsyncMock()
+        resolver = ActionResolver(gm_agent=mock_gm)
+        published: list[tuple[str, dict]] = []
+
+        async def publish(session_id, event_type, payload, source=None):
+            published.append((event_type, payload))
+
+        with patch("app.game.action_resolver.event_bus.publish_to_session", new=publish), patch(
+            "app.game.action_resolver.tts_router.synthesize_and_broadcast",
+            new=AsyncMock(),
+        ):
+            await resolver.resolve(
+                session_id=active_session.session_id,
+                action_type="free_text",
+                content="J'avance vers les ruines.",
+                character_id="hero-1",
+                target_id=None,
+                active=active_session,
+                db=db_session,
+            )
+
+        narrations = [
+            payload["text"]
+            for event_type, payload in published
+            if event_type == EventType.NARRATION
+        ]
+        assert narrations == ["Le sentier descend vers les ruines."]
+        mock_gm.narrate_outcome_response.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

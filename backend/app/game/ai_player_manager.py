@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from app.agents.player_agent import _NON_JSON_LLM_ERROR
 from app.agents.schemas import PlayerActionChoice
+from app.game.constants import INACTIVE_STATUSES
 from app.game.event_bus import EventType, event_bus
 
 if TYPE_CHECKING:
@@ -41,11 +42,15 @@ _WAIT_ACTION = PlayerActionChoice(
 )
 
 _COMBAT_STARTING_ACTIONS = {"attack", "cast_spell", "shove"}
-_INACTIVE_NPC_STATUSES = {"defeated", "surrendered", "fled"}
 
 # Actions d'exploration qui nécessitent un arbitrage MJ (résolution moteur + narration).
 # talk/wait sont purement narratifs et ne déclenchent PAS le pipeline MJ.
 _EXPLORATION_ARBITRAGE_ACTIONS = {"examine", "move", "use_item", "help"}
+_MECHANICAL_ACTION_TYPES = (
+    _COMBAT_STARTING_ACTIONS
+    | _EXPLORATION_ARBITRAGE_ACTIONS
+    | {"dash", "disengage", "dodge", "hide", "stabilize", "death_save"}
+)
 
 
 def _build_scene_context(messages: list) -> str:
@@ -247,12 +252,14 @@ class AIPlayerManager:
                 else:
                     action = _WAIT_ACTION
 
-            # Broadcast the AI player's in-character text first
+            visible_text = self._visible_action_text(action, current.name)
+
+            # Broadcast the AI player's visible intention first
             await event_bus.publish_to_session(
                 session_id,
                 EventType.NARRATION,
                 {
-                    "text": action.roleplay_text,
+                    "text": visible_text,
                     "speaker": current.name,
                     "action_type": action.action_type,
                     "is_ai_player": True,
@@ -265,7 +272,7 @@ class AIPlayerManager:
                 from app.services.message_service import persist_narration
                 await persist_narration(
                     session_id,
-                    action.roleplay_text,
+                    visible_text,
                     current.name,
                     db,
                     role=MessageRole.PLAYER,
@@ -410,11 +417,12 @@ class AIPlayerManager:
             ):
                 if active.state_data.get("pending_encounter"):
                     # Legitimate: publish the aggressive action, flag transition, stop
+                    visible_text = self._visible_action_text(action, char_name)
                     await event_bus.publish_to_session(
                         session_id,
                         EventType.NARRATION,
                         {
-                            "text": action.roleplay_text,
+                            "text": visible_text,
                             "speaker": char_name,
                             "action_type": action.action_type,
                             "is_ai_player": True,
@@ -431,17 +439,18 @@ class AIPlayerManager:
                         action_type="wait",
                         action_description="Le personnage hésite prudemment.",
                         roleplay_text=(
-                            f"(jette un regard méfiant, la main sur l'arme, mais sans dégainer)"
+                            "(jette un regard méfiant, la main sur l'arme, mais sans dégainer)"
                         ),
                         inner_reasoning="Pas de menace confirmée par le MJ — attente.",
                     )
 
             # Publish post-guard roleplay
+            visible_text = self._visible_action_text(action, char_name)
             await event_bus.publish_to_session(
                 session_id,
                 EventType.NARRATION,
                 {
-                    "text": action.roleplay_text,
+                    "text": visible_text,
                     "speaker": char_name,
                     "action_type": action.action_type,
                     "is_ai_player": True,
@@ -450,7 +459,7 @@ class AIPlayerManager:
             )
 
             # Collecter la réponse pour la conclusion sociale éventuelle
-            companion_responses.append({"speaker": char_name, "text": action.roleplay_text})
+            companion_responses.append({"speaker": char_name, "text": visible_text})
 
             # Persist to DB
             if db is not None:
@@ -463,7 +472,7 @@ class AIPlayerManager:
                 )
                 await persist_narration(
                     session_id,
-                    action.roleplay_text,
+                    visible_text,
                     char_name,
                     db,
                     role=MessageRole.PLAYER,
@@ -752,13 +761,36 @@ class AIPlayerManager:
     @classmethod
     def _character_can_act(cls, character_id: str, state_data: dict[str, Any]) -> bool:
         cdata = cls._character_data(character_id, state_data)
-        if str(cdata.get("status", "active")).lower() in _INACTIVE_NPC_STATUSES:
+        if str(cdata.get("status", "active")).lower() in INACTIVE_STATUSES:
             return False
         try:
             hp = int(cdata.get("current_hp", cdata.get("hp", 1)))
         except (TypeError, ValueError):
             hp = 1
         return hp > 0
+
+    @classmethod
+    def _visible_action_text(cls, action: PlayerActionChoice, character_name: str) -> str:
+        if action.action_type not in _MECHANICAL_ACTION_TYPES:
+            return action.roleplay_text
+
+        description = str(action.action_description or "").strip()
+        if not description:
+            return action.roleplay_text
+
+        if description.casefold().startswith(character_name.casefold()):
+            text = description
+        else:
+            text = f"{character_name} {cls._lowercase_initial(description)}"
+        if text[-1] not in ".!?…":
+            text += "."
+        return text
+
+    @staticmethod
+    def _lowercase_initial(text: str) -> str:
+        if not text:
+            return text
+        return text[0].lower() + text[1:]
 
     @staticmethod
     def _normalize_text(value: Any) -> str:
@@ -823,7 +855,7 @@ class AIPlayerManager:
             )
             if not is_enemy:
                 continue
-            if str(cdata.get("status", "active")).lower() in _INACTIVE_NPC_STATUSES:
+            if str(cdata.get("status", "active")).lower() in INACTIVE_STATUSES:
                 continue
             try:
                 hp = int(cdata.get("hp", 0))

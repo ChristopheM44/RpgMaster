@@ -21,7 +21,7 @@ Instructions :
 - Si action_intent = "social" : écris une narration COURTE (1-2 phrases), contexte d'ambiance uniquement.
   Ne décris PAS les réactions des compagnons — ils vont parler eux-mêmes juste après.
 - Varie les registres sensoriels : vue, ouïe, odorat, toucher, ressenti émotionnel.
-- Si l'action du joueur nécessite un jet de dés (escalader, persuader, crocheter, percevoir…), inclus un roll_request.
+- Si l'action du joueur nécessite un jet de dés (escalader, persuader, crocheter, percevoir…), inclus un roll_request et limite la narration à 1 phrase de cadrage. Ne donne pas le résultat, l'indice ou la conséquence avant le jet.
 - Si la scène introduit un nouveau lieu ou change l'heure/météo/le jour : émets journal_update avec uniquement les champs qui changent.
 - Si la narration introduit une quête ou rumeur (donnée par un PNJ, découverte, mystère) : émets quest_add avec un id court en snake_case.
 - Si la narration nomme un nouveau PNJ ou lieu important : émets chronicle_add (kind="npc" ou "location"). Pas les monstres de combat, pas les personnages joueurs.

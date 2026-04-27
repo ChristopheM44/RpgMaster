@@ -48,6 +48,7 @@ from app.engine.combat import roll_attack, roll_damage
 from app.engine.tactical_grid import initialize_positions, validate_move, GridPosition
 from app.game.action_resolver import ActionResolver
 from app.game.combat_triggers import prime_combat_from_aggressive_action
+from app.game.constants import ARMOR_CATEGORIES, INACTIVE_STATUSES, MONSTER_TYPE_COLORS
 from app.game.event_bus import EventType, GameEvent, event_bus
 from app.game.session_manager import SessionManager
 from app.game.turn_manager import CombatantInfo
@@ -219,24 +220,6 @@ def _build_session_state_payload(session_id: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-_ARMOR_CATS = {"light", "medium", "heavy"}
-_INACTIVE_NPC_STATUSES = {"defeated", "surrendered", "fled"}
-_MONSTER_TYPE_COLORS = {
-    "aberration": "#8f5cf7",
-    "beast": "#7f8a78",
-    "celestial": "#f4c95d",
-    "construct": "#9aa4b2",
-    "dragon": "#d94841",
-    "elemental": "#3aa6b9",
-    "fey": "#d16ba5",
-    "fiend": "#b42318",
-    "giant": "#b7791f",
-    "humanoid": "#4d9f64",
-    "monstrosity": "#8b5e3c",
-    "ooze": "#6b7280",
-    "plant": "#2f855a",
-    "undead": "#6d597a",
-}
 
 
 def _compute_ac_from_equipment(equipment: list, dex_mod: int) -> int:
@@ -245,7 +228,7 @@ def _compute_ac_from_equipment(equipment: list, dex_mod: int) -> int:
     Utilise les champs SRD : base_ac, dex_cap (0=lourd, None=libre, int=moyen).
     """
     armor = next(
-        (it for it in equipment if it.get("equipped") and it.get("category") in _ARMOR_CATS),
+        (it for it in equipment if it.get("equipped") and it.get("category") in ARMOR_CATEGORIES),
         None,
     )
     shield = next(
@@ -273,7 +256,7 @@ def _monster_token(name: str, count: int) -> str:
 
 
 def _monster_color(monster_type: str | None) -> str:
-    return _MONSTER_TYPE_COLORS.get((monster_type or "").lower(), "#b45309")
+    return MONSTER_TYPE_COLORS.get((monster_type or "").lower(), "#b45309")
 
 
 def _format_monster_actions(actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -552,7 +535,7 @@ async def _cleanup_inactive_npcs(session_id: str, active: Any) -> list[dict[str,
                 source="ws_game",
             )
 
-        if status not in _INACTIVE_NPC_STATUSES:
+        if status not in INACTIVE_STATUSES:
             continue
 
         removed = active.turn_manager.remove_combatant(cid)
@@ -959,7 +942,7 @@ async def _handle_ai_turns(session_id: str, active: Any, db: AsyncSession) -> No
         # Enemy monster: deterministic mechanical resolution first, then GM prose narration
         combatants_info: dict[str, Any] = active.state_data.get("combatants", {})
         monster_info = combatants_info.get(current.combatant_id, {})
-        if str(monster_info.get("status", "active")).lower() in _INACTIVE_NPC_STATUSES:
+        if str(monster_info.get("status", "active")).lower() in INACTIVE_STATUSES:
             active.turn_manager.remove_combatant(current.combatant_id)
             active.mark_dirty()
             continue

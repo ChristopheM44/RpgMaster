@@ -255,7 +255,12 @@ class ActionResolver:
         # l'ordre d'exécution (social : compagnons d'abord, MJ conclut).
         active.last_gm_intent = gm_response.action_intent if gm_response else None
 
-        if gm_response:
+        has_gm_roll_request = bool(
+            gm_response
+            and any(gm_action.type == "roll_request" for gm_action in gm_response.actions)
+        )
+
+        if gm_response and not has_gm_roll_request:
             prime_combat_from_hostile_narration(
                 active,
                 gm_response.content,
@@ -274,28 +279,8 @@ class ActionResolver:
             )
 
         narration_text = gm_response.content if gm_response else _FALLBACK_NARRATION
-        narration_id = str(uuid.uuid4())
-        await event_bus.publish_to_session(
-            session_id,
-            EventType.NARRATION,
-            {"text": narration_text, "speaker": "Maître du Jeu", "narration_id": narration_id},
-            source="action_resolver",
-        )
-
-        # Persistance en DB — awaited (aligné avec les autres call sites).
-        # NB : passé auparavant en fire-and-forget via asyncio.create_task, ce qui
-        # provoquait une race SQLAlchemy : la session DB est partagée avec les
-        # appels suivants et l'autoflush déclenché par la requête de lecture
-        # d'historique pouvait collider avec l'INSERT différé. L'await garantit
-        # aussi que la narration MJ est visible pour le tour suivant.
-        if db is not None:
-            from app.services.message_service import persist_narration
-            await persist_narration(session_id, narration_text, "Maître du Jeu", db)
-
-        # TTS fire-and-forget : ne bloque jamais le game loop
-        asyncio.create_task(
-            tts_router.synthesize_and_broadcast(narration_text, session_id, narration_id)
-        )
+        if not has_gm_roll_request:
+            await self._publish_gm_narration(session_id, narration_text, db)
 
         # ----------------------------------------------------------------
         # 4. Traitement des actions mécaniques demandées par le GM
@@ -327,6 +312,14 @@ class ActionResolver:
                         "state_transition",
                     }:
                         canon_dirty = True
+
+        if has_gm_roll_request and not pending_rolls:
+            prime_combat_from_hostile_narration(
+                active,
+                narration_text,
+                source="gm_narration",
+            )
+            await self._publish_gm_narration(session_id, narration_text, db)
 
         # ----------------------------------------------------------------
         # 5. Narration de l'issue si des jets ont été effectués
@@ -374,19 +367,7 @@ class ActionResolver:
                     outcome_text,
                     source="gm_roll_outcome",
                 )
-                outcome_id = str(uuid.uuid4())
-                await event_bus.publish_to_session(
-                    session_id,
-                    EventType.NARRATION,
-                    {"text": outcome_text, "speaker": "Maître du Jeu", "narration_id": outcome_id},
-                    source="action_resolver",
-                )
-                if db is not None:
-                    from app.services.message_service import persist_narration as _persist
-                    await _persist(session_id, outcome_text, "Maître du Jeu", db)
-                asyncio.create_task(
-                    tts_router.synthesize_and_broadcast(outcome_text, session_id, outcome_id)
-                )
+                await self._publish_gm_narration(session_id, outcome_text, db)
                 for gm_action in outcome_response.actions:
                     merged_params: Dict[str, Any] = dict(gm_action.params)
                     if gm_action.target and "target" not in merged_params:
@@ -414,6 +395,30 @@ class ActionResolver:
                 )
             except Exception as exc:
                 logger.warning("Synthèse canon campagne ignorée : %s", exc)
+
+    async def _publish_gm_narration(
+        self,
+        session_id: str,
+        narration_text: str,
+        db: Optional[Any],
+    ) -> None:
+        """Publie, persiste et lance le TTS pour une narration visible du MJ."""
+        narration_id = str(uuid.uuid4())
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.NARRATION,
+            {"text": narration_text, "speaker": "Maître du Jeu", "narration_id": narration_id},
+            source="action_resolver",
+        )
+
+        if db is not None:
+            from app.services.message_service import persist_narration
+
+            await persist_narration(session_id, narration_text, "Maître du Jeu", db)
+
+        asyncio.create_task(
+            tts_router.synthesize_and_broadcast(narration_text, session_id, narration_id)
+        )
 
     # ------------------------------------------------------------------
     # Conclusion sociale (compagnons ont déjà parlé)
@@ -575,7 +580,6 @@ class ActionResolver:
             save_d20 = raw.get("save_d20")
             if save_d20 is not None:
                 save_total = int(raw.get("save_total", save_d20))
-                ability = str(raw.get("save_ability", "DEX"))[:3].upper()
                 return {
                     "dice_notation": "1d20",
                     "rolls": [int(save_d20)],
@@ -894,7 +898,7 @@ class ActionResolver:
         fail = ds.get("failures", 0)
 
         if result.critical_success:
-            label = f"Jet de sauvegarde contre la mort — 20 NATUREL ! Récupère 1 PV !"
+            label = "Jet de sauvegarde contre la mort — 20 NATUREL ! Récupère 1 PV !"
         elif result.critical_failure:
             fail = min(3, fail + 2)
             label = f"Jet de sauvegarde contre la mort — 1 NATUREL ! ({fail}/3 échecs)"

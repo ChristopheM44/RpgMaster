@@ -204,26 +204,15 @@ class GMAgent(BaseAgent):
 
         data = self._extract_json(raw)
         if data is None:
-            logger.warning("GMAgent : le LLM n'a pas retourné du JSON valide — extraction partielle")
+            logger.warning(
+                "GMAgent : le LLM n'a pas retourné du JSON valide — extraction partielle"
+            )
             # Tentative d'extraction du champ narration depuis un JSON tronqué
             match = re.search(r'"narration"\s*:\s*"((?:[^"\\]|\\.)*)', raw)
             narration_text = match.group(1) if match else raw.strip()
             return GMResponse(narration=narration_text)
 
         return self._parse_gm_response(data, raw)
-
-    def _build_messages(
-        self,
-        user_prompt: str,
-        context_manager: Optional[ContextManager],
-    ) -> list[dict[str, str]]:
-        """Construit la liste de messages pour l'API Ollama."""
-        if context_manager is not None:
-            msgs = context_manager.to_ollama_messages(self._system_prompt)
-        else:
-            msgs = [{"role": "system", "content": self._system_prompt}]
-        msgs.append({"role": "user", "content": user_prompt})
-        return msgs
 
     def _parse_gm_response(self, data: dict[str, Any], raw: str) -> GMResponse:
         """Convertit le dict JSON parsé en GMResponse Pydantic."""
@@ -254,14 +243,3 @@ class GMAgent(BaseAgent):
             logger.error("GMAgent : échec parsing GMResponse : %s — data=%s", exc, data)
             return GMResponse(narration=str(data.get("narration", raw.strip())))
 
-    @staticmethod
-    def _format_messages(messages: Optional[list]) -> str:
-        """Formate une liste de messages récents en texte pour les templates."""
-        if not messages:
-            return "(aucun message récent)"
-        lines: list[str] = []
-        for msg in messages[-10:]:
-            speaker = getattr(msg, "speaker", "?")
-            content = getattr(msg, "content", "")
-            lines.append(f"[{speaker}] {content}")
-        return "\n".join(lines)

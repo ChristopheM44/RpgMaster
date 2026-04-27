@@ -19,8 +19,6 @@ import json
 from typing import Any, Dict
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from app.agents.player_agent import PlayerAgent
 from app.agents.schemas import PlayerPersonality
 from app.game.ai_player_manager import AIPlayerManager
@@ -272,7 +270,6 @@ async def test_process_ai_turns_multiple_consecutive_ai() -> None:
     active.ai_players["elara_1"] = elara_agent
 
     # Build a controlled order: Thorin (AI) → Elara (AI) → Aria (human)
-    from app.engine.combat import ActionEconomy
     from app.game.turn_manager import TurnEntry
 
     active.turn_manager._order = [
@@ -426,7 +423,8 @@ async def test_process_ai_turns_persists_ai_combat_action(db_session) -> None:
         resolver = MagicMock()
         resolver.resolve = AsyncMock()
 
-        with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=AsyncMock()):
+        publish = AsyncMock()
+        with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=publish):
             ai_manager = AIPlayerManager()
             triggered = await ai_manager.process_ai_turns(
                 session.id,
@@ -450,7 +448,13 @@ async def test_process_ai_turns_persists_ai_combat_action(db_session) -> None:
     ]
     assert len(ai_messages) == 1
     assert ai_messages[0].speaker == "Thorin"
+    assert ai_messages[0].content == "Thorin attaque."
+    assert "frappe le gobelin" not in ai_messages[0].content
     assert (ai_messages[0].metadata_ or {}).get("action_type") == "attack"
+    narration_calls = [
+        call for call in publish.await_args_list if call.args[1] == "narration"
+    ]
+    assert narration_calls[-1].args[2]["text"] == "Thorin attaque."
 
 
 async def test_cleanup_after_ai_kill_skips_dead_next_monster() -> None:

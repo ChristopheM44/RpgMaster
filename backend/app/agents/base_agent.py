@@ -14,6 +14,7 @@ from app.agents.schemas import AgentContext, AgentResponse
 logger = logging.getLogger(__name__)
 
 _PROMPTS_DIR = Path(__file__).parent / "prompts"
+_FORMAT_MESSAGES_WINDOW = 10
 
 
 class BaseAgent(ABC):
@@ -116,6 +117,35 @@ class BaseAgent(ABC):
             preview = stripped[:200] or "<vide>"
             logger.warning("Impossible d'extraire du JSON depuis la sortie LLM : %s…", preview)
         return None
+
+    # -------------------------------------------------------------------------
+    # Helpers communs (format messages, construction LLM messages)
+    # -------------------------------------------------------------------------
+
+    @staticmethod
+    def _format_messages(messages: Optional[list]) -> str:
+        """Formate les N derniers messages en texte pour les templates Jinja2."""
+        if not messages:
+            return "(aucun message récent)"
+        lines: list[str] = []
+        for msg in messages[-_FORMAT_MESSAGES_WINDOW:]:
+            speaker = getattr(msg, "speaker", "?")
+            content = getattr(msg, "content", "")
+            lines.append(f"[{speaker}] {content}")
+        return "\n".join(lines)
+
+    def _build_messages(
+        self,
+        user_prompt: str,
+        context_manager: Any,  # ContextManager | None — évite l'import circulaire
+    ) -> list[dict[str, str]]:
+        """Construit la liste de messages pour l'API LLM (system + historique + user)."""
+        if context_manager is not None:
+            msgs = context_manager.to_ollama_messages(self._system_prompt)
+        else:
+            msgs = [{"role": "system", "content": self._system_prompt}]
+        msgs.append({"role": "user", "content": user_prompt})
+        return msgs
 
     # -------------------------------------------------------------------------
     # Interface abstraite

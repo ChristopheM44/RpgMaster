@@ -15,7 +15,7 @@ import pytest
 
 from app.agents.player_agent import PlayerAgent
 from app.agents.schemas import PlayerPersonality
-from app.game.ai_player_manager import AIPlayerManager, rebuild_ai_players, register_ai_player
+from app.game.ai_player_manager import AIPlayerManager, rebuild_ai_players
 from app.game.session_manager import ActiveSession
 from app.game.turn_manager import TurnEntry
 from app.models.character import Character
@@ -115,7 +115,7 @@ async def test_exploration_reactions_calls_roleplay_for_ai() -> None:
         publish = AsyncMock()
         with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=publish):
             ai_manager = AIPlayerManager()
-            reacted, _ = await ai_manager.run_exploration_reactions(
+            reacted, responses = await ai_manager.run_exploration_reactions(
                 "expl_session", active, resolver, trigger_character_id="human_1"
             )
 
@@ -128,6 +128,13 @@ async def test_exploration_reactions_calls_roleplay_for_ai() -> None:
         if call.args[1] == "ai_thinking"
     ]
     assert thinking_flags == [True, False]
+    narration_calls = [
+        call for call in publish.await_args_list if call.args[1] == "narration"
+    ]
+    assert narration_calls[-1].args[2]["text"] == "Thorin regarde autour de lui, méfiant."
+    assert responses == [
+        {"speaker": "Thorin", "text": "Thorin regarde autour de lui, méfiant."}
+    ]
 
 
 @pytest.mark.asyncio
@@ -221,15 +228,22 @@ async def test_exploration_reactions_attack_with_pending_encounter_triggers_comb
         resolver = MagicMock()
         resolver.resolve = AsyncMock()
 
-        with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=AsyncMock()):
+        publish = AsyncMock()
+        with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=publish):
             ai_manager = AIPlayerManager()
-            reacted, _ = await ai_manager.run_exploration_reactions(
+            reacted, responses = await ai_manager.run_exploration_reactions(
                 "expl_session", active, resolver, trigger_character_id="human_1"
             )
 
     assert reacted == 1
     assert active.state_data["pending_phase_transition"] == "COMBAT"
     resolver.resolve.assert_not_called()
+    narration_calls = [
+        call for call in publish.await_args_list if call.args[1] == "narration"
+    ]
+    assert narration_calls[-1].args[2]["text"] == "Thorin attaque la menace la plus proche."
+    assert "se jette dans la mêlée" not in narration_calls[-1].args[2]["text"]
+    assert responses == []
 
 
 @pytest.mark.asyncio
@@ -259,9 +273,10 @@ async def test_exploration_reactions_examine_triggers_gm_arbitrage() -> None:
         resolver = MagicMock()
         resolver.resolve = AsyncMock()
 
-        with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=AsyncMock()):
+        publish = AsyncMock()
+        with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=publish):
             ai_manager = AIPlayerManager()
-            reacted, _ = await ai_manager.run_exploration_reactions(
+            reacted, responses = await ai_manager.run_exploration_reactions(
                 "expl_session", active, resolver, trigger_character_id="human_1"
             )
 
@@ -270,6 +285,16 @@ async def test_exploration_reactions_examine_triggers_gm_arbitrage() -> None:
     call_kwargs = resolver.resolve.call_args.kwargs
     assert call_kwargs["character_id"] == "ai_1"
     assert call_kwargs["action_type"] == "examine"
+    assert call_kwargs["content"] == "[Compagnon IA] Thorin examine la porte suspecte."
+
+    narration_calls = [
+        call for call in publish.await_args_list if call.args[1] == "narration"
+    ]
+    assert narration_calls[-1].args[2]["text"] == "Thorin examine la porte suspecte."
+    assert "s'approche lentement" not in narration_calls[-1].args[2]["text"]
+    assert responses == [
+        {"speaker": "Thorin", "text": "Thorin examine la porte suspecte."}
+    ]
 
 
 @pytest.mark.asyncio
@@ -427,6 +452,8 @@ def test_toggle_ai_control_ws_updates_state(ws_client) -> None:
     # Start the game so the session is opened
     ws_client.post(f"/api/game/{session_id}/start")
 
+    from app.api import ws_game
+
     with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
         # Consume initial session_state
         data = ws.receive_json()
@@ -450,10 +477,12 @@ def test_toggle_ai_control_ws_updates_state(ws_client) -> None:
             except Exception:
                 break
 
-    # Verify the character is now AI in the DB
-    resp = ws_client.get(f"/api/characters/{character_id}")
-    assert resp.status_code == 200
-    assert resp.json()["is_ai"] is True
+        active = ws_game.session_manager.get_session(session_id)
+        assert active is not None
+        assert active.state_data["characters"][character_id]["is_ai"] is True
+        assert character_id in active.ai_players
+
+    assert any(event.get("event_type") == "session_state" for event in events)
 
 
 @pytest.mark.asyncio

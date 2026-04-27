@@ -16,6 +16,7 @@ from app.agents.schemas import (
     PlayerActionChoice,
     PlayerPersonality,
 )
+from app.game.constants import INACTIVE_STATUSES
 from app.llm.base_client import LLMClient
 from app.llm.model_router import router
 from app.llm.ollama_client import OllamaError
@@ -26,7 +27,6 @@ logger = logging.getLogger(__name__)
 _NON_JSON_LLM_ERROR = "Réponse LLM non parsable (JSON manquant)."
 
 _ELLIPSIS_ONLY_RESPONSES = {"...", "…"}
-_INACTIVE_NPC_STATUSES = {"defeated", "surrendered", "fled"}
 
 _ACTION_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
@@ -781,7 +781,7 @@ class PlayerAgent(BaseAgent):
     def _is_alive_combatant(cls, cdata: Any) -> bool:
         if isinstance(cdata, dict):
             status = str(cdata.get("status", "active")).lower()
-            if status in _INACTIVE_NPC_STATUSES:
+            if status in INACTIVE_STATUSES:
                 return False
         hp = cls._combatant_hp(cdata)
         return hp is None or hp > 0
@@ -874,7 +874,7 @@ class PlayerAgent(BaseAgent):
             }
             if cdata.get("is_player") is True or cid in character_ids:
                 allies.append(entry)
-            elif hp > 0 and status not in _INACTIVE_NPC_STATUSES:
+            elif hp > 0 and status not in INACTIVE_STATUSES:
                 enemies.append(entry)
 
         return {
@@ -901,18 +901,6 @@ class PlayerAgent(BaseAgent):
         if clean_description:
             return f"{self._character_name} agit avec prudence : {clean_description}."
         return f"{self._character_name} se remet en garde."
-
-    def _build_messages(
-        self,
-        user_prompt: str,
-        context_manager: Optional[ContextManager],
-    ) -> list[dict[str, str]]:
-        if context_manager is not None:
-            msgs = context_manager.to_ollama_messages(self._system_prompt)
-        else:
-            msgs = [{"role": "system", "content": self._system_prompt}]
-        msgs.append({"role": "user", "content": user_prompt})
-        return msgs
 
     def _parse_player_action(
         self,
@@ -973,17 +961,6 @@ class PlayerAgent(BaseAgent):
         if "current_hp" not in result and "hp" in result:
             result["current_hp"] = result["hp"]
         return result
-
-    @staticmethod
-    def _format_messages(messages: Optional[list]) -> str:
-        if not messages:
-            return "(aucun message récent)"
-        lines: list[str] = []
-        for msg in messages[-10:]:
-            speaker = getattr(msg, "speaker", "?")
-            content = getattr(msg, "content", "")
-            lines.append(f"[{speaker}] {content}")
-        return "\n".join(lines)
 
     @staticmethod
     def _summarize_recent_narrative(game_state: dict[str, Any]) -> str:
