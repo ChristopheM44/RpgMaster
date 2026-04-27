@@ -267,7 +267,7 @@ class AIPlayerManager:
                 source="ai_player_manager",
             )
 
-            if db is not None:
+            if db is not None and action.action_type in {"talk", "wait"}:
                 from app.models.message import MessageRole, MessageType
                 from app.services.message_service import persist_narration
                 await persist_narration(
@@ -285,18 +285,22 @@ class AIPlayerManager:
                     },
                 )
 
-            # Full engine + GM pipeline
-            await action_resolver.resolve(
-                session_id=session_id,
-                action_type=action.action_type,
-                content=f"[Compagnon IA] {action.action_description}",
-                character_id=current.combatant_id,
-                target_id=action.target,
-                active=active,
-                db=db,
-                spell_id=spell_id,
-                slot_level=slot_level,
-            )
+            # Full engine + GM pipeline for mechanical/arbitrated actions.
+            if action.action_type not in {"talk", "wait"}:
+                await action_resolver.resolve(
+                    session_id=session_id,
+                    action_type=action.action_type,
+                    content=f"[Compagnon IA] {action.action_description}",
+                    character_id=current.combatant_id,
+                    target_id=action.target,
+                    active=active,
+                    db=db,
+                    spell_id=spell_id,
+                    slot_level=slot_level,
+                    actor_kind="companion",
+                    actor_name=current.name,
+                    display_text=visible_text,
+                )
 
             active.turn_number += 1
             active.mark_dirty()
@@ -461,8 +465,8 @@ class AIPlayerManager:
             # Collecter la réponse pour la conclusion sociale éventuelle
             companion_responses.append({"speaker": char_name, "text": visible_text})
 
-            # Persist to DB
-            if db is not None:
+            # Persist locally only for non-pipeline social/passive reactions.
+            if db is not None and action.action_type not in _EXPLORATION_ARBITRAGE_ACTIONS:
                 from app.models.message import MessageRole, MessageType
                 from app.services.message_service import persist_narration
                 msg_type = (
@@ -495,6 +499,9 @@ class AIPlayerManager:
                         target_id=action.target,
                         active=active,
                         db=db,
+                        actor_kind="companion",
+                        actor_name=char_name,
+                        display_text=visible_text,
                     )
                 except Exception as exc:
                     logger.error(

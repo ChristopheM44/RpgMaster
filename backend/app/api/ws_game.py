@@ -44,7 +44,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.schemas import AgentContext
 from app.db.database import get_db
-from app.engine.combat import roll_attack, roll_damage
 from app.engine.tactical_grid import initialize_positions, validate_move, GridPosition
 from app.game.action_resolver import ActionResolver
 from app.game.combat_triggers import prime_combat_from_aggressive_action
@@ -939,7 +938,7 @@ async def _handle_ai_turns(session_id: str, active: Any, db: AsyncSession) -> No
             # which is resolved below by the deterministic monster branch.
             continue
 
-        # Enemy monster: deterministic mechanical resolution first, then GM prose narration
+        # Enemy monster: same mechanical + GM pipeline as players/companions.
         combatants_info: dict[str, Any] = active.state_data.get("combatants", {})
         monster_info = combatants_info.get(current.combatant_id, {})
         if str(monster_info.get("status", "active")).lower() in INACTIVE_STATUSES:
@@ -947,121 +946,16 @@ async def _handle_ai_turns(session_id: str, active: Any, db: AsyncSession) -> No
             active.mark_dirty()
             continue
 
-        # Pick target: first alive player
-        target_id: Optional[str] = None
-        target_name = "la cible"
-        target_ac = 10
-        for cid, cdata in combatants_info.items():
-            if cdata.get("is_player", False) and int(cdata.get("hp", 0)) > 0:
-                target_id = cid
-                target_name = cdata.get("name", cid)
-                target_ac = int(cdata.get("ac", 10))
-                break
-
-        attack_bonus = int(monster_info.get("attack_bonus", 0))
-        damage_notation = monster_info.get("damage_notation", "1d4")
-
-        # Résolution déterministe (moteur de règles D&D SRD)
-        damage_dealt = 0
-        try:
-            atk = roll_attack(attack_bonus, target_ac)
-            if target_id is not None and atk.hit:
-                dmg = roll_damage(damage_notation, critical=atk.critical)
-                damage_dealt = dmg.total
-                new_hp = max(0, int(combatants_info[target_id].get("hp", 0)) - damage_dealt)
-                combatants_info[target_id]["hp"] = new_hp
-                active.mark_dirty()
-                await event_bus.publish_to_session(
-                    session_id,
-                    EventType.HP_CHANGED,
-                    {"combatant_id": target_id, "hp": new_hp, "delta": -damage_dealt},
-                    source="ws_game",
-                )
-                # Si un joueur tombe à 0 PV : init jets de sauvegarde contre la mort
-                if new_hp == 0 and combatants_info[target_id].get("is_player", False):
-                    cdata = combatants_info[target_id]
-                    if "death_saves" not in cdata:
-                        cdata["death_saves"] = {"successes": 0, "failures": 0, "stable": False}
-                    conds = list(cdata.get("conditions", []))
-                    if "inconscient" not in conds:
-                        conds.append("inconscient")
-                        cdata["conditions"] = conds
-        except Exception as exc:
-            logger.error("_handle_ai_turns: résolution mécanique échouée pour '%s': %s", current.name, exc)
-            atk = roll_attack(0, 10)  # attaque neutre pour continuer
-
-        # Émission de l'event structuré COMBAT_ACTION
-        await event_bus.publish_to_session(
-            session_id,
-            EventType.COMBAT_ACTION,
-            {
-                "attacker_id": current.combatant_id,
-                "attacker_name": current.name,
-                "target_id": target_id,
-                "target_name": target_name,
-                "action_type": "attack",
-                "action_name": "Attaque",
-                "d20": atk.d20_roll,
-                "attack_roll": atk.total,
-                "attack_bonus": attack_bonus,
-                "target_ac": target_ac,
-                "hit": atk.hit,
-                "critical": atk.critical,
-                "damage": damage_dealt if atk.hit else None,
-                "damage_notation": damage_notation,
-            },
-            source="ws_game",
-        )
-
-        # GM narre l'action en prose (mécaniques déjà résolues — ne pas réappliquer)
-        roll_results = {
-            "attacker": current.name,
-            "target": target_name,
-            "d20": atk.d20_roll,
-            "attack_total": atk.total,
-            "target_ac": target_ac,
-            "hit": atk.hit,
-            "critical": atk.critical,
-            "damage": damage_dealt,
-            "damage_notation": damage_notation,
-        }
-        try:
-            await event_bus.publish_to_session(
-                session_id,
-                EventType.AI_THINKING,
-                {"agent_kind": "gm", "thinking": True},
-                source="ws_game",
-            )
-            gm_response = await action_resolver._gm.run_combat_turn(
-                game_state=active.state_data,
-                player_action=f"[Tour du monstre] {current.name} attaque {target_name}.",
-                roll_results=roll_results,
-            )
-            narration_text = gm_response.narration
-            # NE PAS exécuter gm_response.actions — les mécaniques sont déjà résolues
-        except Exception as exc:
-            logger.error("_handle_ai_turns: GM agent failed for '%s': %s", current.name, exc)
-            if atk.hit:
-                crit_str = " (CRITIQUE !)" if atk.critical else ""
-                narration_text = (
-                    f"{current.name} attaque {target_name}{crit_str}"
-                    f" et inflige {damage_dealt} dégâts !"
-                )
-            else:
-                narration_text = f"{current.name} attaque {target_name} mais rate !"
-        finally:
-            await event_bus.publish_to_session(
-                session_id,
-                EventType.AI_THINKING,
-                {"agent_kind": "gm", "thinking": False},
-                source="ws_game",
-            )
-
-        await event_bus.publish_to_session(
-            session_id,
-            EventType.NARRATION,
-            {"text": narration_text, "speaker": current.name},
-            source="ws_game",
+        await action_resolver.resolve(
+            session_id=session_id,
+            action_type="attack",
+            content=None,
+            character_id=current.combatant_id,
+            target_id=None,
+            active=active,
+            db=db,
+            actor_kind="monster",
+            actor_name=current.name,
         )
 
         # Check for newly inactive combatants after monster action

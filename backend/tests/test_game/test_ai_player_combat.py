@@ -20,7 +20,8 @@ from typing import Any, Dict
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.agents.player_agent import PlayerAgent
-from app.agents.schemas import PlayerPersonality
+from app.agents.schemas import AgentResponse, PlayerPersonality
+from app.game.action_resolver import ActionResolver
 from app.game.ai_player_manager import AIPlayerManager
 from app.game.session_manager import ActiveSession
 from app.game.turn_manager import CombatantInfo, TurnManager
@@ -339,9 +340,8 @@ async def test_process_ai_turns_validates_and_falls_back_to_wait() -> None:
             triggered = await ai_manager.process_ai_turns("test_session", active, resolver)
 
     assert triggered == 1
-    # The resolver was still called, but with 'wait'
-    call_kwargs = resolver.resolve.call_args.kwargs
-    assert call_kwargs["action_type"] == "wait"
+    # wait reste local : pas de pipeline mecanique/GM.
+    resolver.resolve.assert_not_called()
 
 
 async def test_process_ai_turns_invalid_spell_falls_back_to_attack() -> None:
@@ -420,11 +420,17 @@ async def test_process_ai_turns_persists_ai_combat_action(db_session) -> None:
     with patch.object(thorin_agent._client, "chat", new=AsyncMock(
         return_value=_attack_json("Thorin")
     )):
-        resolver = MagicMock()
-        resolver.resolve = AsyncMock()
+        mock_gm = MagicMock()
+        mock_gm.think = AsyncMock(return_value=AgentResponse(
+            content="Thorin force le gobelin a reculer.",
+            actions=[],
+        ))
+        resolver = ActionResolver(gm_agent=mock_gm)
 
         publish = AsyncMock()
-        with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=publish):
+        with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=publish), \
+             patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast",
+                   new=AsyncMock()):
             ai_manager = AIPlayerManager()
             triggered = await ai_manager.process_ai_turns(
                 session.id,
@@ -454,7 +460,7 @@ async def test_process_ai_turns_persists_ai_combat_action(db_session) -> None:
     narration_calls = [
         call for call in publish.await_args_list if call.args[1] == "narration"
     ]
-    assert narration_calls[-1].args[2]["text"] == "Thorin attaque."
+    assert any(call.args[2]["text"] == "Thorin attaque." for call in narration_calls)
 
 
 async def test_cleanup_after_ai_kill_skips_dead_next_monster() -> None:

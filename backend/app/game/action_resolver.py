@@ -14,10 +14,9 @@ import json
 import logging
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from app.agents.gm_agent import GMAgent
-from app.agents.schemas import AgentContext, AgentResponse, GMResponse
 from app.engine import combat as combat_engine
 from app.engine.ability_checks import ability_modifier, proficiency_bonus
 from app.engine.dice import roll
@@ -26,7 +25,6 @@ from app.engine.spells import (
     spell_save_dc,
     upcast_damage,
 )
-from app.game.combat_triggers import prime_combat_from_hostile_narration
 from app.game.event_bus import EventType, event_bus
 from app.game.session_manager import ActiveSession
 from app.llm.voxtral_client import tts_router
@@ -61,12 +59,6 @@ def _load_spells() -> Dict[str, Any]:
             data = json.load(fh)
         _SPELLS_CACHE = {s["id"]: s for s in data["spells"]}
     return _SPELLS_CACHE
-
-_FALLBACK_NARRATION = (
-    "Le Maître du Jeu observe la situation… "
-    "(Le système de narration est temporairement indisponible.)"
-)
-
 
 class ActionResolver:
     """Orchestre le traitement complet d'une action joueur.
@@ -104,8 +96,11 @@ class ActionResolver:
         db: Optional[Any] = None,
         spell_id: Optional[str] = None,
         slot_level: Optional[int] = None,
+        actor_kind: Literal["player", "companion", "monster"] = "player",
+        actor_name: Optional[str] = None,
+        display_text: Optional[str] = None,
     ) -> None:
-        """Exécute le pipeline complet pour une action joueur.
+        """Exécute le pipeline complet pour une action.
 
         Args:
             session_id: Identifiant de la session active.
@@ -115,286 +110,25 @@ class ActionResolver:
             target_id: ID de la cible (optionnel).
             active: Session active en mémoire.
         """
-        roll_results: Optional[Dict[str, Any]] = None
+        from app.game.action_pipeline import ActionPipeline, ActionRequest
 
-        # ----------------------------------------------------------------
-        # 1. Résolution mécanique (moteur pur, pas de LLM)
-        # ----------------------------------------------------------------
-        if action_type == "attack":
-            roll_results = self._resolve_attack(character_id, target_id, active.state_data)
-            # Le moteur fait autorité : appliquer les dégâts immédiatement, sans attendre le GM.
-            if roll_results and roll_results.get("hit") and target_id:
-                damage_amount = roll_results.get("damage", {}).get("total", 0)
-                if damage_amount > 0:
-                    await self._apply_gm_action(
-                        session_id,
-                        "damage_apply",
-                        {"target": target_id, "amount": damage_amount},
-                        active,
-                    )
-        elif action_type == "death_save":
-            roll_results = self._resolve_death_save(character_id, active.state_data)
-            await self._apply_death_save_outcome(session_id, character_id, roll_results, active)
-        elif action_type == "stabilize":
-            roll_results = self._resolve_stabilize(character_id, target_id, active.state_data)
-            if roll_results.get("success") and target_id:
-                combatants_st: Dict[str, Any] = active.state_data.setdefault("combatants", {})
-                if target_id in combatants_st:
-                    ds_st = combatants_st[target_id].setdefault(
-                        "death_saves", {"successes": 0, "failures": 0, "stable": False}
-                    )
-                    ds_st["stable"] = True
-                    conds_st: List[str] = list(combatants_st[target_id].get("conditions", []))
-                    if "inconscient" in conds_st:
-                        conds_st.remove("inconscient")
-                        combatants_st[target_id]["conditions"] = conds_st
-                        await event_bus.publish_to_session(
-                            session_id,
-                            EventType.CONDITION_CHANGED,
-                            {"combatant_id": target_id, "condition": "inconscient", "added": False},
-                            source="action_resolver",
-                        )
-                    await event_bus.publish_to_session(
-                        session_id,
-                        EventType.DEATH_SAVE_UPDATED,
-                        {"combatant_id": target_id, "death_saves": dict(ds_st)},
-                        source="action_resolver",
-                    )
-                    active.mark_dirty()
-        elif action_type == "cast_spell":
-            if spell_id is not None and db is not None:
-                roll_results = await self._resolve_cast_spell(
-                    session_id, character_id, spell_id, slot_level, target_id, active, db
-                )
-                # Le moteur fait autorité : appliquer les dégâts immédiatement.
-                if roll_results and not roll_results.get("error") and target_id:
-                    atk = roll_results.get("attack", {})
-                    dmg = roll_results.get("damage", {})
-                    # Sorts avec jet d'attaque : appliquer si touche
-                    # Sorts auto_hit ou save : appliquer directement
-                    if dmg:
-                        hit = atk.get("hit", True) if atk else True
-                        if hit:
-                            damage_amount = dmg.get("total", 0)
-                            if damage_amount > 0:
-                                await self._apply_gm_action(
-                                    session_id,
-                                    "damage_apply",
-                                    {"target": target_id, "amount": damage_amount},
-                                    active,
-                                )
-            else:
-                roll_results = self._resolve_generic_roll(content)
-
-        # ----------------------------------------------------------------
-        # 2. Construction du contexte pour le GMAgent
-        # ----------------------------------------------------------------
-        player_action_text = content or action_type
-        if roll_results:
-            player_action_text = (
-                f"{player_action_text} [Résultat mécanique : {roll_results.get('summary', '')}]"
-            )
-
-        # 2.a Persister l'action du joueur AVANT de relire l'historique,
-        #     afin qu'elle fasse partie du contexte envoyé au MJ (cohérence
-        #     bilatérale de la conversation).
-        speaker_name = "Joueur"
-        characters_data = active.state_data.get("characters", {}) if active.state_data else {}
-        if character_id and isinstance(characters_data, dict):
-            speaker_name = characters_data.get(character_id, {}).get("name") or "Joueur"
-
-        if db is not None:
-            from app.models.message import MessageRole, MessageType
-            from app.services.message_service import persist_narration
-
-            await persist_narration(
-                session_id,
-                player_action_text,
-                speaker_name,
-                db,
-                role=MessageRole.PLAYER,
-                message_type=MessageType.ACTION,
-                metadata={"action_type": action_type, "character_id": character_id},
-            )
-
-        # 2.b Relire l'historique récent pour alimenter le prompt du MJ.
-        recent_messages: list = []
-        if db is not None:
-            from app.services.message_service import load_recent_messages
-            recent_messages = await load_recent_messages(session_id, db)
-
-        context = AgentContext(
-            session_id=session_id,
-            game_phase=active.phase.value.upper(),
-            game_state=active.state_data,
-            player_action=player_action_text,
-            roll_results=roll_results or {},
-            messages=recent_messages,
+        pipeline = ActionPipeline(self._gm, event_bus, db, mechanics=self)
+        await pipeline.resolve_and_publish(
+            ActionRequest(
+                session_id=session_id,
+                actor_id=character_id,
+                actor_name=actor_name,
+                actor_kind=actor_kind,
+                action_type=action_type,
+                content=content,
+                target_id=target_id,
+                spell_id=spell_id,
+                slot_level=slot_level,
+                display_text=display_text,
+            ),
+            active,
+            db,
         )
-
-        gm_response: Optional[AgentResponse] = None
-        try:
-            await event_bus.publish_to_session(
-                session_id,
-                EventType.AI_THINKING,
-                {"agent_kind": "gm", "thinking": True},
-                source="action_resolver",
-            )
-            gm_response = await self._gm.think(context)
-        except Exception as exc:
-            logger.error("ActionResolver : GMAgent échoué : %s", exc)
-        finally:
-            await event_bus.publish_to_session(
-                session_id,
-                EventType.AI_THINKING,
-                {"agent_kind": "gm", "thinking": False},
-                source="action_resolver",
-            )
-
-        # Stocker l'intent classifié pour que ws_game puisse orchestrer
-        # l'ordre d'exécution (social : compagnons d'abord, MJ conclut).
-        active.last_gm_intent = gm_response.action_intent if gm_response else None
-
-        has_gm_roll_request = bool(
-            gm_response
-            and any(gm_action.type == "roll_request" for gm_action in gm_response.actions)
-        )
-
-        if gm_response and not has_gm_roll_request:
-            prime_combat_from_hostile_narration(
-                active,
-                gm_response.content,
-                source="gm_narration",
-            )
-
-        # ----------------------------------------------------------------
-        # 3. Publication des événements sur le bus
-        # ----------------------------------------------------------------
-        if roll_results:
-            await event_bus.publish_to_session(
-                session_id,
-                EventType.ROLL_RESULT,
-                self._normalize_roll_event(roll_results),
-                source="action_resolver",
-            )
-
-        narration_text = gm_response.content if gm_response else _FALLBACK_NARRATION
-        if not has_gm_roll_request:
-            await self._publish_gm_narration(session_id, narration_text, db)
-
-        # ----------------------------------------------------------------
-        # 4. Traitement des actions mécaniques demandées par le GM
-        # ----------------------------------------------------------------
-        pending_rolls: List[Dict[str, Any]] = []
-        canon_dirty = False
-        if gm_response:
-            for gm_action in gm_response.actions:
-                # Fusionner gm_action.target dans params pour simplifier les handlers
-                merged_params: Dict[str, Any] = dict(gm_action.params)
-                if gm_action.target and "target" not in merged_params:
-                    merged_params["target"] = gm_action.target
-
-                if gm_action.type == "roll_request":
-                    roll_evt = self._execute_roll_request(merged_params, character_id, active)
-                    if roll_evt:
-                        pending_rolls.append(roll_evt)
-                        await event_bus.publish_to_session(
-                            session_id, EventType.ROLL_RESULT, roll_evt, source="action_resolver"
-                        )
-                else:
-                    await self._apply_gm_action(
-                        session_id, gm_action.type, merged_params, active
-                    )
-                    if gm_action.type in {
-                        "journal_update",
-                        "quest_add",
-                        "chronicle_add",
-                        "state_transition",
-                    }:
-                        canon_dirty = True
-
-        if has_gm_roll_request and not pending_rolls:
-            prime_combat_from_hostile_narration(
-                active,
-                narration_text,
-                source="gm_narration",
-            )
-            await self._publish_gm_narration(session_id, narration_text, db)
-
-        # ----------------------------------------------------------------
-        # 5. Narration de l'issue si des jets ont été effectués
-        # ----------------------------------------------------------------
-        if pending_rolls:
-            outcome_response: Optional[GMResponse] = None
-            try:
-                await event_bus.publish_to_session(
-                    session_id,
-                    EventType.AI_THINKING,
-                    {"agent_kind": "gm", "thinking": True},
-                    source="action_resolver",
-                )
-                try:
-                    outcome_candidate = await self._gm.narrate_outcome_response(
-                        context, pending_rolls
-                    )
-                except (AttributeError, TypeError):
-                    outcome_candidate = await self._gm.narrate_outcome(context, pending_rolls)
-
-                if isinstance(outcome_candidate, GMResponse):
-                    outcome_response = outcome_candidate
-                elif isinstance(outcome_candidate, AgentResponse):
-                    outcome_response = GMResponse(
-                        narration=outcome_candidate.content,
-                        actions=outcome_candidate.actions,
-                        action_intent=outcome_candidate.action_intent,
-                    )
-                elif outcome_candidate is not None:
-                    outcome_response = GMResponse(narration=str(outcome_candidate))
-            except Exception as exc:
-                logger.error("ActionResolver : narrate_outcome échoué : %s", exc)
-            finally:
-                await event_bus.publish_to_session(
-                    session_id,
-                    EventType.AI_THINKING,
-                    {"agent_kind": "gm", "thinking": False},
-                    source="action_resolver",
-                )
-
-            if outcome_response and outcome_response.narration:
-                outcome_text = outcome_response.narration
-                prime_combat_from_hostile_narration(
-                    active,
-                    outcome_text,
-                    source="gm_roll_outcome",
-                )
-                await self._publish_gm_narration(session_id, outcome_text, db)
-                for gm_action in outcome_response.actions:
-                    merged_params: Dict[str, Any] = dict(gm_action.params)
-                    if gm_action.target and "target" not in merged_params:
-                        merged_params["target"] = gm_action.target
-                    await self._apply_gm_action(
-                        session_id, gm_action.type, merged_params, active
-                    )
-                    if gm_action.type in {
-                        "journal_update",
-                        "quest_add",
-                        "chronicle_add",
-                        "state_transition",
-                    }:
-                        canon_dirty = True
-
-        if canon_dirty and db is not None:
-            try:
-                from app.services import campaign_dossier_service
-
-                await campaign_dossier_service.synthesize_canon_for_session(
-                    session_id,
-                    active.state_data,
-                    [],
-                    db,
-                )
-            except Exception as exc:
-                logger.warning("Synthèse canon campagne ignorée : %s", exc)
 
     async def _publish_gm_narration(
         self,

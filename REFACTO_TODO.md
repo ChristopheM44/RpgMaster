@@ -29,20 +29,25 @@ Cadence : stop après chaque lot → tests + diff review + ✅ user avant d'ench
 - [x] ✅ Validation user → passer au Lot 1.3
 
 ### Lot 1.3 — Tests d'intégration de référence (avant Lot 1.4)
-- [ ] Créer `tests/test_game/test_action_pipeline.py` (4 scénarios baseline)
-- [ ] Créer `tests/test_agents/test_agent_helpers.py`
-- [ ] Tests verts → baseline confirmée
-- [ ] ✅ Validation user → passer au Lot 1.4
+- [x] Créer `tests/test_game/test_action_pipeline.py` (4 scénarios baseline)
+- [x] Créer `tests/test_agents/test_agent_helpers.py`
+- [x] Tests verts → baseline confirmée
+- [x] ✅ Validation user → passer au Lot 1.4
 
 ### Lot 1.4 — Pipeline unifié de résolution d'action 🎯🎯
-- [ ] Créer `backend/app/game/action_pipeline.py` (`ResolvedAction`, `ActionPipeline`)
-- [ ] Créer `backend/app/game/gm_response_executor.py`
-- [ ] Modifier `action_resolver.py` → délègue au pipeline
-- [ ] Modifier `ai_player_manager.py` → délègue au pipeline
-- [ ] Modifier `ws_game.py` `_handle_ai_turns()` → délègue au pipeline
-- [ ] `pytest tests/test_game/ tests/test_agents/ -v` vert
-- [ ] Smoke test manuel (humain + compagnon + monstre → narration identique)
+- [x] Créer `backend/app/game/action_pipeline.py` (`ActionRequest`, `ResolvedAction`, `ActionPipeline`)
+- [x] Créer `backend/app/game/gm_response_executor.py`
+- [x] Modifier `action_resolver.py` → façade compatible qui délègue au pipeline
+- [x] Modifier `ai_player_manager.py` → les actions arbitrées passent par le pipeline ; `talk` / `wait` restent locaux
+- [x] Modifier `ws_game.py` `_handle_ai_turns()` → les monstres passent par `action_resolver.resolve(..., actor_kind="monster")`
+- [x] Mettre à jour `tests/test_game/test_action_pipeline.py` → plus de divergence humain / monstre, `ROLL_RESULT` canonique pour les 3 acteurs
+- [x] `pytest backend/tests/test_game backend/tests/test_agents -v` → 234 passed
+- [x] `pytest backend/tests --cov=app.game --cov=app.agents -q` → 723 passed
+- [x] Smoke local scripté OK : humain + compagnon + monstre publient tous `ROLL_RESULT`, puis narration MJ uniforme
+- [ ] Smoke test manuel UI/WebSocket complet (session réelle 1 humain + 1 compagnon IA + 1 monstre)
 - [ ] ✅ Validation user → Sprint 1 terminé
+
+> Note : `COMBAT_ACTION` reste présent pour compatibilité code/frontend, mais les attaques unifiées de ce lot publient désormais `ROLL_RESULT` puis narration `speaker="Maître du Jeu"` pour humain, compagnon et monstre.
 
 ---
 
