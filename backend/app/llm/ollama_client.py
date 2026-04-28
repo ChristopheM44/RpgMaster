@@ -2,19 +2,26 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 from collections.abc import AsyncIterator
 from typing import Optional
 
 import httpx
 import ollama
 
-from app.config import get_gm_model, get_ollama_api_key, get_ollama_url
+from app.config import (
+    get_gm_model,
+    get_ollama_api_key,
+    get_ollama_max_concurrent_requests,
+    get_ollama_url,
+)
 
 logger = logging.getLogger(__name__)
 
 _MAX_RETRIES = 3
 _BASE_DELAY = 1.0  # seconds, doubles on each retry
 _LLM_TIMEOUT = 120.0  # seconds before giving up on a single LLM call
+_SEMAPHORES: dict[tuple[int, int], asyncio.Semaphore] = {}
 
 
 class OllamaError(Exception):
@@ -73,6 +80,21 @@ class OllamaClient:
             self._cached_headers = current_headers
         return self._client
 
+    @staticmethod
+    def _semaphore() -> asyncio.Semaphore:
+        limit = get_ollama_max_concurrent_requests()
+        loop_id = id(asyncio.get_running_loop())
+        key = (limit, loop_id)
+        sem = _SEMAPHORES.get(key)
+        if sem is None:
+            sem = asyncio.Semaphore(limit)
+            _SEMAPHORES[key] = sem
+        return sem
+
+    async def _with_llm_slot(self, coro_fn) -> str:
+        async with self._semaphore():
+            return await coro_fn()
+
     # -------------------------------------------------------------------------
     # Public API
     # -------------------------------------------------------------------------
@@ -94,7 +116,7 @@ class OllamaClient:
             )
             return response.message.content  # type: ignore[union-attr]
 
-        return await self._with_retry(_call)
+        return await self._with_retry(lambda: self._with_llm_slot(_call))
 
     async def generate(
         self,
@@ -115,7 +137,7 @@ class OllamaClient:
             )
             return response.response  # type: ignore[union-attr]
 
-        return await self._with_retry(_call)
+        return await self._with_retry(lambda: self._with_llm_slot(_call))
 
     async def stream_chat(
         self,
@@ -125,15 +147,16 @@ class OllamaClient:
     ) -> AsyncIterator[str]:
         """Stream une réponse chat, retourne les chunks de texte un par un."""
         try:
-            stream = await self._get_client().chat(
-                model=model or self.model,
-                messages=messages,
-                options={"temperature": temperature},
-                stream=True,
-            )
-            async for chunk in stream:  # type: ignore[union-attr]
-                if chunk.message and chunk.message.content:
-                    yield chunk.message.content
+            async with self._semaphore():
+                stream = await self._get_client().chat(
+                    model=model or self.model,
+                    messages=messages,
+                    options={"temperature": temperature},
+                    stream=True,
+                )
+                async for chunk in stream:  # type: ignore[union-attr]
+                    if chunk.message and chunk.message.content:
+                        yield chunk.message.content
         except (httpx.ConnectError, httpx.TimeoutException, ollama.ResponseError) as exc:
             raise OllamaError(f"Streaming interrompu : {exc}") from exc
 
@@ -175,7 +198,7 @@ class OllamaClient:
                     exc,
                     delay,
                 )
-                await asyncio.sleep(delay)
+                await asyncio.sleep(delay + random.uniform(0.0, 0.25))
                 delay *= 2
 
         raise OllamaError(

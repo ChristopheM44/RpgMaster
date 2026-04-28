@@ -19,6 +19,13 @@ from app.game.constants import INACTIVE_STATUSES
 from app.game.event_bus import EventType, event_bus
 from app.game.gm_response_executor import GMResponseExecutor
 from app.game.session_manager import ActiveSession
+from app.llm.budget import (
+    begin_llm_call_scope,
+    end_llm_call_scope,
+    is_companion_social_prompt,
+    is_sober_mode,
+    should_use_gm_for_action,
+)
 from app.llm.voxtral_client import tts_router
 
 logger = logging.getLogger(__name__)
@@ -79,6 +86,22 @@ class ActionPipeline:
         self._executor = GMResponseExecutor(event_bus_instance, source=source)
 
     async def resolve_and_publish(
+        self,
+        request: ActionRequest,
+        active: ActiveSession,
+        db: Optional[Any] = None,
+    ) -> ResolvedAction:
+        """Execute le flux complet pour une action deja choisie."""
+        token, scope = begin_llm_call_scope(
+            request.session_id,
+            f"{request.actor_kind}:{request.action_type}",
+        )
+        try:
+            return await self._resolve_and_publish_impl(request, active, db)
+        finally:
+            end_llm_call_scope(token, scope)
+
+    async def _resolve_and_publish_impl(
         self,
         request: ActionRequest,
         active: ActiveSession,
@@ -197,37 +220,66 @@ class ActionPipeline:
             target_name,
             roll_results,
         )
-        recent_messages: list[Any] = []
-        if actual_db is not None:
-            from app.services.message_service import load_recent_messages
-
-            recent_messages = await load_recent_messages(request.session_id, actual_db)
-
-        context = AgentContext(
-            session_id=request.session_id,
-            game_phase=self._phase_value(active).upper(),
-            game_state=active.state_data,
-            player_action=prompt_action_text,
-            roll_results=roll_results or {},
-            messages=recent_messages,
+        phase_value = self._phase_value(active).upper()
+        use_gm = should_use_gm_for_action(
+            phase=phase_value,
+            action_type=request.action_type,
+            actor_kind=request.actor_kind,
+            content=request.content,
+            roll_results=roll_results,
         )
+        if (
+            is_sober_mode()
+            and phase_value != "COMBAT"
+            and is_companion_social_prompt(request.content)
+            and not active.ai_players
+        ):
+            use_gm = True
+        context: Optional[AgentContext] = None
 
         gm_response: Optional[AgentResponse] = None
-        try:
-            await self._publish_ai_thinking(request.session_id, True)
-            gm_candidate = await self._gm.think(context)
-            gm_response = self._as_agent_response(gm_candidate)
-        except Exception as exc:
-            logger.error("ActionPipeline : GMAgent echoue : %s", exc)
-        finally:
-            await self._publish_ai_thinking(request.session_id, False)
+        if use_gm:
+            recent_messages: list[Any] = []
+            if actual_db is not None:
+                from app.services.message_service import load_recent_messages
 
-        active.last_gm_intent = gm_response.action_intent if gm_response else None
+                recent_messages = await load_recent_messages(request.session_id, actual_db)
+
+            context = AgentContext(
+                session_id=request.session_id,
+                game_phase=phase_value,
+                game_state=active.state_data,
+                player_action=prompt_action_text,
+                roll_results=roll_results or {},
+                messages=recent_messages,
+            )
+
+            try:
+                await self._publish_ai_thinking(request.session_id, True)
+                gm_candidate = await self._gm.think(context)
+                gm_response = self._as_agent_response(gm_candidate)
+            except Exception as exc:
+                logger.error("ActionPipeline : GMAgent echoue : %s", exc)
+            finally:
+                await self._publish_ai_thinking(request.session_id, False)
+
+        if gm_response:
+            active.last_gm_intent = gm_response.action_intent
+        elif (
+            is_sober_mode()
+            and phase_value != "COMBAT"
+            and is_companion_social_prompt(request.content)
+        ):
+            active.last_gm_intent = "social"
+        else:
+            active.last_gm_intent = None
 
         has_gm_roll_request = bool(
             gm_response
             and any(gm_action.type == "roll_request" for gm_action in gm_response.actions)
         )
+        if gm_response and phase_value == "COMBAT":
+            gm_response = self._without_combat_damage_actions(gm_response)
 
         if gm_response and not has_gm_roll_request:
             prime_combat_from_hostile_narration(
@@ -248,9 +300,19 @@ class ActionPipeline:
                 source=self._source,
             )
 
-        narration_text = gm_response.content if gm_response else _FALLBACK_NARRATION
+        if gm_response:
+            narration_text = gm_response.content
+        elif use_gm:
+            narration_text = _FALLBACK_NARRATION
+        else:
+            narration_text = self._deterministic_narration(
+                request,
+                actor_name,
+                target_name,
+                roll_results,
+            )
         final_narration = narration_text
-        if not has_gm_roll_request:
+        if not has_gm_roll_request and narration_text:
             await self._publish_gm_narration(request.session_id, narration_text, actual_db)
 
         # 4. Actions GM initiales. Si roll_request, l'outcome narrera le resultat.
@@ -274,10 +336,23 @@ class ActionPipeline:
                 narration_text,
                 source="gm_narration",
             )
-            await self._publish_gm_narration(request.session_id, narration_text, actual_db)
+            if narration_text:
+                await self._publish_gm_narration(request.session_id, narration_text, actual_db)
 
         # 5. Narration finale des jets demandes par le GM.
         if pending_rolls:
+            if context is None:
+                logger.warning(
+                    "ActionPipeline : jets GM en attente sans contexte de narration."
+                )
+                context = AgentContext(
+                    session_id=request.session_id,
+                    game_phase=phase_value,
+                    game_state=active.state_data,
+                    player_action=prompt_action_text,
+                    roll_results=roll_results or {},
+                    messages=[],
+                )
             outcome_response = await self._narrate_outcome(
                 request.session_id,
                 context,
@@ -338,6 +413,62 @@ class ActionPipeline:
 
             self._mechanics = ActionResolver(gm_agent=self._gm)
         return self._mechanics
+
+    @staticmethod
+    def _deterministic_narration(
+        request: ActionRequest,
+        actor_name: str,
+        target_name: str,
+        roll_results: Optional[dict[str, Any]],
+    ) -> str:
+        action = request.action_type.strip().lower()
+        target_label = target_name or "la cible"
+
+        if is_companion_social_prompt(request.content):
+            return ""
+
+        if action == "attack" and roll_results:
+            hit = bool(roll_results.get("hit"))
+            critical = bool(roll_results.get("critical"))
+            if hit:
+                damage = int(roll_results.get("damage", {}).get("total", 0))
+                crit_text = " d'un coup critique" if critical else ""
+                return (
+                    f"{actor_name} touche {target_label}{crit_text} "
+                    f"et inflige {damage} degats."
+                )
+            return f"{actor_name} attaque {target_label}, mais manque sa cible."
+
+        if action == "cast_spell" and roll_results:
+            summary = str(roll_results.get("summary") or "").strip()
+            spell_name = str(roll_results.get("spell_name") or "un sort")
+            if summary:
+                return f"{actor_name} lance {spell_name}. {summary}."
+            return f"{actor_name} lance {spell_name} vers {target_label}."
+
+        if action == "death_save" and roll_results:
+            return str(roll_results.get("summary") or f"{actor_name} lutte pour survivre.")
+
+        if action == "stabilize" and roll_results:
+            if roll_results.get("success"):
+                return f"{actor_name} stabilise {target_label}."
+            return f"{actor_name} tente de stabiliser {target_label}, sans y parvenir."
+
+        if action == "dodge":
+            return f"{actor_name} se met en defense."
+        if action == "dash":
+            return f"{actor_name} se deplace aussi vite que possible."
+        if action == "disengage":
+            return f"{actor_name} se degage prudemment de la melee."
+        if action == "hide":
+            return f"{actor_name} cherche un couvert et tente de se dissimuler."
+        if action == "wait":
+            return f"{actor_name} temporise et observe le combat."
+
+        display = request.display_text or request.content
+        if display:
+            return str(display)
+        return f"{actor_name} agit."
 
     async def _publish_ai_thinking(self, session_id: str, thinking: bool) -> None:
         await self._event_bus.publish_to_session(
@@ -454,6 +585,22 @@ class ActionPipeline:
         if candidate is None:
             return None
         return AgentResponse(content=str(candidate), actions=[])
+
+    @staticmethod
+    def _without_combat_damage_actions(response: AgentResponse) -> AgentResponse:
+        actions = [
+            gm_action for gm_action in response.actions if gm_action.type != "damage_apply"
+        ]
+        if len(actions) == len(response.actions):
+            return response
+        logger.warning(
+            "ActionPipeline : damage_apply GM ignore en combat ; les degats viennent du moteur."
+        )
+        return AgentResponse(
+            content=response.content,
+            actions=actions,
+            action_intent=response.action_intent,
+        )
 
     @staticmethod
     def _enrich_roll_event(

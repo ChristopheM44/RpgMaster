@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -69,6 +71,32 @@ async def test_chat_uses_custom_model(client: OllamaClient, sdk_client) -> None:
     )
 
     assert mock_chat.call_args.kwargs["model"] == "llama3:8b"
+
+
+async def test_chat_serializes_concurrent_requests(client: OllamaClient, sdk_client) -> None:
+    """Le limiteur global évite deux requêtes Ollama simultanées par défaut."""
+    active_calls = 0
+    max_active_calls = 0
+
+    async def slow_chat(**kwargs):
+        nonlocal active_calls, max_active_calls
+        active_calls += 1
+        max_active_calls = max(max_active_calls, active_calls)
+        await asyncio.sleep(0.01)
+        active_calls -= 1
+        mock_response = MagicMock()
+        mock_response.message.content = "ok"
+        return mock_response
+
+    sdk_client.chat = slow_chat
+
+    results = await asyncio.gather(
+        client.chat([{"role": "user", "content": "a"}]),
+        client.chat([{"role": "user", "content": "b"}]),
+    )
+
+    assert results == ["ok", "ok"]
+    assert max_active_calls == 1
 
 
 # ---------------------------------------------------------------------------

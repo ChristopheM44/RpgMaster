@@ -9,6 +9,7 @@ from app.agents.base_agent import BaseAgent
 from app.agents.context_manager import ContextManager
 from app.agents.schemas import AgentContext, AgentResponse, GMAction, GMResponse
 from app.llm.base_client import LLMClient
+from app.llm.budget import record_llm_call
 from app.llm.model_router import router
 from app.llm.ollama_client import OllamaError
 from app.llm.openai_compatible_client import OpenAICompatibleError
@@ -197,6 +198,7 @@ class GMAgent(BaseAgent):
         messages = self._build_messages(user_prompt, context_manager)
 
         try:
+            record_llm_call("gm")
             raw = await self._client.chat(messages=messages, temperature=0.75, max_tokens=2048)
         except (OllamaError, OpenAICompatibleError) as exc:
             logger.error("GMAgent : appel LLM échoué : %s", exc)
@@ -242,4 +244,3 @@ class GMAgent(BaseAgent):
         except Exception as exc:
             logger.error("GMAgent : échec parsing GMResponse : %s — data=%s", exc, data)
             return GMResponse(narration=str(data.get("narration", raw.strip())))
-

@@ -42,15 +42,15 @@ from pydantic import BaseModel, ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.schemas import AgentContext
 from app.db.database import get_db
-from app.engine.tactical_grid import initialize_positions, validate_move, GridPosition
+from app.engine.tactical_grid import GridPosition, initialize_positions, validate_move
 from app.game.action_resolver import ActionResolver
 from app.game.combat_triggers import prime_combat_from_aggressive_action
 from app.game.constants import ARMOR_CATEGORIES, INACTIVE_STATUSES, MONSTER_TYPE_COLORS
 from app.game.event_bus import EventType, GameEvent, event_bus
 from app.game.session_manager import SessionManager
 from app.game.turn_manager import CombatantInfo
+from app.llm.budget import is_sober_mode
 from app.models.character import Character
 from app.models.session import SessionStatus
 from app.services.encounter_service import encounter_service
@@ -921,10 +921,17 @@ async def _handle_ai_turns(session_id: str, active: Any, db: AsyncSession) -> No
 
         agent = active.ai_players.get(current.combatant_id)
         if agent is not None:
-            # AI companion: delegate to AIPlayerManager (handles its own next_turn() loop)
+            # Resolve exactly one companion turn here so cleanup and TURN_START
+            # events remain interleaved turn by turn.
             from app.game.ai_player_manager import AIPlayerManager
             ai_manager = AIPlayerManager()
-            await ai_manager.process_ai_turns(session_id, active, action_resolver, db=db)
+            await ai_manager.process_ai_turns(
+                session_id,
+                active,
+                action_resolver,
+                db=db,
+                max_turns=1,
+            )
             removed_npcs = await _cleanup_inactive_npcs(session_id, active)
             if active.turn_manager.all_npcs_removed():
                 await _handle_combat_end(
@@ -1534,9 +1541,18 @@ async def _handle_toggle_ai_control(
         else:
             from app.game.ai_player_manager import AIPlayerManager
             try:
-                await AIPlayerManager().run_exploration_reactions(
-                    session_id, active, action_resolver, trigger_character_id=None, db=db
-                )
+                if is_sober_mode():
+                    await AIPlayerManager().run_party_reaction_batch(
+                        session_id,
+                        active,
+                        "Le groupe sollicite l'avis des compagnons.",
+                        trigger_character_id=None,
+                        db=db,
+                    )
+                else:
+                    await AIPlayerManager().run_exploration_reactions(
+                        session_id, active, action_resolver, trigger_character_id=None, db=db
+                    )
                 pending_transition = active.state_data.pop("pending_phase_transition", None)
                 if pending_transition == "COMBAT" and active.phase != SessionStatus.COMBAT:
                     await _handle_start_combat(session_id, active, db, encounter_id=None)
@@ -1584,13 +1600,22 @@ async def _handle_trigger_ai_reactions(
 
     # Exploration: let each AI companion react once.
     from app.game.ai_player_manager import AIPlayerManager
-    await AIPlayerManager().run_exploration_reactions(
-        session_id,
-        active,
-        action_resolver,
-        trigger_character_id=trigger_character_id,
-        db=db,
-    )
+    if is_sober_mode():
+        await AIPlayerManager().run_party_reaction_batch(
+            session_id,
+            active,
+            "Le groupe sollicite l'avis des compagnons.",
+            trigger_character_id=trigger_character_id,
+            db=db,
+        )
+    else:
+        await AIPlayerManager().run_exploration_reactions(
+            session_id,
+            active,
+            action_resolver,
+            trigger_character_id=trigger_character_id,
+            db=db,
+        )
     pending_transition = active.state_data.pop("pending_phase_transition", None)
     if pending_transition == "COMBAT" and active.phase != SessionStatus.COMBAT:
         await _handle_start_combat(session_id, active, db, encounter_id=None)
@@ -1753,13 +1778,24 @@ async def _dispatch_action(
             from app.game.ai_player_manager import AIPlayerManager
             gm_intent = active.last_gm_intent
             try:
-                _, companion_responses = await AIPlayerManager().run_exploration_reactions(
-                    session_id,
-                    active,
-                    action_resolver,
-                    trigger_character_id=action.character_id,
-                    db=db,
-                )
+                companion_responses: list[dict[str, str]] = []
+                if is_sober_mode():
+                    if gm_intent == "social":
+                        _, companion_responses = await AIPlayerManager().run_party_reaction_batch(
+                            session_id,
+                            active,
+                            action.content or action.action_type,
+                            trigger_character_id=action.character_id,
+                            db=db,
+                        )
+                else:
+                    _, companion_responses = await AIPlayerManager().run_exploration_reactions(
+                        session_id,
+                        active,
+                        action_resolver,
+                        trigger_character_id=action.character_id,
+                        db=db,
+                    )
                 pending_transition = active.state_data.pop("pending_phase_transition", None)
                 if pending_transition == "COMBAT" and active.phase != SessionStatus.COMBAT:
                     await _handle_start_combat(session_id, active, db, encounter_id=None)
@@ -1767,7 +1803,11 @@ async def _dispatch_action(
 
                 # Après une action sociale avec des compagnons qui ont répondu,
                 # le MJ produit une narration de conclusion (transition de scène).
-                if gm_intent == "social" and companion_responses:
+                if (
+                    not is_sober_mode()
+                    and gm_intent == "social"
+                    and companion_responses
+                ):
                     player_action_text = action.content or action.action_type
                     await action_resolver.social_conclude(
                         session_id=session_id,

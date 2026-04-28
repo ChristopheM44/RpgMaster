@@ -18,6 +18,7 @@ from app.agents.schemas import (
 )
 from app.game.constants import INACTIVE_STATUSES
 from app.llm.base_client import LLMClient
+from app.llm.budget import record_llm_call
 from app.llm.model_router import router
 from app.llm.ollama_client import OllamaError
 from app.llm.openai_compatible_client import OpenAICompatibleError
@@ -366,6 +367,7 @@ class PlayerAgent(BaseAgent):
         messages = self._build_messages(user_prompt, context_manager)
 
         try:
+            record_llm_call("player")
             raw = await self._client.chat(messages=messages, temperature=0.6, max_tokens=1024)
         except (OllamaError, OpenAICompatibleError) as exc:
             logger.error("PlayerAgent[%s] : appel LLM échoué : %s", self._character_name, exc)
@@ -446,6 +448,7 @@ class PlayerAgent(BaseAgent):
             },
         ]
         try:
+            record_llm_call("player")
             repaired = await self._client.chat(
                 messages=repair_messages,
                 temperature=0.0,

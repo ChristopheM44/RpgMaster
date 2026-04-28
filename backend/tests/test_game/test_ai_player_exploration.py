@@ -298,6 +298,52 @@ async def test_exploration_reactions_examine_triggers_gm_arbitrage() -> None:
 
 
 @pytest.mark.asyncio
+async def test_party_reaction_batch_uses_one_llm_call() -> None:
+    """En mode sobre, les reactions sociales de groupe passent par un seul appel."""
+    import json
+
+    active = _make_exploration_session()
+    first_agent = PlayerAgent(
+        character_id="ai_1",
+        character_name="Thorin",
+        personality=PlayerPersonality(traits=["noble"]),
+        client=MagicMock(),
+    )
+    second_agent = PlayerAgent(
+        character_id="ai_2",
+        character_name="Elara",
+        personality=PlayerPersonality(traits=["curious"]),
+        client=MagicMock(),
+    )
+    active.ai_players["ai_1"] = first_agent
+    active.ai_players["ai_2"] = second_agent
+
+    batch_client = MagicMock()
+    batch_client.chat = AsyncMock(return_value=json.dumps({
+        "responses": [
+            {"character_id": "ai_1", "speaker": "Thorin", "text": "Thorin approuve le plan."},
+            {"character_id": "ai_2", "speaker": "Elara", "text": "Elara veut inspecter les runes."},
+        ]
+    }))
+    publish = AsyncMock()
+
+    with patch("app.llm.model_router.router.get_player_client", return_value=batch_client), \
+         patch("app.game.ai_player_manager.event_bus.publish_to_session", new=publish):
+        reacted, responses = await AIPlayerManager().run_party_reaction_batch(
+            "expl_session",
+            active,
+            "Compagnons, que pensez-vous de ce plan ?",
+            trigger_character_id="human_1",
+        )
+
+    assert reacted == 2
+    assert len(responses) == 2
+    batch_client.chat.assert_awaited_once()
+    first_agent._client.chat.assert_not_called()
+    second_agent._client.chat.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_exploration_reactions_no_ai_players_returns_zero() -> None:
     """Aucun compagnon IA enregistré → run_exploration_reactions() retourne 0."""
     active = _make_exploration_session()

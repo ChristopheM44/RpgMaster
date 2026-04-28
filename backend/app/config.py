@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     default_language: str = "fr"
     max_context_messages: int = 20
     tts_async: bool = True
+    llm_budget_mode: str = "sober"
+    ollama_max_concurrent_requests: int = 1
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
@@ -63,6 +65,7 @@ def update_llm_settings(
     ollama_base_url: str | None = None,
     gm_model: str | None = None,
     player_model: str | None = None,
+    llm_budget_mode: str | None = None,
     llm_provider: str | None = None,
     openai_base_url: str | None = None,
     openai_api_key: str | None = None,
@@ -75,6 +78,8 @@ def update_llm_settings(
         _runtime_llm["gm_model"] = gm_model
     if player_model is not None:
         _runtime_llm["player_model"] = player_model
+    if llm_budget_mode is not None:
+        _runtime_llm["llm_budget_mode"] = llm_budget_mode
     if llm_provider is not None:
         _runtime_llm["llm_provider"] = llm_provider
     if openai_base_url is not None:
@@ -102,6 +107,21 @@ def get_gm_model() -> str:
 
 def get_player_model() -> str:
     return _runtime_llm.get("player_model", settings.player_model)
+
+
+def get_llm_budget_mode() -> str:
+    return _runtime_llm.get("llm_budget_mode", settings.llm_budget_mode)
+
+
+def get_ollama_max_concurrent_requests() -> int:
+    raw = _runtime_llm.get(
+        "ollama_max_concurrent_requests",
+        settings.ollama_max_concurrent_requests,
+    )
+    try:
+        return max(1, int(raw))
+    except (TypeError, ValueError):
+        return 1
 
 
 def get_ollama_api_key() -> str:

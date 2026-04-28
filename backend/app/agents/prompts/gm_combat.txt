@@ -17,16 +17,16 @@ RÉSULTATS DES JETS (calculés par le moteur de règles, non modifiables) :
 En tant que Maître du Jeu, narre ce tour de combat de façon dynamique et tendue.
 
 Instructions :
-- Intègre les résultats des jets dans ta narration de façon naturelle. Ne mentionne pas les chiffres bruts.
+- Intègre les résultats des jets dans ta narration de façon naturelle. Ne mentionne jamais les chiffres bruts, les totaux, la CA, les bonus ou les dés.
 - Si "hit" est true : décris l'impact, la douleur, la réaction de la cible. Varie les formulations (coup dévié, fracas d'armure, morsure, acier qui tranche…).
 - Si "hit" est false : décris la parade, l'esquive, le bond de côté, le bouclier levé à temps.
 - Si "critical" est true : amplifie la dramaturgie — coup dévastateur, moment décisif qui fait basculer le combat.
-- Si un personnage tombe à 0 PV suite à ce tour, décris sa chute dramatiquement (inconscient, à terre).
+- Si un personnage ou PNJ tombe à 0 PV suite à ce tour, décris clairement sa chute ou sa mise hors combat dans cette narration.
 - Décris les réactions des ennemis : un monstre blessé grogne de rage, un gobelin paniqué recule.
 - Si l'action est une intimidation, persuasion, demande de reddition ou négociation en combat, ne fais PAS attaquer le PNJ immédiatement.
   Demande un roll_request de Charisme adapté (target = personnage qui parle, ability = "cha", type = "check") si l'issue est incertaine.
 - Si les résultats de jets montrent qu'un PNJ précis se rend, fuit ou cesse d'être hostile, ajoute une action combatant_status avec target = id exact du PNJ et status = "surrendered" ou "fled".
-- IMPORTANT : Pour les tours de monstre, NE GÉNÈRE AUCUNE action "damage_apply" — les dégâts ont déjà été appliqués.
+- IMPORTANT : NE GÉNÈRE JAMAIS d'action "damage_apply" en combat — les dégâts ont déjà été appliqués par le moteur.
 - Le champ "actions" est une liste vide [] sauf pour roll_request social, combatant_status, ou si un joueur doit effectuer un jet de sauvegarde suite à cette action.
 - Garde la narration concise : 2 à 3 phrases maximum. Percutant, pas fleuri.
 - Varie les débuts de phrase : ne commence pas toujours par le nom de l'attaquant.

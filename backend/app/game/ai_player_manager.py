@@ -16,6 +16,7 @@ Usage::
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 import unicodedata
@@ -25,6 +26,12 @@ from app.agents.player_agent import _NON_JSON_LLM_ERROR
 from app.agents.schemas import PlayerActionChoice
 from app.game.constants import INACTIVE_STATUSES
 from app.game.event_bus import EventType, event_bus
+from app.llm.budget import (
+    begin_llm_call_scope,
+    end_llm_call_scope,
+    is_sober_mode,
+    record_llm_call,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -151,6 +158,7 @@ class AIPlayerManager:
         active: "ActiveSession",
         action_resolver: "ActionResolver",
         db: Optional["AsyncSession"] = None,
+        max_turns: Optional[int] = None,
     ) -> int:
         """Trigger all consecutive AI-controlled PC turns from the current entry.
 
@@ -158,6 +166,8 @@ class AIPlayerManager:
             session_id: Active session identifier (for event publishing).
             active: In-memory session state (provides turn_manager and ai_players).
             action_resolver: Pipeline that resolves actions through engine + GM agent.
+            max_turns: Optional cap on processed AI PC turns. ``None`` keeps the
+                legacy batch behavior.
 
         Returns:
             The number of AI actions triggered this call.
@@ -180,26 +190,34 @@ class AIPlayerManager:
                 active.turn_manager.next_turn()
                 continue
 
-            # Ask the agent for an action
-            await self._publish_thinking(
-                session_id,
-                True,
-                character_id=current.combatant_id,
-                character_name=current.name,
+            available_actions = self._available_combat_actions(
+                current.combatant_id,
+                active.state_data,
             )
-            try:
-                available_actions = self._available_combat_actions(
+            if active.phase.value == "combat" and is_sober_mode():
+                action = self._build_deterministic_combat_action(
                     current.combatant_id,
+                    current.name,
                     active.state_data,
+                    available_actions,
                 )
-                action = await self._get_action(agent, active, available_actions)
-            finally:
+            else:
+                # Ask the agent for an action
                 await self._publish_thinking(
                     session_id,
-                    False,
+                    True,
                     character_id=current.combatant_id,
                     character_name=current.name,
                 )
+                try:
+                    action = await self._get_action(agent, active, available_actions)
+                finally:
+                    await self._publish_thinking(
+                        session_id,
+                        False,
+                        character_id=current.combatant_id,
+                        character_name=current.name,
+                    )
 
             # Les erreurs provider doivent rester visibles. Le JSON invalide,
             # lui, dégrade en attente silencieuse après tentative de réparation.
@@ -308,6 +326,8 @@ class AIPlayerManager:
 
             # Advance to the next combatant for the next iteration
             active.turn_manager.next_turn()
+            if max_turns is not None and triggered >= max_turns:
+                break
 
         return triggered
 
@@ -516,6 +536,158 @@ class AIPlayerManager:
 
         return reacted, companion_responses
 
+    async def run_party_reaction_batch(
+        self,
+        session_id: str,
+        active: "ActiveSession",
+        player_action: str,
+        trigger_character_id: Optional[str] = None,
+        db: Optional["AsyncSession"] = None,
+    ) -> "tuple[int, list[dict[str, str]]]":
+        """Produit les reactions sociales des compagnons en un seul appel LLM."""
+        companions = self._party_reaction_targets(active, trigger_character_id)
+        if not companions:
+            return 0, []
+
+        await self._publish_thinking(session_id, True)
+        try:
+            raw = await self._call_party_reaction_llm(active, player_action, companions)
+            parsed = self._parse_party_reaction(raw)
+        except Exception as exc:
+            logger.warning("run_party_reaction_batch: fallback sobre apres erreur: %s", exc)
+            parsed = []
+        finally:
+            await self._publish_thinking(session_id, False)
+
+        by_id = {
+            str(item.get("character_id") or item.get("id") or ""): item
+            for item in parsed
+            if isinstance(item, dict)
+        }
+        responses: list[dict[str, str]] = []
+        for companion in companions:
+            candidate = by_id.get(companion["id"], {})
+            text = str(candidate.get("text") or candidate.get("roleplay_text") or "").strip()
+            speaker = str(candidate.get("speaker") or companion["name"])
+            if not text:
+                text = f"{speaker} acquiesce et garde son attention sur la suite."
+
+            await event_bus.publish_to_session(
+                session_id,
+                EventType.NARRATION,
+                {
+                    "text": text,
+                    "speaker": speaker,
+                    "action_type": "talk",
+                    "is_ai_player": True,
+                },
+                source="ai_player_manager",
+            )
+            if db is not None:
+                from app.models.message import MessageRole, MessageType
+                from app.services.message_service import persist_narration
+
+                await persist_narration(
+                    session_id,
+                    text,
+                    speaker,
+                    db,
+                    role=MessageRole.PLAYER,
+                    message_type=MessageType.DIALOGUE,
+                    metadata={
+                        "is_ai_player": True,
+                        "character_id": companion["id"],
+                        "action_type": "talk",
+                        "llm_budget": "batch_party",
+                    },
+                )
+            responses.append({"speaker": speaker, "text": text})
+
+        return len(responses), responses
+
+    @staticmethod
+    def _party_reaction_targets(
+        active: "ActiveSession",
+        trigger_character_id: Optional[str],
+    ) -> list[dict[str, str]]:
+        companions: list[dict[str, str]] = []
+        for char_id, agent in active.ai_players.items():
+            if char_id == trigger_character_id:
+                continue
+            name = str(getattr(agent, "character_name", char_id))
+            personality = getattr(agent, "personality", None)
+            traits = getattr(personality, "traits", None)
+            companions.append(
+                {
+                    "id": str(char_id),
+                    "name": name,
+                    "traits": ", ".join(traits) if isinstance(traits, list) else "",
+                }
+            )
+        return companions
+
+    @staticmethod
+    async def _call_party_reaction_llm(
+        active: "ActiveSession",
+        player_action: str,
+        companions: list[dict[str, str]],
+    ) -> str:
+        from app.llm.model_router import router
+
+        client = router.get_player_client()
+        compact_state = {
+            "phase": active.phase.value if hasattr(active.phase, "value") else str(active.phase),
+            "location": active.state_data.get("adventure_journal", {}),
+            "companions": companions,
+        }
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "Tu ecris les reactions breves de compagnons de JDR. "
+                    "Retourne uniquement un JSON valide."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    "Le joueur sollicite le groupe :\n"
+                    f"{player_action}\n\n"
+                    "Etat compact :\n"
+                    f"{json.dumps(compact_state, ensure_ascii=False)}\n\n"
+                    "Retourne ce schema exact :\n"
+                    '{"responses":[{"character_id":"id","speaker":"nom",'
+                    '"text":"1 phrase en francais"}]}'
+                ),
+            },
+        ]
+        token, scope = begin_llm_call_scope(active.session_id, "party_reaction")
+        try:
+            record_llm_call("party")
+            return await client.chat(messages=messages, temperature=0.65, max_tokens=700)
+        finally:
+            end_llm_call_scope(token, scope)
+
+    @staticmethod
+    def _parse_party_reaction(raw: str) -> list[dict[str, Any]]:
+        stripped = raw.strip()
+        if stripped.startswith("```"):
+            stripped = re.sub(r"^```(?:json)?", "", stripped).strip()
+            stripped = re.sub(r"```$", "", stripped).strip()
+        try:
+            data = json.loads(stripped)
+        except json.JSONDecodeError:
+            start = stripped.find("{")
+            end = stripped.rfind("}")
+            if start == -1 or end == -1 or end <= start:
+                return []
+            try:
+                data = json.loads(stripped[start:end + 1])
+            except json.JSONDecodeError:
+                return []
+        responses = data.get("responses", []) if isinstance(data, dict) else []
+        return [item for item in responses if isinstance(item, dict)]
+
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
@@ -578,6 +750,8 @@ class AIPlayerManager:
         state_data: dict[str, Any],
     ) -> list[str]:
         actions = ["attack"]
+        if cls._find_unstable_ally(character_id, state_data) is not None:
+            actions.append("stabilize")
         if cls._has_castable_spell(character_id, state_data):
             actions.append("cast_spell")
         actions.extend(["dodge", "wait"])
@@ -741,6 +915,59 @@ class AIPlayerManager:
             roleplay_text=_WAIT_ACTION.roleplay_text,
             inner_reasoning=_WAIT_ACTION.inner_reasoning,
         )
+
+    @classmethod
+    def _build_deterministic_combat_action(
+        cls,
+        character_id: str,
+        character_name: str,
+        state_data: dict[str, Any],
+        available_actions: list[str],
+    ) -> PlayerActionChoice:
+        unstable_ally = cls._find_unstable_ally(character_id, state_data)
+        if unstable_ally and "stabilize" in available_actions:
+            ally_name = cls._combatant_name(state_data, unstable_ally)
+            return PlayerActionChoice(
+                action_type="stabilize",
+                action_description=f"Stabilise {ally_name}",
+                target=unstable_ally,
+                params={},
+                roleplay_text=f"{character_name} se penche vers {ally_name} pour le stabiliser.",
+                inner_reasoning="Mode sobre : priorite a la survie d'un allie a 0 PV.",
+            )
+
+        return cls._build_fallback_combat_action(
+            character_id,
+            character_name,
+            state_data,
+            available_actions,
+        )
+
+    @classmethod
+    def _find_unstable_ally(
+        cls,
+        character_id: str,
+        state_data: dict[str, Any],
+    ) -> Optional[str]:
+        combatants = state_data.get("combatants", {})
+        if not isinstance(combatants, dict):
+            return None
+
+        for cid, cdata in combatants.items():
+            if cid == character_id or not isinstance(cdata, dict):
+                continue
+            if cdata.get("is_player") is not True:
+                continue
+            if str(cdata.get("status", "active")).lower() in INACTIVE_STATUSES:
+                continue
+            try:
+                hp = int(cdata.get("hp", cdata.get("current_hp", 1)))
+            except (TypeError, ValueError):
+                hp = 1
+            death_saves = cdata.get("death_saves", {})
+            if hp == 0 and not death_saves.get("stable") and not cdata.get("dead"):
+                return str(cid)
+        return None
 
     @staticmethod
     def _character_data(character_id: str, state_data: dict[str, Any]) -> dict[str, Any]:

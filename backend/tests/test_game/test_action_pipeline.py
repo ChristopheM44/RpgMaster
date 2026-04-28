@@ -7,8 +7,10 @@ Trois chemins doivent converger vers le meme contrat visible :
 """
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from app.agents.player_agent import PlayerAgent, PlayerPersonality
 from app.agents.schemas import AgentResponse, GMAction, GMResponse
 from app.game.action_pipeline import ActionPipeline, ActionRequest
 from app.game.action_resolver import ActionResolver
@@ -201,6 +203,40 @@ class TestPipelineExecutorUnits:
             EventType.CONDITION_CHANGED,
         ]
 
+    async def test_pipeline_ignores_gm_damage_apply_in_combat(self) -> None:
+        active = _make_combat_active()
+        bus = _FakeBus()
+        gm = MagicMock()
+        gm.think = AsyncMock(return_value=AgentResponse(
+            content="Le gobelin chancelle.",
+            actions=[
+                GMAction(
+                    type="damage_apply",
+                    target="goblin_1",
+                    params={"amount": 3},
+                )
+            ],
+        ))
+
+        pipeline = ActionPipeline(gm, bus, mechanics=ActionResolver(gm_agent=gm))
+        with patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast",
+                   new=AsyncMock()):
+            await pipeline.resolve_and_publish(
+                ActionRequest(
+                    session_id=SESSION_ID,
+                    actor_id="hero_1",
+                    actor_name="Aria",
+                    actor_kind="player",
+                    action_type="free_text",
+                    content="Je menace le gobelin.",
+                    target_id="goblin_1",
+                ),
+                active,
+            )
+
+        assert active.state_data["combatants"]["goblin_1"]["hp"] == 7
+        assert not any(event_type == EventType.HP_CHANGED for event_type, _ in bus.published)
+
     async def test_monster_attack_without_target_chooses_first_living_player(self) -> None:
         active = ActiveSession(
             session_id=SESSION_ID,
@@ -276,6 +312,13 @@ class TestHumanPlayerPipeline:
         narrs = _narrations(published)
         assert len(narrs) >= 1
         assert any(n.get("text") for n in narrs)
+        resolver._gm.think.assert_awaited_once()
+        visible_events = [
+            event_type
+            for event_type, _payload in published
+            if event_type in {EventType.ROLL_RESULT, EventType.NARRATION}
+        ]
+        assert visible_events[-2:] == [EventType.ROLL_RESULT, EventType.NARRATION]
 
     async def test_human_attack_emits_roll_result(self) -> None:
         active = _make_combat_active()
@@ -297,6 +340,7 @@ class TestHumanPlayerPipeline:
 
         rolls = [p for et, p in published if et == EventType.ROLL_RESULT]
         assert len(rolls) >= 1
+        resolver._gm.think.assert_awaited_once()
 
     async def test_human_narration_speaker_is_gm(self) -> None:
         active = _make_combat_active()
@@ -320,6 +364,59 @@ class TestHumanPlayerPipeline:
         assert narrs
         # Le chemin humain émet la narration avec speaker="Maître du Jeu"
         assert narrs[-1].get("speaker") == "Maître du Jeu"
+        resolver._gm.think.assert_awaited_once()
+
+    async def test_exploration_environmental_uses_one_gm_call(self) -> None:
+        active = ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.EXPLORATION,
+            state_data={"characters": {"hero_1": {"name": "Aria"}}},
+        )
+        resolver = ActionResolver(gm_agent=_mock_gm("La salle revele ses secrets."))
+        published, capture = _event_collector()
+
+        with patch("app.game.action_resolver.event_bus.publish_to_session", new=capture), \
+             patch("app.game.action_resolver.tts_router.synthesize_and_broadcast",
+                   new=AsyncMock()):
+            await resolver.resolve(
+                session_id=SESSION_ID,
+                action_type="free_text",
+                content="J'examine les murs de la salle.",
+                character_id="hero_1",
+                target_id=None,
+                active=active,
+                db=None,
+            )
+
+        resolver._gm.think.assert_awaited_once()
+        assert _narrations(published)
+
+    async def test_social_prompt_skips_gm_and_sets_party_intent(self) -> None:
+        active = ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.EXPLORATION,
+            state_data={"characters": {"hero_1": {"name": "Aria"}}},
+        )
+        active.ai_players = {"ai_1": MagicMock()}
+        resolver = ActionResolver(gm_agent=_mock_gm("Ne devrait pas etre appele."))
+        published, capture = _event_collector()
+
+        with patch("app.game.action_resolver.event_bus.publish_to_session", new=capture), \
+             patch("app.game.action_resolver.tts_router.synthesize_and_broadcast",
+                   new=AsyncMock()):
+            await resolver.resolve(
+                session_id=SESSION_ID,
+                action_type="free_text",
+                content="Compagnons, que pensez-vous de ce plan ?",
+                character_id="hero_1",
+                target_id=None,
+                active=active,
+                db=None,
+            )
+
+        resolver._gm.think.assert_not_called()
+        assert active.last_gm_intent == "social"
+        assert _narrations(published) == []
 
 
 # ---------------------------------------------------------------------------
@@ -380,8 +477,6 @@ class TestAICompanionPipeline:
         active.turn_manager._round = 1
 
         # PlayerAgent mocké avec un LLM factice
-        from app.agents.player_agent import PlayerAgent, PlayerPersonality
-        import json
         thorin_agent = PlayerAgent(
             character_id=companion_id,
             character_name="Thorin",
@@ -406,9 +501,9 @@ class TestAICompanionPipeline:
             "inner_reasoning": "Attaque.",
         }, ensure_ascii=False)
 
+        mock_chat = AsyncMock(return_value=attack_json)
         with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=capture), \
-             patch.object(thorin_agent._client, "chat",
-                          new=AsyncMock(return_value=attack_json)):
+             patch.object(thorin_agent._client, "chat", new=mock_chat):
             await manager.process_ai_turns(SESSION_ID, active, mock_resolver, db=None)
 
         # Le compagnon doit émettre au moins une NARRATION avec son texte de roleplay
@@ -417,6 +512,138 @@ class TestAICompanionPipeline:
         assert any(n.get("text") for n in narrs)
         # L'action_resolver doit avoir été appelé (pipeline mécanique + GM)
         mock_resolver.resolve.assert_called_once()
+        mock_chat.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# 2b. Orchestration ws_game : compagnons IA tour par tour
+# ---------------------------------------------------------------------------
+
+
+class TestAICompanionTurnOrdering:
+    async def test_ws_ai_turns_cleanup_defeated_npc_before_next_companion_turn(self) -> None:
+        from app.api.ws_game import _handle_ai_turns
+
+        active = ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.COMBAT,
+            state_data={
+                "characters": {
+                    "shade_1": {"name": "Shade", "level": 1, "is_ai": True},
+                    "elara_1": {"name": "Elara", "level": 1, "is_ai": True},
+                    "thorvald_1": {"name": "Thorvald", "level": 1, "is_ai": False},
+                },
+                "combatants": {
+                    "shade_1": {
+                        "name": "Shade",
+                        "hp": 18,
+                        "is_player": True,
+                        "is_ai": True,
+                        "status": "active",
+                        "attack_bonus": 3,
+                        "damage_notation": "1d6",
+                    },
+                    "elara_1": {
+                        "name": "Elara",
+                        "hp": 12,
+                        "is_player": True,
+                        "is_ai": True,
+                        "status": "active",
+                        "attack_bonus": 3,
+                        "damage_notation": "1d6",
+                    },
+                    "thorvald_1": {
+                        "name": "Thorvald",
+                        "hp": 20,
+                        "is_player": True,
+                        "is_ai": False,
+                        "status": "active",
+                    },
+                    "bandit_3": {
+                        "name": "Bandit 3",
+                        "hp": 1,
+                        "is_player": False,
+                        "is_ai": True,
+                        "status": "active",
+                        "ac": 12,
+                    },
+                    "bandit_1": {
+                        "name": "Bandit 1",
+                        "hp": 7,
+                        "is_player": False,
+                        "is_ai": True,
+                        "status": "active",
+                        "ac": 12,
+                    },
+                },
+                "grid_positions": {"bandit_3": {"x": 1, "y": 1}},
+            },
+        )
+        active.turn_manager._order = [
+            TurnEntry("shade_1", "Shade", 18, True, True),
+            TurnEntry("elara_1", "Elara", 16, True, True),
+            TurnEntry("bandit_3", "Bandit 3", 14, False, True),
+            TurnEntry("bandit_1", "Bandit 1", 12, False, True),
+            TurnEntry("thorvald_1", "Thorvald", 10, True, False),
+        ]
+        active.turn_manager._index = 0
+        active.turn_manager._mode = "combat"
+        active.turn_manager._round = 1
+        active.ai_players = {
+            "shade_1": PlayerAgent(
+                character_id="shade_1",
+                character_name="Shade",
+                personality=PlayerPersonality(traits=["shadow"]),
+                client=MagicMock(),
+            ),
+            "elara_1": PlayerAgent(
+                character_id="elara_1",
+                character_name="Elara",
+                personality=PlayerPersonality(traits=["arcane"]),
+                client=MagicMock(),
+            ),
+        }
+
+        async def resolve_side_effect(**kwargs):
+            if kwargs["character_id"] == "shade_1":
+                active.state_data["combatants"]["bandit_3"]["hp"] = 0
+
+        published, capture = _event_collector()
+        mock_resolve = AsyncMock(side_effect=resolve_side_effect)
+
+        with patch("app.api.ws_game.event_bus.publish_to_session", new=capture), \
+             patch("app.api.ws_game.action_resolver.resolve", new=mock_resolve), \
+             patch("app.api.ws_game.session_manager.save_state", new=AsyncMock()), \
+             patch("app.api.ws_game._build_session_state_payload",
+                   return_value={"phase": "combat"}):
+            await _handle_ai_turns(SESSION_ID, active, None)
+
+        turn_starts = [
+            payload["combatant_id"]
+            for event_type, payload in published
+            if event_type == EventType.TURN_START
+        ]
+        assert turn_starts[:3] == ["shade_1", "elara_1", "bandit_1"]
+
+        defeated_idx = next(
+            idx
+            for idx, (event_type, payload) in enumerate(published)
+            if event_type == EventType.NARRATION
+            and payload.get("text") == "Bandit 3 a été vaincu !"
+        )
+        elara_turn_idx = next(
+            idx
+            for idx, (event_type, payload) in enumerate(published)
+            if event_type == EventType.TURN_START
+            and payload.get("combatant_id") == "elara_1"
+        )
+        assert defeated_idx < elara_turn_idx
+
+        resolved_actor_ids = [
+            call.kwargs["character_id"]
+            for call in mock_resolve.await_args_list
+        ]
+        assert resolved_actor_ids[:2] == ["shade_1", "elara_1"]
 
 
 # ---------------------------------------------------------------------------
@@ -431,10 +658,10 @@ class TestMonsterPipeline:
         active = _make_combat_active(monster_turn_first=True)
         published, capture = _event_collector()
         mock_gm_resp = AgentResponse(content="Le gobelin frappe sauvagement !", actions=[])
+        mock_gm_think = AsyncMock(return_value=mock_gm_resp)
 
         with patch("app.api.ws_game.event_bus.publish_to_session", new=capture), \
-             patch("app.api.ws_game.action_resolver._gm.think",
-                   new=AsyncMock(return_value=mock_gm_resp)), \
+             patch("app.api.ws_game.action_resolver._gm.think", new=mock_gm_think), \
              patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast",
                    new=AsyncMock()), \
              patch("app.api.ws_game.session_manager.save_state", new=AsyncMock()), \
@@ -448,6 +675,7 @@ class TestMonsterPipeline:
         narrs = _narrations(published)
         assert len(narrs) >= 1
         assert any(n.get("text") for n in narrs)
+        mock_gm_think.assert_awaited_once()
 
     async def test_monster_attack_emits_roll_result_event(self) -> None:
         from app.api.ws_game import _handle_ai_turns

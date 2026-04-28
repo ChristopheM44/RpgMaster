@@ -454,13 +454,16 @@ async def test_process_ai_turns_persists_ai_combat_action(db_session) -> None:
     ]
     assert len(ai_messages) == 1
     assert ai_messages[0].speaker == "Thorin"
-    assert ai_messages[0].content == "Thorin attaque."
+    assert ai_messages[0].content.startswith("Thorin attaque")
     assert "frappe le gobelin" not in ai_messages[0].content
     assert (ai_messages[0].metadata_ or {}).get("action_type") == "attack"
     narration_calls = [
         call for call in publish.await_args_list if call.args[1] == "narration"
     ]
-    assert any(call.args[2]["text"] == "Thorin attaque." for call in narration_calls)
+    assert any(
+        call.args[2]["text"].startswith("Thorin attaque")
+        for call in narration_calls
+    )
 
 
 async def test_cleanup_after_ai_kill_skips_dead_next_monster() -> None:
