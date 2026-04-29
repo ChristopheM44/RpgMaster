@@ -888,7 +888,7 @@ function cloneContract(contract: CampaignPlayerContract): CampaignPlayerContract
         class="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(8,6,12,0.72)] p-4 backdrop-blur-md"
         @click.self="closeForge"
       >
-        <div class="relative max-h-[90vh] w-full max-w-[640px] overflow-y-auto rounded-[14px] border border-border-strong bg-[linear-gradient(180deg,var(--color-bg-elev),var(--color-bg))] p-7 shadow-[0_24px_80px_rgba(0,0,0,0.6),0_0_0_1px_rgba(240,199,100,0.08)]">
+        <div class="relative max-h-[90vh] w-full max-w-[640px] overflow-y-auto overflow-x-hidden rounded-[14px] border border-border-strong bg-[linear-gradient(180deg,var(--color-bg-elev),var(--color-bg))] p-7 shadow-[0_24px_80px_rgba(0,0,0,0.6),0_0_0_1px_rgba(240,199,100,0.08)]">
           <div class="pointer-events-none absolute -right-12 -top-20 h-60 w-60 rounded-full bg-[radial-gradient(circle,rgba(255,130,71,0.18),transparent_70%)]" />
           <div class="relative">
             <div class="rpg-eyebrow"><span class="rpg-sparkle">✦</span>Forger une nouvelle chronique</div>

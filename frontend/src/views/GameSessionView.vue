@@ -333,7 +333,7 @@ onUnmounted(() => { disconnect() })
     <!-- Save/Load dropdown -->
     <div
       v-if="showSaveLoad"
-      class="absolute right-6 top-14 z-50 w-80 rounded-b-xl border p-5 shadow-2xl"
+      class="fixed right-6 top-14 z-50 w-80 rounded-b-xl border p-5 shadow-2xl"
       :style="{
         borderColor: 'var(--color-border-strong)',
         background: 'var(--color-bg-elev)',

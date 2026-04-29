@@ -99,12 +99,12 @@ onMounted(fetchSaves)
         type="text"
         placeholder="Nom de la sauvegarde…"
         maxlength="100"
-        class="rpg-input flex-1 text-sm"
+        class="rpg-input flex-1 min-w-0 text-sm"
         @keyup.enter="createSave"
       />
       <button
         :disabled="loading || !saveName.trim()"
-        class="rpg-btn-primary"
+        class="rpg-btn-primary shrink-0"
         @click="createSave"
       >
         Sauvegarder
