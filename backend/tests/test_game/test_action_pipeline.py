@@ -418,6 +418,43 @@ class TestHumanPlayerPipeline:
         assert active.last_gm_intent == "social"
         assert _narrations(published) == []
 
+    async def test_companion_world_action_uses_gm_even_if_content_mentions_companion(self) -> None:
+        active = ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.EXPLORATION,
+            state_data={
+                "characters": {
+                    "shade_1": {"name": "Shade", "level": 1, "is_ai": True},
+                }
+            },
+        )
+        active.ai_players = {"shade_1": MagicMock()}
+        gm = _mock_gm("Shade inspecte le passage et fait signe d'attendre.")
+        bus = _FakeBus()
+        pipeline = ActionPipeline(gm, bus, mechanics=ActionResolver(gm_agent=gm))
+
+        with patch("app.llm.budget.get_llm_budget_mode", return_value="sober"), \
+             patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast",
+                   new=AsyncMock()):
+            await pipeline.resolve_and_publish(
+                ActionRequest(
+                    session_id=SESSION_ID,
+                    actor_id="shade_1",
+                    actor_name="Shade",
+                    actor_kind="companion",
+                    action_type="examine",
+                    content="[Compagnon IA] Shade examine le passage secret.",
+                    display_text="Shade s'accroupit à l'entrée du passage.",
+                    persist_actor_action=False,
+                ),
+                active,
+            )
+
+        gm.think.assert_awaited_once()
+        assert _narrations(bus.published)[-1]["text"] == (
+            "Shade inspecte le passage et fait signe d'attendre."
+        )
+
 
 # ---------------------------------------------------------------------------
 # 2. Compagnon IA → AIPlayerManager.process_ai_turns() → ActionResolver

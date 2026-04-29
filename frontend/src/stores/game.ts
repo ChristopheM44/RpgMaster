@@ -105,11 +105,21 @@ export const useGameStore = defineStore('game', () => {
   function addNarration(payload: NarrationPayload) {
     isProcessing.value = false
     isGmThinking.value = false
+    const type =
+      payload.entry_kind === 'dialogue'
+        ? 'dialogue'
+        : payload.entry_kind === 'action'
+          ? 'player'
+          : 'narration'
     narrativeLog.value.push({
       id: crypto.randomUUID(),
-      type: 'narration',
+      type,
       text: payload.text,
       speaker: payload.speaker,
+      speaker_id: payload.speaker_id,
+      speaker_kind: payload.speaker_kind,
+      entry_kind: payload.entry_kind,
+      scene_id: payload.scene_id,
       timestamp: new Date().toISOString(),
     })
   }

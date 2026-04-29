@@ -265,6 +265,43 @@ class PlayerAgent(BaseAgent):
             combat_mode=False,
         )
 
+    async def respond_to_player(
+        self,
+        game_state: dict[str, Any],
+        player_message: str,
+        context_manager: Optional[ContextManager] = None,
+        messages: Optional[list] = None,
+    ) -> PlayerActionChoice:
+        """Répond à un joueur humain dans une scène de dialogue libre.
+
+        Contrairement à :meth:`roleplay`, ce mode part explicitement de la
+        parole d'un joueur adressée au compagnon. La réponse peut rester purement
+        conversationnelle (``talk``) ou proposer une action que le MJ arbitrera.
+        """
+        character_data = self._extract_character(game_state)
+        recent_messages = self._format_messages(messages)
+        if recent_messages == "(aucun message récent)":
+            recent_messages = self._summarize_recent_narrative(game_state)
+
+        user_prompt = self._render_prompt(
+            "player_dialogue.txt",
+            {
+                "character_name": self._character_name,
+                "character_data": json.dumps(character_data, ensure_ascii=False, indent=2),
+                "personality_description": _describe_personality(self._personality),
+                "game_state": json.dumps(game_state, ensure_ascii=False, indent=2),
+                "player_message": player_message,
+                "recent_messages": recent_messages,
+            },
+        )
+        return await self._call_and_parse_action(
+            user_prompt,
+            context_manager,
+            game_state=game_state,
+            available_actions=("talk", "move", "use_item", "wait", "examine", "help"),
+            combat_mode=False,
+        )
+
     # -------------------------------------------------------------------------
     # Validation des actions
     # -------------------------------------------------------------------------

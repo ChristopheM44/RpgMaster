@@ -22,6 +22,7 @@ _SIMPLE_COMBAT_ACTIONS = {
     "wait",
 }
 _LLM_COMBAT_ACTIONS = {"free_text", "talk", "parley", "negotiate", "intimidate", "persuade"}
+_SOCIAL_ONLY_ACTIONS = {"free_text", "talk", "wait"}
 _COMPANION_SOCIAL_MARKERS = (
     "que pensez",
     "qu'en pensez",
@@ -86,6 +87,16 @@ def is_companion_social_prompt(content: Optional[str]) -> bool:
     return any(marker in text for marker in _COMPANION_SOCIAL_MARKERS)
 
 
+def is_pure_companion_social_prompt(
+    action_type: str,
+    content: Optional[str],
+) -> bool:
+    """Return true only for social prompts that do not need world arbitration."""
+    return action_type.strip().lower() in _SOCIAL_ONLY_ACTIONS and is_companion_social_prompt(
+        content
+    )
+
+
 def should_use_gm_for_action(
     *,
     phase: str,
@@ -95,7 +106,7 @@ def should_use_gm_for_action(
     roll_results: Optional[dict[str, Any]],
 ) -> bool:
     """Return whether the action needs a GM LLM narration under the current budget."""
-    del action_type, actor_kind, roll_results
+    del actor_kind, roll_results
     if not is_sober_mode():
         return True
 
@@ -103,6 +114,6 @@ def should_use_gm_for_action(
     if phase_upper == "COMBAT":
         return True
 
-    if is_companion_social_prompt(content):
+    if is_pure_companion_social_prompt(action_type, content):
         return False
     return True

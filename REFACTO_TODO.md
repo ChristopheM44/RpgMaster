@@ -49,6 +49,28 @@ Cadence : stop après chaque lot → tests + diff review + ✅ user avant d'ench
 
 > Note : `COMBAT_ACTION` reste présent pour compatibilité code/frontend, mais les attaques unifiées de ce lot publient désormais `ROLL_RESULT` puis narration `speaker="Maître du Jeu"` pour humain, compagnon et monstre.
 
+### Lot 1.5 — Flux narratif Table Vivante ✅ TERMINÉ
+- [x] Créer `backend/app/services/narrative_flow_service.py` pour orchestrer les scènes d'exploration
+- [x] Ajouter la détection d'audience : `gm` / `world` / `party` / `companion` / `mixed`
+- [x] Étendre le WebSocket `action` avec `addressed_to`, `audience`, `scene_id`
+- [x] Ajouter `PlayerAgent.respond_to_player()` + prompt `player_dialogue.txt`
+- [x] Ajouter `CombatGMAgent` + prompt `gm_combat_system.txt`
+- [x] Router `ActionPipeline` vers le MJ narratif ou le MJ combat selon la phase
+- [x] Enrichir les payloads `narration` avec `speaker_id`, `speaker_kind`, `entry_kind`, `scene_id`
+- [x] Frontend : boutons `@Compagnon`, ciblage compagnon, rendu distinct des dialogues
+- [x] Tests : `test_narrative_flow_service.py`, `test_combat_gm_agent.py`
+- [x] Documentation : `docs/NARRATIVE_FLOW.md` + mise à jour `docs/PROJECT.md`
+- [x] `backend/.venv/bin/pytest backend/tests -q` → 737 passed
+- [x] `cd frontend && npm run type-check && npm run build` → OK
+- [x] Correctif post-smoke : les actions arbitrables de compagnon (`examine`, `move`, `use_item`, `help`) gardent leur dialogue visible puis repassent toujours par le MJ, y compris en mode `sober`
+- [x] Tests ciblés correctif : `pytest backend/tests/test_game -q` → 165 passed
+
+> Note : `AIPlayerManager.run_party_reaction_batch()` et `run_exploration_reactions()`
+> restent disponibles pour compatibilité, déclenchement manuel et mode sobre, mais le
+> flux normal d'exploration passe désormais par `NarrativeFlowService`.
+> En mode sobre, seuls les échanges sociaux purs évitent l'appel MJ ; une action de
+> compagnon qui touche le monde reste arbitrée pour préserver les transitions.
+
 ---
 
 ## SPRINT 2 — Allègement backend

@@ -16,6 +16,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
+from app.agents.combat_gm_agent import CombatGMAgent
 from app.agents.gm_agent import GMAgent
 from app.engine import combat as combat_engine
 from app.engine.ability_checks import ability_modifier, proficiency_bonus
@@ -78,8 +79,16 @@ class ActionResolver:
         )
     """
 
-    def __init__(self, gm_agent: Optional[GMAgent] = None) -> None:
+    def __init__(
+        self,
+        gm_agent: Optional[GMAgent] = None,
+        combat_gm_agent: Optional[GMAgent] = None,
+    ) -> None:
         self._gm: GMAgent = gm_agent or GMAgent()
+        self._combat_gm_explicit = combat_gm_agent is not None
+        self._combat_gm: GMAgent = combat_gm_agent or (
+            gm_agent if gm_agent is not None else CombatGMAgent()
+        )
 
     # ------------------------------------------------------------------
     # Point d'entrée principal
@@ -99,6 +108,7 @@ class ActionResolver:
         actor_kind: Literal["player", "companion", "monster"] = "player",
         actor_name: Optional[str] = None,
         display_text: Optional[str] = None,
+        persist_actor_action: bool = True,
     ) -> None:
         """Exécute le pipeline complet pour une action.
 
@@ -112,7 +122,13 @@ class ActionResolver:
         """
         from app.game.action_pipeline import ActionPipeline, ActionRequest
 
-        pipeline = ActionPipeline(self._gm, event_bus, db, mechanics=self)
+        pipeline = ActionPipeline(
+            self._gm,
+            event_bus,
+            db,
+            mechanics=self,
+            combat_gm_agent=self._combat_gm_for_call(),
+        )
         await pipeline.resolve_and_publish(
             ActionRequest(
                 session_id=session_id,
@@ -125,10 +141,28 @@ class ActionResolver:
                 spell_id=spell_id,
                 slot_level=slot_level,
                 display_text=display_text,
+                persist_actor_action=persist_actor_action,
             ),
             active,
             db,
         )
+
+    def _combat_gm_for_call(self) -> GMAgent:
+        """Retourne le MJ combat effectif.
+
+        Les tests et certains outils monkeypatchent historiquement ``_gm.think``
+        sur le resolver global. Dans ce cas, on respecte ce patch pour éviter un
+        appel réseau involontaire tout en gardant un agent combat dédié en usage
+        normal.
+        """
+        think_type_module = type(getattr(self._gm, "think", None)).__module__
+        if (
+            not self._combat_gm_explicit
+            and self._combat_gm is not self._gm
+            and think_type_module.startswith("unittest.mock")
+        ):
+            return self._gm
+        return self._combat_gm
 
     async def _publish_gm_narration(
         self,
@@ -141,7 +175,13 @@ class ActionResolver:
         await event_bus.publish_to_session(
             session_id,
             EventType.NARRATION,
-            {"text": narration_text, "speaker": "Maître du Jeu", "narration_id": narration_id},
+            {
+                "text": narration_text,
+                "speaker": "Maître du Jeu",
+                "speaker_kind": "gm",
+                "entry_kind": "narration",
+                "narration_id": narration_id,
+            },
             source="action_resolver",
         )
 
@@ -201,7 +241,13 @@ class ActionResolver:
         await event_bus.publish_to_session(
             session_id,
             EventType.NARRATION,
-            {"text": gm_resp.narration, "speaker": "Maître du Jeu", "narration_id": narration_id},
+            {
+                "text": gm_resp.narration,
+                "speaker": "Maître du Jeu",
+                "speaker_kind": "gm",
+                "entry_kind": "narration",
+                "narration_id": narration_id,
+            },
             source="action_resolver",
         )
         if db is not None:

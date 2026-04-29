@@ -64,6 +64,25 @@ watch(
           >{{ entry.text }}</p>
         </div>
 
+        <!-- Dialogue compagnon / PNJ -->
+        <div
+          v-else-if="entry.type === 'dialogue'"
+          class="flex gap-3 rounded-lg border-l-2 py-2.5 pl-4 pr-3"
+          :style="{
+            borderColor: entry.speaker_kind === 'companion' ? 'rgba(192,144,255,0.55)' : 'rgba(240,199,100,0.45)',
+            background: entry.speaker_kind === 'companion' ? 'rgba(192,144,255,0.07)' : 'rgba(240,199,100,0.06)',
+          }"
+        >
+          <div class="min-w-0 flex-1">
+            <span
+              v-if="entry.speaker"
+              class="mr-2 text-sm font-display font-semibold"
+              :style="{ color: entry.speaker_kind === 'companion' ? 'var(--color-arcane)' : 'var(--color-gold)' }"
+            >{{ entry.speaker }}</span>
+            <span class="text-sm leading-relaxed" :style="{ color: 'var(--color-parchment)' }">{{ entry.text }}</span>
+          </div>
+        </div>
+
         <!-- Action joueur -->
         <div
           v-else-if="entry.type === 'player'"

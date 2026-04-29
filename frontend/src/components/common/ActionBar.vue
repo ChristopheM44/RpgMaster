@@ -21,6 +21,7 @@ const input = ref('')
 const showSpellPanel = ref(false)
 const showTargetSelector = ref(false)
 const showItemPicker = ref(false)
+const addressedTo = ref<string | null>(null)
 
 const isMyTurn = computed(
   () => gameStore.currentTurnId === charStore.myCharacter?.id,
@@ -56,6 +57,10 @@ const attackTargets = computed(() => {
   return gameStore.combatants.filter((c) => c.id !== myId && c.kind === 'monster' && c.hp_current > 0)
 })
 
+const aiCompanions = computed(() =>
+  charStore.sessionCharacters.filter((c) => c.is_ai),
+)
+
 const combatActions = [
   { label: 'Attaquer', type: 'attack', icon: '⚔', tone: 'tone-blood' },
   { label: 'Sort', type: 'cast_spell', icon: '✦', tone: 'tone-arcane' },
@@ -73,8 +78,10 @@ const isCombatImmersive = computed(() => props.variant === 'combat-immersive')
 function submitText() {
   const text = input.value.trim()
   if (!text || !canSend.value) return
-  emit('action', 'free_text', text)
+  const extra = buildAddressingPayload(text)
+  emit('action', 'free_text', text, undefined, extra)
   input.value = ''
+  addressedTo.value = null
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -137,6 +144,41 @@ function onDeathSave() {
 
 function onStabilize(targetId: string) {
   emit('action', 'stabilize', undefined, targetId)
+}
+
+function addressCompanion(characterId: string, name: string) {
+  addressedTo.value = characterId
+  const mention = `@${name} `
+  if (!input.value.trim().startsWith(mention)) {
+    input.value = mention + input.value.replace(/^@\S+\s*/, '')
+  }
+}
+
+function buildAddressingPayload(text: string): Record<string, unknown> | undefined {
+  const explicit = addressedTo.value
+  if (explicit) {
+    return { addressed_to: explicit, audience: 'companion' }
+  }
+
+  const normalized = text.toLocaleLowerCase()
+  const mentioned = aiCompanions.value.find((c) => {
+    const name = c.name.toLocaleLowerCase()
+    return normalized.includes(`@${name}`) || normalized.startsWith(`${name},`) || normalized.startsWith(`${name} `)
+  })
+  if (mentioned) {
+    return { addressed_to: mentioned.id, audience: 'companion' }
+  }
+
+  if (
+    normalized.includes('compagnon') ||
+    normalized.includes('votre avis') ||
+    normalized.includes('que pensez') ||
+    normalized.includes('on fait quoi')
+  ) {
+    return { audience: 'party' }
+  }
+
+  return undefined
 }
 </script>
 
@@ -268,6 +310,32 @@ function onStabilize(targetId: string) {
     </div>
 
     <!-- Textarea + Envoyer -->
+    <div
+      v-if="!gameStore.isInCombat && aiCompanions.length > 0"
+      class="mb-2 flex flex-wrap items-center gap-2"
+    >
+      <span class="text-[11px] font-semibold uppercase tracking-[0.14em]" :style="{ color: 'var(--color-text-muted)' }">Parler à</span>
+      <button
+        v-for="companion in aiCompanions"
+        :key="companion.id"
+        class="rounded border px-2.5 py-1 text-xs font-semibold"
+        :style="{
+          borderColor: addressedTo === companion.id ? 'rgba(192,144,255,0.75)' : 'var(--color-border)',
+          background: addressedTo === companion.id ? 'rgba(192,144,255,0.16)' : 'rgba(255,255,255,0.03)',
+          color: addressedTo === companion.id ? 'var(--color-arcane)' : 'var(--color-parchment)',
+        }"
+        type="button"
+        @click="addressCompanion(companion.id, companion.name)"
+      >@{{ companion.name }}</button>
+      <button
+        v-if="addressedTo"
+        class="text-xs"
+        :style="{ color: 'var(--color-text-muted)' }"
+        type="button"
+        @click="addressedTo = null"
+      >Tous</button>
+    </div>
+
     <div class="flex items-end gap-3">
       <textarea
         v-model="input"

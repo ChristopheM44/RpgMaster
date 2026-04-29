@@ -1,6 +1,6 @@
 # RpgMaster — Avancement du projet
 
-> Derniere mise a jour : 2026-04-07 (Sprint 9 : personnages prétirés + écran CharacterSetup)
+> Derniere mise a jour : 2026-04-29 (Sprint 10 : flux narratif Table Vivante)
 
 ---
 
@@ -18,10 +18,35 @@
 | Sprint 7 | Integration + Voix | 🔄 En cours |
 | Sprint 8 | Polish + Playtest | ✅ Termine |
 | Sprint 9 | Personnages Prétirés + Flux Setup | ✅ Termine |
+| Sprint 10 | Flux narratif Table Vivante | ✅ Termine |
 
 ---
 
 ## Ce qui a ete realise
+
+### Sprint 10 — Flux narratif Table Vivante
+
+Refonte du flux d'exploration pour se rapprocher d'une vraie table de JDR.
+
+**Backend :**
+- `NarrativeFlowService` orchestre les scènes hors combat : détection d'audience, réponses des compagnons IA, arbitrage MJ si nécessaire.
+- Le WebSocket `action` accepte `addressed_to`, `audience` et `scene_id`.
+- Les payloads `narration` sont enrichis avec `speaker_id`, `speaker_kind`, `entry_kind` et `scene_id`, tout en restant rétrocompatibles.
+- `PlayerAgent.respond_to_player()` permet un vrai dialogue ciblé avec un compagnon IA via le nouveau prompt `player_dialogue.txt`.
+- Les actions arbitrables d'un compagnon (`examine`, `move`, `use_item`, `help`) publient d'abord son dialogue naturel, puis repassent par le MJ pour préserver la transition de scène, même en mode sobre.
+- `CombatGMAgent` isole la narration de combat avec un contexte compact et le prompt `gm_combat_system.txt`.
+- `ActionPipeline` route les appels vers le MJ narratif ou le MJ combat selon la phase.
+
+**Frontend :**
+- `ActionBar.vue` ajoute des boutons `@Compagnon` hors combat et envoie le ciblage au backend.
+- `NarrativeLog.vue` distingue les dialogues compagnon / PNJ de la narration MJ.
+- `stores/game.ts` et `types/index.ts` gèrent les nouveaux champs optionnels de narration.
+
+**Tests / validation :**
+- Ajout de `test_narrative_flow_service.py` et `test_combat_gm_agent.py`.
+- `backend/.venv/bin/pytest backend/tests -q` → 737 passed.
+- `cd frontend && npm run type-check && npm run build` → OK.
+- Documentation détaillée : `docs/NARRATIVE_FLOW.md`.
 
 ### Sprint 0 — Infrastructure de base
 
@@ -1182,4 +1207,3 @@ Lobby → créer session → /session/:id/setup
 - `router/index.ts` : route `character-setup`
 - `views/LobbyView.vue` : redirections vers `character-setup` (handleCreate + handleAddCharacter)
 - `views/CharacterCreationView.vue` : redirect vers `character-setup` après création (au lieu de `game-session`)
-

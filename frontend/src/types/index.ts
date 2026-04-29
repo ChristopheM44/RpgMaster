@@ -348,6 +348,10 @@ export interface TurnEntry {
 export interface NarrationPayload {
   text: string
   speaker?: string
+  speaker_id?: string
+  speaker_kind?: 'gm' | 'human' | 'companion' | 'npc' | 'monster'
+  entry_kind?: 'narration' | 'dialogue' | 'action' | 'system'
+  scene_id?: string
 }
 
 export interface RollResultPayload {
@@ -383,13 +387,17 @@ export interface AiThinkingPayload {
 
 // ─── Game UI State ────────────────────────────────────────────────────────────
 
-export type NarrativeEntryType = 'narration' | 'roll' | 'system' | 'player' | 'combat_action'
+export type NarrativeEntryType = 'narration' | 'dialogue' | 'roll' | 'system' | 'player' | 'combat_action'
 
 export interface NarrativeEntry {
   id: string
   type: NarrativeEntryType
   text?: string
   speaker?: string
+  speaker_id?: string
+  speaker_kind?: NarrationPayload['speaker_kind']
+  entry_kind?: NarrationPayload['entry_kind']
+  scene_id?: string
   roll?: RollResultPayload
   combatAction?: CombatActionPayload
   timestamp: string

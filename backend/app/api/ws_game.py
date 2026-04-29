@@ -86,6 +86,9 @@ class PlayerActionMessage(BaseModel):
     spell_id: Optional[str] = None    # cast_spell only
     slot_level: Optional[int] = None  # cast_spell only
     item_id: Optional[str] = None     # equip/use_item/drop_item only
+    addressed_to: Optional[str] = None
+    audience: Optional[str] = None
+    scene_id: Optional[str] = None
 
 
 class PingMessage(BaseModel):
@@ -1724,8 +1727,34 @@ async def _dispatch_action(
         return
 
     # ----------------------------------------------------------------
-    # Normal action: engine resolution → GM narration → events
+    # Normal action: exploration scene flow or combat pipeline.
     # ----------------------------------------------------------------
+    if active.phase != SessionStatus.COMBAT:
+        from app.services.narrative_flow_service import NarrativeFlowService
+
+        await NarrativeFlowService().handle_exploration_action(
+            session_id=session_id,
+            action=action,
+            active=active,
+            action_resolver=action_resolver,
+            db=db,
+        )
+
+        pending_transition = active.state_data.pop("pending_phase_transition", None)
+        if pending_transition == "COMBAT" and active.phase != SessionStatus.COMBAT:
+            await _handle_start_combat(session_id, active, db, encounter_id=None)
+            return
+
+        active.turn_number += 1
+        active.mark_dirty()
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.TURN_END,
+            {"turn_number": active.turn_number},
+            source="ws_game",
+        )
+        return
+
     await action_resolver.resolve(
         session_id=session_id,
         action_type=action.action_type,
@@ -1738,9 +1767,6 @@ async def _dispatch_action(
         slot_level=action.slot_level,
     )
 
-    # Auto-déclenchement du combat demandé par le MJ via state_transition.
-    # Le resolver a posé le drapeau ; on le consomme ici (accès à db +
-    # possibilité d'appeler _handle_start_combat qui roule l'initiative).
     pending_transition = active.state_data.pop("pending_phase_transition", None)
     if pending_transition == "COMBAT" and active.phase != SessionStatus.COMBAT:
         await _handle_start_combat(session_id, active, db, encounter_id=None)
@@ -1759,67 +1785,6 @@ async def _dispatch_action(
             return
         # Auto-advance turn: one action = end of turn
         await _handle_end_turn(session_id, active, db)
-    else:
-        active.turn_number += 1
-        active.mark_dirty()
-        await event_bus.publish_to_session(
-            session_id,
-            EventType.TURN_END,
-            {"turn_number": active.turn_number},
-            source="ws_game",
-        )
-
-        # En exploration, laisser les compagnons IA réagir après l'action humaine.
-        # L'ordre dépend de l'intent classifié par le MJ :
-        #   - "social" (adresse aux compagnons) : compagnons d'abord, MJ conclut après.
-        #   - autres : MJ a déjà narré, compagnons réagissent ensuite (comportement actuel).
-        # Désactivable via state_data["auto_ai_reactions"] = False.
-        if active.state_data.get("auto_ai_reactions", True) and active.ai_players:
-            from app.game.ai_player_manager import AIPlayerManager
-            gm_intent = active.last_gm_intent
-            try:
-                companion_responses: list[dict[str, str]] = []
-                if is_sober_mode():
-                    if gm_intent == "social":
-                        _, companion_responses = await AIPlayerManager().run_party_reaction_batch(
-                            session_id,
-                            active,
-                            action.content or action.action_type,
-                            trigger_character_id=action.character_id,
-                            db=db,
-                        )
-                else:
-                    _, companion_responses = await AIPlayerManager().run_exploration_reactions(
-                        session_id,
-                        active,
-                        action_resolver,
-                        trigger_character_id=action.character_id,
-                        db=db,
-                    )
-                pending_transition = active.state_data.pop("pending_phase_transition", None)
-                if pending_transition == "COMBAT" and active.phase != SessionStatus.COMBAT:
-                    await _handle_start_combat(session_id, active, db, encounter_id=None)
-                    return
-
-                # Après une action sociale avec des compagnons qui ont répondu,
-                # le MJ produit une narration de conclusion (transition de scène).
-                if (
-                    not is_sober_mode()
-                    and gm_intent == "social"
-                    and companion_responses
-                ):
-                    player_action_text = action.content or action.action_type
-                    await action_resolver.social_conclude(
-                        session_id=session_id,
-                        active=active,
-                        player_action=player_action_text,
-                        companion_responses=companion_responses,
-                        db=db,
-                    )
-            except Exception as exc:
-                logger.error(
-                    "Auto AI reactions failed in exploration: %s", exc, exc_info=True
-                )
 
 
 # ---------------------------------------------------------------------------

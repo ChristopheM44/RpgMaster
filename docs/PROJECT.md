@@ -63,14 +63,26 @@ L'objectif est de permettre a quiconque de vivre une experience de JDR complete 
 
 ### Flux de jeu typique
 
-1. **Joueur** envoie une action via WebSocket (ex: "J'ouvre la porte")
-2. **Game Loop** recoit l'action, determine la phase courante
-3. **GM Agent** recoit le contexte du jeu et genere une reponse structuree (JSON)
-4. **Rules Engine** resout les mecaniques (jets de des, checks, degats)
-5. **Game Loop** met a jour le game state
-6. **Event Bus** diffuse les evenements a tous les clients connectes
-7. **Frontend** affiche la narration, les resultats de des, et met a jour l'interface
-8. *(Optionnel)* **Voxtral** genere l'audio de la narration en arriere-plan
+Le flux narratif complet est documente dans [NARRATIVE_FLOW.md](./NARRATIVE_FLOW.md).
+
+En exploration :
+
+1. **Joueur** envoie une action libre via WebSocket (ex: "@Thorin que penses-tu ?")
+2. **NarrativeFlowService** detecte l'audience : MJ, monde, groupe, compagnon cible, ou mixte
+3. **PlayerAgent(s)** des compagnons concernes repondent si la scene les sollicite
+4. **GM Agent** arbitre ensuite seulement si l'action touche le monde, les regles ou la suite
+5. **Rules Engine** resout les jets ou effets mecaniques demandes par le MJ
+6. **Event Bus** diffuse dialogues, narration, jets et mises a jour d'etat
+7. **Frontend** affiche les locuteurs distincts : MJ, joueur humain, compagnon, PNJ
+8. *(Optionnel)* **TTS** genere l'audio de la narration en arriere-plan
+
+Un dialogue direct avec un compagnon reste conversationnel, mais si ce compagnon choisit une action concrete (`examine`, `move`, `use_item`, `help`), sa parole visible est publiee puis le MJ reprend la main pour arbitrer la transition. En mode `sober`, seuls les echanges sociaux purs evitent cet appel MJ.
+
+En combat :
+
+1. **ActionResolver / ActionPipeline** resolvent l'action via le moteur de regles
+2. **CombatGMAgent** narre le tour avec un contexte compact et les jets deja calcules
+3. **Event Bus** diffuse `roll_result`, changements de PV/statut et narration MJ
 
 ### Protocole WebSocket
 
@@ -78,18 +90,24 @@ L'objectif est de permettre a quiconque de vivre une experience de JDR complete 
 
 | Direction | Evenement | Description |
 |-----------|-----------|-------------|
-| Client → Serveur | `player_action` | Action du joueur (attaquer, parler, se deplacer...) |
-| Client → Serveur | `player_choice` | Reponse a un choix propose par le MJ |
-| Client → Serveur | `player_message` | Texte libre au MJ |
-| Client → Serveur | `end_turn` | Fin de tour |
-| Serveur → Client | `narrative` | Texte narratif du MJ (+audio optionnel) |
-| Serveur → Client | `dice_result` | Resultat de jet de des avec detail |
-| Serveur → Client | `combat_update` | Changement d'initiative, PV, conditions |
-| Serveur → Client | `character_update` | Mise a jour de fiche (PV, sorts, inventaire) |
-| Serveur → Client | `choice_prompt` | Le MJ propose des choix au joueur |
-| Serveur → Client | `turn_start` | Debut du tour du joueur |
-| Serveur → Client | `phase_change` | Transition de phase (exploration → combat) |
-| Serveur → Client | `audio` | Audio Voxtral (base64 ou URL) |
+| Client → Serveur | `join` | Associe la connexion au personnage humain courant |
+| Client → Serveur | `action` | Action libre ou mecanique (`free_text`, `attack`, `cast_spell`, `end_turn`, etc.) |
+| Client → Serveur | `action.addressed_to` | Optionnel : id ou nom du compagnon IA cible |
+| Client → Serveur | `action.audience` | Optionnel : `gm`, `world`, `party`, `companion`, `mixed` |
+| Client → Serveur | `action.scene_id` | Optionnel : identifiant d'echange narratif |
+| Client → Serveur | `toggle_ai_control` | Passe un personnage en controle IA ou humain |
+| Client → Serveur | `trigger_ai_reactions` | Declenchement manuel de reactions IA hors flux normal |
+| Client → Serveur | `ping` | Keepalive |
+| Serveur → Client | `session_state` | Etat courant de session, phase, tour, journal, quetes, chronique |
+| Serveur → Client | `narration` | Narration ou dialogue avec `speaker`, `speaker_kind`, `entry_kind` optionnels |
+| Serveur → Client | `roll_result` | Resultat de jet de des avec detail |
+| Serveur → Client | `combat_start` / `combat_end` | Debut / fin de combat |
+| Serveur → Client | `turn_start` / `turn_end` | Debut / fin de tour |
+| Serveur → Client | `hp_changed`, `condition_changed`, `combatant_status_changed` | Mises a jour de combat |
+| Serveur → Client | `journal_updated`, `quest_updated`, `chronicle_updated` | Mises a jour canon |
+| Serveur → Client | `ai_thinking` | Indique qu'un MJ ou compagnon IA reflechit |
+| Serveur → Client | `audio` | Audio TTS (base64) |
+| Serveur → Client | `error` / `pong` | Erreur ou reponse keepalive |
 
 ### Format de reponse du GM Agent
 

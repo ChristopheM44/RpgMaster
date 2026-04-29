@@ -22,7 +22,7 @@ from app.game.session_manager import ActiveSession
 from app.llm.budget import (
     begin_llm_call_scope,
     end_llm_call_scope,
-    is_companion_social_prompt,
+    is_pure_companion_social_prompt,
     is_sober_mode,
     should_use_gm_for_action,
 )
@@ -49,6 +49,7 @@ class ActionRequest(BaseModel):
     spell_id: Optional[str] = None
     slot_level: Optional[int] = None
     display_text: Optional[str] = None
+    persist_actor_action: bool = True
 
 
 class ResolvedAction(BaseModel):
@@ -76,9 +77,11 @@ class ActionPipeline:
         db: Optional[Any] = None,
         *,
         mechanics: Optional[Any] = None,
+        combat_gm_agent: Optional[Any] = None,
         source: str = "action_pipeline",
     ) -> None:
         self._gm = gm_agent
+        self._combat_gm = combat_gm_agent or gm_agent
         self._event_bus = event_bus_instance
         self._db = db
         self._mechanics = mechanics
@@ -205,14 +208,15 @@ class ActionPipeline:
                 roll_results = mechanics._resolve_generic_roll(request.content)
 
         # 2. Persistance visible puis contexte GM avec resume mecanique.
-        await self._persist_actor_action(
-            request.session_id,
-            display_text,
-            actor_name,
-            request,
-            target_id,
-            actual_db,
-        )
+        if request.persist_actor_action:
+            await self._persist_actor_action(
+                request.session_id,
+                display_text,
+                actor_name,
+                request,
+                target_id,
+                actual_db,
+            )
 
         prompt_action_text = self._prompt_action_text(
             request,
@@ -231,7 +235,7 @@ class ActionPipeline:
         if (
             is_sober_mode()
             and phase_value != "COMBAT"
-            and is_companion_social_prompt(request.content)
+            and is_pure_companion_social_prompt(request.action_type, request.content)
             and not active.ai_players
         ):
             use_gm = True
@@ -256,7 +260,8 @@ class ActionPipeline:
 
             try:
                 await self._publish_ai_thinking(request.session_id, True)
-                gm_candidate = await self._gm.think(context)
+                gm_agent = self._gm_for_phase(phase_value)
+                gm_candidate = await gm_agent.think(context)
                 gm_response = self._as_agent_response(gm_candidate)
             except Exception as exc:
                 logger.error("ActionPipeline : GMAgent echoue : %s", exc)
@@ -268,7 +273,7 @@ class ActionPipeline:
         elif (
             is_sober_mode()
             and phase_value != "COMBAT"
-            and is_companion_social_prompt(request.content)
+            and is_pure_companion_social_prompt(request.action_type, request.content)
         ):
             active.last_gm_intent = "social"
         else:
@@ -357,6 +362,7 @@ class ActionPipeline:
                 request.session_id,
                 context,
                 pending_rolls,
+                gm_agent=self._gm_for_phase(phase_value),
             )
             if outcome_response and outcome_response.narration:
                 final_narration = outcome_response.narration
@@ -414,6 +420,9 @@ class ActionPipeline:
             self._mechanics = ActionResolver(gm_agent=self._gm)
         return self._mechanics
 
+    def _gm_for_phase(self, phase_value: str) -> Any:
+        return self._combat_gm if phase_value.upper() == "COMBAT" else self._gm
+
     @staticmethod
     def _deterministic_narration(
         request: ActionRequest,
@@ -424,7 +433,7 @@ class ActionPipeline:
         action = request.action_type.strip().lower()
         target_label = target_name or "la cible"
 
-        if is_companion_social_prompt(request.content):
+        if is_pure_companion_social_prompt(request.action_type, request.content):
             return ""
 
         if action == "attack" and roll_results:
@@ -491,6 +500,8 @@ class ActionPipeline:
             {
                 "text": narration_text,
                 "speaker": "Maître du Jeu",
+                "speaker_kind": "gm",
+                "entry_kind": "narration",
                 "narration_id": narration_id,
             },
             source=self._source,
@@ -510,17 +521,20 @@ class ActionPipeline:
         session_id: str,
         context: AgentContext,
         pending_rolls: list[dict[str, Any]],
+        *,
+        gm_agent: Optional[Any] = None,
     ) -> Optional[GMResponse]:
         outcome_response: Optional[GMResponse] = None
+        agent = gm_agent or self._gm_for_phase(context.game_phase)
         try:
             await self._publish_ai_thinking(session_id, True)
             try:
-                outcome_candidate = await self._gm.narrate_outcome_response(
+                outcome_candidate = await agent.narrate_outcome_response(
                     context,
                     pending_rolls,
                 )
             except (AttributeError, TypeError):
-                outcome_candidate = await self._gm.narrate_outcome(context, pending_rolls)
+                outcome_candidate = await agent.narrate_outcome(context, pending_rolls)
 
             if isinstance(outcome_candidate, GMResponse):
                 outcome_response = outcome_candidate
