@@ -91,10 +91,11 @@ pip install -e .
 
 # Configurer les variables d'environnement
 cp ../.env.example .env
+
+# Créer la base de données (obligatoire à la première installation)
+alembic upgrade head
 ```
 *(Optionnel) Éditez le fichier `.env` si vous devez modifier les ports, l'hôte (`APP_HOST`) ou le modèle LLM.*
-
-Les tables de base de données (SQLite) sont gérées soit au lancement, soit via `alembic upgrade head`.
 
 Pour lancer le backend :
 ```bash
