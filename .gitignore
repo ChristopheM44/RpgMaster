@@ -63,5 +63,4 @@ backend/runtime_settings.json
 backend/llm_runtime.json
 
 .ollama
-
-
+.claude/worktrees/
