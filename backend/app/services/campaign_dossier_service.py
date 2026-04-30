@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.campaign_forge_agent import CampaignForgeAgent
@@ -247,9 +247,10 @@ async def gm_dossier_view(campaign_id: str, db: AsyncSession) -> dict[str, Any]:
 
 async def public_summary(campaign: Campaign, db: AsyncSession) -> dict[str, Any]:
     dossier = await get_dossier(campaign.id, db)
+    character_count = await _current_session_character_count(campaign, db)
     if dossier is None:
-        return _summary_from_contract(campaign, None)
-    return _summary_from_contract(campaign, dossier)
+        return _summary_from_contract(campaign, None, character_count=character_count)
+    return _summary_from_contract(campaign, dossier, character_count=character_count)
 
 
 async def synthesize_canon(
@@ -625,6 +626,7 @@ def _fallback_canon(
 def _summary_from_contract(
     campaign: Campaign,
     dossier: Optional[CampaignDossier],
+    character_count: Optional[int] = None,
 ) -> dict[str, Any]:
     if dossier is None:
         contract = sanitize_player_contract({}, campaign, brief={})
@@ -646,7 +648,11 @@ def _summary_from_contract(
         "progress": {"done": done, "total": max(total, 1)},
         "counts": {
             "sessions": len(campaign.session_ids or []),
-            "characters": len(campaign.character_ids or []),
+            "characters": (
+                character_count
+                if character_count is not None
+                else len(campaign.character_ids or [])
+            ),
             "quests_active": len([q for q in quests if q.get("status", "active") == "active"]),
             "quests_done": len([q for q in quests if q.get("status") == "completed"]),
             "chronicle_entries": len(canon.get("npc_relationships", []))
@@ -655,6 +661,26 @@ def _summary_from_contract(
             "places": len((dossier.gm_dossier or {}).get("locations", [])) if dossier else 0,
         },
     }
+
+
+def _current_session_id(campaign: Campaign) -> Optional[str]:
+    session_ids = list(campaign.session_ids or [])
+    if not session_ids:
+        return None
+    index = campaign.current_session_index
+    if 0 <= index < len(session_ids):
+        return session_ids[index]
+    return session_ids[-1]
+
+
+async def _current_session_character_count(campaign: Campaign, db: AsyncSession) -> Optional[int]:
+    session_id = _current_session_id(campaign)
+    if session_id is None:
+        return None
+    result = await db.execute(
+        select(func.count(Character.id)).where(Character.session_id == session_id)
+    )
+    return int(result.scalar_one())
 
 
 def _current_public_chapter(
