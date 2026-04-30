@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -12,14 +12,15 @@ from app.api.routes_character import _init_spell_slots, _resolve_equipment
 from app.db.database import get_db
 from app.models.character import Character
 from app.schemas.character import CharacterResponse
+from app.services.rest_service import build_hit_dice
 
 router = APIRouter()
 
 _PREGENS_PATH = Path(__file__).parent.parent / "engine" / "srd_data" / "pregens.json"
-_PREGENS_DATA: Optional[List[Dict[str, Any]]] = None
+_PREGENS_DATA: Optional[list[dict[str, Any]]] = None
 
 
-def _load_pregens() -> List[Dict[str, Any]]:
+def _load_pregens() -> list[dict[str, Any]]:
     global _PREGENS_DATA
     if _PREGENS_DATA is not None:
         return _PREGENS_DATA
@@ -40,7 +41,7 @@ class PregenTemplate(BaseModel):
     description: str
     species: str
     background: str
-    ability_scores: Dict[str, int]
+    ability_scores: dict[str, int]
     hp_max: int
 
 
@@ -54,7 +55,7 @@ class PregenSelectBody(BaseModel):
 # ── Routes ─────────────────────────────────────────────────────────────────────
 
 
-@router.get("/pregenerated", response_model=List[PregenTemplate])
+@router.get("/pregenerated", response_model=list[PregenTemplate])
 async def list_pregenerated():
     """Retourne les 12 templates de personnages prétirés (sans créer en DB)."""
     pregens = _load_pregens()
@@ -95,6 +96,7 @@ async def create_from_pregen(
     name = (body.name or "").strip() or template["name"]
     equipment = _resolve_equipment(template["equipment"])
     spell_slots = _init_spell_slots(class_id, 1)
+    hit_dice = build_hit_dice(class_id, 1)
 
     character = Character(
         name=name,
@@ -110,6 +112,7 @@ async def create_from_pregen(
         hp_temp=0,
         equipment=equipment,
         spell_slots=spell_slots,
+        hit_dice=hit_dice,
         known_spells=template["known_spells"],
         conditions=[],
         proficiencies=template["proficiencies"],

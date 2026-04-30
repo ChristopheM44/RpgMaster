@@ -73,6 +73,7 @@ class EventType(str):
     # Character updates
     SPELL_SLOT_UPDATED = "spell_slot_updated"
     EQUIPMENT_UPDATED = "equipment_updated"
+    HIT_DICE_UPDATED = "hit_dice_updated"
     DEATH_SAVE_UPDATED = "death_save_updated"
 
     # World state (journal, quests, chronicle)

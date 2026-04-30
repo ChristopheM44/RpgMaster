@@ -245,6 +245,7 @@ async def create_save(session_id: str, body: dict, db: AsyncSession = Depends(ge
             "hp_temp": c.hp_temp,
             "equipment": c.equipment,
             "spell_slots": c.spell_slots,
+            "hit_dice": c.hit_dice,
             "known_spells": c.known_spells,
             "conditions": c.conditions,
             "proficiencies": c.proficiencies,
@@ -386,6 +387,7 @@ async def load_save(session_id: str, save_id: str, db: AsyncSession = Depends(ge
         char.ability_scores = snap["ability_scores"]
         char.equipment = snap["equipment"]
         char.spell_slots = snap["spell_slots"]
+        char.hit_dice = snap.get("hit_dice", char.hit_dice or {})
         char.known_spells = snap["known_spells"]
         char.conditions = snap["conditions"]
         char.proficiencies = snap["proficiencies"]

@@ -50,8 +50,11 @@ app/
 │   ├── ollama_client.py     # Client async Ollama (retry, streaming)
 │   └── voxtral_client.py    # Client TTS dual-backend (Kokoro ou vLLM-Omni)
 └── services/
-    ├── message_service.py   # Persistance narrations en DB
-    └── encounter_service.py # Construction rencontres depuis monster_ids
+    ├── message_service.py        # Persistance narrations en DB
+    ├── encounter_service.py      # Construction rencontres depuis monster_ids
+    ├── narrative_flow_service.py # Orchestration exploration vivante
+    ├── equipment_service.py      # Equip/use/drop, sync DB + ActiveSession
+    └── rest_service.py           # Repos court/long, des de vie, sorts
 ```
 
 ## Protocole WebSocket
@@ -61,13 +64,23 @@ Endpoint : `ws://localhost:8000/ws/game/{session_id}?character_id={id}`
 ### Messages client -> serveur
 
 ```json
-{ "type": "join" }
-{ "type": "action", "action_type": "free_action", "text": "Je cherche une porte secrete" }
+{ "type": "join", "character_id": "hero_1" }
+{ "type": "action", "action_type": "free_text", "content": "Je cherche une porte secrete" }
 { "type": "action", "action_type": "attack", "target_id": "goblin_0" }
 { "type": "action", "action_type": "cast_spell", "spell_id": "fire_bolt", "target_id": "...", "slot_level": 1 }
 { "type": "action", "action_type": "start_combat" }
-{ "type": "action", "action_type": "take_rest", "rest_type": "short" }
+{ "type": "action", "action_type": "equip", "character_id": "hero_1", "item_id": "leather" }
+{ "type": "action", "action_type": "use_item", "character_id": "hero_1", "item_id": "healing_potion" }
+{ "type": "action", "action_type": "drop_item", "character_id": "hero_1", "item_id": "torch" }
+{ "type": "action", "action_type": "short_rest", "hit_dice_spend": { "hero_1": 1 } }
+{ "type": "action", "action_type": "long_rest" }
+{ "type": "action", "action_type": "take_rest" }
 ```
+
+`take_rest` reste un alias de compatibilite pour `long_rest`.
+Le repos court depense les des de vie choisis par le client via
+`hit_dice_spend`. Le format persiste sur `Character.hit_dice` :
+`{"die": 10, "total": 1, "used": 0}`.
 
 ### Evenements serveur -> client (EventType)
 
@@ -79,6 +92,9 @@ Endpoint : `ws://localhost:8000/ws/game/{session_id}?character_id={id}`
 | `combat_action` | Action mecaniste resolue (attaque, sort, mouvement) |
 | `hp_changed` | Changement de PV d'un combattant |
 | `condition_changed` | Condition appliquee/retiree |
+| `equipment_updated` | Inventaire/equipement d'un personnage |
+| `spell_slot_updated` | Emplacements de sorts restaures ou consommes |
+| `hit_dice_updated` | Des de vie disponibles/depenses |
 | `turn_start` / `turn_end` | Debut/fin de tour |
 | `combat_start` / `combat_end` | Transitions de phase |
 | `phase_change` | Changement d'etat de la machine a etats |
@@ -102,6 +118,10 @@ session = AsyncSession(engine)  # NON
 Les prompts sont des templates Jinja2 dans `agents/prompts/`.
 Le GMAgent attend une reponse JSON valide selon `agents/schemas.py` (classe `GMResponse`).
 Tout nouveau type d'action doit etre ajoute dans `EventType` (event_bus.py) ET gere dans `action_resolver.py`.
+
+Exceptions actuelles : les actions directes d'inventaire et de repos passent
+par `EquipmentService` / `RestService`, puis publient directement leurs
+evenements via l'event bus depuis `ws_game.py` ou le service.
 
 ## Tests
 

@@ -16,6 +16,7 @@ import type {
   DeathSaveUpdatedPayload,
   SpellSlotUpdatedPayload,
   EquipmentUpdatedPayload,
+  HitDiceUpdatedPayload,
   AudioPayload,
   CombatActionPayload,
   CombatantMovedPayload,
@@ -146,6 +147,11 @@ export function useWebSocket(sessionId: string) {
       case 'equipment_updated': {
         const p = msg.payload as EquipmentUpdatedPayload
         charStore.updateEquipment(p.character_id, p.equipment)
+        break
+      }
+      case 'hit_dice_updated': {
+        const p = msg.payload as HitDiceUpdatedPayload
+        charStore.updateHitDice(p.character_id, p.hit_dice)
         break
       }
       case 'combat_action':

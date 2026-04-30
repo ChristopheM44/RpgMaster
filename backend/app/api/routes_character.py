@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -10,7 +10,6 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
-from app.engine.dice import roll
 from app.engine.spells import FULL_CASTER_SLOTS, HALF_CASTER_SLOTS
 from app.game.constants import ARMOR_CATEGORIES
 from app.models.character import Character
@@ -20,14 +19,20 @@ from app.schemas.character import (
     CharacterResponse,
     CharacterUpdate,
 )
+from app.services.equipment_service import (
+    CharacterNotFoundError,
+    EquipmentService,
+    ItemNotFoundError,
+)
+from app.services.rest_service import build_hit_dice, normalize_character_hit_dice
 
 # ── Equipment SRD helpers ───────────────────────────────────────────────────────
 
 _EQUIPMENT_JSON_PATH = Path(__file__).parent.parent / "engine" / "srd_data" / "equipment.json"
-_EQUIPMENT_LOOKUP: Optional[Dict[str, Any]] = None
+_EQUIPMENT_LOOKUP: Optional[dict[str, Any]] = None
 
 # Noms français pour les items génériques / spéciaux non présents dans equipment.json
-_SPECIAL_ITEM_NAMES: Dict[str, str] = {
+_SPECIAL_ITEM_NAMES: dict[str, str] = {
     "simple_weapon": "Arme courante",
     "martial_weapon": "Arme de guerre",
     "druidic_focus": "Focalisateur druidique",
@@ -42,7 +47,7 @@ _SPECIAL_ITEM_NAMES: Dict[str, str] = {
 }
 
 
-def _get_equipment_lookup() -> Dict[str, Any]:
+def _get_equipment_lookup() -> dict[str, Any]:
     """Charge equipment.json et retourne un dict id → données complètes de l'item."""
     global _EQUIPMENT_LOOKUP
     if _EQUIPMENT_LOOKUP is not None:
@@ -53,7 +58,7 @@ def _get_equipment_lookup() -> Dict[str, Any]:
     except (OSError, json.JSONDecodeError):
         _EQUIPMENT_LOOKUP = {}
         return _EQUIPMENT_LOOKUP
-    lookup: Dict[str, Any] = {}
+    lookup: dict[str, Any] = {}
     for subcategory in data.get("weapons", {}).values():
         for item in subcategory:
             lookup[item["id"]] = item
@@ -66,11 +71,11 @@ def _get_equipment_lookup() -> Dict[str, Any]:
     return _EQUIPMENT_LOOKUP
 
 
-def _resolve_equipment(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _resolve_equipment(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Enrichit chaque item avec les données SRD (name_fr, category, base_ac…) et
     initialise equipped=True pour la première armure et le premier bouclier."""
     lookup = _get_equipment_lookup()
-    resolved: List[Dict[str, Any]] = []
+    resolved: list[dict[str, Any]] = []
     armor_equipped = False
     shield_equipped = False
 
@@ -112,7 +117,7 @@ _FULL_CASTERS = {"wizard", "cleric", "druid", "bard", "sorcerer"}
 _HALF_CASTERS = {"paladin", "ranger"}
 
 
-def _init_spell_slots(char_class: str, level: int) -> Dict[str, Dict[str, int]]:
+def _init_spell_slots(char_class: str, level: int) -> dict[str, dict[str, int]]:
     """Retourne les emplacements de sorts initiaux (tous unused) selon la classe et le niveau."""
     cls = char_class.lower()
     if cls in _FULL_CASTERS:
@@ -131,13 +136,22 @@ class InventoryActionRequest(BaseModel):
     item_id: str
 
 
-def _find_item(equipment: List[Dict[str, Any]], item_id: str) -> Tuple[int, Optional[Dict[str, Any]]]:
-    for i, item in enumerate(equipment):
-        if item.get("id") == item_id:
-            return i, item
-    return -1, None
-
 router = APIRouter()
+equipment_service = EquipmentService()
+
+
+async def _normalize_hit_dice_for_response(
+    characters: Character | list[Character],
+    db: AsyncSession,
+) -> None:
+    chars = characters if isinstance(characters, list) else [characters]
+    changed = False
+    for char in chars:
+        before = dict(char.hit_dice or {})
+        normalize_character_hit_dice(char)
+        changed = changed or before != dict(char.hit_dice or {})
+    if changed:
+        await db.commit()
 
 
 @router.get("/", response_model=CharacterListResponse)
@@ -162,6 +176,7 @@ async def list_characters(
         query.order_by(Character.created_at.asc()).offset(skip).limit(limit)
     )
     characters = result.scalars().all()
+    await _normalize_hit_dice_for_response(list(characters), db)
 
     return CharacterListResponse(characters=list(characters), total=total)
 
@@ -178,6 +193,8 @@ async def create_character(
     # Auto-initialiser les emplacements de sorts si non fournis
     if not data.get("spell_slots"):
         data["spell_slots"] = _init_spell_slots(data["char_class"], data["level"])
+    if not data.get("hit_dice"):
+        data["hit_dice"] = build_hit_dice(data["char_class"], data["level"])
     character = Character(**data)
     db.add(character)
     await db.commit()
@@ -195,6 +212,7 @@ async def get_character(
     character = result.scalar_one_or_none()
     if character is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Personnage introuvable")
+    await _normalize_hit_dice_for_response(character, db)
     return character
 
 
@@ -213,6 +231,8 @@ async def update_character(
     update_data = payload.model_dump(exclude_none=True)
     for field, value in update_data.items():
         setattr(character, field, value)
+    if "level" in update_data or "hit_dice" in update_data or not character.hit_dice:
+        normalize_character_hit_dice(character)
 
     await db.commit()
     await db.refresh(character)
@@ -244,29 +264,23 @@ async def equip_item(
     db: AsyncSession = Depends(get_db),
 ):
     """Équipe ou retire un objet (toggle). Pour les armures, une seule peut être équipée."""
-    result = await db.execute(select(Character).where(Character.id == character_id))
-    char = result.scalar_one_or_none()
-    if char is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Personnage introuvable")
-
-    equipment: List[Dict[str, Any]] = list(char.equipment or [])
-    idx, item = _find_item(equipment, payload.item_id)
-    if idx == -1:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Objet introuvable dans l'inventaire")
-
-    new_equipped = not item.get("equipped", False)
-
-    # Si on équipe une armure, retirer les autres armures
-    if new_equipped and item.get("category", "") in ARMOR_CATEGORIES:
-        for i, eq in enumerate(equipment):
-            if i != idx and eq.get("category", "") in ARMOR_CATEGORIES:
-                equipment[i] = {**eq, "equipped": False}
-
-    equipment[idx] = {**item, "equipped": new_equipped}
-    char.equipment = equipment
-    await db.commit()
-    await db.refresh(char)
-    return char
+    try:
+        result = await equipment_service.equip_item(
+            character_id=character_id,
+            item_id=payload.item_id,
+            db=db,
+        )
+        return result.character
+    except CharacterNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Personnage introuvable",
+        ) from exc
+    except ItemNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Objet introuvable dans l'inventaire",
+        ) from exc
 
 
 @router.post("/{character_id}/inventory/use", response_model=CharacterResponse)
@@ -276,34 +290,23 @@ async def use_item(
     db: AsyncSession = Depends(get_db),
 ):
     """Utilise un objet consommable (potion = soin). Décrémente la quantité."""
-    result = await db.execute(select(Character).where(Character.id == character_id))
-    char = result.scalar_one_or_none()
-    if char is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Personnage introuvable")
-
-    equipment: List[Dict[str, Any]] = list(char.equipment or [])
-    idx, item = _find_item(equipment, payload.item_id)
-    if idx == -1:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Objet introuvable dans l'inventaire")
-
-    item_id_lower = (item.get("id") or "").lower()
-    item_name_lower = (item.get("name_fr") or "").lower()
-    is_healing_potion = "potion" in item_id_lower or "potion" in item_name_lower
-    if is_healing_potion:
-        heal_result = roll("2d4+2")
-        new_hp = min(char.hp_max, char.hp_current + heal_result.total)
-        char.hp_current = new_hp
-
-    qty = int(item.get("quantity", 1))
-    if qty > 1:
-        equipment[idx] = {**item, "quantity": qty - 1}
-    else:
-        equipment.pop(idx)
-
-    char.equipment = equipment
-    await db.commit()
-    await db.refresh(char)
-    return char
+    try:
+        result = await equipment_service.use_item(
+            character_id=character_id,
+            item_id=payload.item_id,
+            db=db,
+        )
+        return result.character
+    except CharacterNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Personnage introuvable",
+        ) from exc
+    except ItemNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Objet introuvable dans l'inventaire",
+        ) from exc
 
 
 @router.post("/{character_id}/inventory/drop", response_model=CharacterResponse)
@@ -313,18 +316,20 @@ async def drop_item(
     db: AsyncSession = Depends(get_db),
 ):
     """Lâche un objet : le retire définitivement de l'inventaire."""
-    result = await db.execute(select(Character).where(Character.id == character_id))
-    char = result.scalar_one_or_none()
-    if char is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Personnage introuvable")
-
-    equipment: List[Dict[str, Any]] = list(char.equipment or [])
-    idx, _ = _find_item(equipment, payload.item_id)
-    if idx == -1:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Objet introuvable dans l'inventaire")
-
-    equipment.pop(idx)
-    char.equipment = equipment
-    await db.commit()
-    await db.refresh(char)
-    return char
+    try:
+        result = await equipment_service.drop_item(
+            character_id=character_id,
+            item_id=payload.item_id,
+            db=db,
+        )
+        return result.character
+    except CharacterNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Personnage introuvable",
+        ) from exc
+    except ItemNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Objet introuvable dans l'inventaire",
+        ) from exc

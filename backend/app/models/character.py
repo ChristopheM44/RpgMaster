@@ -42,6 +42,8 @@ class Character(Base):
     equipment: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     # spell_slots: {"1": {"total": 2, "used": 1}, "2": {...}}
     spell_slots: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    # hit_dice: {"die": 10, "total": 1, "used": 0}
+    hit_dice: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     # known_spells: ["fire_bolt", "magic_missile", ...]
     known_spells: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     # conditions: ["poisoned", "prone"] — noms des conditions actives

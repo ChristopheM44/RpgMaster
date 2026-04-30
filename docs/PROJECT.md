@@ -84,6 +84,35 @@ En combat :
 2. **CombatGMAgent** narre le tour avec un contexte compact et les jets deja calcules
 3. **Event Bus** diffuse `roll_result`, changements de PV/statut et narration MJ
 
+### Services backend extraits
+
+Depuis le Sprint 2 / Lot 2.1, `ws_game.py` reste le routeur temps reel principal,
+mais les mutations metier d'equipement et de repos sont sorties dans `app/services/`.
+
+| Service | Role | Consommateurs |
+|---------|------|---------------|
+| `EquipmentService` | Equiper/retirer, utiliser et lacher les objets ; synchronise DB + `ActiveSession.state_data` | REST personnages + WebSocket |
+| `RestService` | Repos court/long, depense des des de vie, restauration PV/sorts/des | WebSocket |
+
+Le modele `Character` expose maintenant `hit_dice` au format :
+
+```json
+{ "die": 10, "total": 1, "used": 0 }
+```
+
+Les personnages existants dont `hit_dice` est vide sont normalises paresseusement
+depuis `char_class` + `level`. La migration Alembic associee ajoute la colonne
+JSON, puis les handlers et services remplissent la valeur canonique au premier
+passage.
+
+Repos :
+
+- **Repos court** : le frontend choisit combien de des de vie chaque personnage
+  depense. Le backend lance `n d{die} + CON*n`, soigne au minimum 1 PV si un de
+  est depense, plafonne a `hp_max`, puis increment `hit_dice.used`.
+- **Repos long** : restaure tous les PV, remet `spell_slots.*.used = 0`, remet
+  `hit_dice.used = 0`, puis repasse la session en exploration.
+
 ### Protocole WebSocket
 
 **Endpoint** : `/ws/game/{session_id}`
@@ -92,9 +121,12 @@ En combat :
 |-----------|-----------|-------------|
 | Client → Serveur | `join` | Associe la connexion au personnage humain courant |
 | Client → Serveur | `action` | Action libre ou mecanique (`free_text`, `attack`, `cast_spell`, `end_turn`, etc.) |
+| Client → Serveur | `action_type=short_rest` | Repos court avec `hit_dice_spend` |
+| Client → Serveur | `action_type=long_rest` | Repos long ; `take_rest` reste un alias compatible |
 | Client → Serveur | `action.addressed_to` | Optionnel : id ou nom du compagnon IA cible |
 | Client → Serveur | `action.audience` | Optionnel : `gm`, `world`, `party`, `companion`, `mixed` |
 | Client → Serveur | `action.scene_id` | Optionnel : identifiant d'echange narratif |
+| Client → Serveur | `action.hit_dice_spend` | Optionnel : map `{character_id: nombre_de_des}` pour `short_rest` |
 | Client → Serveur | `toggle_ai_control` | Passe un personnage en controle IA ou humain |
 | Client → Serveur | `trigger_ai_reactions` | Declenchement manuel de reactions IA hors flux normal |
 | Client → Serveur | `ping` | Keepalive |
@@ -104,6 +136,7 @@ En combat :
 | Serveur → Client | `combat_start` / `combat_end` | Debut / fin de combat |
 | Serveur → Client | `turn_start` / `turn_end` | Debut / fin de tour |
 | Serveur → Client | `hp_changed`, `condition_changed`, `combatant_status_changed` | Mises a jour de combat |
+| Serveur → Client | `equipment_updated`, `spell_slot_updated`, `hit_dice_updated` | Mises a jour personnage |
 | Serveur → Client | `journal_updated`, `quest_updated`, `chronicle_updated` | Mises a jour canon |
 | Serveur → Client | `ai_thinking` | Indique qu'un MJ ou compagnon IA reflechit |
 | Serveur → Client | `audio` | Audio TTS (base64) |

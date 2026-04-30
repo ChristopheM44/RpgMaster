@@ -128,6 +128,7 @@ async def advance_to_next_session(
                 hp_temp=0,
                 equipment=list(old_char.equipment),
                 spell_slots=dict(old_char.spell_slots),
+                hit_dice=dict(old_char.hit_dice or {}),
                 known_spells=list(old_char.known_spells),
                 conditions=[],  # Clear conditions between sessions
                 proficiencies=dict(old_char.proficiencies),

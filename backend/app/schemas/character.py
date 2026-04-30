@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -26,6 +26,14 @@ class AbilityScores(BaseModel):
 class SpellSlotLevel(BaseModel):
     """Emplacements de sorts pour un niveau donné."""
 
+    total: int = Field(..., ge=0)
+    used: int = Field(..., ge=0)
+
+
+class HitDiceState(BaseModel):
+    """Dés de vie disponibles pour les repos courts."""
+
+    die: int = Field(..., ge=4)
     total: int = Field(..., ge=0)
     used: int = Field(..., ge=0)
 
@@ -56,6 +64,7 @@ class CharacterCreate(BaseModel):
 
     equipment: list[dict[str, Any]] = Field(default_factory=list)
     spell_slots: dict[str, SpellSlotLevel] = Field(default_factory=dict)
+    hit_dice: Union[HitDiceState, dict[str, Any]] = Field(default_factory=dict)  # noqa: UP007
     known_spells: list[str] = Field(default_factory=list)
     conditions: list[str] = Field(default_factory=list)
     proficiencies: dict[str, Any] = Field(default_factory=dict)
@@ -80,6 +89,7 @@ class CharacterUpdate(BaseModel):
 
     equipment: Optional[list[dict[str, Any]]] = None
     spell_slots: Optional[dict[str, SpellSlotLevel]] = None
+    hit_dice: Optional[Union[HitDiceState, dict[str, Any]]] = None  # noqa: UP007
     known_spells: Optional[list[str]] = None
     conditions: Optional[list[str]] = None
     proficiencies: Optional[dict[str, Any]] = None
@@ -108,6 +118,7 @@ class CharacterResponse(BaseModel):
 
     equipment: list[dict[str, Any]]
     spell_slots: dict[str, Any]
+    hit_dice: dict[str, Any]
     known_spells: list[str]
     conditions: list[str]
     proficiencies: dict[str, Any]

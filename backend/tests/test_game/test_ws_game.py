@@ -6,9 +6,6 @@ assurant que tout s'exécute dans le même event loop interne du TestClient.
 """
 from __future__ import annotations
 
-import pytest
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -19,6 +16,24 @@ def _create_session(ws_client, name: str = "Test Session") -> str:
     resp = ws_client.post("/api/sessions/", json={"name": name})
     assert resp.status_code == 201, resp.text
     return resp.json()["id"]
+
+
+def _create_character(ws_client, session_id: str, **overrides) -> dict:
+    payload = {
+        "name": "Thorvald",
+        "species": "human",
+        "char_class": "fighter",
+        "ability_scores": {"str": 16, "dex": 12, "con": 14, "int": 10, "wis": 10, "cha": 10},
+        "hp_current": 5,
+        "hp_max": 12,
+        "equipment": [],
+        "spell_slots": {"1": {"total": 2, "used": 1}},
+        "session_id": session_id,
+    }
+    payload.update(overrides)
+    resp = ws_client.post("/api/characters/", json=payload)
+    assert resp.status_code == 201, resp.text
+    return resp.json()
 
 
 def _receive_until(ws, expected_type: str, max_messages: int = 8) -> dict:
@@ -202,12 +217,93 @@ class TestPlayerAction:
                 event_types.append(evt["event_type"])
                 if evt["event_type"] == "phase_change" and evt["payload"]["phase"] == "exploration":
                     exploration_seen = True
-                if evt["event_type"] == "session_state" and evt["payload"]["phase"] == "exploration":
+                if (
+                    evt["event_type"] == "session_state"
+                    and evt["payload"]["phase"] == "exploration"
+                ):
                     break
 
             assert "combat_end" in event_types
             assert exploration_seen
             assert active.phase == SessionStatus.EXPLORATION
+
+    def test_equipment_action_emits_equipment_update(self, ws_client) -> None:
+        session_id = _create_session(ws_client)
+        character = _create_character(
+            ws_client,
+            session_id,
+            equipment=[
+                {"id": "dagger", "name_fr": "Dague", "category": "simple", "equipped": False},
+            ],
+        )
+
+        with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
+            ws.receive_json()  # session_state
+            ws.send_json({
+                "type": "action",
+                "action_type": "equip",
+                "character_id": character["id"],
+                "item_id": "dagger",
+            })
+
+            update = _receive_until(ws, "equipment_updated")
+            assert update["payload"]["character_id"] == character["id"]
+            assert update["payload"]["equipment"][0]["equipped"] is True
+            narration = _receive_until(ws, "narration")
+            assert "équipe" in narration["payload"]["text"]
+
+    def test_short_rest_emits_roll_hp_and_hit_dice_updates(self, ws_client) -> None:
+        session_id = _create_session(ws_client)
+        character = _create_character(ws_client, session_id, hp_current=6, hp_max=12)
+        start_resp = ws_client.post(f"/api/game/{session_id}/start")
+        assert start_resp.status_code == 200, start_resp.text
+
+        with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
+            ws.receive_json()  # session_state
+            ws.send_json({
+                "type": "action",
+                "action_type": "short_rest",
+                "character_id": character["id"],
+                "hit_dice_spend": {character["id"]: 1},
+            })
+
+            roll = _receive_until(ws, "roll_result")
+            assert roll["payload"]["character_id"] == character["id"]
+            hp = _receive_until(ws, "hp_changed")
+            assert hp["payload"]["combatant_id"] == character["id"]
+            hit_dice = _receive_until(ws, "hit_dice_updated")
+            assert hit_dice["payload"]["hit_dice"]["used"] == 1
+            narration = _receive_until(ws, "narration")
+            assert "repos court" in narration["payload"]["text"]
+
+    def test_take_rest_alias_restores_spell_slots_and_hit_dice(self, ws_client) -> None:
+        session_id = _create_session(ws_client)
+        character = _create_character(
+            ws_client,
+            session_id,
+            hp_current=2,
+            hp_max=12,
+            spell_slots={"1": {"total": 2, "used": 2}},
+            hit_dice={"die": 10, "total": 1, "used": 1},
+        )
+        start_resp = ws_client.post(f"/api/game/{session_id}/start")
+        assert start_resp.status_code == 200, start_resp.text
+
+        with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
+            ws.receive_json()  # session_state
+            ws.send_json({
+                "type": "action",
+                "action_type": "take_rest",
+                "character_id": character["id"],
+            })
+
+            phase = _receive_until(ws, "phase_change")
+            assert phase["payload"]["phase"] == "exploration"
+            _receive_until(ws, "hp_changed")
+            slots = _receive_until(ws, "spell_slot_updated")
+            assert slots["payload"]["spell_slots"]["1"]["used"] == 0
+            hit_dice = _receive_until(ws, "hit_dice_updated")
+            assert hit_dice["payload"]["hit_dice"]["used"] == 0
 
     def test_surrendered_last_bandit_ends_combat(self, ws_client) -> None:
         from unittest.mock import AsyncMock, MagicMock
@@ -300,7 +396,10 @@ class TestPlayerAction:
                 for _ in range(18):
                     evt = ws.receive_json()
                     events.append(evt)
-                    if evt["event_type"] == "session_state" and evt["payload"]["phase"] == "exploration":
+                    if (
+                        evt["event_type"] == "session_state"
+                        and evt["payload"]["phase"] == "exploration"
+                    ):
                         break
 
             event_types = [evt["event_type"] for evt in events]

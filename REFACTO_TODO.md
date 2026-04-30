@@ -75,12 +75,24 @@ Cadence : stop après chaque lot → tests + diff review + ✅ user avant d'ench
 
 ## SPRINT 2 — Allègement backend
 
-### Lot 2.1 — Extraction services depuis ws_game.py
-- [ ] Créer `services/equipment_service.py` (equip/unequip/use/drop)
-- [ ] Créer `services/rest_service.py` (short/long rest)
-- [ ] `ws_game.py` : handlers délèguent aux services (~2123 → ~1100 lignes)
-- [ ] Tests + smoke test équip/repos
+### Lot 2.1 — Extraction services depuis ws_game.py ✅ IMPLÉMENTÉ
+- [x] Créer `backend/app/services/equipment_service.py` (equip/unequip/use/drop)
+- [x] Créer `backend/app/services/rest_service.py` (short/long rest)
+- [x] Ajouter `Character.hit_dice` + migration Alembic `d4e5f6a7b8c9`
+- [x] Étendre WebSocket : `short_rest`, `long_rest`, alias `take_rest`, `hit_dice_spend`
+- [x] Ajouter l'événement `hit_dice_updated`
+- [x] Frontend : `RestDialog.vue` avec choix repos court/long et dépense de dés de vie
+- [x] `ws_game.py` : handlers équipement/repos délèguent aux services (reste ~1982 lignes ; cible ~1100 indicative)
+- [x] Tests automatisés équip/repos
+- [x] Documentation : `docs/PROJECT.md` + `backend/CLAUDE.md`
+- [ ] Smoke test manuel UI/WebSocket complet équip/repos
 - [ ] ✅ Validation user
+
+> Vérifications Lot 2.1 : `backend/.venv/bin/pytest backend/tests -q` → 747 passed ;
+> `cd frontend && npm run type-check && npm run build` → OK ;
+> `ruff check` ciblé sur les fichiers modifiés → OK.
+> Le `ruff check app tests` global reste rouge sur dette préexistante hors lot
+> (275 erreurs historiques listées par `--statistics`).
 
 ### Lot 2.2 — LLM retry mutualisé
 - [ ] Créer `backend/app/llm/retry.py` décorateur `@with_llm_retry`

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { characterApi } from '../services/api'
-import type { Character } from '../types'
+import type { Character, HitDiceState } from '../types'
 
 export const useCharacterStore = defineStore('character', () => {
   const myCharacter = ref<Character | null>(null)
@@ -84,6 +84,19 @@ export const useCharacterStore = defineStore('character', () => {
     }
   }
 
+  function updateHitDice(characterId: string, hitDice: HitDiceState) {
+    if (myCharacter.value?.id === characterId) {
+      myCharacter.value = { ...myCharacter.value, hit_dice: hitDice }
+    }
+    const idx = sessionCharacters.value.findIndex((c) => c.id === characterId)
+    if (idx !== -1) {
+      sessionCharacters.value[idx] = {
+        ...sessionCharacters.value[idx],
+        hit_dice: hitDice,
+      } as Character
+    }
+  }
+
   function setMyCharacter(character: Character) {
     myCharacter.value = character
   }
@@ -120,6 +133,7 @@ export const useCharacterStore = defineStore('character', () => {
     updateHp,
     updateEquipment,
     updateSpellSlots,
+    updateHitDice,
     setMyCharacter,
     setSelectedCharacter,
     toggleAiControl,

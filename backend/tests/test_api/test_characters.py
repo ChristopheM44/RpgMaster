@@ -34,6 +34,7 @@ async def test_create_character(async_client):
     assert data["char_class"] == "fighter"
     assert data["level"] == 1
     assert data["is_ai"] is False
+    assert data["hit_dice"] == {"die": 10, "total": 1, "used": 0}
     assert "id" in data
     assert "created_at" in data
 
@@ -93,7 +94,8 @@ async def test_list_characters_filter_by_session(async_client):
 
     # Personnage dans la session
     await async_client.post(
-        "/api/characters/", json={**_BASE_CHARACTER, "name": "Dans Session", "session_id": session_id}
+        "/api/characters/",
+        json={**_BASE_CHARACTER, "name": "Dans Session", "session_id": session_id},
     )
     # Personnage sans session
     await async_client.post("/api/characters/", json={**_BASE_CHARACTER, "name": "Sans Session"})

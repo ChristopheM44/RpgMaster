@@ -13,6 +13,7 @@ import ActionBar from '../components/common/ActionBar.vue'
 import SaveLoadPanel from '../components/ui/SaveLoadPanel.vue'
 import AdventureStartModal from '../components/ui/AdventureStartModal.vue'
 import ConfirmDialog from '../components/common/ConfirmDialog.vue'
+import RestDialog from '../components/ui/RestDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -29,6 +30,7 @@ const showSaveLoad = ref(false)
 const showStartModal = ref(false)
 const showLobbyConfirm = ref(false)
 const showEndCombatConfirm = ref(false)
+const showRestDialog = ref(false)
 
 async function initSession() {
   gameStore.reset()
@@ -121,7 +123,17 @@ async function handleStartConfirm(mode: 'libre' | 'script' | 'auto', script?: st
 }
 
 function startCombat() { sendAction('start_combat', undefined, charStore.myCharacter?.id) }
-function takeRest()    { sendAction('take_rest',    undefined, charStore.myCharacter?.id) }
+function openRestDialog() { showRestDialog.value = true }
+function takeShortRest(spend: Record<string, number>) {
+  showRestDialog.value = false
+  sendAction('short_rest', undefined, charStore.myCharacter?.id, undefined, {
+    hit_dice_spend: spend,
+  })
+}
+function takeLongRest() {
+  showRestDialog.value = false
+  sendAction('long_rest', undefined, charStore.myCharacter?.id)
+}
 function resetCombat() { sendAction('reset_combat', undefined, charStore.myCharacter?.id) }
 function dismissError() { gameStore.setError(null) }
 function handleEndTurn() { sendAction('end_turn', undefined, charStore.myCharacter?.id) }
@@ -280,7 +292,7 @@ onUnmounted(() => { disconnect() })
         <button
           v-if="canRest"
           class="rpg-btn-tonal tone-arcane !py-1.5 !text-[11px]"
-          @click="takeRest"
+          @click="openRestDialog"
         >☽ Repos</button>
 
         <button
@@ -373,6 +385,14 @@ onUnmounted(() => { disconnect() })
       v-if="showStartModal"
       @confirm="handleStartConfirm"
       @cancel="showStartModal = false"
+    />
+
+    <RestDialog
+      v-if="showRestDialog"
+      :characters="charStore.sessionCharacters"
+      @confirm-short="takeShortRest"
+      @confirm-long="takeLongRest"
+      @cancel="showRestDialog = false"
     />
 
     <!-- Quitter la session -->

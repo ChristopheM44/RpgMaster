@@ -101,6 +101,7 @@ export interface CharacterCreate {
   hp_max: number
   hp_temp: number
   equipment?: Record<string, unknown>[]
+  hit_dice?: HitDiceState
   proficiencies?: Record<string, unknown>
   known_spells?: string[]
   session_id?: string
@@ -120,6 +121,7 @@ export interface Character {
   hp_max: number
   hp_temp: number
   equipment: Record<string, unknown>[]
+  hit_dice: HitDiceState
   spell_slots: Record<string, unknown>
   known_spells: string[]
   conditions: string[]
@@ -141,6 +143,7 @@ export interface CharacterUpdate {
   hp_max?: number
   hp_temp?: number
   equipment?: Record<string, unknown>[]
+  hit_dice?: HitDiceState
   spell_slots?: Record<string, unknown>
   known_spells?: string[]
   conditions?: string[]
@@ -152,6 +155,12 @@ export interface CharacterUpdate {
 export interface CharacterListResponse {
   characters: Character[]
   total: number
+}
+
+export interface HitDiceState {
+  die: number
+  total: number
+  used: number
 }
 
 // ─── Pregen ───────────────────────────────────────────────────────────────────
@@ -273,6 +282,7 @@ export type WsEventType =
   | 'death_save_updated'
   | 'spell_slot_updated'
   | 'equipment_updated'
+  | 'hit_dice_updated'
   | 'player_joined'
   | 'player_left'
   | 'ai_thinking'
@@ -501,6 +511,11 @@ export interface DeathSaveUpdatedPayload {
 export interface SpellSlotUpdatedPayload {
   character_id: string
   spell_slots: Record<string, { total: number; used: number }>
+}
+
+export interface HitDiceUpdatedPayload {
+  character_id: string
+  hit_dice: HitDiceState
 }
 
 export interface CombatStartPayload {
