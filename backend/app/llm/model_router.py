@@ -5,10 +5,10 @@ import logging
 from app.config import (
     get_gm_model,
     get_llm_provider,
+    get_ollama_url,
     get_openai_api_key,
     get_openai_base_url,
     get_player_model,
-    get_ollama_url,
 )
 from app.llm.base_client import LLMClient
 

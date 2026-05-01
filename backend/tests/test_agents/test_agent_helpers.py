@@ -13,7 +13,6 @@ import pytest
 from app.agents.base_agent import BaseAgent
 from app.agents.schemas import AgentContext, AgentResponse
 
-
 # ---------------------------------------------------------------------------
 # Stub concret (BaseAgent est abstract)
 # ---------------------------------------------------------------------------

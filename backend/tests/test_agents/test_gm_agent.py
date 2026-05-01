@@ -6,10 +6,9 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.agents.context_manager import ContextManager
-from app.agents.gm_agent import GMAgent, _FALLBACK_NARRATION
+from app.agents.gm_agent import _FALLBACK_NARRATION, GMAgent
 from app.agents.schemas import AgentContext, GMResponse
 from app.llm.ollama_client import OllamaClient, OllamaError
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -89,7 +88,11 @@ async def test_run_combat_turn_success(gm_agent: GMAgent) -> None:
         narration="L'épée s'abat sur le gobelin !",
         mood="tense",
         actions=[
-            {"type": "damage_apply", "target": "goblin_1", "params": {"amount": 8, "type": "slashing"}}
+            {
+                "type": "damage_apply",
+                "target": "goblin_1",
+                "params": {"amount": 8, "type": "slashing"},
+            }
         ],
     )
     with patch.object(gm_agent._client, "chat", new=AsyncMock(return_value=payload)):

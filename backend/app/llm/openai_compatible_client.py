@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 from collections.abc import AsyncIterator
 from typing import Optional
 
-from openai import AsyncOpenAI, APIConnectionError, APIStatusError, APITimeoutError
+from openai import APIConnectionError, APIStatusError, APITimeoutError, AsyncOpenAI
 
 from app.config import get_openai_api_key, get_openai_base_url
+from app.llm.retry import with_llm_retry
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +18,14 @@ _LLM_TIMEOUT = 120.0
 
 class OpenAICompatibleError(Exception):
     """Le provider OpenAI-compatible est injoignable ou a retourné une erreur."""
+
+
+def _openai_retry_error(
+    exc: Optional[BaseException], max_retries: int
+) -> OpenAICompatibleError:
+    return OpenAICompatibleError(
+        f"Provider injoignable après {max_retries} tentatives : {exc}"
+    )
 
 
 class OpenAICompatibleClient:
@@ -71,16 +79,12 @@ class OpenAICompatibleClient:
         temperature: float = 0.7,
         max_tokens: int = 1024,
     ) -> str:
-        async def _call() -> str:
-            response = await self._get_client().chat.completions.create(
-                model=self._model,
-                messages=messages,  # type: ignore[arg-type]
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-            return response.choices[0].message.content or ""
-
-        return await self._with_retry(_call)
+        try:
+            return await self._chat_with_retry(messages, temperature, max_tokens)
+        except APIStatusError as exc:
+            raise OpenAICompatibleError(
+                f"Erreur API {exc.status_code} : {exc.message}"
+            ) from exc
 
     async def generate(
         self,
@@ -128,29 +132,24 @@ class OpenAICompatibleClient:
         except Exception:
             return False
 
-    async def _with_retry(self, coro_fn) -> str:  # type: ignore[type-arg]
-        delay = _BASE_DELAY
-        last_exc: Optional[Exception] = None
-        for attempt in range(1, _MAX_RETRIES + 1):
-            try:
-                return await coro_fn()
-            except (APIConnectionError, APITimeoutError) as exc:
-                last_exc = exc
-                if attempt == _MAX_RETRIES:
-                    break
-                logger.warning(
-                    "OpenAI-compat tentative %d/%d : %s — retry dans %.1fs",
-                    attempt,
-                    _MAX_RETRIES,
-                    exc,
-                    delay,
-                )
-                await asyncio.sleep(delay)
-                delay *= 2
-            except APIStatusError as exc:
-                raise OpenAICompatibleError(
-                    f"Erreur API {exc.status_code} : {exc.message}"
-                ) from exc
-        raise OpenAICompatibleError(
-            f"Provider injoignable après {_MAX_RETRIES} tentatives : {last_exc}"
-        ) from last_exc
+    @with_llm_retry(
+        retry_exceptions=(APIConnectionError, APITimeoutError),
+        error_factory=_openai_retry_error,
+        provider_name="OpenAI-compat",
+        max_retries=_MAX_RETRIES,
+        base_delay=_BASE_DELAY,
+        log=logger,
+    )
+    async def _chat_with_retry(
+        self,
+        messages: list[dict],
+        temperature: float,
+        max_tokens: int,
+    ) -> str:
+        response = await self._get_client().chat.completions.create(
+            model=self._model,
+            messages=messages,  # type: ignore[arg-type]
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        return response.choices[0].message.content or ""

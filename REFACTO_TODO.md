@@ -94,10 +94,16 @@ Cadence : stop après chaque lot → tests + diff review + ✅ user avant d'ench
 > Le `ruff check app tests` global reste rouge sur dette préexistante hors lot
 > (275 erreurs historiques listées par `--statistics`).
 
-### Lot 2.2 — LLM retry mutualisé
-- [ ] Créer `backend/app/llm/retry.py` décorateur `@with_llm_retry`
-- [ ] Modifier `ollama_client.py` et `openai_compatible_client.py`
+### Lot 2.2 — LLM retry mutualisé ✅ IMPLÉMENTÉ
+- [x] Créer `backend/app/llm/retry.py` décorateur `@with_llm_retry`
+- [x] Modifier `ollama_client.py` et `openai_compatible_client.py`
+- [x] Ajouter les tests mockés `test_openai_compatible_client.py` et `test_llm/test_retry.py`
+- [x] Vérifier sans instance Ollama locale : tests LLM mockés uniquement
 - [ ] ✅ Validation user
+
+> Vérifications Lot 2.2 : `backend/.venv/bin/pytest backend/tests/test_agents/test_ollama_client.py backend/tests/test_agents/test_openai_compatible_client.py backend/tests/test_llm/test_retry.py -q` → 20 passed ;
+> `backend/.venv/bin/pytest backend/tests/test_agents -q` → 90 passed ;
+> `backend/.venv/bin/ruff check backend/app/llm backend/tests/test_agents backend/tests/test_llm` → OK.
 
 ### Lot 2.3 — Tests API/agents manquants (couverture 65% → >80%)
 - [ ] `tests/test_api/test_routes_admin.py`

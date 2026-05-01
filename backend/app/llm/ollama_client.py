@@ -15,6 +15,7 @@ from app.config import (
     get_ollama_max_concurrent_requests,
     get_ollama_url,
 )
+from app.llm.retry import with_llm_retry
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,10 @@ _SEMAPHORES: dict[tuple[int, int], asyncio.Semaphore] = {}
 
 class OllamaError(Exception):
     """Ollama est injoignable ou a retourné une erreur."""
+
+
+def _ollama_retry_error(exc: Optional[BaseException], max_retries: int) -> OllamaError:
+    return OllamaError(f"Ollama injoignable après {max_retries} tentatives : {exc}")
 
 
 class OllamaClient:
@@ -116,7 +121,7 @@ class OllamaClient:
             )
             return response.message.content  # type: ignore[union-attr]
 
-        return await self._with_retry(lambda: self._with_llm_slot(_call))
+        return await self._chat_with_retry(_call)
 
     async def generate(
         self,
@@ -137,7 +142,7 @@ class OllamaClient:
             )
             return response.response  # type: ignore[union-attr]
 
-        return await self._with_retry(lambda: self._with_llm_slot(_call))
+        return await self._generate_with_retry(_call)
 
     async def stream_chat(
         self,
@@ -168,39 +173,40 @@ class OllamaClient:
         except Exception:
             return False
 
-    # -------------------------------------------------------------------------
-    # Internal retry logic
-    # -------------------------------------------------------------------------
+    @with_llm_retry(
+        retry_exceptions=(
+            httpx.ConnectError,
+            httpx.TimeoutException,
+            httpx.ReadTimeout,
+            httpx.ReadError,
+            httpx.RemoteProtocolError,
+            ollama.ResponseError,
+        ),
+        error_factory=_ollama_retry_error,
+        provider_name="Ollama",
+        max_retries=_MAX_RETRIES,
+        base_delay=_BASE_DELAY,
+        jitter=lambda: random.uniform(0.0, 0.25),
+        log=logger,
+    )
+    async def _chat_with_retry(self, coro_fn) -> str:
+        return await self._with_llm_slot(coro_fn)
 
-    async def _with_retry(self, coro_fn) -> str:
-        """Appelle ``coro_fn()`` avec backoff exponentiel sur erreurs transitoires."""
-        delay = _BASE_DELAY
-        last_exc: Optional[Exception] = None
-
-        for attempt in range(1, _MAX_RETRIES + 1):
-            try:
-                return await coro_fn()
-            except (
-                httpx.ConnectError,
-                httpx.TimeoutException,
-                httpx.ReadTimeout,
-                httpx.ReadError,
-                httpx.RemoteProtocolError,
-                ollama.ResponseError,
-            ) as exc:
-                last_exc = exc
-                if attempt == _MAX_RETRIES:
-                    break
-                logger.warning(
-                    "Ollama tentative %d/%d échouée : %s — retry dans %.1fs",
-                    attempt,
-                    _MAX_RETRIES,
-                    exc,
-                    delay,
-                )
-                await asyncio.sleep(delay + random.uniform(0.0, 0.25))
-                delay *= 2
-
-        raise OllamaError(
-            f"Ollama injoignable après {_MAX_RETRIES} tentatives : {last_exc}"
-        ) from last_exc
+    @with_llm_retry(
+        retry_exceptions=(
+            httpx.ConnectError,
+            httpx.TimeoutException,
+            httpx.ReadTimeout,
+            httpx.ReadError,
+            httpx.RemoteProtocolError,
+            ollama.ResponseError,
+        ),
+        error_factory=_ollama_retry_error,
+        provider_name="Ollama",
+        max_retries=_MAX_RETRIES,
+        base_delay=_BASE_DELAY,
+        jitter=lambda: random.uniform(0.0, 0.25),
+        log=logger,
+    )
+    async def _generate_with_retry(self, coro_fn) -> str:
+        return await self._with_llm_slot(coro_fn)

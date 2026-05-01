@@ -1,10 +1,6 @@
 from __future__ import annotations
 
-import pytest
-
 from app.agents.context_manager import ContextManager
-from app.agents.schemas import ContextMessage
-
 
 # ---------------------------------------------------------------------------
 # add_message / get_messages
