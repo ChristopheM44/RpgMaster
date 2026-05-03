@@ -1,6 +1,7 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { useGameStore } from '../../stores/game'
 import { useWebSocket } from '../useWebSocket'
 
 class WebSocketMock {
@@ -67,6 +68,85 @@ describe('useWebSocket', () => {
     })
 
     second.disconnect()
+    vi.unstubAllGlobals()
+  })
+
+  it('does not force exploration on combat_end before phase_change arrives', () => {
+    const socket = useWebSocket('session-1')
+    const gameStore = useGameStore()
+
+    socket.connect('hero-1')
+    WebSocketMock.instances[0]!.open()
+    gameStore.applyPhaseChange('combat')
+
+    WebSocketMock.instances[0]!.onmessage?.({
+      data: JSON.stringify({
+        event_type: 'combat_end',
+        payload: { reason: 'victory' },
+      }),
+    })
+
+    expect(gameStore.phase).toBe('combat')
+
+    WebSocketMock.instances[0]!.onmessage?.({
+      data: JSON.stringify({
+        event_type: 'phase_change',
+        payload: { phase: 'encounter_end' },
+      }),
+    })
+
+    expect(gameStore.phase).toBe('encounter_end')
+
+    socket.disconnect()
+    vi.unstubAllGlobals()
+  })
+
+  it('ignores malformed critical payloads', () => {
+    const socket = useWebSocket('session-1')
+    const gameStore = useGameStore()
+
+    socket.connect('hero-1')
+    WebSocketMock.instances[0]!.open()
+    gameStore.applyPhaseChange('combat')
+
+    WebSocketMock.instances[0]!.onmessage?.({
+      data: JSON.stringify({
+        event_type: 'phase_change',
+        payload: { phase: 42 },
+      }),
+    })
+
+    expect(gameStore.phase).toBe('combat')
+
+    socket.disconnect()
+    vi.unstubAllGlobals()
+  })
+
+  it('handles dialogue events as narration entries', () => {
+    const socket = useWebSocket('session-1')
+    const gameStore = useGameStore()
+
+    socket.connect('hero-1')
+    WebSocketMock.instances[0]!.open()
+
+    WebSocketMock.instances[0]!.onmessage?.({
+      data: JSON.stringify({
+        event_type: 'dialogue',
+        payload: {
+          text: 'Je reste avec toi.',
+          speaker: 'Elara',
+          entry_kind: 'dialogue',
+        },
+      }),
+    })
+
+    expect(gameStore.narrativeLog.at(-1)).toMatchObject({
+      type: 'dialogue',
+      text: 'Je reste avec toi.',
+      speaker: 'Elara',
+    })
+
+    socket.disconnect()
     vi.unstubAllGlobals()
   })
 })

@@ -30,6 +30,39 @@ const ACCESS_TOKEN = import.meta.env.VITE_RPGMASTER_ACCESS_TOKEN?.trim()
 const PING_INTERVAL_MS = 25_000
 const RECONNECT_DELAY_MS = 3_000
 const MAX_RECONNECTS = 5
+const WS_EVENT_TYPES = new Set([
+  'session_state',
+  'narration',
+  'dialogue',
+  'roll_result',
+  'damage_applied',
+  'condition_changed',
+  'hp_changed',
+  'turn_start',
+  'turn_end',
+  'round_start',
+  'combat_start',
+  'combat_end',
+  'combat_action',
+  'combatant_moved',
+  'combatant_status_changed',
+  'combatant_removed',
+  'phase_change',
+  'player_joined',
+  'player_left',
+  'audio',
+  'ai_thinking',
+  'spell_slot_updated',
+  'equipment_updated',
+  'hit_dice_updated',
+  'death_save_updated',
+  'journal_updated',
+  'quest_updated',
+  'chronicle_updated',
+  'scene_layout_changed',
+  'error',
+  'pong',
+])
 
 export function useWebSocket(sessionId: string) {
   const gameStore = useGameStore()
@@ -122,16 +155,17 @@ export function useWebSocket(sessionId: string) {
 
     switch (msg.event_type) {
       case 'session_state':
-        gameStore.applySessionState(msg.payload as SessionStatePayload)
+        if (isSessionStatePayload(msg.payload)) gameStore.applySessionState(msg.payload)
         break
       case 'narration':
-        gameStore.addNarration(msg.payload as NarrationPayload)
+      case 'dialogue':
+        if (isNarrationPayload(msg.payload)) gameStore.addNarration(msg.payload)
         break
       case 'roll_result':
-        gameStore.addRollResult(msg.payload as RollResultPayload)
+        if (isRollResultPayload(msg.payload)) gameStore.addRollResult(msg.payload)
         break
       case 'turn_start':
-        gameStore.applyTurnStart(msg.payload as TurnStartPayload)
+        if (isTurnStartPayload(msg.payload)) gameStore.applyTurnStart(msg.payload)
         break
       case 'turn_end':
       case 'round_start':
@@ -140,71 +174,86 @@ export function useWebSocket(sessionId: string) {
         gameStore.setProcessing(false)
         break
       case 'ai_thinking':
-        gameStore.applyAiThinking(msg.payload as AiThinkingPayload)
+        if (isAiThinkingPayload(msg.payload)) gameStore.applyAiThinking(msg.payload)
         break
       case 'phase_change':
         gameStore.setProcessing(false)
-        gameStore.applyPhaseChange((msg.payload as PhaseChangePayload).phase)
+        if (isPhaseChangePayload(msg.payload)) gameStore.applyPhaseChange(msg.payload.phase)
         break
       case 'combat_start': {
-        const p = msg.payload as CombatStartPayload
-        gameStore.setCombatants(p.combatants)
-        if (p.grid_config) gameStore.setGridConfig(p.grid_config)
-        gameStore.setGridDecoration(p.grid_decoration)
+        if (isCombatStartPayload(msg.payload)) {
+          const p = msg.payload
+          gameStore.setCombatants(p.combatants)
+          if (p.grid_config) gameStore.setGridConfig(p.grid_config)
+          gameStore.setGridDecoration(p.grid_decoration)
+        }
         break
       }
       case 'hp_changed': {
-        const p = msg.payload as HpChangedPayload
-        gameStore.applyHpChanged(p)
-        charStore.updateHp(p.combatant_id, p.hp)
+        if (isHpChangedPayload(msg.payload)) {
+          const p = msg.payload
+          gameStore.applyHpChanged(p)
+          charStore.updateHp(p.combatant_id, p.hp)
+        }
         break
       }
       case 'condition_changed': {
-        const p = msg.payload as ConditionChangedPayload
-        gameStore.applyConditionChanged(p.combatant_id, p.condition, p.added)
+        if (isConditionChangedPayload(msg.payload)) {
+          const p = msg.payload
+          gameStore.applyConditionChanged(p.combatant_id, p.condition, p.added)
+        }
         break
       }
       case 'death_save_updated': {
-        const p = msg.payload as DeathSaveUpdatedPayload
-        gameStore.applyDeathSaveUpdated(p.combatant_id, p.death_saves)
+        if (isDeathSaveUpdatedPayload(msg.payload)) {
+          const p = msg.payload
+          gameStore.applyDeathSaveUpdated(p.combatant_id, p.death_saves)
+        }
         break
       }
       case 'spell_slot_updated': {
-        const p = msg.payload as SpellSlotUpdatedPayload
-        charStore.updateSpellSlots(p.character_id, p.spell_slots)
+        if (isSpellSlotUpdatedPayload(msg.payload)) {
+          const p = msg.payload
+          charStore.updateSpellSlots(p.character_id, p.spell_slots)
+        }
         break
       }
       case 'equipment_updated': {
-        const p = msg.payload as EquipmentUpdatedPayload
-        charStore.updateEquipment(p.character_id, p.equipment)
+        if (isEquipmentUpdatedPayload(msg.payload)) {
+          const p = msg.payload
+          charStore.updateEquipment(p.character_id, p.equipment)
+        }
         break
       }
       case 'hit_dice_updated': {
-        const p = msg.payload as HitDiceUpdatedPayload
-        charStore.updateHitDice(p.character_id, p.hit_dice)
+        if (isHitDiceUpdatedPayload(msg.payload)) {
+          const p = msg.payload
+          charStore.updateHitDice(p.character_id, p.hit_dice)
+        }
         break
       }
       case 'combat_action':
-        gameStore.addCombatAction(msg.payload as CombatActionPayload)
+        if (isRecord(msg.payload)) gameStore.addCombatAction(msg.payload as unknown as CombatActionPayload)
         break
       case 'combatant_moved':
-        gameStore.moveCombatant(msg.payload as CombatantMovedPayload)
+        if (isRecord(msg.payload)) gameStore.moveCombatant(msg.payload as unknown as CombatantMovedPayload)
         break
       case 'combatant_status_changed':
-        gameStore.applyCombatantStatusChanged(msg.payload as CombatantStatusChangedPayload)
+        if (isRecord(msg.payload)) {
+          gameStore.applyCombatantStatusChanged(msg.payload as unknown as CombatantStatusChangedPayload)
+        }
         break
       case 'combatant_removed':
-        gameStore.removeCombatant((msg.payload as CombatantRemovedPayload).combatant_id)
+        if (isCombatantRemovedPayload(msg.payload)) gameStore.removeCombatant(msg.payload.combatant_id)
         break
       case 'combat_end':
         gameStore.setProcessing(false)
-        gameStore.applyPhaseChange('exploration')
         break
       case 'audio':
-        audio.playAudioB64((msg.payload as AudioPayload).audio_b64)
+        if (isAudioPayload(msg.payload)) audio.playAudioB64(msg.payload.audio_b64)
         break
       case 'error':
-        gameStore.setError((msg.payload as { message: string }).message)
+        if (isErrorPayload(msg.payload)) gameStore.setError(msg.payload.message)
         break
       case 'journal_updated':
         gameStore.applyJournalUpdated(msg.payload as { journal: import('../types').AdventureJournal })
@@ -216,7 +265,11 @@ export function useWebSocket(sessionId: string) {
         gameStore.applyChronicleUpdated(msg.payload as { chronicle: import('../types').ChronicleEntry[] })
         break
       case 'scene_layout_changed':
-        gameStore.applySceneLayout(msg.payload as SceneLayoutChangedPayload)
+        if (isRecord(msg.payload)) {
+          gameStore.applySceneLayout(msg.payload as unknown as SceneLayoutChangedPayload)
+        }
+        break
+      case 'damage_applied':
         break
       case 'pong':
         break
@@ -293,9 +346,95 @@ function buildWsUrl(sessionId: string): string {
 
 function isWsEvent(value: unknown): value is WsEvent {
   return (
-    typeof value === 'object'
-    && value !== null
-    && typeof (value as { event_type?: unknown }).event_type === 'string'
+    isRecord(value)
+    && typeof value.event_type === 'string'
+    && WS_EVENT_TYPES.has(value.event_type)
     && 'payload' in value
   )
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function isSessionStatePayload(value: unknown): value is SessionStatePayload {
+  return (
+    isRecord(value)
+    && typeof value.phase === 'string'
+    && typeof value.turn_number === 'number'
+    && typeof value.round_number === 'number'
+    && Array.isArray(value.turn_order)
+    && typeof value.current_turn_index === 'number'
+    && Array.isArray(value.valid_transitions)
+  )
+}
+
+function isNarrationPayload(value: unknown): value is NarrationPayload {
+  return isRecord(value) && typeof value.text === 'string'
+}
+
+function isRollResultPayload(value: unknown): value is RollResultPayload {
+  return (
+    isRecord(value)
+    && Array.isArray(value.rolls)
+    && typeof value.total === 'number'
+    && typeof value.modifier === 'number'
+  )
+}
+
+function isTurnStartPayload(value: unknown): value is TurnStartPayload {
+  return isRecord(value) && typeof value.combatant_id === 'string'
+}
+
+function isAiThinkingPayload(value: unknown): value is AiThinkingPayload {
+  return isRecord(value) && typeof value.agent_kind === 'string' && typeof value.thinking === 'boolean'
+}
+
+function isPhaseChangePayload(value: unknown): value is PhaseChangePayload {
+  return isRecord(value) && typeof value.phase === 'string'
+}
+
+function isCombatStartPayload(value: unknown): value is CombatStartPayload {
+  return isRecord(value) && Array.isArray(value.combatants)
+}
+
+function isHpChangedPayload(value: unknown): value is HpChangedPayload {
+  return isRecord(value) && typeof value.combatant_id === 'string' && typeof value.hp === 'number'
+}
+
+function isConditionChangedPayload(value: unknown): value is ConditionChangedPayload {
+  return (
+    isRecord(value)
+    && typeof value.combatant_id === 'string'
+    && typeof value.condition === 'string'
+    && typeof value.added === 'boolean'
+  )
+}
+
+function isDeathSaveUpdatedPayload(value: unknown): value is DeathSaveUpdatedPayload {
+  return isRecord(value) && typeof value.combatant_id === 'string' && isRecord(value.death_saves)
+}
+
+function isSpellSlotUpdatedPayload(value: unknown): value is SpellSlotUpdatedPayload {
+  return isRecord(value) && typeof value.character_id === 'string' && isRecord(value.spell_slots)
+}
+
+function isEquipmentUpdatedPayload(value: unknown): value is EquipmentUpdatedPayload {
+  return isRecord(value) && typeof value.character_id === 'string' && Array.isArray(value.equipment)
+}
+
+function isHitDiceUpdatedPayload(value: unknown): value is HitDiceUpdatedPayload {
+  return isRecord(value) && typeof value.character_id === 'string' && isRecord(value.hit_dice)
+}
+
+function isCombatantRemovedPayload(value: unknown): value is CombatantRemovedPayload {
+  return isRecord(value) && typeof value.combatant_id === 'string'
+}
+
+function isAudioPayload(value: unknown): value is AudioPayload {
+  return isRecord(value) && typeof value.audio_b64 === 'string'
+}
+
+function isErrorPayload(value: unknown): value is { message: string } {
+  return isRecord(value) && typeof value.message === 'string'
 }

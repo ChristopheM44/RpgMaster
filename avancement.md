@@ -1,6 +1,6 @@
 # RpgMaster — Avancement du projet
 
-> Derniere mise a jour : 2026-04-29 (Sprint 10 : flux narratif Table Vivante)
+> Derniere mise a jour : 2026-05-03 (Sprint 11 : refacto post-audit)
 
 ---
 
@@ -19,10 +19,33 @@
 | Sprint 8 | Polish + Playtest | ✅ Termine |
 | Sprint 9 | Personnages Prétirés + Flux Setup | ✅ Termine |
 | Sprint 10 | Flux narratif Table Vivante | ✅ Termine |
+| Sprint 11 | Refacto post-audit WS / ActionPipeline / IA combat | ✅ Termine |
 
 ---
 
 ## Ce qui a ete realise
+
+### Sprint 11 — Refacto post-audit WS / ActionPipeline / IA combat
+
+Cycle de consolidation apres audit, sans reprise des lots securite deja livres.
+
+**Backend :**
+- `ws_game.py` reste la facade WebSocket, mais les payloads sont extraits dans `backend/app/api/ws_payloads.py`.
+- Les handlers d'intro de rencontre, de combat et de tours IA sont separes dans `backend/app/api/ws_handlers/`.
+- La boucle des tours IA combat passe par un point unique : compagnons via `AIPlayerManager.process_ai_turns(..., max_turns=1)`, monstres via `ActionResolver`.
+- `trigger_ai_reactions` en combat reutilise la boucle commune, y compris pour un tour de monstre.
+- `ActionResolver` conserve l'API historique mais herite maintenant de `ActionMechanics`, qui porte les helpers mecaniques (`attack`, `cast_spell`, death saves, roll requests).
+- `GMResponse.start_mode` est couvert cote demarrage combat : `pause` garde `ENCOUNTER_START`, `combat` lance l'initiative directement.
+
+**Frontend :**
+- `WsEventType` est realigne avec les `EventType` backend (`dialogue`, `damage_applied`) en conservant `pong` comme message protocolaire.
+- `useWebSocket.ts` ajoute des guards runtime legers pour les payloads critiques avant d'ecrire dans les stores.
+- La reconnexion avec `characterId` persistant et le token WS optionnel restent inchanges.
+
+**Tests / validation en cours :**
+- Tests cibles ajoutes : payloads WS, intro encounter, handlers combat WS, action mechanics, `useWebSocket`.
+- Validation ciblee deja passee : `50 passed` cote backend sur les tests refacto directs ; `npm run type-check` et `npm run test -- useWebSocket` OK cote frontend.
+- Validation finale large : `backend/.venv/bin/pytest backend/tests/test_game backend/tests/test_api -q` -> 262 passed ; `cd frontend && npm run type-check && npm run test && npm run build` -> OK ; ruff cible -> OK.
 
 ### Sprint 10 — Flux narratif Table Vivante
 

@@ -267,7 +267,9 @@ export interface GameStateResponse {
 export type WsEventType =
   | 'session_state'
   | 'narration'
+  | 'dialogue'
   | 'roll_result'
+  | 'damage_applied'
   | 'turn_start'
   | 'turn_end'
   | 'round_start'

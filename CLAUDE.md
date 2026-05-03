@@ -10,69 +10,48 @@ Application de jeu de role avec un Maitre de Jeu IA, utilisant les regles D&D SR
 |-----------|------------|---------|
 | Backend | Python 3.9+ / FastAPI | Async, app factory dans `backend/app/main.py` |
 | Frontend | Vue.js 3 / TypeScript | Composition API, `<script setup>`, Pinia, Vue Router |
-| CSS | TailwindCSS v4 | Theme dark fantasy (parchment/ink/blood/gold/arcane) |
+| CSS | TailwindCSS v4 | Tokens `@theme` + classes `.rpg-*` dans `src/assets/main.css` |
 | LLM texte | Ollama | Modele local configurable (default: mistral:7b) |
 | LLM voix | Voxtral 4B TTS | Via vLLM-Omni (PAS Ollama), optionnel, port 8091 |
 | Base de donnees | SQLite | Via SQLAlchemy async (aiosqlite) + Alembic |
 | Temps reel | WebSocket | Natif FastAPI, endpoint `/ws/game/{session_id}` |
-| Conteneurs | Docker Compose | Ollama + Voxtral (optionnel) |
 
-## Lancer le stack complet
+## Lancer le stack
 
 ```bash
-# Terminal 1 — Backend
+# Backend
 cd backend && source .venv/bin/activate
-alembic upgrade head          # a faire une seule fois, ou apres migration
-python -m uvicorn app.main:app --reload
+alembic upgrade head && python -m uvicorn app.main:app --reload   # → http://localhost:8000
 
-# Terminal 2 — Frontend
-cd frontend && npm run dev
-
-# URLs
-# Frontend : http://localhost:5173
-# Backend  : http://localhost:8000
-# API docs : http://localhost:8000/docs
+# Frontend
+cd frontend && npm run dev                                         # → http://localhost:5173
 ```
 
 ## Variables d'environnement
 
-Copier `.env.example` vers `backend/.env` et ajuster si besoin.
+Copier `.env.example` vers `backend/.env`.
 
-| Variable | Defaut | Obligatoire |
-|----------|--------|-------------|
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Oui |
-| `GM_MODEL` | `mistral:7b` | Oui |
-| `PLAYER_MODEL` | `mistral:7b` | Oui |
-| `VOXTRAL_ENABLED` | `false` | Non |
+| Variable | Defaut | Note |
+|----------|--------|------|
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | |
+| `GM_MODEL` / `PLAYER_MODEL` | `mistral:7b` | |
+| `DATABASE_URL` | `sqlite+aiosqlite:///./rpgmaster.db` | |
+| `VOXTRAL_ENABLED` | `false` | Garder `false` si vLLM-Omni non démarré |
 | `VOXTRAL_BASE_URL` | `http://localhost:8091` | Si TTS active |
-| `DATABASE_URL` | `sqlite+aiosqlite:///./rpgmaster.db` | Oui |
-| `MAX_CONTEXT_MESSAGES` | `20` | Non |
-| `TTS_ASYNC` | `true` | Non |
+| `MAX_CONTEXT_MESSAGES` | `20` | |
+| `TTS_ASYNC` | `true` | |
 
 ## Commandes
 
-### Backend
 ```bash
-cd backend
-source .venv/bin/activate
-python -m uvicorn app.main:app --reload          # Dev server (port 8000)
-pytest                                             # Tous les tests
-pytest tests/test_engine/ -v                       # Tests moteur uniquement
-pytest tests/test_api/ -v                          # Tests API uniquement
-pytest tests/test_game/ -v                         # Tests game loop uniquement
-pytest --cov=app                                   # Tests avec couverture
-ruff check app/                                    # Lint
-ruff format app/                                   # Format
-alembic upgrade head                               # Migrations DB
-alembic history                                    # Voir les migrations
-```
+# Backend (dans backend/ avec venv actif)
+python -m uvicorn app.main:app --reload     # Dev server
+pytest / pytest tests/test_engine/ -v / pytest --cov=app
+ruff check app/ && ruff format app/
+alembic upgrade head && alembic history
 
-### Frontend
-```bash
-cd frontend
-npm run dev                                        # Dev server (port 5173)
-npm run build                                      # Build production
-npm run type-check                                 # Verification TypeScript
+# Frontend
+npm run dev / npm run build / npm run type-check
 ```
 
 ## Architecture
@@ -95,63 +74,129 @@ RpgMaster/
 │   └── db/                  # SQLAlchemy async engine
 ├── frontend/src/
 │   ├── views/               # Pages (Home, Lobby, CharacterCreation, GameSession)
-│   ├── components/          # narrative/, combat/, character/, common/, ui/
+│   ├── components/          # exploration/, combat/, campaigns/, common/
 │   ├── stores/              # Pinia (session, game, character, chat)
 │   ├── composables/         # useWebSocket, useGameActions, useAudio
 │   ├── services/            # api.ts, websocket.ts
 │   └── types/               # Interfaces TypeScript
-└── docs/                    # Documentation projet
+└── docs/
 ```
+
+## Frontend — Design System
+
+**Direction** : Dark-fantasy premium (Ember + gold sur obsidienne). Interface = grimoire vivant, pas un dashboard SaaS.
+
+### Tokens de couleur (`src/assets/main.css` → `@theme`)
+
+| Token | Valeur | Usage |
+|---|---|---|
+| `--color-bg` | `#0e0d14` | Fond app global |
+| `--color-bg-elev` | `#181623` | Header, panneaux, footer |
+| `--color-surface` | `#1f1c2e` | Cartes, sections |
+| `--color-surface-raised` | `#2a2640` | Hover, sélection |
+| `--color-parchment` | `#f7ecd0` | Texte principal |
+| `--color-parchment-dark` | `rgba(247,236,208,.75)` | Texte secondaire |
+| `--color-text-muted` | `rgba(247,236,208,.50)` | Labels, metadata |
+| `--color-text-dim` | `rgba(247,236,208,.32)` | Placeholders |
+| `--color-border` | `rgba(255,235,180,.07)` | Séparateurs discrets |
+| `--color-border-strong` | `rgba(255,235,180,.18)` | Inputs focus, boutons |
+| `--color-ember` | `#ff8247` | Accent CTA, joueur humain |
+| `--color-gold` | `#f0c764` | Titres forts, sélection, tour actif |
+| `--color-blood` | `#e84545` | Danger, ennemis, HP critiques |
+| `--color-arcane` | `#c090ff` | IA, sorts, magie |
+| `--color-teal` | `#4fd8c0` | Alliés, déplacement, succès |
+| `--color-green` | `#6fd96f` | HP pleins, zone sûre |
+| `--grad-primary` | `linear-gradient(135deg, #ff8247, #f0c764)` | Bouton CTA, logo, barres |
+
+### Typographie
+
+| Token | Police | Rôle |
+|---|---|---|
+| `--font-display` | **Cinzel** | Titres, noms, CTA, eyebrows — uppercase + letter-spacing |
+| `--font-serif` | **Fraunces** | Récit narratif, taglines — `text-wrap: pretty`, `line-height: 1.65` |
+| `--font-body` | **Inter** | UI courante, boutons, labels |
+| `--font-mono` | **JetBrains Mono** | Stats, compteurs, dates, metadata |
+
+### Classes `.rpg-*` (réutiliser en priorité)
+
+| Classe | Usage |
+|---|---|
+| `.rpg-eyebrow` | Label 10px Cinzel uppercase doré `✦ TITRE` |
+| `.rpg-section-title` | Header de section avec filet dégradé |
+| `.rpg-card` | Carte : fond `bg-elev`, border 1px, radius `lg` |
+| `.rpg-btn-primary` | CTA gradient ember→gold, shadow ember |
+| `.rpg-btn-secondary` | Contour or, fond transparent |
+| `.rpg-btn-tonal` | Bouton teinté : `.tone-blood` `.tone-arcane` `.tone-teal` `.tone-gold` |
+| `.rpg-input` | Input/textarea fond sombre, focus ember |
+| `.rpg-chip` | Chip statut 10px uppercase |
+| `.rpg-sparkle` | Icône `✦` ember devant un titre |
+| `.prose-narrative` | Prose Fraunces pilotée par `--narrative-scale` |
+
+### Règles frontend
+
+- Couleurs **toujours** via tokens `var(--color-*)` — jamais de hex en dur dans les templates
+- Hiérarchie de fond : `bg` → `bg-elev` → `surface` → `surface-raised`
+- Animations : 120ms ease (interactions), 200ms (ouvertures/fermetures)
+- `overflow: hidden` sur `html, body` — scroll géré par colonnes internes
+- Scrollbars fines et semi-transparentes (global)
+- Icônes : Unicode (✦ ◆ ⚔ ◉ ❦) + SVG custom dans `icons/color/` et `icons/mono/`
+- Layout : AppNav 56px + colonne principale + panneau droit 380–580px + ActionBar
+
+### Checklist nouveau composant
+
+- [ ] Tokens `--color-*` (pas de hex en dur)
+- [ ] Polices via `--font-display / serif / body / mono`
+- [ ] Classes `.rpg-*` réutilisées si applicable
+- [ ] Titres Cinzel uppercase avec letter-spacing
+- [ ] Récit Fraunces avec `text-wrap: pretty`
+- [ ] Stats/chiffres JetBrains Mono
+- [ ] Accents sémantiques : ember=joueur, arcane=IA, blood=danger, teal=allié/succès, gold=sélection
 
 ## Strategie de tests
 
 | Suite | Dossier | Ce qu'elle teste |
 |-------|---------|-----------------|
-| Engine | `tests/test_engine/` | Logique pure D&D, sans I/O — jets de des, combat, sorts, conditions |
+| Engine | `tests/test_engine/` | Logique pure D&D, sans I/O |
 | API | `tests/test_api/` | Endpoints REST avec DB SQLite en memoire |
 | Agents | `tests/test_agents/` | GMAgent, PlayerAgent, ContextManager (Ollama mocke) |
-| Game loop | `tests/test_game/` | Event bus, session manager, turn manager, WebSocket, integration |
+| Game loop | `tests/test_game/` | Event bus, session manager, turn manager, WebSocket |
 
-Les tests `engine/` sont purement unitaires (rapides, aucune dependance externe).
-Les tests `game/` peuvent necessiter une boucle asyncio — utiliser `pytest-asyncio`.
+Les tests `engine/` sont purement unitaires. Les tests `game/` utilisent `pytest-asyncio`.
 
 ## Principes de conception
 
-1. **Le moteur de regles fait autorite** : `engine/` est de la logique pure sans I/O. Le LLM ne peut pas halluciner de jets de des - c'est le moteur qui resout les mecaniques.
-2. **Sorties JSON structurees** : Les agents IA retournent du JSON parse et valide par Pydantic, pas du texte libre.
-3. **Voix asynchrone et optionnelle** : Le TTS ne bloque jamais le gameplay. Le texte apparait immediatement, l'audio suit.
-4. **Game state = JSON blob** : Evite une modelisation relationnelle complexe. Pydantic valide a l'entree/sortie.
-5. **Event bus in-process** : `asyncio.Queue` pour Phase 1 (solo). Evolutif vers Redis pour le multijoueur reseau.
+1. **Moteur de regles souverain** : `engine/` = logique pure sans I/O. Le LLM ne resout jamais les mecaniques.
+2. **Sorties JSON structurees** : Agents retournent du JSON valide par Pydantic, pas du texte libre.
+3. **TTS non-bloquant** : texte immédiat, audio asynchrone et optionnel.
+4. **Game state = JSON blob** : Pydantic valide a l'entree/sortie. Pas de nouvelles tables SQLAlchemy.
+5. **Event bus in-process** : `asyncio.Queue` → Redis si multijoueur reseau.
 
-## Machine a etats du jeu
+## Machine a etats
 
 ```
-LOBBY -> CHARACTER_CREATION -> EXPLORATION -> ENCOUNTER_START ->
-COMBAT (rounds) -> ENCOUNTER_END -> EXPLORATION -> ...
-                                 -> REST (court/long)
-                                 -> LEVEL_UP -> SESSION_END
+LOBBY → CHARACTER_CREATION → EXPLORATION → ENCOUNTER_START →
+COMBAT (rounds) → ENCOUNTER_END → EXPLORATION → ...
+                              → REST (court/long) → LEVEL_UP → SESSION_END
 ```
 
 ## Convention de code
 
 - **Python** : ruff, line-length 100, `from __future__ import annotations`
-- **TypeScript** : Vue 3 Composition API avec `<script setup lang="ts">`
-- **CSS** : Classes utilitaires TailwindCSS, theme custom via `@theme` dans main.css
+- **TypeScript** : Vue 3 Composition API, `<script setup lang="ts">`
 - **Commits** : Messages concis en anglais, format conventionnel
-- **Langue de l'application** : Interface en francais, code/variables en anglais
+- **Langue** : Interface en francais, code/variables en anglais
 
-## Contraintes importantes
+## Contraintes
 
-- Python 3.9.6 est installe sur cette machine (pas 3.11+)
-- Voxtral TTS necessite vLLM-Omni, PAS Ollama - deux backends LLM distincts
-- Le frontend tourne sur le port 5173 (Vite), le backend sur le port 8000 (Uvicorn)
-- CORS configure pour `http://localhost:5173`
+- Python 3.9.6 (pas 3.11+)
+- Voxtral TTS via vLLM-Omni uniquement (port 8091) — PAS Ollama
+- Frontend port 5173, backend port 8000, CORS configure pour `http://localhost:5173`
 
-## Anti-patterns a eviter
+## Anti-patterns
 
-- **Ne jamais creer une nouvelle session SQLAlchemy dans un handler WebSocket** — reutiliser le `db` injecte via `Depends(get_db)` ou passe en parametre.
-- **Ne jamais appeler le LLM de facon bloquante dans un handler WebSocket** — toujours utiliser `asyncio.create_task()` pour les appels GMAgent/PlayerAgent.
-- **Ne pas faire resoudre les mecaniques par le LLM** — jets de des, calculs de degats, initiative : tout passe par `engine/`. Le LLM produit uniquement de la narration.
-- **Ne pas ajouter de champs relationnels complexes au game state** — c'est un JSON blob valide par Pydantic. Eviter de creer de nouvelles tables SQLAlchemy pour des donnees de jeu.
-- **Ne pas modifier `engine/` pour y faire des I/O** — ce package doit rester pure logic, testable sans base de donnees ni reseau.
-- **Ne pas utiliser `tts_backend="vllm"` sans vLLM-Omni en cours** — l'app tombe en erreur. Garder `VOXTRAL_ENABLED=false` si Voxtral n'est pas demarre.
+- **WebSocket** : ne jamais creer une session SQLAlchemy dans un handler — reutiliser le `db` injecte.
+- **WebSocket** : ne jamais appeler un LLM de facon bloquante — `asyncio.create_task()` obligatoire.
+- **Mecaniques** : jets de des, degats, initiative → `engine/` uniquement. Le LLM = narration seulement.
+- **Game state** : pas de champs relationnels complexes, pas de nouvelles tables SQLAlchemy.
+- **`engine/`** : zero I/O — reste testable sans DB ni reseau.
+- **TTS** : ne pas utiliser `tts_backend="vllm"` sans vLLM-Omni actif.

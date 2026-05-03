@@ -155,6 +155,43 @@ async def test_run_encounter_intro(gm_agent: GMAgent) -> None:
     assert response.mood == "tense"
 
 
+async def test_run_encounter_end(gm_agent: GMAgent) -> None:
+    """run_encounter_end() produit une narration post-combat structurée."""
+    payload = _valid_gm_json(
+        narration="Le silence revient sur les quais, seulement troublé par le clapotis noir.",
+        mood="dramatic",
+        actions=[
+            {
+                "type": "scene_layout",
+                "target": None,
+                "params": {
+                    "cols": 6,
+                    "rows": 6,
+                    "terrain": "dock_aftermath",
+                    "pois": [],
+                    "exits": [],
+                    "party_positions": {},
+                },
+            }
+        ],
+    )
+    with patch.object(gm_agent._client, "chat", new=AsyncMock(return_value=payload)):
+        response = await gm_agent.run_encounter_end(
+            game_state={"phase": "encounter_end"},
+            combat_summary={
+                "enemies_defeated": [{"id": "bandit_1", "name": "Bandit"}],
+                "enemies_unresolved": [],
+                "previous_scene": {"terrain": "dock"},
+            },
+            messages=[],
+        )
+
+    assert isinstance(response, GMResponse)
+    assert "silence" in response.narration
+    assert response.actions[0].type == "scene_layout"
+    assert response.mood == "dramatic"
+
+
 # ---------------------------------------------------------------------------
 # run_npc_dialogue()
 # ---------------------------------------------------------------------------

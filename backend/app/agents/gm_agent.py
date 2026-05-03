@@ -124,6 +124,33 @@ class GMAgent(BaseAgent):
         )
         return await self._call_and_parse(user_prompt, context_manager)
 
+    async def run_encounter_end(
+        self,
+        game_state: dict[str, Any],
+        combat_summary: dict[str, Any],
+        messages: Optional[list] = None,
+        context_manager: Optional[ContextManager] = None,
+    ) -> GMResponse:
+        """Génère la narration d'aftercare et la scène post-combat."""
+        user_prompt = self._render_prompt(
+            "gm_encounter_end.txt",
+            {
+                "game_state": json.dumps(game_state, ensure_ascii=False, indent=2),
+                "combat_summary": json.dumps(
+                    combat_summary,
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                "previous_scene": json.dumps(
+                    combat_summary.get("previous_scene") or {},
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                "recent_messages": self._format_messages(messages),
+            },
+        )
+        return await self._call_and_parse(user_prompt, context_manager)
+
     async def run_npc_dialogue(
         self,
         npc_name: str,

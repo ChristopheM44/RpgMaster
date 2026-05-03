@@ -1,0 +1,38 @@
+ETAT DU JEU :
+{{ game_state }}
+
+RESUME STRUCTURE DU COMBAT :
+{{ combat_summary }}
+
+SCENE PRECEDENTE :
+{{ previous_scene }}
+
+MESSAGES RECENTS :
+{{ recent_messages }}
+
+Tu dois produire la narration de fin de rencontre, juste apres la resolution mecanique du combat.
+
+Objectif :
+- Narrer l'apres-combat en 3 a 5 phrases immersives : souffle qui retombe, traces au sol, armes, silence, fuite ou reddition.
+- Respecter strictement le resume du combat : ne declare pas vaincu un ennemi indique comme "fled", "surrendered" ou "unresolved".
+- Donner un sort narratif clair a chaque ennemi non joueur : vaincu, en fuite, rendu, disparu dans la confusion ou autrement neutralise.
+- Si un ennemi est "unresolved", choisis une resolution narrative prudente et non mecanique : fuite, retraite, disparition, reddition ou menace qui s'eloigne. Ne le tue pas par defaut.
+- Produire au plus UNE action scene_layout pour afficher le champ de bataille apres le combat.
+- Dans scene_layout, conserve les dimensions, le terrain, les sorties, les positions du groupe et les POIs non hostiles de la scene precedente autant que possible.
+- Remplace les POIs hostiles ou ennemis visibles par des traces coherentes : corps, armes tombees, butin, indice, sang, debris ou piste de fuite.
+- Utilise des icones d'exploration compatibles : chest, clue, ruins, poi, npc, door, secret-passage, fog, light.
+- Tu peux ajouter journal_update, quest_add ou chronicle_add uniquement si un changement important et nouveau le justifie.
+
+Interdictions absolues :
+- Ne demande aucun jet.
+- Ne modifie aucun PV, aucune statistique, aucune condition et aucune ressource.
+- N'emets pas damage_apply, condition_add, condition_remove, combatant_status, encounter_setup, roll_request ou state_transition.
+- Ne lance pas un nouveau combat.
+- Ne change pas la phase.
+- Ne deplace pas le groupe dans un autre lieu sans raison explicite deja etablie.
+
+Format attendu :
+- Reponds avec UN SEUL objet JSON conforme au system prompt.
+- "actions" doit contenir uniquement scene_layout, journal_update, quest_add ou chronicle_add.
+- "mood" doit refleter le retour de tension apres l'affrontement.
+- Aucun texte hors JSON.

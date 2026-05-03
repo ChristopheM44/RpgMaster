@@ -34,9 +34,9 @@ Connection lifecycle
 from __future__ import annotations
 
 import asyncio
-import inspect
 import logging
 import re
+from copy import deepcopy
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
@@ -45,6 +45,37 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.connection_manager import ConnectionManager
+from app.api.ws_handlers.ai_control import handle_ai_turns as handle_ai_combat_turns
+from app.api.ws_handlers.combat import (
+    active_npc_ids,
+    combat_end_reason_from_removed,
+    combat_end_text,
+    combat_target_id,
+    is_combat_social_text,
+    npc_removed_text,
+    reject_out_of_turn_action,
+)
+from app.api.ws_handlers.encounter_intro import (
+    execute_intro_scene_layout,
+    generate_encounter_intro,
+    is_async_callable,
+    is_unhelpful_intro,
+    normalized_phrase,
+    pause_at_encounter_start,
+    should_pause_for_encounter_intro,
+)
+from app.api.ws_payloads import (
+    build_combat_start_payload,
+    build_session_state_payload,
+    character_snapshot,
+    compute_ac_from_equipment,
+    format_monster_actions,
+    monster_base_id,
+    monster_color,
+    monster_instance_number,
+    monster_token,
+    monster_token_for_combatant,
+)
 from app.api.ws_schemas import (
     JoinMessage,
     PingMessage,
@@ -57,7 +88,7 @@ from app.db.database import get_db
 from app.engine.tactical_grid import GridPosition, initialize_positions, validate_move
 from app.game.action_resolver import ActionResolver
 from app.game.combat_triggers import prime_combat_from_aggressive_action
-from app.game.constants import ARMOR_CATEGORIES, INACTIVE_STATUSES, MONSTER_TYPE_COLORS
+from app.game.constants import INACTIVE_STATUSES
 from app.game.event_bus import EventType, GameEvent, event_bus
 from app.game.session_manager import SessionManager
 from app.game.turn_manager import CombatantInfo
@@ -87,69 +118,6 @@ action_resolver = ActionResolver()
 equipment_service = EquipmentService()
 rest_service = RestService(session_manager=session_manager)
 
-_TURN_BOUND_COMBAT_ACTIONS = {
-    "attack",
-    "cast_spell",
-    "death_save",
-    "disengage",
-    "dash",
-    "dodge",
-    "end_turn",
-    "equip",
-    "free_text",
-    "hide",
-    "move",
-    "shove",
-    "stabilize",
-    "use_item",
-    "wait",
-}
-
-_SOCIAL_COMBAT_MARKERS = (
-    "rends toi",
-    "rends-toi",
-    "rendez vous",
-    "rendez-vous",
-    "pose tes armes",
-    "posez vos armes",
-    "depose",
-    "dépose",
-    "clemence",
-    "clémence",
-    "parlement",
-    "negoc",
-    "négoc",
-    "intimid",
-    "persuad",
-)
-
-_ENCOUNTER_PAUSE_MARKERS = (
-    "pas un pas",
-    "recule",
-    "halte",
-    "ne bougez",
-    "rendez",
-    "posez vos armes",
-    "pose tes armes",
-    "sommation",
-    "menace",
-    "a nous",
-    "à nous",
-    "que faites-vous",
-    "que faites vous",
-)
-
-_IMMEDIATE_ATTACK_MARKERS = (
-    "attaquent",
-    "attaque aussitot",
-    "attaque aussitôt",
-    "chargent",
-    "fondent sur",
-    "se ruent",
-    "tirent",
-    "frappent",
-)
-
 # Module-level singleton
 connection_manager = ConnectionManager()
 
@@ -178,51 +146,7 @@ async def _relay_events(websocket: WebSocket, queue: asyncio.Queue) -> None:
 
 
 def _build_session_state_payload(session_id: str) -> dict[str, Any]:
-    """Build the ``session_state`` event payload from the active session.
-
-    Maps backend TurnEntry field names to frontend-compatible names:
-    combatant_id → id, initiative_total → initiative, is_ai_controlled → is_ai.
-    """
-    active = session_manager.get_session(session_id)
-    if active is None:
-        return {"session_id": session_id, "phase": "unknown"}
-
-    turn_data = active.turn_manager.to_dict()
-
-    def _map_entry(e: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "id": e.get("combatant_id", ""),
-            "name": e.get("name", ""),
-            "initiative": e.get("initiative_total", 0),
-            "is_ai": e.get("is_ai_controlled", False),
-            "is_ai_controlled": e.get("is_ai_controlled", False),
-            "is_player": e.get("is_player", True),
-        }
-
-    _default_journal = {
-        "location_region": None,
-        "location_place": None,
-        "time_of_day": "morning",
-        "day_number": 1,
-        "calendar_date": None,
-        "weather": None,
-    }
-
-    return {
-        "session_id": session_id,
-        "phase": active.phase.value,
-        "turn_number": active.turn_number,
-        "round_number": active.round_number,
-        "turn_order": [_map_entry(e) for e in turn_data.get("order", [])],
-        "current_turn_index": turn_data.get("index", 0),
-        "valid_transitions": [
-            s.value for s in active.game_loop.get_valid_transitions(active.phase)
-        ],
-        "adventure_journal": active.state_data.get("adventure_journal", _default_journal),
-        "quests": active.state_data.get("quests", []),
-        "chronicle": active.state_data.get("chronicle", []),
-        "current_scene": active.state_data.get("current_scene"),
-    }
+    return build_session_state_payload(session_id, session_manager.get_session(session_id))
 
 
 # ---------------------------------------------------------------------------
@@ -230,97 +154,14 @@ def _build_session_state_payload(session_id: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-
-
-def _compute_ac_from_equipment(equipment: list, dex_mod: int) -> int:
-    """Calcule l'AC à partir de l'équipement équipé (armure + bouclier).
-
-    Utilise les champs SRD : base_ac, dex_cap (0=lourd, None=libre, int=moyen).
-    """
-    armor = next(
-        (it for it in equipment if it.get("equipped") and it.get("category") in ARMOR_CATEGORIES),
-        None,
-    )
-    shield = next(
-        (it for it in equipment if it.get("equipped") and it.get("category") == "shield"),
-        None,
-    )
-    shield_bonus = 2 if shield else 0
-
-    if armor and isinstance(armor.get("base_ac"), int):
-        dex_cap = armor.get("dex_cap")  # None = uncapped, 0 = heavy, int = medium
-        dex_applied = dex_mod if dex_cap is None else min(dex_mod, int(dex_cap))
-        return armor["base_ac"] + dex_applied + shield_bonus
-
-    return 10 + dex_mod + shield_bonus
-
-
-def _monster_base_id(combatant_id: str) -> str:
-    return "_".join(combatant_id.rsplit("_", 1)[:-1]) if "_" in combatant_id else combatant_id
-
-
-def _monster_instance_number(combatant_id: str, display_name: str = "") -> int:
-    """Return the stable encounter instance number carried by id/name."""
-    for value, pattern in (
-        (combatant_id, r"_(\d+)$"),
-        (display_name, r"\b(\d+)$"),
-    ):
-        match = re.search(pattern, value or "")
-        if match:
-            return max(1, int(match.group(1)))
-    return 1
-
-
-def _monster_token(name: str, count: int) -> str:
-    letters = "".join(part[0] for part in name.replace("-", " ").split() if part)
-    prefix = (letters or name[:1] or "?").upper()[:2]
-    return f"{prefix}{count}"
-
-
-def _monster_token_for_combatant(
-    monster_name: str,
-    combatant_id: str,
-    display_name: str,
-) -> str:
-    return _monster_token(monster_name, _monster_instance_number(combatant_id, display_name))
-
-
-def _monster_color(monster_type: str | None) -> str:
-    return MONSTER_TYPE_COLORS.get((monster_type or "").lower(), "#b45309")
-
-
-def _format_monster_actions(actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    formatted: list[dict[str, Any]] = []
-    for action in actions:
-        formatted.append({
-            "name": action.get("name_fr") or action.get("name") or "Action",
-            "attack_bonus": action.get("attack_bonus"),
-            "damage_dice": action.get("damage_dice"),
-            "description": action.get("description") or action.get("description_fr"),
-        })
-    return formatted
-
-
-def _character_snapshot(char: Character) -> dict[str, Any]:
-    """Build the in-memory character snapshot used by game/combat state."""
-    hit_dice = normalize_character_hit_dice(char)
-    return {
-        "name": char.name,
-        "hp": char.hp_current,
-        "hp_max": char.hp_max,
-        "is_ai": char.is_ai,
-        "level": char.level,
-        "ability_scores": dict(char.ability_scores),
-        "skill_proficiencies": list(char.proficiencies.get("skills", [])),
-        "save_proficiencies": list(char.proficiencies.get("saving_throws", [])),
-        "spell_slots": dict(char.spell_slots or {}),
-        "known_spells": list(char.known_spells or []),
-        "dex": int(char.ability_scores.get("dex", 10)),
-        "str": int(char.ability_scores.get("str", 10)),
-        "equipment": list(char.equipment or []),
-        "hit_dice": dict(hit_dice),
-        "personality": dict(char.personality or {}),
-    }
+_compute_ac_from_equipment = compute_ac_from_equipment
+_monster_base_id = monster_base_id
+_monster_instance_number = monster_instance_number
+_monster_token = monster_token
+_monster_token_for_combatant = monster_token_for_combatant
+_monster_color = monster_color
+_format_monster_actions = format_monster_actions
+_character_snapshot = character_snapshot
 
 
 async def _sync_ai_control_from_db(
@@ -385,101 +226,13 @@ async def _sync_ai_control_from_db(
 
 
 def _build_combat_start_payload(active: Any) -> dict[str, Any]:
-    combatants_info: dict[str, Any] = active.state_data.get("combatants", {})
-    grid_cfg: dict[str, Any] = active.state_data.get(
-        "grid_config", {"cols": 10, "rows": 8, "cell_size_m": 1.5}
-    )
-    grid_positions: dict[str, Any] = active.state_data.get("grid_positions", {})
-    turn_data = active.turn_manager.to_dict()
-    current_idx = turn_data.get("index", 0)
-
-    encounter_service._ensure_loaded()
-
-    combat_combatants = []
-    for i, entry in enumerate(turn_data.get("order", [])):
-        cid = entry.get("combatant_id", "")
-        info = combatants_info.get(cid, {})
-        is_player = bool(info.get("is_player", entry.get("is_player", True)))
-        is_ai_controlled = bool(entry.get("is_ai_controlled", False)) if is_player else False
-        payload = {
-            "id": cid,
-            "name": entry.get("name") or info.get("name", ""),
-            "initiative": entry.get("initiative_total", 0),
-            "hp_current": info.get("hp", 0),
-            "hp_max": info.get("hp_max", 0),
-            "kind": "pc" if is_player else "monster",
-            "is_ai": entry.get("is_ai_controlled", False) if is_player else True,
-            "is_ai_controlled": is_ai_controlled,
-            "conditions": info.get("conditions", []),
-            "status": info.get("status", "active"),
-            "is_active": (i == current_idx),
-            "position": grid_positions.get(cid, {"col": 0, "row": 0}),
-            "death_saves": info.get("death_saves"),
-            "ac": info.get("ac", 10),
-            "attack_bonus": info.get("attack_bonus"),
-            "damage_notation": info.get("damage_notation"),
-            "action_economy": entry.get("action_economy"),
-        }
-        if not is_player:
-            base_id = info.get("monster_id") or _monster_base_id(cid)
-            monster_data = encounter_service._monsters_by_id.get(base_id, {})
-            monster_name = (
-                monster_data.get("name_fr")
-                or monster_data.get("name")
-                or payload["name"]
-            )
-            payload.update({
-                "species": monster_data.get("type"),
-                "cr": monster_data.get("cr"),
-                "token": info.get("token")
-                or _monster_token_for_combatant(monster_name, cid, str(payload["name"])),
-                "color": info.get("color") or _monster_color(monster_data.get("type")),
-                "ability_scores": monster_data.get("ability_scores", {}),
-                "actions": _format_monster_actions(monster_data.get("actions", [])),
-                "description": monster_data.get("description") or monster_data.get("alignment"),
-            })
-        combat_combatants.append(payload)
-
-    return {
-        "combatants": combat_combatants,
-        "grid_config": grid_cfg,
-        "grid_decoration": active.state_data.get("grid_decoration"),
-    }
+    return build_combat_start_payload(active, encounter_service)
 
 
-def _encounter_intro_combatants(combatants_info: dict[str, Any]) -> list[dict[str, Any]]:
-    """Compact enemy snapshot for the encounter-intro prompt."""
-    enemies: list[dict[str, Any]] = []
-    for combatant_id, info in combatants_info.items():
-        if info.get("is_player", False):
-            continue
-        enemies.append({
-            "id": combatant_id,
-            "name": info.get("name", combatant_id),
-            "hp": info.get("hp"),
-            "hp_max": info.get("hp_max"),
-            "monster_id": info.get("monster_id"),
-            "species": info.get("species"),
-            "cr": info.get("cr"),
-        })
-    return enemies
-
-
-def _is_unhelpful_intro(text: Optional[str]) -> bool:
-    if not text or not text.strip():
-        return True
-    lowered = text.casefold()
-    return "temporairement indisponible" in lowered or "systeme llm" in lowered
-
-
-def _is_async_callable(candidate: Any) -> bool:
-    if inspect.iscoroutinefunction(candidate):
-        return True
-    candidate_type = type(candidate)
-    return (
-        candidate_type.__module__ == "unittest.mock"
-        and candidate_type.__name__ == "AsyncMock"
-    )
+_is_unhelpful_intro = is_unhelpful_intro
+_is_async_callable = is_async_callable
+_normalized_phrase = normalized_phrase
+_should_pause_for_encounter_intro = should_pause_for_encounter_intro
 
 
 async def _generate_encounter_intro(
@@ -488,11 +241,400 @@ async def _generate_encounter_intro(
     db: AsyncSession,
     combatants_info: dict[str, Any],
 ) -> Optional[str]:
-    """Ask the GM for a one-shot cinematic encounter intro when available."""
-    gm_agent = getattr(action_resolver, "_gm", None)
-    run_intro = getattr(gm_agent, "run_encounter_intro", None)
-    if not callable(run_intro) or not _is_async_callable(run_intro):
+    return await generate_encounter_intro(
+        session_id,
+        active,
+        db,
+        combatants_info,
+        gm_agent=getattr(action_resolver, "_gm", None),
+        event_bus=event_bus,
+        load_recent_messages=load_recent_messages,
+    )
+
+
+async def _execute_intro_scene_layout(
+    session_id: str,
+    active: Any,
+    response: Any,
+) -> None:
+    await execute_intro_scene_layout(session_id, active, response, event_bus=event_bus)
+
+
+_ENCOUNTER_END_ACTION_TYPES = {
+    "scene_layout",
+    "journal_update",
+    "quest_add",
+    "chronicle_add",
+}
+
+_HOSTILE_POI_MARKERS = {
+    "hostile",
+    "enemy",
+    "enemies",
+    "ennemi",
+    "ennemis",
+    "monster",
+    "monstre",
+    "adversaire",
+    "foe",
+    "goblin",
+    "gobelin",
+    "hobgoblin",
+    "orc",
+    "skeleton",
+    "squelette",
+    "zombie",
+    "wolf",
+    "loup",
+    "spider",
+    "araignee",
+    "bandit",
+    "cultist",
+    "cultiste",
+    "bugbear",
+    "zhentarim",
+}
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _summary_position(position: Any) -> Optional[dict[str, int]]:
+    if not isinstance(position, dict):
         return None
+    if "col" in position or "row" in position:
+        return {
+            "col": _safe_int(position.get("col"), 0),
+            "row": _safe_int(position.get("row"), 0),
+        }
+    if "x" in position or "y" in position:
+        return {
+            "col": _safe_int(position.get("x"), 0),
+            "row": _safe_int(position.get("y"), 0),
+        }
+    return None
+
+
+def _dedupe_removed_npcs(*groups: Optional[list[dict[str, Any]]]) -> list[dict[str, Any]]:
+    by_id: dict[str, dict[str, Any]] = {}
+    for group in groups:
+        for entry in group or []:
+            if not isinstance(entry, dict):
+                continue
+            combatant_id = entry.get("combatant_id") or entry.get("id")
+            if not combatant_id:
+                continue
+            by_id[str(combatant_id)] = {**by_id.get(str(combatant_id), {}), **entry}
+    return list(by_id.values())
+
+
+def _build_combat_summary(
+    active: Any,
+    removed_npcs: Optional[list[dict[str, Any]]] = None,
+) -> dict[str, Any]:
+    """Build a compact, structured combat outcome before combat state cleanup."""
+    state_data: dict[str, Any] = active.state_data
+    combatants: dict[str, Any] = state_data.get("combatants", {})
+    grid_positions: dict[str, Any] = state_data.get("grid_positions", {})
+    previous_scene = deepcopy(state_data.get("current_scene"))
+    all_removed = _dedupe_removed_npcs(
+        state_data.get("resolved_npcs"),
+        removed_npcs,
+    )
+    removed_by_id = {
+        str(item.get("combatant_id") or item.get("id")): item
+        for item in all_removed
+        if item.get("combatant_id") or item.get("id")
+    }
+
+    party: list[dict[str, Any]] = []
+    enemies_defeated: list[dict[str, Any]] = []
+    enemies_fled: list[dict[str, Any]] = []
+    enemies_surrendered: list[dict[str, Any]] = []
+    enemies_unresolved: list[dict[str, Any]] = []
+
+    for combatant_id, info in combatants.items():
+        removed = removed_by_id.get(str(combatant_id), {})
+        is_player = bool(info.get("is_player", False))
+        hp = _safe_int(info.get("hp"), 0)
+        raw_status = removed.get("status", info.get("status", "active"))
+        status = str(raw_status or "active").lower()
+        if not is_player and hp <= 0 and status == "active":
+            status = "defeated"
+
+        entry = {
+            "id": combatant_id,
+            "name": info.get("name", combatant_id),
+            "hp": hp,
+            "hp_max": info.get("hp_max"),
+            "status": status,
+            "is_player": is_player,
+            "position": (
+                _summary_position(removed.get("position"))
+                or _summary_position(grid_positions.get(combatant_id))
+            ),
+        }
+        for key in ("monster_id", "species", "cr"):
+            if info.get(key) is not None:
+                entry[key] = info.get(key)
+
+        if is_player:
+            party.append(entry)
+        elif status == "fled":
+            enemies_fled.append(entry)
+        elif status == "surrendered":
+            enemies_surrendered.append(entry)
+        elif status == "defeated":
+            enemies_defeated.append(entry)
+        else:
+            enemies_unresolved.append(entry)
+
+    journal = state_data.get("adventure_journal") or {}
+    battlefield_location = (
+        journal.get("location_place")
+        or journal.get("location_region")
+        or (previous_scene or {}).get("terrain")
+        or "lieu actuel"
+    )
+    total_enemies = (
+        len(enemies_defeated)
+        + len(enemies_fled)
+        + len(enemies_surrendered)
+        + len(enemies_unresolved)
+    )
+
+    return {
+        "outcome": "partial" if enemies_unresolved else "victory",
+        "party": party,
+        "enemies_defeated": enemies_defeated,
+        "enemies_fled": enemies_fled,
+        "enemies_surrendered": enemies_surrendered,
+        "enemies_unresolved": enemies_unresolved,
+        "total_enemies": total_enemies,
+        "battlefield_location": battlefield_location,
+        "round_number": getattr(active, "round_number", 0),
+        "grid_config": deepcopy(state_data.get("grid_config") or {}),
+        "previous_scene": previous_scene,
+    }
+
+
+def _is_hostile_scene_poi(poi: Any) -> bool:
+    if not isinstance(poi, dict):
+        return False
+    searchable = " ".join(
+        str(poi.get(key, ""))
+        for key in ("id", "name", "kind", "icon", "description", "action_hint")
+    ).casefold()
+    normalized = re.sub(r"[^a-z0-9àâäéèêëîïôöùûüç_-]+", " ", searchable)
+    tokens = set(normalized.replace("_", " ").replace("-", " ").split())
+    return bool(tokens & _HOSTILE_POI_MARKERS)
+
+
+def _position_for_aftermath(
+    entry: dict[str, Any],
+    *,
+    cols: int,
+    rows: int,
+    fallback_index: int,
+) -> dict[str, int]:
+    position = _summary_position(entry.get("position"))
+    if position is None:
+        position = {
+            "col": 1 + (fallback_index % max(cols - 2, 1)),
+            "row": min(rows - 2, 1 + (fallback_index // max(cols - 2, 1))),
+        }
+    return {
+        "col": max(0, min(cols - 1, position["col"])),
+        "row": max(0, min(rows - 1, position["row"])),
+    }
+
+
+def _fallback_poi_for_enemy(
+    enemy: dict[str, Any],
+    *,
+    status: str,
+    index: int,
+    cols: int,
+    rows: int,
+) -> dict[str, Any]:
+    safe_id = re.sub(r"[^a-zA-Z0-9_]+", "_", str(enemy.get("id") or f"enemy_{index}"))
+    name = str(enemy.get("name") or "Adversaire")
+    position = _position_for_aftermath(enemy, cols=cols, rows=rows, fallback_index=index)
+
+    if status == "defeated":
+        return {
+            "id": f"aftermath_{safe_id}",
+            "name": f"Restes de {name}",
+            "kind": "corpse",
+            "icon": "ruins",
+            "position": position,
+            "description": (
+                "Le combat a laisse ici un corps, des armes tombees "
+                "et des traces visibles."
+            ),
+            "action_hint": "Examiner les restes ou recuperer ce qui peut servir.",
+        }
+    if status == "surrendered":
+        return {
+            "id": f"aftermath_{safe_id}",
+            "name": f"Armes deposees de {name}",
+            "kind": "clue",
+            "icon": "clue",
+            "position": position,
+            "description": "Une arme ou un signe de reddition marque la fin de l'affrontement.",
+            "action_hint": "Observer ce que l'adversaire a abandonne.",
+        }
+    return {
+        "id": f"aftermath_{safe_id}",
+        "name": f"Trace de fuite de {name}",
+        "kind": "clue",
+        "icon": "clue",
+        "position": position,
+        "description": "Des marques pressees indiquent une retraite dans la confusion.",
+        "action_hint": "Chercher ou suivre la piste.",
+    }
+
+
+def _build_fallback_aftermath_scene(
+    previous_scene: Any,
+    combat_summary: dict[str, Any],
+) -> dict[str, Any]:
+    """Build a deterministic post-combat exploration scene when the LLM cannot."""
+    base_scene = deepcopy(previous_scene) if isinstance(previous_scene, dict) else {}
+    grid_config = combat_summary.get("grid_config") or {}
+    cols = _safe_int(base_scene.get("cols") or grid_config.get("cols"), 8)
+    rows = _safe_int(base_scene.get("rows") or grid_config.get("rows"), 8)
+    cols = max(3, min(cols, 24))
+    rows = max(3, min(rows, 24))
+
+    pois = [
+        deepcopy(poi)
+        for poi in base_scene.get("pois", []) or []
+        if isinstance(poi, dict) and not _is_hostile_scene_poi(poi)
+    ]
+
+    aftermath_enemies: list[tuple[str, dict[str, Any]]] = []
+    aftermath_enemies.extend(
+        ("defeated", enemy) for enemy in combat_summary.get("enemies_defeated", [])
+    )
+    aftermath_enemies.extend(
+        ("surrendered", enemy) for enemy in combat_summary.get("enemies_surrendered", [])
+    )
+    aftermath_enemies.extend(
+        ("fled", enemy) for enemy in combat_summary.get("enemies_fled", [])
+    )
+    aftermath_enemies.extend(
+        ("unresolved", enemy) for enemy in combat_summary.get("enemies_unresolved", [])
+    )
+
+    for index, (status, enemy) in enumerate(aftermath_enemies, start=1):
+        if isinstance(enemy, dict):
+            pois.append(
+                _fallback_poi_for_enemy(
+                    enemy,
+                    status=status,
+                    index=index,
+                    cols=cols,
+                    rows=rows,
+                )
+            )
+
+    party_positions = deepcopy(base_scene.get("party_positions") or {})
+    if not party_positions:
+        party_positions = {
+            str(member["id"]): member["position"]
+            for member in combat_summary.get("party", [])
+            if isinstance(member, dict) and member.get("id") and member.get("position")
+        }
+
+    return {
+        "cols": cols,
+        "rows": rows,
+        "cell_size_m": base_scene.get("cell_size_m")
+        or grid_config.get("cell_size_m")
+        or 1.5,
+        "terrain": base_scene.get("terrain") or "battlefield_aftermath",
+        "pois": pois,
+        "exits": deepcopy(base_scene.get("exits", []) or []),
+        "party_positions": party_positions,
+    }
+
+
+async def _apply_fallback_aftermath_scene(
+    session_id: str,
+    active: Any,
+    combat_summary: dict[str, Any],
+) -> bool:
+    from app.agents.schemas import GMAction, GMResponse
+    from app.game.gm_response_executor import GMResponseExecutor
+
+    previous_scene = combat_summary.get("previous_scene")
+    fallback_scene = _build_fallback_aftermath_scene(previous_scene, combat_summary)
+    before_scene = deepcopy(active.state_data.get("current_scene"))
+    await GMResponseExecutor(event_bus, source="ws_game").execute_gm_response(
+        GMResponse(
+            narration="",
+            actions=[GMAction(type="scene_layout", params=fallback_scene)],
+        ),
+        active,
+        session_id=session_id,
+    )
+    return active.state_data.get("current_scene") != before_scene
+
+
+async def _execute_encounter_end_actions(
+    session_id: str,
+    active: Any,
+    response: Any,
+) -> bool:
+    from app.agents.schemas import GMResponse
+    from app.game.gm_response_executor import GMResponseExecutor
+
+    safe_actions: list[Any] = []
+    scene_action_seen = False
+    for action in getattr(response, "actions", []) or []:
+        action_type = str(getattr(action, "type", "") or "").lower()
+        if action_type not in _ENCOUNTER_END_ACTION_TYPES:
+            logger.warning(
+                "Action GM post-combat ignoree car interdite : %s",
+                action_type or "<vide>",
+            )
+            continue
+        if action_type == "scene_layout":
+            if scene_action_seen:
+                logger.warning("scene_layout post-combat supplementaire ignore.")
+                continue
+            scene_action_seen = True
+        safe_actions.append(action)
+
+    if not safe_actions:
+        return False
+
+    before_scene = deepcopy(active.state_data.get("current_scene"))
+    safe_response = GMResponse(narration="", actions=safe_actions)
+    await GMResponseExecutor(event_bus, source="ws_game").execute_gm_response(
+        safe_response,
+        active,
+        session_id=session_id,
+    )
+    return scene_action_seen and active.state_data.get("current_scene") != before_scene
+
+
+async def _generate_encounter_end(
+    session_id: str,
+    active: Any,
+    db: AsyncSession,
+    combat_summary: dict[str, Any],
+) -> tuple[Optional[str], bool]:
+    """Ask the GM for one post-combat narration and safe scene updates."""
+    gm_agent = getattr(action_resolver, "_gm", None)
+    run_end = getattr(gm_agent, "run_encounter_end", None)
+    if not callable(run_end) or not _is_async_callable(run_end):
+        return None, False
 
     response: Any = None
     await event_bus.publish_to_session(
@@ -503,14 +645,14 @@ async def _generate_encounter_intro(
     )
     try:
         recent_messages = await load_recent_messages(session_id, db)
-        response = await run_intro(
-            game_state={**active.state_data, "phase": SessionStatus.ENCOUNTER_START.value},
-            combatants=_encounter_intro_combatants(combatants_info),
+        response = await run_end(
+            game_state={**active.state_data, "phase": SessionStatus.ENCOUNTER_END.value},
+            combat_summary=combat_summary,
             messages=recent_messages,
         )
     except Exception as exc:
-        logger.warning("_generate_encounter_intro: intro LLM ignorée : %s", exc)
-        return None
+        logger.warning("_generate_encounter_end: aftermath LLM ignore : %s", exc)
+        return None, False
     finally:
         await event_bus.publish_to_session(
             session_id,
@@ -519,59 +661,11 @@ async def _generate_encounter_intro(
             source="ws_game",
         )
 
-    await _execute_intro_scene_layout(session_id, active, response)
+    scene_applied = await _execute_encounter_end_actions(session_id, active, response)
     narration = getattr(response, "narration", "")
     if _is_unhelpful_intro(narration):
-        return None
-    start_mode = str(getattr(response, "start_mode", "") or "").strip().lower()
-    if start_mode in {"pause", "combat"}:
-        active.state_data["_encounter_intro_start_mode"] = start_mode
-    return str(narration).strip()
-
-
-async def _execute_intro_scene_layout(
-    session_id: str,
-    active: Any,
-    response: Any,
-) -> None:
-    scene_actions = [
-        action
-        for action in getattr(response, "actions", []) or []
-        if getattr(action, "type", "") == "scene_layout"
-    ]
-    if not scene_actions:
-        return
-
-    from app.agents.schemas import GMResponse
-    from app.game.gm_response_executor import GMResponseExecutor
-
-    scene_response = GMResponse(narration="", actions=scene_actions[:1])
-    await GMResponseExecutor(event_bus, source="ws_game").execute_gm_response(
-        scene_response,
-        active,
-        session_id=session_id,
-    )
-
-
-def _normalized_phrase(text: Optional[str]) -> str:
-    if not text:
-        return ""
-    normalized = text.casefold().replace("’", "'")
-    return re.sub(r"\s+", " ", normalized)
-
-
-def _should_pause_for_encounter_intro(text: Optional[str]) -> bool:
-    """Return True when the intro reads like a threat/sommation, not an attack."""
-    normalized = _normalized_phrase(text)
-    if not normalized:
-        return False
-    if any(marker in normalized for marker in _IMMEDIATE_ATTACK_MARKERS):
-        return False
-    return (
-        any(marker in normalized for marker in _ENCOUNTER_PAUSE_MARKERS)
-        or "«" in normalized
-        or '"' in normalized
-    )
+        return None, scene_applied
+    return str(narration).strip(), scene_applied
 
 
 async def _pause_at_encounter_start(
@@ -581,71 +675,22 @@ async def _pause_at_encounter_start(
     pending: dict[str, Any] | None,
     intro_text: str,
 ) -> None:
-    """Publish a roleplay encounter opening without rolling initiative yet."""
-    active.turn_manager.reset()
-    active.state_data.pop("combatants", None)
-    active.state_data.pop("grid_positions", None)
-    active.state_data.pop("grid_config", None)
-    active.state_data.pop("grid_decoration", None)
-
-    pending_encounter = dict(pending or {})
-    pending_encounter["intro_played"] = True
-    pending_encounter["intro_text"] = intro_text
-    active.state_data["pending_encounter"] = pending_encounter
-    active.phase = SessionStatus.ENCOUNTER_START
-    active.state_data["phase"] = SessionStatus.ENCOUNTER_START.value
-    active.mark_dirty()
-    await session_manager.save_state(session_id, db)
-
-    await event_bus.publish_to_session(
+    await pause_at_encounter_start(
         session_id,
-        EventType.PHASE_CHANGE,
-        {"phase": SessionStatus.ENCOUNTER_START.value},
-        source="ws_game",
+        active,
+        db,
+        pending,
+        intro_text,
+        session_manager=session_manager,
+        event_bus=event_bus,
+        session_state_payload=lambda: _build_session_state_payload(session_id),
+        persist_narration=persist_narration,
     )
-    await event_bus.publish_to_session(
-        session_id,
-        EventType.SESSION_STATE,
-        _build_session_state_payload(session_id),
-        source="ws_game",
-    )
-    await event_bus.publish_to_session(
-        session_id,
-        EventType.NARRATION,
-        {"text": intro_text, "speaker": "Maître du Jeu"},
-        source="ws_game",
-    )
-    await persist_narration(session_id, intro_text, "Maître du Jeu", db)
 
 
-def _is_combat_social_text(text: Optional[str]) -> bool:
-    normalized = _normalized_phrase(text)
-    return any(marker in normalized for marker in _SOCIAL_COMBAT_MARKERS)
-
-
-def _active_npc_ids(active: Any) -> list[str]:
-    combatants: dict[str, Any] = active.state_data.get("combatants", {})
-    result: list[str] = []
-    for cid, cdata in combatants.items():
-        if not isinstance(cdata, dict) or cdata.get("is_player", True):
-            continue
-        status = str(cdata.get("status", "active")).lower()
-        try:
-            hp = int(cdata.get("hp", 1))
-        except (TypeError, ValueError):
-            hp = 1
-        if hp > 0 and status not in INACTIVE_STATUSES:
-            result.append(cid)
-    return result
-
-
-def _combat_target_id(action: PlayerActionMessage, active: Any) -> Optional[str]:
-    if action.target_id:
-        return action.target_id
-    if action.action_type != "free_text" or not _is_combat_social_text(action.content):
-        return None
-    active_npcs = _active_npc_ids(active)
-    return active_npcs[0] if len(active_npcs) == 1 else None
+_is_combat_social_text = is_combat_social_text
+_active_npc_ids = active_npc_ids
+_combat_target_id = combat_target_id
 
 
 async def _reject_out_of_turn_action(
@@ -653,28 +698,12 @@ async def _reject_out_of_turn_action(
     action: PlayerActionMessage,
     active: Any,
 ) -> bool:
-    if action.action_type not in _TURN_BOUND_COMBAT_ACTIONS or not action.character_id:
-        return False
-    current = active.turn_manager.current_turn
-    if current is None:
-        return False
-    if action.action_type == "end_turn" and current.is_ai_controlled:
-        return False
-    if action.character_id == current.combatant_id:
-        return False
-
-    await event_bus.publish_to_session(
+    return await reject_out_of_turn_action(
         session_id,
-        EventType.ERROR,
-        {
-            "message": (
-                f"Ce n'est pas le tour de ce personnage. "
-                f"Tour actuel : {current.name}."
-            )
-        },
-        source="ws_game",
+        action,
+        active,
+        event_bus=event_bus,
     )
-    return True
 
 
 async def _auto_death_save(
@@ -759,27 +788,8 @@ async def _auto_death_save(
     )
 
 
-def _combat_end_reason_from_removed(removed: list[dict[str, Any]]) -> str:
-    statuses = {str(item.get("status", "defeated")) for item in removed}
-    if not statuses:
-        return "victory"
-    if statuses == {"surrendered"}:
-        return "surrender"
-    if statuses == {"fled"}:
-        return "fled"
-    if statuses & {"surrendered", "fled"}:
-        return "resolved"
-    return "victory"
-
-
-def _combat_end_text(reason: str) -> str:
-    if reason == "surrender":
-        return "Le dernier adversaire se rend. Le combat prend fin et le calme revient."
-    if reason == "fled":
-        return "Les derniers adversaires prennent la fuite. Le combat prend fin."
-    if reason == "resolved":
-        return "La menace est neutralisée. Le combat prend fin."
-    return "Victoire ! Tous les ennemis ont été vaincus. Le calme revient."
+_combat_end_reason_from_removed = combat_end_reason_from_removed
+_combat_end_text = combat_end_text
 
 
 async def _cleanup_inactive_npcs(session_id: str, active: Any) -> list[dict[str, Any]]:
@@ -819,7 +829,7 @@ async def _cleanup_inactive_npcs(session_id: str, active: Any) -> list[dict[str,
         removed = active.turn_manager.remove_combatant(cid)
         if removed:
             name = cdata.get("name", cid)
-            grid_positions.pop(cid, None)
+            position = _summary_position(grid_positions.pop(cid, None))
             await event_bus.publish_to_session(
                 session_id,
                 EventType.NARRATION,
@@ -836,18 +846,47 @@ async def _cleanup_inactive_npcs(session_id: str, active: Any) -> list[dict[str,
                 },
                 source="ws_game",
             )
-            removed_entries.append({"combatant_id": cid, "name": name, "status": status})
+            removed_entry = {
+                "combatant_id": cid,
+                "name": name,
+                "status": status,
+                "position": position,
+            }
+            removed_entries.append(removed_entry)
+            resolved_npcs = active.state_data.setdefault("resolved_npcs", [])
+            existing_idx = next(
+                (
+                    idx for idx, item in enumerate(resolved_npcs)
+                    if item.get("combatant_id") == cid
+                ),
+                -1,
+            )
+            if existing_idx >= 0:
+                resolved_npcs[existing_idx] = {
+                    **resolved_npcs[existing_idx],
+                    **removed_entry,
+                }
+            else:
+                resolved_npcs.append(removed_entry)
             active.mark_dirty()
 
     return removed_entries
 
 
-def _npc_removed_text(name: str, status: str) -> str:
-    if status == "surrendered":
-        return f"{name} se rend et quitte l'initiative."
-    if status == "fled":
-        return f"{name} fuit le combat !"
-    return f"{name} a été vaincu !"
+_npc_removed_text = npc_removed_text
+
+
+async def _transition_active_phase(
+    session_id: str,
+    active: Any,
+    db: AsyncSession,
+    target: SessionStatus,
+) -> None:
+    active.game_loop.validate_transition(active.phase, target)
+    active.phase = target
+    active.state_data["phase"] = target.value
+    active.mark_dirty()
+    await session_manager.save_state(session_id, db)
 
 
 async def _handle_combat_end(
@@ -855,18 +894,22 @@ async def _handle_combat_end(
     active: Any,
     db: AsyncSession,
     reason: str = "victory",
+    removed_npcs: Optional[list[dict[str, Any]]] = None,
 ) -> None:
-    """Wrap up combat: transition to EXPLORATION and notify clients."""
+    """Wrap up combat through ENCOUNTER_END, then return to EXPLORATION."""
+    combat_summary = _build_combat_summary(active, removed_npcs)
+    if combat_summary.get("enemies_unresolved") and reason == "victory":
+        reason = "resolved"
+
     active.turn_manager.reset()
-    active.phase = SessionStatus.EXPLORATION
     active.state_data.pop("combatants", None)
     active.state_data.pop("grid_positions", None)
     active.state_data.pop("grid_config", None)
     active.state_data.pop("grid_decoration", None)
     active.state_data.pop("pending_encounter", None)
-    active.state_data["phase"] = SessionStatus.EXPLORATION.value
+    active.state_data.pop("resolved_npcs", None)
     active.mark_dirty()
-    await session_manager.save_state(session_id, db)
+    await _transition_active_phase(session_id, active, db, SessionStatus.ENCOUNTER_END)
 
     await event_bus.publish_to_session(
         session_id,
@@ -877,10 +920,28 @@ async def _handle_combat_end(
     await event_bus.publish_to_session(
         session_id,
         EventType.PHASE_CHANGE,
+        {"phase": SessionStatus.ENCOUNTER_END.value},
+        source="ws_game",
+    )
+
+    aftermath_text, scene_applied = await _generate_encounter_end(
+        session_id,
+        active,
+        db,
+        combat_summary,
+    )
+    if not scene_applied:
+        await _apply_fallback_aftermath_scene(session_id, active, combat_summary)
+
+    await _transition_active_phase(session_id, active, db, SessionStatus.EXPLORATION)
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.PHASE_CHANGE,
         {"phase": SessionStatus.EXPLORATION.value},
         source="ws_game",
     )
-    victory_text = _combat_end_text(reason)
+
+    victory_text = aftermath_text or _combat_end_text(reason)
     await event_bus.publish_to_session(
         session_id,
         EventType.NARRATION,
@@ -1179,6 +1240,7 @@ async def _handle_end_turn(session_id: str, active: Any, db: AsyncSession) -> No
             active,
             db,
             reason=_combat_end_reason_from_removed(removed_npcs),
+            removed_npcs=removed_npcs,
         )
         return
 
@@ -1211,110 +1273,18 @@ async def _handle_end_turn(session_id: str, active: Any, db: AsyncSession) -> No
 
 async def _handle_ai_turns(session_id: str, active: Any, db: AsyncSession) -> None:
     """Trigger all consecutive AI-controlled turns, then emit TURN_START for the next human."""
-    while True:
-        current = active.turn_manager.current_turn
-        if current is None or not current.is_ai_controlled:
-            break
-
-        # Announce this AI combatant's turn to the frontend
-        await event_bus.publish_to_session(
-            session_id,
-            EventType.TURN_START,
-            {"combatant_id": current.combatant_id, "combatant_name": current.name},
-            source="ws_game",
-        )
-
-        # Si ce combattant IA est un joueur à 0 PV → jet de sauvegarde automatique
-        _cdata = active.state_data.get("combatants", {}).get(current.combatant_id, {})
-        if _cdata.get("is_player") and int(_cdata.get("hp", 1)) == 0:
-            _ds = _cdata.get("death_saves", {})
-            if not _ds.get("stable") and not _cdata.get("dead"):
-                await _auto_death_save(session_id, current.combatant_id, current.name, active)
-            active.turn_manager.next_turn()
-            active.turn_number += 1
-            active.round_number = active.turn_manager.round_number
-            active.mark_dirty()
-            continue
-
-        agent = active.ai_players.get(current.combatant_id)
-        if agent is not None:
-            # Resolve exactly one companion turn here so cleanup and TURN_START
-            # events remain interleaved turn by turn.
-            from app.game.ai_player_manager import AIPlayerManager
-            ai_manager = AIPlayerManager()
-            await ai_manager.process_ai_turns(
-                session_id,
-                active,
-                action_resolver,
-                db=db,
-                max_turns=1,
-            )
-            removed_npcs = await _cleanup_inactive_npcs(session_id, active)
-            if active.turn_manager.all_npcs_removed():
-                await _handle_combat_end(
-                    session_id,
-                    active,
-                    db,
-                    reason=_combat_end_reason_from_removed(removed_npcs),
-                )
-                return
-            # Continue the loop: the next AI-controlled entry may be a monster,
-            # which is resolved below by the deterministic monster branch.
-            continue
-
-        # Enemy monster: same mechanical + GM pipeline as players/companions.
-        combatants_info: dict[str, Any] = active.state_data.get("combatants", {})
-        monster_info = combatants_info.get(current.combatant_id, {})
-        if str(monster_info.get("status", "active")).lower() in INACTIVE_STATUSES:
-            active.turn_manager.remove_combatant(current.combatant_id)
-            active.mark_dirty()
-            continue
-
-        await action_resolver.resolve(
-            session_id=session_id,
-            action_type="attack",
-            content=None,
-            character_id=current.combatant_id,
-            target_id=None,
-            active=active,
-            db=db,
-            actor_kind="monster",
-            actor_name=current.name,
-        )
-
-        # Check for newly inactive combatants after monster action
-        removed_npcs = await _cleanup_inactive_npcs(session_id, active)
-        if active.turn_manager.all_npcs_removed():
-            await _handle_combat_end(
-                session_id,
-                active,
-                db,
-                reason=_combat_end_reason_from_removed(removed_npcs),
-            )
-            return
-
-        # Advance past the monster's turn
-        active.turn_manager.next_turn()
-        active.turn_number += 1
-        active.round_number = active.turn_manager.round_number
-
-    # Save state and announce the next (human) combatant
-    active.mark_dirty()
-    await session_manager.save_state(session_id, db)
-
-    current = active.turn_manager.current_turn
-    if current:
-        await event_bus.publish_to_session(
-            session_id,
-            EventType.TURN_START,
-            {"combatant_id": current.combatant_id, "combatant_name": current.name},
-            source="ws_game",
-        )
-    await event_bus.publish_to_session(
+    await handle_ai_combat_turns(
         session_id,
-        EventType.SESSION_STATE,
-        _build_session_state_payload(session_id),
-        source="ws_game",
+        active,
+        db,
+        event_bus=event_bus,
+        action_resolver=action_resolver,
+        session_manager=session_manager,
+        session_state_payload=lambda: _build_session_state_payload(session_id),
+        cleanup_inactive_npcs=_cleanup_inactive_npcs,
+        handle_combat_end=_handle_combat_end,
+        combat_end_reason_from_removed=_combat_end_reason_from_removed,
+        auto_death_save=_auto_death_save,
     )
 
 
@@ -1830,32 +1800,15 @@ async def _handle_trigger_ai_reactions(
     if active is None:
         return
 
-    if not active.ai_players:
-        return
-
     if active.phase == SessionStatus.COMBAT:
         # In combat, only makes sense when the current turn is AI.
         current = active.turn_manager.current_turn
         if current is None or not current.is_ai_controlled:
             return
-        from app.game.ai_player_manager import AIPlayerManager
-        await AIPlayerManager().process_ai_turns(session_id, active, action_resolver, db=db)
-        removed_npcs = await _cleanup_inactive_npcs(session_id, active)
-        if active.turn_manager.all_npcs_removed():
-            await _handle_combat_end(
-                session_id,
-                active,
-                db,
-                reason=_combat_end_reason_from_removed(removed_npcs),
-            )
-            return
-        await session_manager.save_state(session_id, db)
-        await event_bus.publish_to_session(
-            session_id,
-            EventType.SESSION_STATE,
-            _build_session_state_payload(session_id),
-            source="ws_game",
-        )
+        await _handle_ai_turns(session_id, active, db)
+        return
+
+    if not active.ai_players:
         return
 
     # Exploration: let each AI companion react once.
@@ -2085,6 +2038,7 @@ async def _dispatch_action(
                 active,
                 db,
                 reason=_combat_end_reason_from_removed(removed_npcs),
+                removed_npcs=removed_npcs,
             )
             return
         # Auto-advance turn: one action = end of turn

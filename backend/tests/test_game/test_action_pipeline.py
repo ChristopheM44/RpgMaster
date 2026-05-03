@@ -157,7 +157,11 @@ class TestPipelineExecutorUnits:
         event_types = [event_type for event_type, _ in bus.published]
         assert EventType.ROLL_RESULT in event_types
         gm.narrate_outcome_response.assert_awaited_once()
-        roll_payload = next(payload for event_type, payload in bus.published if event_type == EventType.ROLL_RESULT)
+        roll_payload = next(
+            payload
+            for event_type, payload in bus.published
+            if event_type == EventType.ROLL_RESULT
+        )
         assert roll_payload["character_id"] == "hero_1"
         assert roll_payload["social_target_id"] == "bandit_1"
 
@@ -332,7 +336,11 @@ class TestPipelineExecutorUnits:
                     "kind": "npc",
                     "position": {"col": 2, "row": 3},
                     "interactions": [
-                        {"label": "Négocier", "intent": "parley", "prompt": "Je négocie avec Toben."},
+                        {
+                            "label": "Négocier",
+                            "intent": "parley",
+                            "prompt": "Je négocie avec Toben.",
+                        },
                         {"intent": "talk", "prompt": "Sans label"},
                         "invalid",
                     ],
@@ -1093,6 +1101,42 @@ class TestEncounterIntro:
         assert "combat_start" not in event_types
         assert EventType.PHASE_CHANGE in event_types
 
+    async def test_intro_start_mode_combat_overrides_pause_markers(self) -> None:
+        from app.api import ws_game
+
+        active = _make_combat_active(monster_id="bandit_1")
+        active.phase = SessionStatus.EXPLORATION
+        active.state_data["phase"] = "exploration"
+        active.state_data["pending_encounter"] = {
+            "monster_ids": ["bandit"],
+            "context": "Un bandit surgit dans les ruines.",
+        }
+        published, capture = _event_collector()
+
+        mock_resolver = MagicMock()
+        mock_resolver._gm.run_encounter_intro = AsyncMock(return_value=GMResponse(
+            narration="Le bandit crie : « Pas un pas de plus ! » puis charge.",
+            actions=[],
+            start_mode="combat",
+        ))
+
+        with patch("app.api.ws_game.action_resolver", mock_resolver), \
+             patch("app.api.ws_game.event_bus.publish_to_session", new=capture), \
+             patch("app.api.ws_game._sync_ai_control_from_db",
+                   new=AsyncMock(return_value=False)), \
+             patch("app.api.ws_game._handle_ai_turns", new=AsyncMock()), \
+             patch("app.api.ws_game.session_manager.save_state", new=AsyncMock()), \
+             patch("app.api.ws_game.load_recent_messages", new=AsyncMock(return_value=[])), \
+             patch("app.api.ws_game.persist_narration", new=AsyncMock()), \
+             patch("app.api.ws_game._build_session_state_payload",
+                   return_value={"phase": "combat"}):
+            await ws_game._handle_start_combat(SESSION_ID, active, None)
+
+        event_types = [event_type for event_type, _ in published]
+        assert active.phase == SessionStatus.COMBAT
+        assert active.state_data.get("pending_encounter") is None
+        assert "combat_start" in event_types
+
     async def test_forced_combat_from_encounter_start_does_not_replay_intro(self) -> None:
         from app.api import ws_game
 
@@ -1127,6 +1171,227 @@ class TestEncounterIntro:
         assert "combat_start" in event_types
         assert narrations[-1]["text"] != old_intro
         mock_resolver._gm.run_encounter_intro.assert_not_called()
+
+    def test_build_combat_summary_classifies_all_enemy_outcomes(self) -> None:
+        from app.api import ws_game
+
+        active = _make_combat_active(monster_id="bandit_1")
+        active.state_data["combatants"].update({
+            "bandit_2": {
+                "name": "Bandit 2",
+                "hp": 5,
+                "hp_max": 11,
+                "is_player": False,
+                "status": "fled",
+                "monster_id": "bandit",
+            },
+            "bandit_3": {
+                "name": "Bandit 3",
+                "hp": 7,
+                "hp_max": 11,
+                "is_player": False,
+                "status": "surrendered",
+                "monster_id": "bandit",
+            },
+            "emissary": {
+                "name": "Emissaire Zhentarim",
+                "hp": 18,
+                "hp_max": 18,
+                "is_player": False,
+                "status": "active",
+                "monster_id": "bandit",
+            },
+        })
+        active.state_data["combatants"]["bandit_1"]["hp"] = 0
+        active.state_data["combatants"]["bandit_1"]["status"] = "active"
+        active.state_data["grid_positions"] = {
+            "hero_1": {"col": 1, "row": 5},
+            "bandit_1": {"col": 3, "row": 2},
+            "bandit_2": {"col": 4, "row": 2},
+            "bandit_3": {"col": 5, "row": 2},
+            "emissary": {"col": 6, "row": 1},
+        }
+
+        summary = ws_game._build_combat_summary(active)
+
+        assert summary["outcome"] == "partial"
+        assert [e["id"] for e in summary["enemies_defeated"]] == ["bandit_1"]
+        assert [e["id"] for e in summary["enemies_fled"]] == ["bandit_2"]
+        assert [e["id"] for e in summary["enemies_surrendered"]] == ["bandit_3"]
+        assert [e["id"] for e in summary["enemies_unresolved"]] == ["emissary"]
+        assert summary["total_enemies"] == 4
+        assert summary["enemies_defeated"][0]["position"] == {"col": 3, "row": 2}
+
+    async def test_generate_encounter_end_filters_unsafe_actions(self) -> None:
+        from app.api import ws_game
+
+        active = _make_combat_active(monster_id="bandit_1")
+        active.state_data["current_scene"] = {
+            "cols": 6,
+            "rows": 6,
+            "cell_size_m": 1.5,
+            "terrain": "dock",
+            "pois": [],
+            "exits": [],
+            "party_positions": {},
+        }
+        summary = ws_game._build_combat_summary(active)
+        published, capture = _event_collector()
+
+        mock_resolver = MagicMock()
+        mock_resolver._gm.run_encounter_end = AsyncMock(return_value=GMResponse(
+            narration="Le silence retombe sur le quai.",
+            actions=[
+                GMAction(
+                    type="damage_apply",
+                    target="hero_1",
+                    params={"amount": 99, "target": "hero_1"},
+                ),
+                GMAction(
+                    type="state_transition",
+                    params={"new_phase": "COMBAT"},
+                ),
+                GMAction(
+                    type="scene_layout",
+                    params={
+                        "cols": 6,
+                        "rows": 6,
+                        "terrain": "dock_aftermath",
+                        "pois": [
+                            {
+                                "id": "fallen_bandit",
+                                "name": "Bandit au sol",
+                                "kind": "corpse",
+                                "icon": "ruins",
+                                "position": {"col": 3, "row": 2},
+                            }
+                        ],
+                        "exits": [],
+                        "party_positions": {},
+                    },
+                ),
+                GMAction(
+                    type="journal_update",
+                    params={"location_place": "Quai silencieux"},
+                ),
+            ],
+        ))
+
+        with patch("app.api.ws_game.action_resolver", mock_resolver), \
+             patch("app.api.ws_game.event_bus.publish_to_session", new=capture), \
+             patch("app.api.ws_game.load_recent_messages", new=AsyncMock(return_value=[])):
+            narration, scene_applied = await ws_game._generate_encounter_end(
+                SESSION_ID,
+                active,
+                MagicMock(),
+                summary,
+            )
+
+        assert narration == "Le silence retombe sur le quai."
+        assert scene_applied is True
+        assert active.state_data["combatants"]["hero_1"]["hp"] == 20
+        assert "pending_phase_transition" not in active.state_data
+        assert active.state_data["current_scene"]["terrain"] == "dock_aftermath"
+        assert active.state_data["adventure_journal"]["location_place"] == "Quai silencieux"
+        assert [event_type for event_type, _ in published].count(EventType.AI_THINKING) == 2
+
+    async def test_handle_combat_end_uses_encounter_end_and_fallback_scene(self) -> None:
+        from app.api import ws_game
+
+        active = _make_combat_active(monster_id="bandit_1")
+        active.state_data["combatants"]["bandit_1"]["hp"] = 0
+        active.state_data["combatants"]["bandit_1"]["status"] = "defeated"
+        active.state_data["grid_positions"] = {
+            "hero_1": {"col": 1, "row": 4},
+            "bandit_1": {"col": 3, "row": 2},
+        }
+        active.state_data["grid_config"] = {"cols": 6, "rows": 6, "cell_size_m": 1.5}
+        active.state_data["current_scene"] = {
+            "cols": 6,
+            "rows": 6,
+            "cell_size_m": 1.5,
+            "terrain": "dock",
+            "pois": [
+                {
+                    "id": "bandit_lookout",
+                    "name": "Bandit aux aguets",
+                    "kind": "enemy",
+                    "icon": "npc",
+                    "position": {"col": 3, "row": 2},
+                },
+                {
+                    "id": "crate",
+                    "name": "Caisse brisee",
+                    "kind": "loot",
+                    "icon": "chest",
+                    "position": {"col": 2, "row": 2},
+                },
+            ],
+            "exits": [
+                {
+                    "id": "street",
+                    "label": "Rue du port",
+                    "position": {"col": 5, "row": 3},
+                    "leads_to": "harbor_street",
+                }
+            ],
+            "party_positions": {"hero_1": {"col": 1, "row": 4}},
+        }
+        active.turn_manager._order = [
+            TurnEntry("hero_1", "Aria", 18, True, False),
+        ]
+        active.turn_manager._mode = "combat"
+        active.turn_manager._round = 1
+        published, capture = _event_collector()
+
+        mock_resolver = MagicMock()
+        mock_resolver._gm = object()
+
+        with patch("app.api.ws_game.action_resolver", mock_resolver), \
+             patch("app.api.ws_game.event_bus.publish_to_session", new=capture), \
+             patch("app.api.ws_game.session_manager.save_state", new=AsyncMock()), \
+             patch("app.api.ws_game.persist_narration", new=AsyncMock()), \
+             patch("app.api.ws_game._build_session_state_payload",
+                   return_value={"phase": "exploration"}), \
+             patch("app.services.campaign_dossier_service.synthesize_canon_for_session",
+                   new=AsyncMock()):
+            await ws_game._handle_combat_end(
+                SESSION_ID,
+                active,
+                MagicMock(),
+                reason="victory",
+                removed_npcs=[
+                    {
+                        "combatant_id": "bandit_1",
+                        "name": "Bandit",
+                        "status": "defeated",
+                        "position": {"col": 3, "row": 2},
+                    }
+                ],
+            )
+
+        event_types = [event_type for event_type, _ in published]
+        phase_payloads = [
+            payload["phase"]
+            for event_type, payload in published
+            if event_type == EventType.PHASE_CHANGE
+        ]
+        narrations = _narrations(published)
+        scene = active.state_data["current_scene"]
+        poi_ids = {poi["id"] for poi in scene["pois"]}
+
+        assert active.phase == SessionStatus.EXPLORATION
+        assert event_types.index(EventType.COMBAT_END) < event_types.index(EventType.NARRATION)
+        assert phase_payloads == ["encounter_end", "exploration"]
+        assert narrations[-1]["text"] == (
+            "Victoire ! Tous les ennemis ont été vaincus. Le calme revient."
+        )
+        assert "bandit_lookout" not in poi_ids
+        assert "crate" in poi_ids
+        assert any(poi["kind"] == "corpse" for poi in scene["pois"])
+        assert scene["exits"][0]["id"] == "street"
+        assert EventType.SCENE_LAYOUT_CHANGED in event_types
+        assert EventType.SESSION_STATE in event_types
 
 
 # ---------------------------------------------------------------------------

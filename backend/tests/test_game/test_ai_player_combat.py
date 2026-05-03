@@ -16,7 +16,7 @@ Ce test vérifie :
 from __future__ import annotations
 
 import json
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.agents.player_agent import PlayerAgent
@@ -26,7 +26,6 @@ from app.game.ai_player_manager import AIPlayerManager
 from app.game.session_manager import ActiveSession
 from app.game.turn_manager import CombatantInfo, TurnManager
 from app.models.session import SessionStatus
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -55,7 +54,7 @@ def _wait_json(character_name: str) -> str:
     }, ensure_ascii=False)
 
 
-def _build_game_state() -> Dict[str, Any]:
+def _build_game_state() -> dict[str, Any]:
     return {
         "phase": "COMBAT",
         "combatants": {
@@ -89,9 +88,27 @@ def _build_combatants() -> list:
         CombatantInfo("aria_1", "Aria", dex_score=14, is_player=True, is_ai_controlled=False),
         CombatantInfo("thorin_1", "Thorin", dex_score=12, is_player=True, is_ai_controlled=True),
         CombatantInfo("elara_1", "Elara", dex_score=16, is_player=True, is_ai_controlled=True),
-        CombatantInfo("goblin_1", "Gobelin 1", dex_score=8, is_player=False, is_ai_controlled=False),
-        CombatantInfo("goblin_2", "Gobelin 2", dex_score=8, is_player=False, is_ai_controlled=False),
-        CombatantInfo("goblin_3", "Gobelin 3", dex_score=8, is_player=False, is_ai_controlled=False),
+        CombatantInfo(
+            "goblin_1",
+            "Gobelin 1",
+            dex_score=8,
+            is_player=False,
+            is_ai_controlled=False,
+        ),
+        CombatantInfo(
+            "goblin_2",
+            "Gobelin 2",
+            dex_score=8,
+            is_player=False,
+            is_ai_controlled=False,
+        ),
+        CombatantInfo(
+            "goblin_3",
+            "Gobelin 3",
+            dex_score=8,
+            is_player=False,
+            is_ai_controlled=False,
+        ),
     ]
 
 
@@ -177,7 +194,7 @@ def test_setup_combat_full_serialization() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _make_active_session(state_data: Dict[str, Any]) -> ActiveSession:
+def _make_active_session(state_data: dict[str, Any]) -> ActiveSession:
     """Build an ActiveSession in COMBAT phase with a seeded turn order."""
     import random
 
@@ -497,7 +514,12 @@ async def test_cleanup_after_ai_kill_skips_dead_next_monster() -> None:
         removed = await ws_game._cleanup_inactive_npcs("cleanup_session", active)
 
     assert removed == [
-        {"combatant_id": "goblin_1", "name": "goblin_1", "status": "defeated"}
+        {
+            "combatant_id": "goblin_1",
+            "name": "goblin_1",
+            "status": "defeated",
+            "position": {"col": 5, "row": 5},
+        }
     ]
     assert active.turn_manager.current_turn.combatant_id == "goblin_2"
     assert "goblin_1" not in active.state_data["grid_positions"]
