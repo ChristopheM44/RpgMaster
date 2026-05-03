@@ -20,7 +20,8 @@ Objectif :
 - Produire au plus UNE action scene_layout pour afficher le champ de bataille apres le combat.
 - Dans scene_layout, conserve les dimensions, le terrain, les sorties, les positions du groupe et les POIs non hostiles de la scene precedente autant que possible.
 - Remplace les POIs hostiles ou ennemis visibles par des traces coherentes : corps, armes tombees, butin, indice, sang, debris ou piste de fuite.
-- Utilise des icones d'exploration compatibles : chest, clue, ruins, poi, npc, door, secret-passage, fog, light.
+- Utilise des categories/icones coherentes : butin/objet = kind "loot", icon "chest"; indice/trace = kind "clue", icon "clue"; debris/corps = kind "corpse" ou "cover", icon "ruins"; PNJ non hostile = kind "npc", icon "npc"; danger = kind "hazard", icon "trap-danger".
+- Une porte, issue ou sortie navigable doit rester dans exits uniquement. Ne la duplique pas dans pois avec le meme id ou la meme position.
 - Tu peux ajouter journal_update, quest_add ou chronicle_add uniquement si un changement important et nouveau le justifie.
 
 Interdictions absolues :

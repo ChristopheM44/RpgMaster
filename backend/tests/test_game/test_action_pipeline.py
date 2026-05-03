@@ -357,6 +357,40 @@ class TestPipelineExecutorUnits:
             }
         ]
 
+    async def test_executor_scene_layout_filters_duplicate_exit_pois(self) -> None:
+        layout = GMResponseExecutor._normalize_scene_layout({
+            "cols": 10,
+            "rows": 8,
+            "terrain": "dock_ambush",
+            "pois": [
+                {
+                    "id": "bandit_2",
+                    "name": "Bandit 2",
+                    "kind": "enemy",
+                    "icon": "bandit",
+                    "position": {"col": 7, "row": 1},
+                    "description": "Pres de la porte de quai. Evalue une fuite.",
+                },
+                {
+                    "id": "dock_gate",
+                    "name": "Porte de quai",
+                    "kind": "exit",
+                    "icon": "gate",
+                    "position": {"col": 7, "row": 1},
+                },
+            ],
+            "exits": [
+                {
+                    "id": "dock_gate",
+                    "label": "Porte de quai",
+                    "position": {"col": 7, "row": 1},
+                    "leads_to": "souk_streets",
+                },
+            ],
+        })
+
+        assert [poi["id"] for poi in layout["pois"]] == ["bandit_2"]
+
     async def test_pipeline_ignores_gm_damage_apply_in_combat(self) -> None:
         active = _make_combat_active()
         bus = _FakeBus()

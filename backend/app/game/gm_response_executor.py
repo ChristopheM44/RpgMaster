@@ -7,6 +7,7 @@ retourne les jets en attente pour une narration d'outcome.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field
@@ -581,6 +582,12 @@ class GMResponseExecutor:
                 if position is not None:
                     layout["party_positions"][str(char_id)] = position
 
+        layout["pois"] = [
+            poi
+            for poi in layout["pois"]
+            if not cls._is_duplicate_exit_poi(poi, layout["exits"])
+        ]
+
         return layout
 
     @classmethod
@@ -621,6 +628,50 @@ class GMResponseExecutor:
                 break
 
         return interactions
+
+    @classmethod
+    def _is_duplicate_exit_poi(
+        cls,
+        poi: dict[str, Any],
+        exits: list[dict[str, Any]],
+    ) -> bool:
+        if not cls._is_exit_like_scene_poi(poi):
+            return False
+        return any(
+            exit_data.get("id") == poi.get("id")
+            or cls._positions_equal(exit_data.get("position"), poi.get("position"))
+            for exit_data in exits
+        )
+
+    @staticmethod
+    def _is_exit_like_scene_poi(poi: dict[str, Any]) -> bool:
+        searchable = " ".join(
+            str(poi.get(key, ""))
+            for key in ("id", "name", "kind", "icon")
+        ).casefold()
+        normalized = re.sub(r"[^a-z0-9_ -]+", " ", searchable)
+        tokens = set(normalized.replace("_", " ").replace("-", " ").split())
+        return bool(tokens & {
+            "exit",
+            "sortie",
+            "issue",
+            "door",
+            "porte",
+            "gate",
+            "portail",
+            "grille",
+            "sas",
+            "passage",
+            "secret",
+            "hidden",
+            "cache",
+        })
+
+    @staticmethod
+    def _positions_equal(first: Any, second: Any) -> bool:
+        if not isinstance(first, dict) or not isinstance(second, dict):
+            return False
+        return first.get("col") == second.get("col") and first.get("row") == second.get("row")
 
     @staticmethod
     def _clean_optional_text(value: Any, max_len: int = 220) -> str:

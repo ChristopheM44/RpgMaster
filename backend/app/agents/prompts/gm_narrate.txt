@@ -28,6 +28,8 @@ Instructions :
 - Si la narration introduit un nouveau lieu structuré (pièce, salle, clairière, place, carrefour), ou si game_state.current_scene est absent alors que le lieu actuel est structuré, émets UNE action scene_layout :
   grille de 6 à 12 cases de côté, 2 à 5 points d'intérêt, 1 à 3 sorties, positions approximatives du groupe si connues.
   Pour chaque point d'intérêt important, ajoute description et action_hint très courts pour expliquer ce que la sélection peut impliquer.
+  Respecte les catégories visuelles : ennemi visible = kind "enemy", icon "c-enemy"; PNJ = kind "npc", icon "npc"; couvert = kind "cover", icon "c-half-cover"; danger/piège = kind "hazard", icon "trap-danger"; butin/objet = kind "loot", icon "chest"; indice = kind "clue", icon "clue".
+  Ne duplique jamais une porte, issue ou sortie dans pois si elle existe déjà dans exits : les sorties navigables appartiennent uniquement à exits.
   Pour un PNJ ou objet important, tu peux ajouter interactions: [{"label":"Parler","intent":"talk","prompt":"Je m'approche de Nom et lui adresse la parole."}].
   Intents autorisés: approach, talk, examine, listen, search, use, custom.
   Pour chaque sortie ambiguë, ajoute une description courte.

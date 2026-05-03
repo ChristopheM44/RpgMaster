@@ -44,6 +44,21 @@ export type RpgMapIconId = typeof RPG_MAP_ICON_IDS[number]
 export type RpgMapIconVariant = 'color' | 'mono'
 export type RpgMapIconState = 'normal' | 'hover' | 'active' | 'disabled'
 export type RpgMapIconCategory = 'exploration' | 'combat-ally' | 'combat-enemy' | 'combat-terrain'
+export type PoiSemanticRole =
+  | 'enemy'
+  | 'npc'
+  | 'hazard'
+  | 'cover'
+  | 'loot'
+  | 'exit'
+  | 'passage'
+  | 'clue'
+  | 'fog'
+  | 'light'
+  | 'ruins'
+  | 'safe'
+  | 'unknown'
+  | 'point'
 
 export interface RpgMapIconDefinition {
   id: RpgMapIconId
@@ -72,6 +87,19 @@ const COMBAT_ICON_IDS = RPG_MAP_ICON_IDS.filter((id) => id.startsWith('c-'))
 const iconIdSet = new Set<string>(RPG_MAP_ICON_IDS)
 const explorationIconIdSet = new Set<string>(EXPLORATION_ICON_IDS)
 const combatIconIdSet = new Set<string>(COMBAT_ICON_IDS)
+const poiCompatibleCombatIconIdSet = new Set<RpgMapIconId>([
+  'c-enemy',
+  'c-enemy-elite',
+  'c-enemy-defeated',
+  'c-enemy-flee',
+  'c-enemy-surrender',
+  'c-body-down',
+  'c-obstacle',
+  'c-half-cover',
+  'c-full-cover',
+  'c-difficult',
+  'c-danger-zone',
+])
 
 const colorIconModules = import.meta.glob('@rpg-icons/color/*.svg', {
   eager: true,
@@ -104,18 +132,30 @@ export function resolveRpgMapIcon(value: unknown, fallback: RpgMapIconId = 'poi'
 }
 
 export function iconForPoi(poi: PointOfInterest): RpgMapIconId {
-  const iconHint = normalizeText(poi.icon)
-  const directIcon = toKnownExplorationIconId(poi.icon)
+  const kindRole = roleFromKind(poi.kind)
+  if (kindRole) return iconForPoiRole(kindRole, poi)
+
+  const directIcon = toKnownPoiIconId(poi.icon)
   if (directIcon) return directIcon
 
-  const iconKeyword = iconHint ? matchPoiKeyword(iconHint) : null
-  if (iconKeyword) return iconKeyword
+  const iconRole = roleFromText(poi.icon)
+  if (iconRole) return iconForPoiRole(iconRole, poi)
 
-  const directKind = toKnownExplorationIconId(poi.kind)
-  if (directKind) return directKind
+  const nameRole = roleFromText(poi.name)
+  if (nameRole) return iconForPoiRole(nameRole, poi)
 
-  const search = normalizeText([poi.kind, poi.icon, poi.name, poi.description].filter(Boolean).join(' '))
-  return matchPoiKeyword(search) ?? 'poi'
+  const descriptionRole = roleFromText(poi.description)
+  if (descriptionRole) return iconForPoiRole(descriptionRole, poi)
+
+  return 'poi'
+}
+
+export function semanticRoleForPoi(poi: PointOfInterest): PoiSemanticRole {
+  return roleFromKind(poi.kind)
+    ?? roleFromText(poi.icon)
+    ?? roleFromText(poi.name)
+    ?? roleFromText(poi.description)
+    ?? 'point'
 }
 
 export function iconForExit(exit: SceneExit): RpgMapIconId {
@@ -225,24 +265,93 @@ function toKnownCombatIconId(value: unknown): RpgMapIconId | null {
   return iconId && combatIconIdSet.has(iconId) ? iconId : null
 }
 
+function toKnownPoiIconId(value: unknown): RpgMapIconId | null {
+  const iconId = toKnownIconId(value)
+  if (!iconId) return null
+  if (explorationIconIdSet.has(iconId) || poiCompatibleCombatIconIdSet.has(iconId)) return iconId
+  return null
+}
+
 function toKnownCategory(value: string): RpgMapIconCategory {
   if (value === 'combat-ally' || value === 'combat-enemy' || value === 'combat-terrain') return value
   return 'exploration'
 }
 
-function matchPoiKeyword(search: string): RpgMapIconId | null {
-  if (containsAny(search, ['mist', 'fog', 'brume', 'brouillard', 'smoke', 'fumee'])) return 'fog'
-  if (containsAny(search, ['secret', 'hidden', 'cache', 'passage'])) return 'secret-passage'
-  if (containsAny(search, ['door', 'porte', 'gate', 'portail'])) return 'door'
-  if (containsAny(search, ['trap', 'danger', 'hazard', 'piege', 'menace'])) return 'trap-danger'
-  if (containsAny(search, ['clue', 'indice', 'hint', 'trace', 'examiner', 'investigate'])) return 'clue'
-  if (containsAny(search, ['lantern', 'light', 'lumiere', 'torch', 'torche'])) return 'light'
-  if (containsAny(search, ['rubble', 'ruin', 'ruins', 'debris', 'gravats', 'obstacle'])) return 'ruins'
-  if (containsAny(search, ['chest', 'coffre', 'loot', 'treasure', 'tresor', 'item', 'objet'])) return 'chest'
-  if (containsAny(search, ['npc', 'pnj', 'villager', 'merchant', 'marchand'])) return 'npc'
-  if (containsAny(search, ['safe', 'refuge', 'rest', 'camp', 'sanctuary', 'sur'])) return 'safe-zone'
-  if (containsAny(search, ['unknown', 'inconnu', 'mystery', 'mystere'])) return 'unknown-zone'
+function roleFromKind(value: unknown): PoiSemanticRole | null {
+  return roleFromText(value, true)
+}
+
+function roleFromText(value: unknown, explicitKind = false): PoiSemanticRole | null {
+  const search = normalizeText(value)
+  if (!search) return null
+
+  if (matchesAny(search, ['enemy', 'enemies', 'hostile', 'foe', 'monster', 'adversaire', 'ennemi', 'bandit', 'cultist', 'cultiste', 'zhentarim'])) return 'enemy'
+  if (matchesAny(search, ['npc', 'pnj', 'personnage', 'villager', 'merchant', 'marchand', 'spy', 'espion', 'emissaire'])) return 'npc'
+  if (matchesAny(search, ['hazard', 'danger', 'trap', 'piege', 'menace', 'staircase', 'stairs', 'escalier', 'trappe'])) return 'hazard'
+  if (matchesAny(search, ['cover', 'couvert', 'half cover', 'full cover', 'barrel', 'barrels', 'baril', 'tonneau', 'tonneaux', 'barricade', 'crate', 'caisse'])) return 'cover'
+  if (matchesAny(search, ['loot', 'chest', 'coffre', 'treasure', 'tresor', 'item', 'objet'])) return 'loot'
+  if (matchesAny(search, ['secret', 'hidden', 'cache', 'passage'])) return 'passage'
+  if (matchesAny(search, ['exit', 'sortie', 'issue', 'door', 'porte', 'gate', 'portail', 'grille', 'sas'])) return 'exit'
+  if (matchesAny(search, ['clue', 'indice', 'hint', 'trace', 'investigate', 'examiner'])) return 'clue'
+  if (matchesAny(search, ['mist', 'fog', 'brume', 'brouillard', 'smoke', 'fumee'])) return 'fog'
+  if (matchesAny(search, ['lantern', 'light', 'lumiere', 'torch', 'torche'])) return 'light'
+  if (matchesAny(search, ['rubble', 'ruin', 'ruins', 'debris', 'gravats', 'obstacle'])) return explicitKind ? 'cover' : 'ruins'
+  if (matchesAny(search, ['safe', 'refuge', 'rest', 'camp', 'sanctuary', 'sanctuaire'])) return 'safe'
+  if (matchesAny(search, ['unknown', 'inconnu', 'mystery', 'mystere'])) return 'unknown'
   return null
+}
+
+function iconForPoiRole(role: PoiSemanticRole, poi: PointOfInterest): RpgMapIconId {
+  switch (role) {
+    case 'enemy':
+      return 'c-enemy'
+    case 'npc':
+      return 'npc'
+    case 'hazard':
+      return 'trap-danger'
+    case 'cover':
+      return coverIconForPoi(poi)
+    case 'loot':
+      return 'chest'
+    case 'exit':
+      return exitIconForPoi(poi)
+    case 'passage':
+      return passageIconForPoi(poi)
+    case 'clue':
+      return 'clue'
+    case 'fog':
+      return 'fog'
+    case 'light':
+      return 'light'
+    case 'ruins':
+      return 'ruins'
+    case 'safe':
+      return 'safe-zone'
+    case 'unknown':
+      return 'unknown-zone'
+    case 'point':
+      return 'poi'
+  }
+}
+
+function coverIconForPoi(poi: PointOfInterest): RpgMapIconId {
+  const search = normalizeText([poi.kind, poi.icon, poi.name].filter(Boolean).join(' '))
+  if (matchesAny(search, ['full cover', 'couvert lourd', 'total cover'])) return 'c-full-cover'
+  if (matchesAny(search, ['obstacle', 'blocked', 'block', 'mur', 'wall'])) return 'c-obstacle'
+  return 'c-half-cover'
+}
+
+function exitIconForPoi(poi: PointOfInterest): RpgMapIconId {
+  const search = normalizeText([poi.kind, poi.icon, poi.name].filter(Boolean).join(' '))
+  if (matchesAny(search, ['secret', 'hidden', 'cache', 'passage'])) return 'secret-passage'
+  if (matchesAny(search, ['door', 'porte', 'gate', 'portail', 'grille', 'sas'])) return 'door'
+  return 'exit-dir'
+}
+
+function passageIconForPoi(poi: PointOfInterest): RpgMapIconId {
+  const search = normalizeText([poi.kind, poi.icon, poi.name].filter(Boolean).join(' '))
+  if (matchesAny(search, ['door', 'porte', 'gate', 'portail', 'grille', 'sas'])) return 'door'
+  return 'secret-passage'
 }
 
 function isEliteCombatant(combatant: CombatantState): boolean {
@@ -264,6 +373,16 @@ function containsAny(search: string, needles: string[]): boolean {
   return needles.some((needle) => search.includes(normalizeText(needle)))
 }
 
+function matchesAny(search: string, needles: string[]): boolean {
+  const tokens = new Set(search.split(/\s+/).filter(Boolean))
+  return needles.some((needle) => {
+    const normalizedNeedle = normalizeText(needle)
+    if (!normalizedNeedle) return false
+    if (normalizedNeedle.includes(' ')) return ` ${search} `.includes(` ${normalizedNeedle} `)
+    return tokens.has(normalizedNeedle)
+  })
+}
+
 function normalizeText(value: unknown): string {
   if (typeof value !== 'string') return ''
   return value
@@ -271,5 +390,7 @@ function normalizeText(value: unknown): string {
     .replace(/\p{Diacritic}/gu, '')
     .toLowerCase()
     .replace(/[_-]+/g, ' ')
+    .replace(/[^a-z0-9\s]+/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim()
 }

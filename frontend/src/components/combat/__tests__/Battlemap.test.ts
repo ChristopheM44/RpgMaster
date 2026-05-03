@@ -66,6 +66,49 @@ const scene: SceneLayout = {
   },
 }
 
+const dockScene: SceneLayout = {
+  cols: 10,
+  rows: 8,
+  cell_size_m: 1.5,
+  terrain: 'dock_ambush',
+  pois: [
+    {
+      id: 'bandit_2',
+      name: 'Bandit 2 (retrait)',
+      kind: 'enemy',
+      icon: 'bandit',
+      position: { col: 6, row: 2 },
+      description: 'Pres de la porte de quai. Evalue une fuite.',
+    },
+    {
+      id: 'barrels',
+      name: 'Tonnes de the',
+      kind: 'cover',
+      icon: 'barrel',
+      position: { col: 3, row: 4 },
+      description: "Barricade instable. Risque d'effondrement.",
+    },
+    {
+      id: 'dock_gate',
+      name: 'Porte de quai (issue)',
+      kind: 'exit',
+      icon: 'gate',
+      position: { col: 7, row: 1 },
+      description: 'Ouverte sur la ruelle.',
+    },
+  ],
+  exits: [
+    {
+      id: 'dock_gate',
+      label: 'Porte de quai (vers la ruelle)',
+      position: { col: 7, row: 1 },
+      leads_to: 'souk_streets',
+      description: 'Ouverte, mais surveillee par les dockers.',
+    },
+  ],
+  party_positions: {},
+}
+
 function combatant(overrides: Partial<CombatantState>): CombatantState {
   return {
     id: 'hero',
@@ -135,8 +178,8 @@ describe('Battlemap', () => {
     await wrapper.find('button[aria-label="Puits scellé"]').trigger('click')
 
     expect(wrapper.emitted('scenePoi')).toBeUndefined()
-    expect(wrapper.find('[data-testid="legend-icon-poi-well"][data-icon-id="fog"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="map-icon-poi-well"][data-icon-id="fog"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="legend-icon-poi-well"][data-icon-id="trap-danger"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="map-icon-poi-well"][data-icon-id="trap-danger"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('Une brume froide')
     expect(wrapper.text()).toContain('Observer à distance')
     expect(wrapper.text()).toContain('Contourner')
@@ -185,6 +228,22 @@ describe('Battlemap', () => {
         default: true,
       },
     ]])
+  })
+
+  it('renders hostile and cover POIs semantically and hides duplicate exit POIs', () => {
+    const wrapper = mount(Battlemap, {
+      props: {
+        mode: 'exploration',
+        sceneLayout: dockScene,
+      },
+    })
+
+    expect(wrapper.find('[data-testid="legend-icon-poi-bandit_2"][data-icon-id="c-enemy"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="map-icon-poi-bandit_2"][data-icon-id="c-enemy"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="legend-icon-poi-barrels"][data-icon-id="c-half-cover"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="legend-icon-exit-dock_gate"][data-icon-id="door"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="legend-icon-poi-dock_gate"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="map-icon-poi-dock_gate"]').exists()).toBe(false)
   })
 
   it('merges custom POI interactions with defaults and prioritizes custom intents', async () => {

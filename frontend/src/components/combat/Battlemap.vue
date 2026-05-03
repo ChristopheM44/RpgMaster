@@ -13,6 +13,7 @@ import {
   iconForExit,
   iconForPartyMember,
   iconForPoi,
+  semanticRoleForPoi,
   type RpgMapIconId,
   type RpgMapIconState,
 } from '../../icons/rpgMapIcons'
@@ -122,9 +123,14 @@ const exitMap = computed(() => {
   return map
 })
 
+const displayPois = computed(() => {
+  const exits = activeScene.value?.exits ?? []
+  return (activeScene.value?.pois ?? []).filter((poi) => !isDuplicateExitPoi(poi, exits))
+})
+
 const poiMap = computed(() => {
   const map: Record<string, PointOfInterest> = {}
-  for (const poi of activeScene.value?.pois ?? []) {
+  for (const poi of displayPois.value) {
     if (poi.position) map[positionKey(poi.position)] = poi
   }
   return map
@@ -202,7 +208,7 @@ const activeModeLabel = computed(() => {
 
 const summary = computed(() => {
   if (isExploration.value) {
-    const pois = activeScene.value?.pois.length ?? 0
+    const pois = displayPois.value.length
     const exits = activeScene.value?.exits.length ?? 0
     const party = partyMarkers.value.length
     return `${party} héros · ${pois} repères · ${exits} sorties`
@@ -252,7 +258,7 @@ const legendEntries = computed<LegendEntry[]>(() => {
         tone: 'teal' as const,
         position: exit.position,
       })),
-      ...(activeScene.value?.pois ?? []).map((poi) => ({
+      ...displayPois.value.map((poi) => ({
         id: `poi-${poi.id}`,
         kind: 'poi' as const,
         label: poi.name,
@@ -416,16 +422,30 @@ function cellBoxStyle(position: GridPosition) {
   }
 }
 
+function isDuplicateExitPoi(poi: PointOfInterest, exits: SceneExit[]): boolean {
+  const role = semanticRoleForPoi(poi)
+  if (role !== 'exit' && role !== 'passage') return false
+  return exits.some((exit) =>
+    exit.id === poi.id
+    || Boolean(exit.position && positionKey(exit.position) === positionKey(poi.position)),
+  )
+}
+
 function toneForPoi(poi: PointOfInterest): LegendEntry['tone'] {
-  const key = `${poi.kind} ${poi.icon ?? ''}`.toLowerCase()
-  if (key.includes('hazard') || key.includes('danger') || key.includes('trap')) return 'blood'
-  if (key.includes('passage')) return 'teal'
-  if (key.includes('clue') || key.includes('indice')) return 'arcane'
+  const role = semanticRoleForPoi(poi)
+  if (role === 'enemy' || role === 'hazard') return 'blood'
+  if (role === 'npc' || role === 'exit' || role === 'passage') return 'teal'
+  if (role === 'clue') return 'arcane'
+  if (role === 'cover' || role === 'unknown' || role === 'fog') return 'muted'
+  if (role === 'safe') return 'green'
   return 'gold'
 }
 
 function defaultPoiDescription(poi: PointOfInterest): string {
   const kind = poi.kind.replaceAll('_', ' ')
+  const role = semanticRoleForPoi(poi)
+  if (role === 'enemy') return `${poi.name} représente une présence hostile à surveiller avant d'agir.`
+  if (role === 'cover') return `${poi.name} peut servir de couvert ou gêner les déplacements.`
   if (toneForPoi(poi) === 'blood') return `${poi.name} semble pouvoir poser un risque. Inspectez avant d'agir.`
   if (kind.includes('passage')) return `${poi.name} peut indiquer un passage ou une ligne de fuite.`
   if (kind.includes('clue') || kind.includes('indice')) return `${poi.name} mérite une observation attentive.`
@@ -614,7 +634,7 @@ function handleCellClick(col: number, row: number) {
 function selectLegend(entry: LegendEntry) {
   if (!entry.position) return
   if (entry.kind === 'poi') {
-    const poi = (activeScene.value?.pois ?? []).find((p) => p.position && positionKey(p.position) === positionKey(entry.position!))
+    const poi = displayPois.value.find((p) => p.position && positionKey(p.position) === positionKey(entry.position!))
     if (poi) selectPoi(poi)
   } else if (entry.kind === 'exit') {
     const exit = (activeScene.value?.exits ?? []).find((e) => e.position && positionKey(e.position) === positionKey(entry.position!))
@@ -811,7 +831,7 @@ function markerToneStyle(tone: LegendEntry['tone']) {
 
           <template v-if="isExploration">
             <button
-              v-for="poi in activeScene?.pois ?? []"
+              v-for="poi in displayPois"
               :key="`poi-${poi.id}`"
               class="absolute z-40 flex h-9 w-9 items-center justify-center rounded-lg border shadow-[0_8px_18px_rgba(0,0,0,0.35)] transition hover:scale-105"
               :style="{ ...markerStyle(poi.position), ...markerToneStyle(toneForPoi(poi)) }"

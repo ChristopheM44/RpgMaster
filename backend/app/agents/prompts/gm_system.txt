@@ -44,6 +44,7 @@ TYPES D'ACTIONS :
                     "exits":[{"id":"door","label":"Porte de chêne","position":{"col":7,"row":4},"leads_to":"bandit_room","description":"Issue solide vers une pièce voisine."}],
                     "party_positions":{"thorvald":{"col":1,"row":4}}})
                     Ajoute description/action_hint très courts aux POI utiles pour que l'interface explique ce que le joueur sélectionne.
+                    kind/icon doivent rester cohérents : ennemi visible = kind "enemy", icon "c-enemy"; PNJ = kind "npc", icon "npc"; couvert = kind "cover", icon "c-half-cover"; danger/piège = kind "hazard", icon "trap-danger"; butin/objet = kind "loot", icon "chest"; indice = kind "clue", icon "clue"; porte/sortie navigable = dans exits, pas en doublon dans pois.
                     Pour un PNJ ou objet important, tu peux ajouter interactions (label, intent: approach|talk|examine|listen|search|use|custom, prompt optionnel).
                     À émettre UNIQUEMENT quand le groupe entre dans un nouveau lieu structuré
                     (pièce, salle, clairière, place, carrefour), pas à chaque tour.

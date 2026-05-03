@@ -5,6 +5,7 @@ import type {
 } from '../types'
 import {
   isRpgMapIconId,
+  semanticRoleForPoi,
   type RpgMapIconId,
 } from '../icons/rpgMapIcons'
 
@@ -71,7 +72,16 @@ export function buildScenePoiInteractionPrompt(
 }
 
 function defaultInteractionsForPoi(poi: PointOfInterest): ResolvedScenePoiInteraction[] {
-  if (isNpcPoi(poi)) {
+  const role = semanticRoleForPoi(poi)
+
+  if (role === 'enemy') {
+    return [
+      makeInteraction('examine', 'Observer', 'clue'),
+      makeInteraction('approach', 'Se diriger vers', 'exit-dir'),
+    ]
+  }
+
+  if (role === 'npc') {
     return [
       makeInteraction('approach', 'Se diriger vers', 'exit-dir'),
       makeInteraction('talk', 'Parler', 'npc'),
@@ -80,27 +90,32 @@ function defaultInteractionsForPoi(poi: PointOfInterest): ResolvedScenePoiIntera
     ]
   }
 
-  const key = searchableText(poi)
-  if (containsAny(key, ['hazard', 'danger', 'trap', 'piege', 'menace'])) {
+  if (role === 'hazard') {
     return [
       makeInteraction('examine', 'Observer à distance', 'trap-danger'),
       makeInteraction('approach', 'Contourner', 'exit-dir'),
     ]
   }
-  if (containsAny(key, ['chest', 'coffre', 'loot', 'treasure', 'tresor', 'item', 'objet'])) {
+  if (role === 'cover') {
+    return [
+      makeInteraction('approach', 'Se mettre à couvert', 'c-half-cover'),
+      makeInteraction('examine', 'Examiner', 'clue'),
+    ]
+  }
+  if (role === 'loot') {
     return [
       makeInteraction('examine', 'Examiner', 'clue'),
       makeInteraction('search', 'Fouiller', 'chest'),
       makeInteraction('use', 'Utiliser', 'door'),
     ]
   }
-  if (containsAny(key, ['clue', 'indice', 'hint', 'trace', 'examiner', 'investigate'])) {
+  if (role === 'clue') {
     return [
       makeInteraction('examine', 'Examiner', 'clue'),
       makeInteraction('search', 'Fouiller', 'poi'),
     ]
   }
-  if (containsAny(key, ['door', 'porte', 'gate', 'portail', 'passage', 'secret', 'hidden', 'cache'])) {
+  if (role === 'exit' || role === 'passage') {
     return [
       makeInteraction('approach', 'Se diriger vers', 'exit-dir'),
       makeInteraction('examine', 'Examiner', 'clue'),
@@ -185,25 +200,4 @@ function resolveInteractionIcon(icon: unknown, intent: ScenePoiInteractionIntent
     case 'custom':
       return 'poi'
   }
-}
-
-function isNpcPoi(poi: PointOfInterest): boolean {
-  return containsAny(searchableText(poi), ['npc', 'pnj', 'personnage', 'villager', 'merchant', 'marchand'])
-}
-
-function searchableText(poi: PointOfInterest): string {
-  return normalizeText([poi.kind, poi.icon, poi.name, poi.description].filter(Boolean).join(' '))
-}
-
-function containsAny(search: string, needles: string[]): boolean {
-  return needles.some((needle) => search.includes(normalizeText(needle)))
-}
-
-function normalizeText(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .toLowerCase()
-    .replace(/[_-]+/g, ' ')
-    .trim()
 }
