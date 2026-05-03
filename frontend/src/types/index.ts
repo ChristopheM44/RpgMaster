@@ -340,6 +340,8 @@ export interface PointOfInterest {
   kind: string
   position: GridPosition
   icon?: string
+  description?: string
+  action_hint?: string
 }
 
 export interface SceneExit {
@@ -347,6 +349,10 @@ export interface SceneExit {
   label: string
   position: GridPosition
   leads_to?: string
+  description?: string
+  icon?: string
+  kind?: string
+  type?: string
 }
 
 export interface SceneLayout {
@@ -457,7 +463,7 @@ export interface GridConfig {
 
 export interface GridDecoration {
   obstacles?: GridPosition[]
-  zones?: Array<{ id: string; name: string; cells: GridPosition[]; kind?: string }>
+  zones?: Array<{ id: string; name: string; cells: GridPosition[]; kind?: string; icon?: string; type?: string }>
 }
 
 export interface CombatantMovedPayload {

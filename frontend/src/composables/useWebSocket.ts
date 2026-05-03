@@ -122,6 +122,7 @@ export function useWebSocket(sessionId: string) {
         const p = msg.payload as CombatStartPayload
         gameStore.setCombatants(p.combatants)
         if (p.grid_config) gameStore.setGridConfig(p.grid_config)
+        gameStore.setGridDecoration(p.grid_decoration)
         break
       }
       case 'hp_changed': {

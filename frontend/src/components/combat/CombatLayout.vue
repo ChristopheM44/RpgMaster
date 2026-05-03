@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useCharacterStore } from '../../stores/character'
 import { useGameStore } from '../../stores/game'
 import NarrativeLog from '../narrative/NarrativeLog.vue'
@@ -22,6 +22,22 @@ const speedM = computed(() => {
   const movement = gameStore.combatants.find((c) => c.id === charStore.myCharacter?.id)?.action_economy?.movement
   return movement ? movement * 0.3048 : 9
 })
+
+type MapInteractionMode = 'inspect' | 'move' | 'attack' | 'spell'
+const mapMode = ref<MapInteractionMode>('inspect')
+
+function handleMapMove(col: number, row: number) {
+  emit('action', 'move', undefined, undefined, { col, row })
+  mapMode.value = 'inspect'
+}
+
+function handleMapTarget(targetId: string, mode: MapInteractionMode) {
+  gameStore.setSelectedCombatant(targetId)
+  if (mode === 'attack') {
+    emit('action', 'attack', undefined, targetId)
+    mapMode.value = 'inspect'
+  }
+}
 </script>
 
 <template>
@@ -34,7 +50,10 @@ const speedM = computed(() => {
           :my-character-id="charStore.myCharacter?.id"
           :is-my-turn="isMyTurn"
           :speed-m="speedM"
-          @move="(col, row) => emit('action', 'move', undefined, undefined, { col, row })"
+          :interaction-mode="mapMode"
+          @move="handleMapMove"
+          @target="handleMapTarget"
+          @mode-change="(mode) => { mapMode = mode }"
         />
       </div>
 
@@ -45,7 +64,11 @@ const speedM = computed(() => {
         <NarrativeLog />
       </section>
 
-      <ActionBar variant="combat-immersive" @action="(...args) => emit('action', ...args)" />
+      <ActionBar
+        variant="combat-immersive"
+        @action="(...args) => emit('action', ...args)"
+        @map-mode="(mode) => { mapMode = mode }"
+      />
     </main>
 
     <SelectedDetailPanel @open-sheet="(id) => emit('openSheet', id)" />

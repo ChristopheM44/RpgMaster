@@ -3,6 +3,8 @@ import { ref, computed } from 'vue'
 import { useGameStore } from '../../stores/game'
 import { useCharacterStore } from '../../stores/character'
 import SpellCastPanel from '../ui/SpellCastPanel.vue'
+import RpgMapIcon from './RpgMapIcon.vue'
+import type { RpgMapIconId } from '../../icons/rpgMapIcons'
 
 const props = withDefaults(defineProps<{
   variant?: 'default' | 'combat-immersive'
@@ -12,6 +14,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   action: [actionType: string, content?: string, targetId?: string, extra?: Record<string, unknown>]
+  mapMode: [mode: 'inspect' | 'move' | 'attack' | 'spell']
 }>()
 
 const gameStore = useGameStore()
@@ -62,12 +65,12 @@ const aiCompanions = computed(() =>
   charStore.sessionCharacters.filter((c) => c.is_ai),
 )
 
-const combatActions = [
-  { label: 'Attaquer', type: 'attack', icon: '⚔', tone: 'tone-blood' },
-  { label: 'Sort', type: 'cast_spell', icon: '✦', tone: 'tone-arcane' },
-  { label: 'Objet', type: 'use_item', icon: '🎒', tone: 'tone-gold' },
-  { label: 'Foncer', type: 'move', icon: '💨', tone: 'tone-teal' },
-  { label: 'Fin du tour', type: 'end_turn', icon: '⏭', tone: 'tone-gold' },
+const combatActions: Array<{ label: string; type: string; iconId: RpgMapIconId; tone: string }> = [
+  { label: 'Attaquer', type: 'attack', iconId: 'c-atk-target', tone: 'tone-blood' },
+  { label: 'Sort', type: 'cast_spell', iconId: 'c-spell-target', tone: 'tone-arcane' },
+  { label: 'Objet', type: 'use_item', iconId: 'chest', tone: 'tone-gold' },
+  { label: 'Foncer', type: 'move', iconId: 'c-move-dest', tone: 'tone-teal' },
+  { label: 'Fin du tour', type: 'end_turn', iconId: 'c-active-turn', tone: 'tone-gold' },
 ]
 
 const canSend = computed(
@@ -111,11 +114,14 @@ const combatItems = computed(() => {
 function onCombatAction(actionType: string) {
   if (!canActNow.value) return
   if (actionType === 'cast_spell') {
+    emit('mapMode', 'spell')
     showSpellPanel.value = true
   } else if (actionType === 'attack') {
-    showTargetSelector.value = true
+    emit('mapMode', 'attack')
   } else if (actionType === 'use_item') {
     showItemPicker.value = true
+  } else if (actionType === 'move') {
+    emit('mapMode', 'move')
   } else {
     emit('action', actionType)
   }
@@ -365,10 +371,12 @@ function buildAddressingPayload(text: string): Record<string, unknown> | undefin
       <!-- Death save -->
       <template v-if="isDowned && isMyTurn">
         <button class="rpg-btn-tonal tone-blood !py-1 !text-[11px]" :disabled="!canSend" @click="onDeathSave">
-          💀 Jet de sauvegarde
+          <RpgMapIcon icon-id="c-body-down" :size="16" label="Corps à terre" />
+          Jet de sauvegarde
         </button>
         <button class="rpg-btn-secondary !py-1 !text-[11px]" :disabled="!canSend" @click="emit('action', 'end_turn')">
-          ⏭ Fin du tour
+          <RpgMapIcon icon-id="c-active-turn" :size="16" label="Fin du tour" />
+          Fin du tour
         </button>
       </template>
 
@@ -382,7 +390,13 @@ function buildAddressingPayload(text: string): Record<string, unknown> | undefin
           :disabled="!canActNow || !gameStore.connected || gameStore.isProcessing"
           @click="onCombatAction(action.type)"
         >
-          {{ action.icon }} {{ action.label }}
+          <RpgMapIcon
+            :icon-id="action.iconId"
+            :size="16"
+            :state="!canActNow || !gameStore.connected || gameStore.isProcessing ? 'disabled' : 'normal'"
+            :label="action.label"
+          />
+          {{ action.label }}
         </button>
 
         <template v-if="isMyTurn && downedAllies.length > 0">
@@ -392,7 +406,10 @@ function buildAddressingPayload(text: string): Record<string, unknown> | undefin
             class="rpg-btn-tonal tone-arcane !py-1 !text-[11px]"
             :disabled="!canSend"
             @click="onStabilize(ally.id)"
-          >🩹 Stabiliser {{ ally.name }}</button>
+          >
+            <RpgMapIcon icon-id="c-ally" :size="16" :label="`Stabiliser ${ally.name}`" />
+            Stabiliser {{ ally.name }}
+          </button>
         </template>
       </template>
     </div>

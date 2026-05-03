@@ -39,9 +39,10 @@ TYPES D'ACTIONS :
                     IMPORTANT : encounter_setup doit TOUJOURS précéder state_transition dans le tableau actions.
 - scene_layout    : fournir un schéma compact du lieu actuel pour l'interface d'exploration
                     (params: {"cols":8,"rows":8,"cell_size_m":1.5,"terrain":"stone_chamber",
-                    "pois":[{"id":"well","name":"Puits scellé","kind":"hazard","position":{"col":4,"row":4},"icon":"mist"}],
-                    "exits":[{"id":"door","label":"Porte de chêne","position":{"col":7,"row":4},"leads_to":"bandit_room"}],
+                    "pois":[{"id":"well","name":"Puits scellé","kind":"hazard","position":{"col":4,"row":4},"icon":"mist","description":"Brume froide et margelle instable.","action_hint":"Examiner avant de s'approcher."}],
+                    "exits":[{"id":"door","label":"Porte de chêne","position":{"col":7,"row":4},"leads_to":"bandit_room","description":"Issue solide vers une pièce voisine."}],
                     "party_positions":{"thorvald":{"col":1,"row":4}}})
+                    Ajoute description/action_hint très courts aux POI utiles pour que l'interface explique ce que le joueur sélectionne.
                     À émettre UNIQUEMENT quand le groupe entre dans un nouveau lieu structuré
                     (pièce, salle, clairière, place, carrefour), pas à chaque tour.
 - journal_update  : mettre à jour le carnet d'aventure (ne mettre que les champs qui changent)

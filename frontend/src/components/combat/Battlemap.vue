@@ -1,8 +1,58 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useCharacterStore } from '../../stores/character'
 import { useGameStore } from '../../stores/game'
-import type { CombatantState, GridPosition, PointOfInterest, SceneExit, SceneLayout } from '../../types'
+import RpgMapIcon from '../common/RpgMapIcon.vue'
+import {
+  iconForCombatZone,
+  iconForCombatant,
+  iconForExit,
+  iconForPartyMember,
+  iconForPoi,
+  type RpgMapIconId,
+  type RpgMapIconState,
+} from '../../icons/rpgMapIcons'
+import type {
+  CombatantState,
+  GridPosition,
+  PointOfInterest,
+  SceneExit,
+  SceneLayout,
+} from '../../types'
+
+type MapInteractionMode = 'inspect' | 'move' | 'attack' | 'spell'
+type MapZoom = 'normal' | 'large'
+type SelectionKind = 'poi' | 'exit' | 'party' | 'combatant' | 'move' | 'obstacle' | 'zone'
+
+interface SelectedThing {
+  kind: SelectionKind
+  id: string
+  name: string
+  position: GridPosition
+  description: string
+  meta?: string
+  actionLabel?: string
+  iconId: RpgMapIconId
+  iconLabel?: string
+}
+
+interface LegendEntry {
+  id: string
+  kind: SelectionKind | 'reachable'
+  label: string
+  detail: string
+  iconId: RpgMapIconId
+  tone: 'gold' | 'teal' | 'arcane' | 'blood' | 'green' | 'muted'
+  position?: GridPosition
+}
+
+interface PartyMarker {
+  id: string
+  name: string
+  position: GridPosition
+  token: string
+  iconId: RpgMapIconId
+}
 
 const props = withDefaults(defineProps<{
   mode?: 'combat' | 'exploration'
@@ -10,34 +60,50 @@ const props = withDefaults(defineProps<{
   myCharacterId?: string
   isMyTurn?: boolean
   speedM?: number
+  interactionMode?: MapInteractionMode
+  panelHeight?: string
 }>(), {
   mode: 'combat',
   sceneLayout: null,
+  interactionMode: 'inspect',
+  panelHeight: undefined,
 })
 
 const emit = defineEmits<{
   move: [col: number, row: number]
   sceneExit: [exitId: string, label: string]
+  scenePoi: [poiId: string, name: string]
+  target: [targetId: string, mode: MapInteractionMode]
+  modeChange: [mode: MapInteractionMode]
 }>()
 
 const gameStore = useGameStore()
 const charStore = useCharacterStore()
-const cellPx = 42
+
+const isCollapsed = ref(false)
+const isFullscreen = ref(false)
+const zoom = ref<MapZoom>('normal')
+const selected = ref<SelectedThing | null>(null)
 
 const isExploration = computed(() => props.mode === 'exploration')
 const activeScene = computed(() => props.sceneLayout ?? gameStore.currentScene)
+const storagePrefix = computed(() => `rpg.map.${props.mode}`)
 
 const cols = computed(() => isExploration.value ? activeScene.value?.cols ?? 8 : gameStore.gridConfig?.cols ?? 10)
 const rows = computed(() => isExploration.value ? activeScene.value?.rows ?? 8 : gameStore.gridConfig?.rows ?? 8)
 const cellSizeM = computed(() => isExploration.value ? activeScene.value?.cell_size_m ?? 1.5 : gameStore.gridConfig?.cell_size_m ?? 1.5)
-const mapTitle = computed(() => isExploration.value ? 'Carte de scène' : 'Battlemap')
+const cellPx = computed(() => {
+  if (isFullscreen.value) return zoom.value === 'large' ? 64 : 54
+  return zoom.value === 'large' ? 56 : 44
+})
+const mapTitle = computed(() => isExploration.value ? 'Carte de scène' : 'Battlemap tactique')
 const terrainLabel = computed(() => activeScene.value?.terrain?.replaceAll('_', ' ') ?? 'lieu actuel')
 
 const cellMap = computed(() => {
   const map: Record<string, CombatantState> = {}
   if (isExploration.value) return map
   for (const combatant of gameStore.combatants) {
-    if (combatant.position) map[`${combatant.position.col},${combatant.position.row}`] = combatant
+    if (combatant.position) map[positionKey(combatant.position)] = combatant
   }
   return map
 })
@@ -45,20 +111,40 @@ const cellMap = computed(() => {
 const exitMap = computed(() => {
   const map: Record<string, SceneExit> = {}
   for (const exit of activeScene.value?.exits ?? []) {
-    if (exit.position) map[`${exit.position.col},${exit.position.row}`] = exit
+    if (exit.position) map[positionKey(exit.position)] = exit
   }
   return map
 })
 
-const poiMarkers = computed(() => activeScene.value?.pois ?? [])
-const exitMarkers = computed(() => activeScene.value?.exits ?? [])
+const poiMap = computed(() => {
+  const map: Record<string, PointOfInterest> = {}
+  for (const poi of activeScene.value?.pois ?? []) {
+    if (poi.position) map[positionKey(poi.position)] = poi
+  }
+  return map
+})
 
-const partyMarkers = computed(() => {
+const partyMap = computed(() => {
+  const map: Record<string, PartyMarker> = {}
+  for (const marker of partyMarkers.value) map[positionKey(marker.position)] = marker
+  return map
+})
+
+const partyMarkers = computed<PartyMarker[]>(() => {
   const positions = activeScene.value?.party_positions ?? {}
   return Object.entries(positions).map(([id, position]) => {
     const character = charStore.sessionCharacters.find((c) => c.id === id)
     const name = character?.name ?? id.replaceAll('_', ' ')
-    return { id, name, position, token: tokenForName(name) }
+    return {
+      id,
+      name,
+      position,
+      token: tokenForName(name),
+      iconId: iconForPartyMember({
+        isCurrentPlayer: id === props.myCharacterId,
+        isAi: Boolean(character?.is_ai),
+      }),
+    }
   })
 })
 
@@ -73,9 +159,10 @@ const reachableCells = computed((): Set<string> => {
   const result = new Set<string>()
   for (let row = 0; row < rows.value; row++) {
     for (let col = 0; col < cols.value; col++) {
-      const key = `${col},${row}`
-      if (cellMap.value[key]) continue
-      const dist = Math.max(Math.abs(col - myPos.value.col), Math.abs(row - myPos.value.row))
+      const position = { col, row }
+      const key = positionKey(position)
+      if (cellMap.value[key] || obstacleSet.value.has(key)) continue
+      const dist = distanceCells(myPos.value, position)
       if (dist > 0 && dist <= maxCells) result.add(key)
     }
   }
@@ -89,20 +176,188 @@ const gridCells = computed(() =>
   })),
 )
 
+const obstacles = computed(() => isExploration.value ? [] : gameStore.gridDecoration?.obstacles ?? [])
+const zones = computed(() => isExploration.value ? [] : gameStore.gridDecoration?.zones ?? [])
+const obstacleSet = computed(() => new Set(obstacles.value.map(positionKey)))
+const zoneByCell = computed(() => {
+  const map: Record<string, { id: string; name: string; kind?: string; icon?: string; type?: string }> = {}
+  for (const zone of zones.value) {
+    for (const cell of zone.cells) map[positionKey(cell)] = zone
+  }
+  return map
+})
+
+const activeModeLabel = computed(() => {
+  if (props.interactionMode === 'attack') return 'Ciblage attaque'
+  if (props.interactionMode === 'spell') return 'Ciblage sort'
+  if (props.interactionMode === 'move') return 'Déplacement'
+  return 'Inspection'
+})
+
+const summary = computed(() => {
+  if (isExploration.value) {
+    const pois = activeScene.value?.pois.length ?? 0
+    const exits = activeScene.value?.exits.length ?? 0
+    const party = partyMarkers.value.length
+    return `${party} héros · ${pois} repères · ${exits} sorties`
+  }
+  const enemies = gameStore.combatants.filter((c) => c.kind === 'monster' && c.hp_current > 0).length
+  const allies = gameStore.combatants.filter((c) => c.kind === 'pc').length
+  return `${allies} alliés · ${enemies} ennemis · ${reachableCells.value.size} cases accessibles`
+})
+
 const mapBackground = computed(() => {
   if (isExploration.value) {
     return `
       radial-gradient(circle at 52% 48%, rgba(247,199,107,0.18), transparent 16%),
-      radial-gradient(circle at 78% 35%, rgba(90,138,111,0.18), transparent 24%),
-      linear-gradient(180deg, rgba(63,55,44,0.68), rgba(20,22,21,0.98))
+      radial-gradient(circle at 78% 35%, rgba(79,216,192,0.16), transparent 24%),
+      linear-gradient(180deg, rgba(63,55,44,0.72), rgba(20,22,21,0.98))
     `
   }
   return `
     radial-gradient(circle at 78% 42%, rgba(247,199,107,0.16), transparent 13%),
-    radial-gradient(circle at 35% 35%, rgba(192,144,255,0.08), transparent 30%),
-    linear-gradient(180deg, rgba(78,49,36,0.42), rgba(21,19,25,0.98))
+    radial-gradient(circle at 35% 35%, rgba(232,69,69,0.12), transparent 30%),
+    linear-gradient(180deg, rgba(78,49,36,0.45), rgba(21,19,25,0.98))
   `
 })
+
+const legendEntries = computed<LegendEntry[]>(() => {
+  if (isExploration.value) {
+    return [
+      ...partyMarkers.value.map((marker) => ({
+        id: `party-${marker.id}`,
+        kind: 'party' as const,
+        label: marker.name,
+        detail: marker.id === props.myCharacterId
+          ? 'Position du joueur'
+          : marker.iconId === 'ai-companion' ? 'Compagnon IA' : 'Membre du groupe',
+        iconId: marker.iconId,
+        tone: marker.id === props.myCharacterId
+          ? 'gold' as const
+          : marker.iconId === 'ai-companion' ? 'arcane' as const : 'teal' as const,
+        position: marker.position,
+      })),
+      ...(activeScene.value?.exits ?? []).map((exit) => ({
+        id: `exit-${exit.id}`,
+        kind: 'exit' as const,
+        label: exit.label,
+        detail: exit.description || (exit.leads_to ? `Vers ${exit.leads_to}` : 'Sortie possible'),
+        iconId: iconForExit(exit),
+        tone: 'teal' as const,
+        position: exit.position,
+      })),
+      ...(activeScene.value?.pois ?? []).map((poi) => ({
+        id: `poi-${poi.id}`,
+        kind: 'poi' as const,
+        label: poi.name,
+        detail: poi.description || defaultPoiDescription(poi),
+        iconId: iconForPoi(poi),
+        tone: toneForPoi(poi),
+        position: poi.position,
+      })),
+    ]
+  }
+
+  const combatants = gameStore.combatants.map((combatant) => ({
+    id: `combatant-${combatant.id}`,
+    kind: 'combatant' as const,
+    label: combatant.name,
+    detail: combatant.kind === 'monster'
+      ? `Ennemi · PV ${combatant.hp_current}/${combatant.hp_max}`
+      : `Allié · PV ${combatant.hp_current}/${combatant.hp_max}`,
+    iconId: iconForCombatant(combatant),
+    tone: combatant.kind === 'monster' ? 'blood' as const : 'arcane' as const,
+    position: combatant.position,
+  })).filter((entry) => entry.position)
+
+  const zoneEntries = zones.value.map((zone) => ({
+    id: `zone-${zone.id}`,
+    kind: 'zone' as const,
+    label: zone.name,
+    detail: zone.kind ? `Zone ${zone.kind}` : 'Zone tactique',
+    iconId: iconForCombatZone(zone),
+    tone: 'gold' as const,
+    position: zone.cells[0],
+  })).filter((entry) => entry.position)
+
+  return [
+    ...combatants,
+    ...zoneEntries,
+    ...(obstacles.value.length
+      ? [{
+          id: 'obstacles',
+          kind: 'obstacle' as const,
+          label: 'Obstacles',
+          detail: `${obstacles.value.length} case${obstacles.value.length > 1 ? 's' : ''}`,
+          iconId: 'c-obstacle' as const,
+          tone: 'muted' as const,
+          position: obstacles.value[0],
+        }]
+      : []),
+    ...(reachableCells.value.size
+      ? [{
+          id: 'reachable',
+          kind: 'reachable' as const,
+          label: 'Déplacement',
+          detail: `${reachableCells.value.size} cases accessibles`,
+          iconId: 'c-move-tile' as const,
+          tone: 'green' as const,
+        }]
+      : []),
+  ]
+})
+
+onMounted(loadPreferences)
+
+watch(storagePrefix, () => {
+  selected.value = null
+  loadPreferences()
+})
+
+watch(
+  () => [cols.value, rows.value, props.mode],
+  () => {
+    selected.value = null
+  },
+)
+
+watch([isCollapsed, zoom], () => {
+  savePreference('collapsed', isCollapsed.value ? '1' : '0')
+  savePreference('zoom', zoom.value)
+})
+
+function loadPreferences() {
+  isCollapsed.value = readPreference('collapsed') === '1'
+  zoom.value = readPreference('zoom') === 'large' ? 'large' : 'normal'
+}
+
+function readPreference(key: string): string | null {
+  try {
+    return window.localStorage.getItem(`${storagePrefix.value}.${key}`)
+  } catch {
+    return null
+  }
+}
+
+function savePreference(key: string, value: string) {
+  try {
+    window.localStorage.setItem(`${storagePrefix.value}.${key}`, value)
+  } catch {
+    // localStorage can be unavailable in private contexts.
+  }
+}
+
+function positionKey(position: GridPosition): string {
+  return `${position.col},${position.row}`
+}
+
+function distanceCells(a: GridPosition, b: GridPosition): number {
+  return Math.max(Math.abs(a.col - b.col), Math.abs(a.row - b.row))
+}
+
+function formatMeters(value: number): string {
+  return Number.isInteger(value) ? `${value} m` : `${value.toFixed(1)} m`
+}
 
 function hpPct(cur: number, max: number): number {
   return Math.max(0, max > 0 ? (cur / max) * 100 : 0)
@@ -129,167 +384,648 @@ function tokenBackground(combatant: CombatantState): string {
   return 'radial-gradient(circle at 35% 25%, rgba(255,255,255,0.28), var(--color-arcane) 58%, var(--color-ember))'
 }
 
-function markerStyle(position: GridPosition) {
-  const col = Math.max(0, Math.min(position.col, cols.value - 1))
-  const row = Math.max(0, Math.min(position.row, rows.value - 1))
+function clampPosition(position: GridPosition): GridPosition {
   return {
-    left: `${col * cellPx + cellPx / 2}px`,
-    top: `${row * cellPx + cellPx / 2}px`,
+    col: Math.max(0, Math.min(position.col, cols.value - 1)),
+    row: Math.max(0, Math.min(position.row, rows.value - 1)),
+  }
+}
+
+function markerStyle(position: GridPosition) {
+  const clamped = clampPosition(position)
+  return {
+    left: `${clamped.col * cellPx.value + cellPx.value / 2}px`,
+    top: `${clamped.row * cellPx.value + cellPx.value / 2}px`,
     transform: 'translate(-50%, -50%)',
   }
 }
 
-function poiGlyph(poi: PointOfInterest): string {
-  const key = `${poi.icon ?? poi.kind}`.toLowerCase()
-  if (key.includes('mist')) return '≋'
-  if (key.includes('rubble') || key.includes('ruin')) return '▧'
-  if (key.includes('lantern') || key.includes('light')) return '✦'
-  if (key.includes('hazard')) return '!'
-  if (key.includes('passage')) return '↗'
-  if (key.includes('clue')) return '?'
-  return '•'
+function cellBoxStyle(position: GridPosition) {
+  const clamped = clampPosition(position)
+  return {
+    left: `${clamped.col * cellPx.value}px`,
+    top: `${clamped.row * cellPx.value}px`,
+    width: `${cellPx.value}px`,
+    height: `${cellPx.value}px`,
+  }
+}
+
+function toneForPoi(poi: PointOfInterest): LegendEntry['tone'] {
+  const key = `${poi.kind} ${poi.icon ?? ''}`.toLowerCase()
+  if (key.includes('hazard') || key.includes('danger') || key.includes('trap')) return 'blood'
+  if (key.includes('passage')) return 'teal'
+  if (key.includes('clue') || key.includes('indice')) return 'arcane'
+  return 'gold'
+}
+
+function defaultPoiDescription(poi: PointOfInterest): string {
+  const kind = poi.kind.replaceAll('_', ' ')
+  if (toneForPoi(poi) === 'blood') return `${poi.name} semble pouvoir poser un risque. Inspectez avant d'agir.`
+  if (kind.includes('passage')) return `${poi.name} peut indiquer un passage ou une ligne de fuite.`
+  if (kind.includes('clue') || kind.includes('indice')) return `${poi.name} mérite une observation attentive.`
+  return `${poi.name} est un repère notable de la scène.`
+}
+
+function selectPoi(poi: PointOfInterest) {
+  selected.value = {
+    kind: 'poi',
+    id: poi.id,
+    name: poi.name,
+    position: poi.position,
+    description: poi.description || defaultPoiDescription(poi),
+    meta: poi.kind.replaceAll('_', ' '),
+    actionLabel: 'Examiner',
+    iconId: iconForPoi(poi),
+    iconLabel: poi.name,
+  }
+}
+
+function selectExit(exit: SceneExit) {
+  selected.value = {
+    kind: 'exit',
+    id: exit.id,
+    name: exit.label,
+    position: exit.position,
+    description: exit.description || (exit.leads_to ? `Cette sortie semble mener vers ${exit.leads_to}.` : 'Cette sortie permet de changer de zone.'),
+    meta: exit.leads_to ? `Destination : ${exit.leads_to}` : 'Sortie',
+    actionLabel: "S'y diriger",
+    iconId: iconForExit(exit),
+    iconLabel: exit.label,
+  }
+}
+
+function selectParty(marker: PartyMarker) {
+  selected.value = {
+    kind: 'party',
+    id: marker.id,
+    name: marker.name,
+    position: marker.position,
+    description: marker.id === props.myCharacterId
+      ? 'Votre position actuelle dans la scène.'
+      : marker.iconId === 'ai-companion'
+        ? 'Un compagnon IA présent dans la scène.'
+        : 'Un membre du groupe présent dans la scène.',
+    meta: 'Groupe',
+    iconId: marker.iconId,
+    iconLabel: marker.name,
+  }
+}
+
+function selectCombatant(combatant: CombatantState) {
+  gameStore.setSelectedCombatant(combatant.id)
+  const isTarget = canTargetCombatant(combatant)
+  selected.value = {
+    kind: 'combatant',
+    id: combatant.id,
+    name: combatant.name,
+    position: combatant.position ?? { col: 0, row: 0 },
+    description: combatant.kind === 'monster'
+      ? `${combatant.name} est une cible hostile. PV ${combatant.hp_current}/${combatant.hp_max}, CA ${combatant.ac}.`
+      : `${combatant.name} est un allié. PV ${combatant.hp_current}/${combatant.hp_max}, CA ${combatant.ac}.`,
+    meta: combatant.kind === 'monster' ? 'Ennemi' : 'Allié',
+    actionLabel: isTarget && props.interactionMode === 'attack'
+      ? 'Confirmer attaque'
+      : isTarget && props.interactionMode === 'spell'
+        ? 'Choisir comme cible'
+        : undefined,
+    iconId: combatSelectionIcon(combatant),
+    iconLabel: combatant.name,
+  }
+}
+
+function selectMove(position: GridPosition) {
+  const distance = myPos.value ? distanceCells(myPos.value, position) * cellSizeM.value : 0
+  selected.value = {
+    kind: 'move',
+    id: positionKey(position),
+    name: 'Destination',
+    position,
+    description: `Déplacement préparé vers ${coordinateLabel(position)}. Distance estimée : ${formatMeters(distance)}.`,
+    meta: props.isMyTurn ? 'Case accessible' : 'Déplacement indisponible',
+    actionLabel: props.isMyTurn ? 'Confirmer déplacement' : undefined,
+    iconId: 'c-move-dest',
+  }
+}
+
+function selectObstacle(position: GridPosition) {
+  selected.value = {
+    kind: 'obstacle',
+    id: positionKey(position),
+    name: 'Obstacle',
+    position,
+    description: 'Cette case représente un obstacle ou un couvert visible sur la carte.',
+    meta: 'Décor tactique',
+    iconId: 'c-obstacle',
+  }
+}
+
+function selectZone(position: GridPosition, zone: { id: string; name: string; kind?: string; icon?: string; type?: string }) {
+  selected.value = {
+    kind: 'zone',
+    id: zone.id,
+    name: zone.name,
+    position,
+    description: zone.kind ? `Zone tactique de type ${zone.kind}.` : 'Zone tactique visible sur la carte.',
+    meta: 'Zone',
+    iconId: iconForCombatZone(zone),
+    iconLabel: zone.name,
+  }
+}
+
+function canTargetCombatant(combatant: CombatantState): boolean {
+  return combatant.kind === 'monster' && combatant.id !== props.myCharacterId && combatant.hp_current > 0
+}
+
+function combatSelectionIcon(combatant: CombatantState): RpgMapIconId {
+  if (canTargetCombatant(combatant) && props.interactionMode === 'attack') return 'c-atk-target'
+  if (canTargetCombatant(combatant) && props.interactionMode === 'spell') return 'c-spell-target'
+  if (combatant.is_active) return 'c-active-turn'
+  if (combatant.id === gameStore.selectedCombatantId) return 'c-selection'
+  return iconForCombatant(combatant)
+}
+
+function targetIconForMode(): RpgMapIconId {
+  return props.interactionMode === 'spell' ? 'c-spell-target' : 'c-atk-target'
+}
+
+function targetLabelForMode(): string {
+  return props.interactionMode === 'spell' ? 'Cible de sort' : "Cible d'attaque"
+}
+
+function selectedIconState(kind: SelectionKind, id: string): RpgMapIconState {
+  return selected.value?.kind === kind && selected.value.id === id ? 'active' : 'normal'
+}
+
+function isSelectedPosition(kind: SelectionKind, position: GridPosition): boolean {
+  return selected.value?.kind === kind && positionKey(selected.value.position) === positionKey(position)
+}
+
+function reachableIconState(position: GridPosition): RpgMapIconState {
+  return isSelectedPosition('move', position) ? 'active' : 'normal'
+}
+
+function isLegendEntrySelected(entry: LegendEntry): boolean {
+  if (!selected.value) return false
+  if (entry.kind !== selected.value.kind) return false
+  if (entry.id.endsWith(selected.value.id)) return true
+  return Boolean(entry.position && positionKey(entry.position) === positionKey(selected.value.position))
 }
 
 function isInteractiveCell(col: number, row: number): boolean {
   const key = `${col},${row}`
-  if (isExploration.value) return Boolean(exitMap.value[key])
-  return reachableCells.value.has(key) || Boolean(cellMap.value[key])
+  if (isExploration.value) return Boolean(exitMap.value[key] || poiMap.value[key] || partyMap.value[key])
+  return reachableCells.value.has(key) || Boolean(cellMap.value[key] || obstacleSet.value.has(key) || zoneByCell.value[key])
 }
 
 function handleCellClick(col: number, row: number) {
-  const key = `${col},${row}`
+  const position = { col, row }
+  const key = positionKey(position)
   if (isExploration.value) {
-    const exit = exitMap.value[key]
-    if (exit) emit('sceneExit', exit.id, exit.label)
+    if (exitMap.value[key]) selectExit(exitMap.value[key]!)
+    else if (poiMap.value[key]) selectPoi(poiMap.value[key]!)
+    else if (partyMap.value[key]) selectParty(partyMap.value[key]!)
     return
   }
 
   const combatant = cellMap.value[key]
   if (combatant) {
-    gameStore.setSelectedCombatant(combatant.id)
+    selectCombatant(combatant)
     return
   }
-  if (reachableCells.value.has(key)) emit('move', col, row)
+  if (obstacleSet.value.has(key)) {
+    selectObstacle(position)
+    return
+  }
+  const zone = zoneByCell.value[key]
+  if (zone) {
+    selectZone(position, zone)
+    return
+  }
+  if (reachableCells.value.has(key)) selectMove(position)
+}
+
+function selectLegend(entry: LegendEntry) {
+  if (!entry.position) return
+  if (entry.kind === 'poi') {
+    const poi = (activeScene.value?.pois ?? []).find((p) => p.position && positionKey(p.position) === positionKey(entry.position!))
+    if (poi) selectPoi(poi)
+  } else if (entry.kind === 'exit') {
+    const exit = (activeScene.value?.exits ?? []).find((e) => e.position && positionKey(e.position) === positionKey(entry.position!))
+    if (exit) selectExit(exit)
+  } else if (entry.kind === 'party') {
+    const marker = partyMarkers.value.find((p) => p.position && positionKey(p.position) === positionKey(entry.position!))
+    if (marker) selectParty(marker)
+  } else if (entry.kind === 'combatant') {
+    const combatant = gameStore.combatants.find((c) => c.position && positionKey(c.position) === positionKey(entry.position!))
+    if (combatant) selectCombatant(combatant)
+  } else if (entry.kind === 'zone') {
+    const zone = zones.value.find((z) => z.cells.some((c) => positionKey(c) === positionKey(entry.position!)))
+    if (zone) selectZone(entry.position, zone)
+  } else if (entry.kind === 'obstacle') {
+    selectObstacle(entry.position)
+  }
+}
+
+function confirmSelection() {
+  const current = selected.value
+  if (!current) return
+  if (current.kind === 'exit') {
+    const exit = (activeScene.value?.exits ?? []).find((e) => e.id === current.id)
+    emit('sceneExit', current.id, exit?.label ?? current.name)
+  } else if (current.kind === 'poi') {
+    emit('scenePoi', current.id, current.name)
+  } else if (current.kind === 'move') {
+    emit('move', current.position.col, current.position.row)
+  } else if (current.kind === 'combatant' && (props.interactionMode === 'attack' || props.interactionMode === 'spell')) {
+    emit('target', current.id, props.interactionMode)
+  }
+}
+
+function coordinateLabel(position: GridPosition): string {
+  return `${String.fromCharCode(65 + position.col)}${position.row + 1}`
+}
+
+function markerToneStyle(tone: LegendEntry['tone']) {
+  const styles = {
+    gold: { color: 'var(--color-gold)', borderColor: 'rgba(240,199,100,0.42)', background: 'rgba(240,199,100,0.1)' },
+    teal: { color: 'var(--color-teal)', borderColor: 'rgba(79,216,192,0.46)', background: 'rgba(79,216,192,0.1)' },
+    arcane: { color: 'var(--color-arcane)', borderColor: 'rgba(192,144,255,0.46)', background: 'rgba(192,144,255,0.1)' },
+    blood: { color: 'var(--color-blood-light)', borderColor: 'rgba(232,69,69,0.46)', background: 'rgba(232,69,69,0.12)' },
+    green: { color: 'var(--color-green)', borderColor: 'rgba(111,217,111,0.38)', background: 'rgba(111,217,111,0.08)' },
+    muted: { color: 'var(--color-text-muted)', borderColor: 'rgba(247,236,208,0.18)', background: 'rgba(247,236,208,0.05)' },
+  }
+  return styles[tone]
 }
 </script>
 
 <template>
-  <section class="flex min-h-0 flex-1 flex-col overflow-hidden">
-    <div class="flex items-center justify-between border-b px-4 py-3" :style="{ borderColor: 'var(--color-border)' }">
-      <div>
-        <div class="rpg-eyebrow" :style="{ color: 'var(--color-gold)' }">{{ mapTitle }}</div>
-        <div class="mt-1 text-xs capitalize" :style="{ color: 'var(--color-text-muted)' }">
+  <section
+    class="flex min-h-0 flex-1 flex-col overflow-hidden border"
+    :class="[
+      isFullscreen ? 'fixed inset-3 z-[60] rounded-lg shadow-2xl' : 'rounded-none',
+      isCollapsed ? 'shrink-0 flex-none' : '',
+    ]"
+    :style="{
+      borderColor: isExploration ? 'rgba(240,199,100,0.18)' : 'rgba(232,69,69,0.24)',
+      background: 'var(--color-bg-elev)',
+      height: isFullscreen || isCollapsed ? undefined : panelHeight ?? (isExploration ? 'min(54vh, 520px)' : undefined),
+    }"
+  >
+    <div
+      class="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b px-4 py-3"
+      :style="{ borderColor: 'var(--color-border)' }"
+    >
+      <div class="min-w-0">
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="rpg-eyebrow" :style="{ color: isExploration ? 'var(--color-gold)' : 'var(--color-blood-light)' }">
+            {{ mapTitle }}
+          </div>
+          <span
+            class="rounded border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]"
+            :style="{ borderColor: 'var(--color-border-strong)', color: 'var(--color-text-muted)' }"
+          >{{ activeModeLabel }}</span>
+        </div>
+        <div class="mt-1 truncate text-xs capitalize" :style="{ color: 'var(--color-text-muted)' }">
           {{ cols * cellSizeM }} × {{ rows * cellSizeM }} m
           <template v-if="isExploration"> · {{ terrainLabel }}</template>
+          · {{ summary }}
         </div>
       </div>
-      <div class="rounded border px-2 py-1 font-mono text-[11px]" :style="{ borderColor: 'rgba(247,199,107,0.25)', color: 'var(--color-gold)' }">
-        A1
+
+      <div class="flex flex-wrap items-center gap-2">
+        <button
+          v-if="!isExploration && interactionMode !== 'inspect'"
+          class="rpg-btn-tonal tone-gold !px-3 !py-1.5 !text-[10px]"
+          type="button"
+          @click="emit('modeChange', 'inspect')"
+        >Inspection</button>
+        <button
+          class="rpg-btn-secondary !px-3 !py-1.5 !text-[10px]"
+          type="button"
+          data-testid="map-zoom"
+          @click="zoom = zoom === 'normal' ? 'large' : 'normal'"
+        >{{ zoom === 'normal' ? 'Agrandir' : 'Normal' }}</button>
+        <button
+          class="rpg-btn-secondary !px-3 !py-1.5 !text-[10px]"
+          type="button"
+          data-testid="map-fullscreen"
+          @click="isFullscreen = !isFullscreen"
+        >{{ isFullscreen ? 'Fenêtre' : 'Plein écran' }}</button>
+        <button
+          class="rpg-btn-tonal tone-gold !px-3 !py-1.5 !text-[10px]"
+          type="button"
+          data-testid="map-collapse"
+          @click="isCollapsed = !isCollapsed"
+        >{{ isCollapsed ? 'Déplier' : 'Replier' }}</button>
       </div>
     </div>
 
-    <div class="flex min-h-0 flex-1 items-center justify-center overflow-auto p-5">
-      <div
-        class="relative overflow-hidden rounded border"
-        :style="{
-          width: `${cols * cellPx}px`,
-          height: `${rows * cellPx}px`,
-          borderColor: 'rgba(247,199,107,0.22)',
-          background: mapBackground,
-          boxShadow: 'inset 0 0 45px rgba(0,0,0,0.55), 0 14px 40px rgba(0,0,0,0.28)',
-        }"
-      >
-        <svg class="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
-          <defs>
-            <pattern id="combat-grid" :width="cellPx" :height="cellPx" patternUnits="userSpaceOnUse">
-              <path :d="`M ${cellPx} 0 L 0 0 0 ${cellPx}`" fill="none" stroke="rgba(255,235,180,0.08)" stroke-width="1" />
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#combat-grid)" />
-        </svg>
-
-        <div class="pointer-events-none absolute inset-x-0 top-0 h-7 bg-black/25" />
-        <div class="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-black/30" />
-        <div v-if="!isExploration" class="pointer-events-none absolute left-[18%] top-[20%] text-lg text-parchment/20">▲</div>
-        <div v-if="!isExploration" class="pointer-events-none absolute right-[28%] bottom-[22%] text-xl text-parchment/20">▲</div>
-        <div v-if="!isExploration" class="pointer-events-none absolute right-[14%] top-[38%] h-16 w-16 rounded-full border border-gold/20 shadow-[0_0_28px_rgba(247,199,107,0.22)]" />
-
-        <template v-if="isExploration">
-          <div
-            v-for="poi in poiMarkers"
-            :key="`poi-${poi.id}`"
-            class="pointer-events-none absolute z-10 flex h-8 w-8 items-center justify-center rounded-lg border bg-black/45 text-sm font-bold text-gold shadow-[0_8px_18px_rgba(0,0,0,0.35)]"
-            :style="{ ...markerStyle(poi.position), borderColor: 'rgba(247,199,107,0.32)' }"
-            :title="poi.name"
-          >
-            {{ poiGlyph(poi) }}
-          </div>
-
-          <div
-            v-for="exit in exitMarkers"
-            :key="`exit-${exit.id}`"
-            class="pointer-events-none absolute z-10 flex h-9 w-9 items-center justify-center rounded-full border text-sm font-bold text-teal-100 shadow-[0_0_18px_rgba(72,187,156,0.28)]"
-            :style="{ ...markerStyle(exit.position), borderColor: 'rgba(72,187,156,0.55)', background: 'rgba(18,64,57,0.74)' }"
-            :title="exit.label"
-          >
-            ↗
-          </div>
-
-          <div
-            v-for="marker in partyMarkers"
-            :key="`party-${marker.id}`"
-            class="pointer-events-none absolute z-20 flex h-9 w-9 items-center justify-center rounded-full border text-[10px] font-bold text-white shadow-[0_8px_18px_rgba(0,0,0,0.42)]"
-            :style="{
-              ...markerStyle(marker.position),
-              borderColor: marker.id === myCharacterId ? 'var(--color-gold)' : 'rgba(247,236,208,0.35)',
-              background: 'radial-gradient(circle at 35% 25%, rgba(255,255,255,0.28), var(--color-arcane) 58%, var(--color-ember))',
-            }"
-            :title="marker.name"
-          >
-            {{ marker.token }}
-          </div>
-        </template>
-
+    <div v-if="!isCollapsed" class="flex min-h-0 flex-1 flex-col lg:flex-row">
+      <div class="flex min-h-0 flex-1 items-center justify-center overflow-auto p-4">
         <div
-          v-for="cell in gridCells"
-          :key="`${cell.col},${cell.row}`"
-          class="absolute flex items-center justify-center"
-          :class="{ 'cursor-pointer': isInteractiveCell(cell.col, cell.row) }"
-          :style="{ left: `${cell.col * cellPx}px`, top: `${cell.row * cellPx}px`, width: `${cellPx}px`, height: `${cellPx}px` }"
-          @click="handleCellClick(cell.col, cell.row)"
+          class="relative overflow-hidden rounded border"
+          data-testid="battlemap-grid"
+          :style="{
+            width: `${cols * cellPx}px`,
+            height: `${rows * cellPx}px`,
+            borderColor: 'rgba(247,199,107,0.22)',
+            background: mapBackground,
+            boxShadow: 'inset 0 0 45px rgba(0,0,0,0.55), 0 14px 40px rgba(0,0,0,0.28)',
+          }"
         >
-          <span
-            v-if="reachableCells.has(`${cell.col},${cell.row}`)"
-            class="h-5 w-5 rounded-full border border-gold/35 bg-gold/10 transition group-hover:bg-gold/20"
-          />
+          <svg class="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
+            <defs>
+              <pattern id="combat-grid" :width="cellPx" :height="cellPx" patternUnits="userSpaceOnUse">
+                <path :d="`M ${cellPx} 0 L 0 0 0 ${cellPx}`" fill="none" stroke="rgba(255,235,180,0.08)" stroke-width="1" />
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#combat-grid)" />
+          </svg>
 
-          <div
-            v-if="cellMap[`${cell.col},${cell.row}`]"
-            class="relative flex h-9 w-9 items-center justify-center rounded-full border text-[11px] font-bold text-white transition-transform hover:scale-105"
-            :style="{
-              background: tokenBackground(cellMap[`${cell.col},${cell.row}`]!),
-              borderColor: cellMap[`${cell.col},${cell.row}`]!.is_active
-                ? 'var(--color-gold)'
-                : cellMap[`${cell.col},${cell.row}`]!.id === gameStore.selectedCombatantId ? 'var(--color-parchment)' : 'rgba(247,236,208,0.28)',
-              boxShadow: cellMap[`${cell.col},${cell.row}`]!.is_active
-                ? '0 0 0 2px rgba(247,199,107,0.28), 0 0 18px rgba(247,199,107,0.45)'
-                : cellMap[`${cell.col},${cell.row}`]!.id === gameStore.selectedCombatantId ? '0 0 0 2px rgba(247,236,208,0.22)' : '0 5px 14px rgba(0,0,0,0.35)',
-            }"
-            :title="cellMap[`${cell.col},${cell.row}`]!.name"
+          <div class="pointer-events-none absolute inset-x-0 top-0 h-7 bg-black/25" />
+          <div class="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-black/30" />
+
+          <template v-if="!isExploration">
+            <div
+              v-for="zone in zones"
+              :key="zone.id"
+            >
+              <button
+                v-for="cell in zone.cells"
+                :key="`${zone.id}-${cell.col},${cell.row}`"
+                class="absolute z-10 flex items-center justify-center border bg-gold/10"
+                :style="{ ...cellBoxStyle(cell), borderColor: 'rgba(240,199,100,0.20)' }"
+                type="button"
+                :aria-label="zone.name"
+                @click.stop="selectZone(cell, zone)"
+              >
+                <RpgMapIcon
+                  :data-testid="`map-icon-zone-${zone.id}`"
+                  :icon-id="iconForCombatZone(zone)"
+                  :size="Math.max(18, Math.min(28, cellPx * 0.52))"
+                  :state="isSelectedPosition('zone', cell) ? 'active' : 'normal'"
+                  :label="zone.name"
+                />
+              </button>
+            </div>
+            <button
+              v-for="obstacle in obstacles"
+              :key="`obstacle-${obstacle.col},${obstacle.row}`"
+              class="absolute z-20 flex items-center justify-center bg-black/45"
+              :style="{ ...cellBoxStyle(obstacle), color: 'var(--color-text-muted)' }"
+              type="button"
+              aria-label="Obstacle"
+              @click.stop="selectObstacle(obstacle)"
+            >
+              <RpgMapIcon
+                :data-testid="`map-icon-obstacle-${obstacle.col}-${obstacle.row}`"
+                icon-id="c-obstacle"
+                variant="mono"
+                :size="Math.max(18, Math.min(28, cellPx * 0.54))"
+                :state="isSelectedPosition('obstacle', obstacle) ? 'active' : 'normal'"
+                label="Obstacle"
+              />
+            </button>
+          </template>
+
+          <template v-if="isExploration">
+            <button
+              v-for="poi in activeScene?.pois ?? []"
+              :key="`poi-${poi.id}`"
+              class="absolute z-40 flex h-9 w-9 items-center justify-center rounded-lg border shadow-[0_8px_18px_rgba(0,0,0,0.35)] transition hover:scale-105"
+              :style="{ ...markerStyle(poi.position), ...markerToneStyle(toneForPoi(poi)) }"
+              type="button"
+              :aria-label="poi.name"
+              :title="poi.name"
+              @click.stop="selectPoi(poi)"
+            >
+              <RpgMapIcon
+                :data-testid="`map-icon-poi-${poi.id}`"
+                :icon-id="iconForPoi(poi)"
+                :size="24"
+                :state="selectedIconState('poi', poi.id)"
+                :label="poi.name"
+              />
+            </button>
+
+            <button
+              v-for="exit in activeScene?.exits ?? []"
+              :key="`exit-${exit.id}`"
+              class="absolute z-40 flex h-10 w-10 items-center justify-center rounded-full border shadow-[0_0_18px_rgba(72,187,156,0.28)] transition hover:scale-105"
+              :style="{ ...markerStyle(exit.position), borderColor: 'rgba(79,216,192,0.62)', background: 'rgba(18,64,57,0.78)', color: 'var(--color-teal)' }"
+              type="button"
+              :aria-label="exit.label"
+              :title="exit.label"
+              @click.stop="selectExit(exit)"
+            >
+              <RpgMapIcon
+                :data-testid="`map-icon-exit-${exit.id}`"
+                :icon-id="iconForExit(exit)"
+                :size="25"
+                :state="selectedIconState('exit', exit.id)"
+                :label="exit.label"
+              />
+            </button>
+
+            <button
+              v-for="marker in partyMarkers"
+              :key="`party-${marker.id}`"
+              class="absolute z-50 flex h-10 w-10 items-center justify-center rounded-full border text-[10px] font-bold text-white shadow-[0_8px_18px_rgba(0,0,0,0.42)] transition hover:scale-105"
+              :style="{
+                ...markerStyle(marker.position),
+                borderColor: marker.id === myCharacterId ? 'var(--color-gold)' : 'rgba(247,236,208,0.35)',
+                background: 'radial-gradient(circle at 35% 25%, rgba(255,255,255,0.28), var(--color-arcane) 58%, var(--color-ember))',
+              }"
+              type="button"
+              :aria-label="marker.name"
+              :title="marker.name"
+              @click.stop="selectParty(marker)"
+            >
+              <RpgMapIcon
+                :data-testid="`map-icon-party-${marker.id}`"
+                :icon-id="marker.iconId"
+                :size="25"
+                :state="selectedIconState('party', marker.id)"
+                :label="marker.name"
+              />
+            </button>
+          </template>
+
+          <button
+            v-for="cell in gridCells"
+            :key="`${cell.col},${cell.row}`"
+            class="absolute z-30 flex items-center justify-center"
+            :class="{ 'cursor-pointer': isInteractiveCell(cell.col, cell.row) }"
+            :style="{ left: `${cell.col * cellPx}px`, top: `${cell.row * cellPx}px`, width: `${cellPx}px`, height: `${cellPx}px` }"
+            type="button"
+            :aria-label="coordinateLabel(cell)"
+            @click="handleCellClick(cell.col, cell.row)"
           >
-            {{ tokenLabel(cellMap[`${cell.col},${cell.row}`]!) }}
-            <span class="absolute -bottom-1.5 h-1 w-8 overflow-hidden rounded-full bg-black/70">
-              <span
-                class="block h-full rounded-full"
-                :style="{
-                  width: `${hpPct(cellMap[`${cell.col},${cell.row}`]!.hp_current, cellMap[`${cell.col},${cell.row}`]!.hp_max)}%`,
-                  background: 'var(--color-green)',
-                }"
+            <span
+              v-if="reachableCells.has(`${cell.col},${cell.row}`)"
+              class="flex h-7 w-7 items-center justify-center rounded-full border transition"
+              :class="interactionMode === 'move' ? 'bg-green/20 border-green/50' : 'bg-gold/10 border-gold/35'"
+            >
+              <RpgMapIcon
+                :data-testid="`map-icon-reachable-${cell.col}-${cell.row}`"
+                :icon-id="reachableIconState(cell) === 'active' ? 'c-move-dest' : 'c-move-tile'"
+                :size="18"
+                :state="reachableIconState(cell)"
+                label="Case accessible"
               />
             </span>
-          </div>
+
+            <div
+              v-if="cellMap[`${cell.col},${cell.row}`]"
+              class="relative flex h-10 w-10 items-center justify-center rounded-full border text-[11px] font-bold text-white transition-transform hover:scale-105"
+              :class="{
+                'ring-2 ring-blood/70': interactionMode === 'attack' && canTargetCombatant(cellMap[`${cell.col},${cell.row}`]!),
+                'ring-2 ring-arcane/70': interactionMode === 'spell' && canTargetCombatant(cellMap[`${cell.col},${cell.row}`]!),
+              }"
+              :style="{
+                background: tokenBackground(cellMap[`${cell.col},${cell.row}`]!),
+                borderColor: cellMap[`${cell.col},${cell.row}`]!.is_active
+                  ? 'var(--color-gold)'
+                  : cellMap[`${cell.col},${cell.row}`]!.id === gameStore.selectedCombatantId ? 'var(--color-parchment)' : 'rgba(247,236,208,0.28)',
+                boxShadow: cellMap[`${cell.col},${cell.row}`]!.is_active
+                  ? '0 0 0 2px rgba(247,199,107,0.28), 0 0 18px rgba(247,199,107,0.45)'
+                  : cellMap[`${cell.col},${cell.row}`]!.id === gameStore.selectedCombatantId ? '0 0 0 2px rgba(247,236,208,0.22)' : '0 5px 14px rgba(0,0,0,0.35)',
+              }"
+              :title="cellMap[`${cell.col},${cell.row}`]!.name"
+            >
+              {{ tokenLabel(cellMap[`${cell.col},${cell.row}`]!) }}
+              <RpgMapIcon
+                class="absolute -left-2 -top-2 rounded-full bg-bg-elev/95"
+                :data-testid="`map-icon-combatant-${cellMap[`${cell.col},${cell.row}`]!.id}`"
+                :icon-id="iconForCombatant(cellMap[`${cell.col},${cell.row}`]!)"
+                :size="18"
+                :state="cellMap[`${cell.col},${cell.row}`]!.hp_current <= 0 ? 'disabled' : 'normal'"
+                :label="cellMap[`${cell.col},${cell.row}`]!.name"
+              />
+              <RpgMapIcon
+                v-if="cellMap[`${cell.col},${cell.row}`]!.is_active"
+                class="absolute -right-2 -top-2 rounded-full bg-bg-elev/95"
+                :data-testid="`map-icon-active-${cellMap[`${cell.col},${cell.row}`]!.id}`"
+                icon-id="c-active-turn"
+                :size="18"
+                state="active"
+                label="Tour actif"
+              />
+              <RpgMapIcon
+                v-else-if="cellMap[`${cell.col},${cell.row}`]!.id === gameStore.selectedCombatantId"
+                class="absolute -right-2 -top-2 rounded-full bg-bg-elev/95"
+                :data-testid="`map-icon-selection-${cellMap[`${cell.col},${cell.row}`]!.id}`"
+                icon-id="c-selection"
+                :size="18"
+                state="active"
+                label="Sélection courante"
+              />
+              <RpgMapIcon
+                v-if="canTargetCombatant(cellMap[`${cell.col},${cell.row}`]!) && (interactionMode === 'attack' || interactionMode === 'spell')"
+                class="absolute -right-2 -bottom-2 rounded-full bg-bg-elev/95"
+                :data-testid="`map-icon-target-${cellMap[`${cell.col},${cell.row}`]!.id}`"
+                :icon-id="targetIconForMode()"
+                :size="19"
+                :state="isSelectedPosition('combatant', cellMap[`${cell.col},${cell.row}`]!.position ?? cell) ? 'active' : 'normal'"
+                :label="targetLabelForMode()"
+              />
+              <span class="absolute -bottom-1.5 h-1 w-8 overflow-hidden rounded-full bg-black/70">
+                <span
+                  class="block h-full rounded-full"
+                  :style="{
+                    width: `${hpPct(cellMap[`${cell.col},${cell.row}`]!.hp_current, cellMap[`${cell.col},${cell.row}`]!.hp_max)}%`,
+                    background: 'var(--color-green)',
+                  }"
+                />
+              </span>
+            </div>
+          </button>
         </div>
       </div>
+
+      <aside
+        class="flex max-h-[48%] min-h-[210px] shrink-0 flex-col border-t lg:max-h-none lg:w-[320px] lg:border-l lg:border-t-0"
+        :style="{ borderColor: 'var(--color-border)', background: 'rgba(14,13,20,0.52)' }"
+      >
+        <div class="border-b p-4" :style="{ borderColor: 'var(--color-border)' }">
+          <div class="rpg-eyebrow mb-2" :style="{ color: 'var(--color-gold)' }">Sélection</div>
+          <template v-if="selected">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex min-w-0 items-start gap-2.5">
+                <RpgMapIcon
+                  class="mt-0.5 rounded border border-parchment/10 bg-black/20"
+                  :data-testid="`selection-icon-${selected.kind}`"
+                  :icon-id="selected.iconId"
+                  :size="28"
+                  state="active"
+                  :label="selected.iconLabel ?? selected.name"
+                />
+                <div class="min-w-0">
+                  <h3 class="truncate font-display text-base font-bold text-parchment">{{ selected.name }}</h3>
+                  <p class="mt-0.5 text-xs capitalize" :style="{ color: 'var(--color-text-muted)' }">
+                    {{ selected.meta }} · {{ coordinateLabel(selected.position) }}
+                  </p>
+                </div>
+              </div>
+              <span
+                class="rounded border px-2 py-1 font-mono text-[10px]"
+                :style="{ borderColor: 'rgba(247,199,107,0.25)', color: 'var(--color-gold)' }"
+              >{{ coordinateLabel(selected.position) }}</span>
+            </div>
+            <p class="mt-3 text-sm leading-relaxed" :style="{ color: 'var(--color-parchment-dark)' }">
+              {{ selected.description }}
+            </p>
+            <button
+              v-if="selected.actionLabel"
+              class="rpg-btn-primary mt-4 w-full justify-center !py-2 !text-[11px]"
+              type="button"
+              data-testid="map-confirm"
+              @click="confirmSelection"
+            >{{ selected.actionLabel }}</button>
+          </template>
+          <p v-else class="text-sm leading-relaxed" :style="{ color: 'var(--color-text-muted)' }">
+            Sélectionnez un repère, une sortie, une cible ou une destination pour voir ce que votre clic peut entraîner.
+          </p>
+        </div>
+
+        <div class="min-h-0 flex-1 overflow-y-auto p-4">
+          <div class="mb-2 flex items-center justify-between gap-3">
+            <div class="rpg-eyebrow" :style="{ color: 'var(--color-text-muted)' }">Légende</div>
+            <span class="text-[10px]" :style="{ color: 'var(--color-text-dim)' }">{{ legendEntries.length }} éléments</span>
+          </div>
+          <div class="space-y-2">
+            <button
+              v-for="entry in legendEntries"
+              :key="entry.id"
+              class="flex w-full items-center gap-2 rounded border px-2.5 py-2 text-left transition hover:bg-white/[0.04]"
+              :style="{ borderColor: isLegendEntrySelected(entry) ? 'rgba(240,199,100,0.42)' : 'var(--color-border)' }"
+              type="button"
+              :disabled="!entry.position"
+              @click="selectLegend(entry)"
+            >
+              <span
+                class="flex h-7 w-7 shrink-0 items-center justify-center rounded border"
+                :style="markerToneStyle(entry.tone)"
+              >
+                <RpgMapIcon
+                  :data-testid="`legend-icon-${entry.id}`"
+                  :icon-id="entry.iconId"
+                  :size="18"
+                  :state="isLegendEntrySelected(entry) ? 'active' : 'normal'"
+                  :label="entry.label"
+                />
+              </span>
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-sm font-semibold text-parchment">{{ entry.label }}</span>
+                <span class="block truncate text-xs" :style="{ color: 'var(--color-text-muted)' }">{{ entry.detail }}</span>
+              </span>
+              <span v-if="entry.position" class="font-mono text-[10px]" :style="{ color: 'var(--color-text-dim)' }">
+                {{ coordinateLabel(entry.position) }}
+              </span>
+            </button>
+          </div>
+        </div>
+      </aside>
     </div>
   </section>
 </template>

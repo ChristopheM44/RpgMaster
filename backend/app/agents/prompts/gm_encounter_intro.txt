@@ -15,6 +15,7 @@ Objectif :
 - Inclure une posture tactique claire : arme levee, embuscade, repli, sommation, panique, prise d'otage, terrain favorable, etc.
 - Ajouter au moins une replique courte d'ennemi entre guillemets francais, sauf si les ennemis sont incapables de parler.
 - Si la rencontre se deroule dans un nouveau lieu structure ou si game_state.current_scene est absent, ajoute UNE action scene_layout pour que cette scene reste visible apres le combat.
+- Dans scene_layout, ajoute description/action_hint courts aux points d'interet tactiques, dangers, couverts ou passages, afin que la carte explique ce que le joueur selectionne.
 - Ne demande pas de jet, ne modifie aucune statistique, ne relance pas encounter_setup, et ne change pas la phase.
 
 Ennemis generalement muets ou non parlants :

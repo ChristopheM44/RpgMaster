@@ -19,6 +19,7 @@ import type {
   ChronicleEntry,
   SceneLayout,
   SceneLayoutChangedPayload,
+  GridDecoration,
 } from '../types'
 
 export const useGameStore = defineStore('game', () => {
@@ -43,6 +44,7 @@ export const useGameStore = defineStore('game', () => {
   const combatants = ref<CombatantState[]>([])
   const selectedCombatantId = ref<string | null>(null)
   const gridConfig = ref<GridConfig | null>(null)
+  const gridDecoration = ref<GridDecoration | null>(null)
 
   // ─── Connection ─────────────────────────────────────────────────────────────
   const connected = ref(false)
@@ -186,6 +188,7 @@ export const useGameStore = defineStore('game', () => {
     if (newPhase !== 'combat') {
       combatants.value = []
       selectedCombatantId.value = null
+      gridDecoration.value = null
     }
     addSystemEntry(`Phase changée → ${newPhase}`)
   }
@@ -212,6 +215,10 @@ export const useGameStore = defineStore('game', () => {
 
   function setGridConfig(config: GridConfig) {
     gridConfig.value = config
+  }
+
+  function setGridDecoration(decoration: GridDecoration | null | undefined) {
+    gridDecoration.value = decoration ?? null
   }
 
   function moveCombatant(payload: CombatantMovedPayload) {
@@ -352,6 +359,7 @@ export const useGameStore = defineStore('game', () => {
     combatants.value = []
     selectedCombatantId.value = null
     gridConfig.value = null
+    gridDecoration.value = null
     phase.value = 'lobby'
     currentTurnId.value = null
     connected.value = false
@@ -377,6 +385,7 @@ export const useGameStore = defineStore('game', () => {
     combatants,
     selectedCombatantId,
     gridConfig,
+    gridDecoration,
     adventureJournal,
     quests,
     chronicle,
@@ -404,6 +413,7 @@ export const useGameStore = defineStore('game', () => {
     setCombatants,
     setSelectedCombatant,
     setGridConfig,
+    setGridDecoration,
     moveCombatant,
     applyCombatantStatusChanged,
     removeCombatant,

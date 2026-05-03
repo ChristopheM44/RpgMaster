@@ -1,0 +1,290 @@
+[
+  {
+    "id": "player-pos",
+    "name": "Position du joueur",
+    "category": "exploration",
+    "color": "#f0c764",
+    "file_color": "icons/color/player-pos.svg",
+    "file_mono": "icons/mono/player-pos.svg"
+  },
+  {
+    "id": "ally-member",
+    "name": "Membre du groupe",
+    "category": "exploration",
+    "color": "#4fd8c0",
+    "file_color": "icons/color/ally-member.svg",
+    "file_mono": "icons/mono/ally-member.svg"
+  },
+  {
+    "id": "ai-companion",
+    "name": "Compagnon IA",
+    "category": "exploration",
+    "color": "#c090ff",
+    "file_color": "icons/color/ai-companion.svg",
+    "file_mono": "icons/mono/ai-companion.svg"
+  },
+  {
+    "id": "exit-dir",
+    "name": "Sortie / direction",
+    "category": "exploration",
+    "color": "#4fd8c0",
+    "file_color": "icons/color/exit-dir.svg",
+    "file_mono": "icons/mono/exit-dir.svg"
+  },
+  {
+    "id": "secret-passage",
+    "name": "Passage secret",
+    "category": "exploration",
+    "color": "#f0c764",
+    "file_color": "icons/color/secret-passage.svg",
+    "file_mono": "icons/mono/secret-passage.svg"
+  },
+  {
+    "id": "door",
+    "name": "Porte",
+    "category": "exploration",
+    "color": "#f7ecd0",
+    "file_color": "icons/color/door.svg",
+    "file_mono": "icons/mono/door.svg"
+  },
+  {
+    "id": "poi",
+    "name": "Point d'intérêt",
+    "category": "exploration",
+    "color": "#f0c764",
+    "file_color": "icons/color/poi.svg",
+    "file_mono": "icons/mono/poi.svg"
+  },
+  {
+    "id": "clue",
+    "name": "Indice / examiner",
+    "category": "exploration",
+    "color": "#f0c764",
+    "file_color": "icons/color/clue.svg",
+    "file_mono": "icons/mono/clue.svg"
+  },
+  {
+    "id": "trap-danger",
+    "name": "Danger / piège",
+    "category": "exploration",
+    "color": "#e84545",
+    "file_color": "icons/color/trap-danger.svg",
+    "file_mono": "icons/mono/trap-danger.svg"
+  },
+  {
+    "id": "fog",
+    "name": "Brume / brouillard",
+    "category": "exploration",
+    "color": "#6b6580",
+    "file_color": "icons/color/fog.svg",
+    "file_mono": "icons/mono/fog.svg"
+  },
+  {
+    "id": "light",
+    "name": "Lumière / lanterne",
+    "category": "exploration",
+    "color": "#f0c764",
+    "file_color": "icons/color/light.svg",
+    "file_mono": "icons/mono/light.svg"
+  },
+  {
+    "id": "ruins",
+    "name": "Ruines / obstacle",
+    "category": "exploration",
+    "color": "#f7ecd0",
+    "file_color": "icons/color/ruins.svg",
+    "file_mono": "icons/mono/ruins.svg"
+  },
+  {
+    "id": "chest",
+    "name": "Coffre / objet",
+    "category": "exploration",
+    "color": "#f0c764",
+    "file_color": "icons/color/chest.svg",
+    "file_mono": "icons/mono/chest.svg"
+  },
+  {
+    "id": "npc",
+    "name": "PNJ visible",
+    "category": "exploration",
+    "color": "#4fd8c0",
+    "file_color": "icons/color/npc.svg",
+    "file_mono": "icons/mono/npc.svg"
+  },
+  {
+    "id": "safe-zone",
+    "name": "Zone sûre / refuge",
+    "category": "exploration",
+    "color": "#6fd96f",
+    "file_color": "icons/color/safe-zone.svg",
+    "file_mono": "icons/mono/safe-zone.svg"
+  },
+  {
+    "id": "unknown-zone",
+    "name": "Zone inconnue",
+    "category": "exploration",
+    "color": "#6b6580",
+    "file_color": "icons/color/unknown-zone.svg",
+    "file_mono": "icons/mono/unknown-zone.svg"
+  },
+  {
+    "id": "c-ally",
+    "name": "Personnage allié",
+    "category": "combat-ally",
+    "color": "#6fd96f",
+    "file_color": "icons/color/c-ally.svg",
+    "file_mono": "icons/mono/c-ally.svg"
+  },
+  {
+    "id": "c-active-turn",
+    "name": "Tour actif",
+    "category": "combat-ally",
+    "color": "#f0c764",
+    "file_color": "icons/color/c-active-turn.svg",
+    "file_mono": "icons/mono/c-active-turn.svg"
+  },
+  {
+    "id": "c-selection",
+    "name": "Sélection courante",
+    "category": "combat-ally",
+    "color": "#f0c764",
+    "file_color": "icons/color/c-selection.svg",
+    "file_mono": "icons/mono/c-selection.svg"
+  },
+  {
+    "id": "c-move-tile",
+    "name": "Case accessible",
+    "category": "combat-ally",
+    "color": "#4fd8c0",
+    "file_color": "icons/color/c-move-tile.svg",
+    "file_mono": "icons/mono/c-move-tile.svg"
+  },
+  {
+    "id": "c-move-dest",
+    "name": "Destination déplacement",
+    "category": "combat-ally",
+    "color": "#4fd8c0",
+    "file_color": "icons/color/c-move-dest.svg",
+    "file_mono": "icons/mono/c-move-dest.svg"
+  },
+  {
+    "id": "c-atk-target",
+    "name": "Cible d'attaque",
+    "category": "combat-ally",
+    "color": "#ff8247",
+    "file_color": "icons/color/c-atk-target.svg",
+    "file_mono": "icons/mono/c-atk-target.svg"
+  },
+  {
+    "id": "c-spell-target",
+    "name": "Cible de sort",
+    "category": "combat-ally",
+    "color": "#c090ff",
+    "file_color": "icons/color/c-spell-target.svg",
+    "file_mono": "icons/mono/c-spell-target.svg"
+  },
+  {
+    "id": "c-enemy",
+    "name": "Ennemi standard",
+    "category": "combat-enemy",
+    "color": "#e84545",
+    "file_color": "icons/color/c-enemy.svg",
+    "file_mono": "icons/mono/c-enemy.svg"
+  },
+  {
+    "id": "c-enemy-elite",
+    "name": "Ennemi élite",
+    "category": "combat-enemy",
+    "color": "#ff8247",
+    "file_color": "icons/color/c-enemy-elite.svg",
+    "file_mono": "icons/mono/c-enemy-elite.svg"
+  },
+  {
+    "id": "c-enemy-defeated",
+    "name": "Ennemi vaincu",
+    "category": "combat-enemy",
+    "color": "#6b6580",
+    "file_color": "icons/color/c-enemy-defeated.svg",
+    "file_mono": "icons/mono/c-enemy-defeated.svg"
+  },
+  {
+    "id": "c-enemy-flee",
+    "name": "Ennemi en fuite",
+    "category": "combat-enemy",
+    "color": "#ff8247",
+    "file_color": "icons/color/c-enemy-flee.svg",
+    "file_mono": "icons/mono/c-enemy-flee.svg"
+  },
+  {
+    "id": "c-enemy-surrender",
+    "name": "Ennemi rendu",
+    "category": "combat-enemy",
+    "color": "#f0c764",
+    "file_color": "icons/color/c-enemy-surrender.svg",
+    "file_mono": "icons/mono/c-enemy-surrender.svg"
+  },
+  {
+    "id": "c-body-down",
+    "name": "Corps à terre",
+    "category": "combat-enemy",
+    "color": "#e84545",
+    "file_color": "icons/color/c-body-down.svg",
+    "file_mono": "icons/mono/c-body-down.svg"
+  },
+  {
+    "id": "c-obstacle",
+    "name": "Obstacle bloquant",
+    "category": "combat-terrain",
+    "color": "#f7ecd0",
+    "file_color": "icons/color/c-obstacle.svg",
+    "file_mono": "icons/mono/c-obstacle.svg"
+  },
+  {
+    "id": "c-half-cover",
+    "name": "Couvert partiel",
+    "category": "combat-terrain",
+    "color": "#4fd8c0",
+    "file_color": "icons/color/c-half-cover.svg",
+    "file_mono": "icons/mono/c-half-cover.svg"
+  },
+  {
+    "id": "c-full-cover",
+    "name": "Couvert lourd",
+    "category": "combat-terrain",
+    "color": "#4fd8c0",
+    "file_color": "icons/color/c-full-cover.svg",
+    "file_mono": "icons/mono/c-full-cover.svg"
+  },
+  {
+    "id": "c-difficult",
+    "name": "Terrain difficile",
+    "category": "combat-terrain",
+    "color": "#ff8247",
+    "file_color": "icons/color/c-difficult.svg",
+    "file_mono": "icons/mono/c-difficult.svg"
+  },
+  {
+    "id": "c-danger-zone",
+    "name": "Zone dangereuse",
+    "category": "combat-terrain",
+    "color": "#e84545",
+    "file_color": "icons/color/c-danger-zone.svg",
+    "file_mono": "icons/mono/c-danger-zone.svg"
+  },
+  {
+    "id": "c-aoe",
+    "name": "Zone d'effet / AoE",
+    "category": "combat-terrain",
+    "color": "#c090ff",
+    "file_color": "icons/color/c-aoe.svg",
+    "file_mono": "icons/mono/c-aoe.svg"
+  },
+  {
+    "id": "c-los",
+    "name": "Ligne de vue",
+    "category": "combat-terrain",
+    "color": "#f0c764",
+    "file_color": "icons/color/c-los.svg",
+    "file_mono": "icons/mono/c-los.svg"
+  }
+]

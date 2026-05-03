@@ -528,13 +528,20 @@ class GMResponseExecutor:
             if position is None:
                 continue
             poi_id = str(poi.get("id") or f"poi_{idx + 1}")
-            layout["pois"].append({
+            normalized_poi = {
                 "id": poi_id,
                 "name": str(poi.get("name") or poi_id),
                 "kind": str(poi.get("kind") or "point"),
                 "position": position,
                 "icon": str(poi.get("icon") or "marker"),
-            })
+            }
+            description = cls._clean_optional_text(poi.get("description"))
+            action_hint = cls._clean_optional_text(poi.get("action_hint"), max_len=140)
+            if description:
+                normalized_poi["description"] = description
+            if action_hint:
+                normalized_poi["action_hint"] = action_hint
+            layout["pois"].append(normalized_poi)
 
         for idx, exit_data in enumerate(raw.get("exits", []) or []):
             if not isinstance(exit_data, dict):
@@ -543,12 +550,16 @@ class GMResponseExecutor:
             if position is None:
                 continue
             exit_id = str(exit_data.get("id") or f"exit_{idx + 1}")
-            layout["exits"].append({
+            normalized_exit = {
                 "id": exit_id,
                 "label": str(exit_data.get("label") or exit_id),
                 "position": position,
                 "leads_to": str(exit_data.get("leads_to") or ""),
-            })
+            }
+            description = cls._clean_optional_text(exit_data.get("description"))
+            if description:
+                normalized_exit["description"] = description
+            layout["exits"].append(normalized_exit)
 
         party_positions = raw.get("party_positions") or {}
         if isinstance(party_positions, dict):
@@ -558,6 +569,15 @@ class GMResponseExecutor:
                     layout["party_positions"][str(char_id)] = position
 
         return layout
+
+    @staticmethod
+    def _clean_optional_text(value: Any, max_len: int = 220) -> str:
+        if value is None:
+            return ""
+        text = str(value).strip()
+        if not text:
+            return ""
+        return text[:max_len]
 
     @staticmethod
     def _normalize_position(

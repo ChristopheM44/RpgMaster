@@ -32,7 +32,8 @@ const showStartModal = ref(false)
 const showLobbyConfirm = ref(false)
 const showEndCombatConfirm = ref(false)
 const showRestDialog = ref(false)
-const showMobileSceneMap = ref(true)
+type MapInteractionMode = 'inspect' | 'move' | 'attack' | 'spell'
+const mobileMapMode = ref<MapInteractionMode>('inspect')
 
 async function initSession() {
   gameStore.reset()
@@ -164,6 +165,29 @@ function handleTriggerAi() {
 
 function handleSceneExit(_exitId: string, label: string) {
   handleAction('free_text', `Je me dirige vers ${label}.`)
+}
+
+function handleScenePoi(_poiId: string, name: string) {
+  handleAction('free_text', `J'examine ${name}.`)
+}
+
+const mobileIsMyTurn = computed(() => gameStore.currentTurnId === charStore.myCharacter?.id)
+const mobileSpeedM = computed(() => {
+  const movement = gameStore.combatants.find((c) => c.id === charStore.myCharacter?.id)?.action_economy?.movement
+  return movement ? movement * 0.3048 : 9
+})
+
+function handleMobileMapMove(col: number, row: number) {
+  handleAction('move', undefined, undefined, { col, row })
+  mobileMapMode.value = 'inspect'
+}
+
+function handleMobileMapTarget(targetId: string, mode: MapInteractionMode) {
+  gameStore.setSelectedCombatant(targetId)
+  if (mode === 'attack') {
+    handleAction('attack', undefined, targetId)
+    mobileMapMode.value = 'inspect'
+  }
 }
 
 watch(() => gameStore.currentTurnId, (turnId) => {
@@ -385,23 +409,28 @@ onUnmounted(() => { disconnect() })
         class="shrink-0 border-b"
         :style="{ borderColor: 'var(--color-border)' }"
       >
-        <button
-          class="flex w-full items-center justify-between px-4 py-2 text-left"
-          type="button"
-          @click="showMobileSceneMap = !showMobileSceneMap"
-        >
-          <span class="rpg-eyebrow" :style="{ color: 'var(--color-gold)' }">Scène visible</span>
-          <span class="text-xs" :style="{ color: 'var(--color-text-muted)' }">
-            {{ showMobileSceneMap ? 'Replier' : 'Déplier' }}
-          </span>
-        </button>
-        <div v-if="showMobileSceneMap" class="h-[320px] min-h-0">
-          <Battlemap
-            mode="exploration"
-            :scene-layout="gameStore.currentScene"
-            @scene-exit="handleSceneExit"
-          />
-        </div>
+        <Battlemap
+          mode="exploration"
+          :scene-layout="gameStore.currentScene"
+          @scene-exit="handleSceneExit"
+          @scene-poi="handleScenePoi"
+        />
+      </div>
+      <div
+        v-else-if="gameStore.isInCombat"
+        class="shrink-0 border-b"
+        :style="{ borderColor: 'var(--color-border)' }"
+      >
+        <Battlemap
+          :my-character-id="charStore.myCharacter?.id"
+          :is-my-turn="mobileIsMyTurn"
+          :speed-m="mobileSpeedM"
+          :interaction-mode="mobileMapMode"
+          panel-height="390px"
+          @move="handleMobileMapMove"
+          @target="handleMobileMapTarget"
+          @mode-change="(mode) => { mobileMapMode = mode }"
+        />
       </div>
       <NarrativeLog />
     </div>
@@ -409,7 +438,10 @@ onUnmounted(() => { disconnect() })
     <!-- ─── ActionBar ─────────────────────────────────────────────────────── -->
     <ActionBar v-if="!gameStore.isInCombat" @action="handleAction" />
     <div v-else class="md:hidden">
-      <ActionBar @action="handleAction" />
+      <ActionBar
+        @action="handleAction"
+        @map-mode="(mode) => { mobileMapMode = mode }"
+      />
     </div>
 
     <!-- Adventure start modal -->

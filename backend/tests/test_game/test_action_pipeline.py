@@ -264,6 +264,8 @@ class TestPipelineExecutorUnits:
                                 "kind": "hazard",
                                 "position": {"col": 4, "row": 4},
                                 "icon": "mist",
+                                "description": "Brume froide et margelle instable.",
+                                "action_hint": "Examiner avant de s'approcher.",
                             }
                         ],
                         "exits": [
@@ -272,6 +274,7 @@ class TestPipelineExecutorUnits:
                                 "label": "Porte de chêne",
                                 "position": {"col": 99, "row": 4},
                                 "leads_to": "bandit_room",
+                                "description": "Issue solide vers une pièce voisine.",
                             }
                         ],
                         "party_positions": {"hero_1": {"col": 1, "row": 4}},
@@ -290,6 +293,9 @@ class TestPipelineExecutorUnits:
         scene = active.state_data["current_scene"]
         assert result.pending_rolls == []
         assert scene["terrain"] == "stone_chamber"
+        assert scene["pois"][0]["description"] == "Brume froide et margelle instable."
+        assert scene["pois"][0]["action_hint"] == "Examiner avant de s'approcher."
+        assert scene["exits"][0]["description"] == "Issue solide vers une pièce voisine."
         assert scene["exits"][0]["position"] == {"col": 7, "row": 4}
         assert bus.published[-1][0] == EventType.SCENE_LAYOUT_CHANGED
         assert bus.published[-1][1]["scene"] == scene
