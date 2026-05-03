@@ -18,12 +18,9 @@ describe('sessionApi', () => {
 
     await expect(sessionApi.list(2, 5)).resolves.toEqual(payload)
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8000/api/sessions?skip=2&limit=5',
-      expect.objectContaining({
-        headers: { 'Content-Type': 'application/json' },
-      }),
-    )
+    const [, options] = fetchMock.mock.calls[0]
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:8000/api/sessions?skip=2&limit=5')
+    expect((options.headers as Headers).get('Content-Type')).toBe('application/json')
   })
 
   it('throws a useful error when the API response is not ok', async () => {

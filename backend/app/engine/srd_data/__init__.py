@@ -2,6 +2,11 @@
 
 All data files are loaded once on first access and cached in-process.
 No I/O after the first call; safe to call from async contexts.
+
+Spell and monster entries are validated at load-time against the Pydantic
+schemas defined in ``schemas.py``. The cached return value is kept as a
+``list[dict]`` for backwards compatibility with existing consumers, but a
+``ValueError`` is raised on the first call if any entry is malformed.
 """
 from __future__ import annotations
 
@@ -10,12 +15,31 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List
 
+from pydantic import ValidationError
+
+from .schemas import MonsterSchema, SpellSchema
+
 _DATA_DIR = Path(__file__).parent
 
 
 def _load(filename: str) -> Dict[str, Any]:
     with (_DATA_DIR / filename).open(encoding="utf-8") as f:
         return json.load(f)
+
+
+def _validate_all(items: List[Dict[str, Any]], model, kind: str) -> List[Dict[str, Any]]:
+    errors: List[str] = []
+    for item in items:
+        try:
+            model.model_validate(item)
+        except ValidationError as e:
+            errors.append(f"{kind} '{item.get('id', '?')}': {e.errors()[0]['msg']} "
+                          f"at {'.'.join(str(p) for p in e.errors()[0]['loc'])}")
+    if errors:
+        head = "\n  - ".join(errors[:10])
+        more = f"\n  ... and {len(errors) - 10} more" if len(errors) > 10 else ""
+        raise ValueError(f"Invalid SRD {kind} data ({len(errors)} errors):\n  - {head}{more}")
+    return items
 
 
 @lru_cache(maxsize=None)
@@ -30,12 +54,12 @@ def get_species() -> List[Dict[str, Any]]:
 
 @lru_cache(maxsize=None)
 def get_spells() -> List[Dict[str, Any]]:
-    return _load("spells.json")["spells"]
+    return _validate_all(_load("spells.json")["spells"], SpellSchema, "spell")
 
 
 @lru_cache(maxsize=None)
 def get_monsters() -> List[Dict[str, Any]]:
-    return _load("monsters.json")["monsters"]
+    return _validate_all(_load("monsters.json")["monsters"], MonsterSchema, "monster")
 
 
 @lru_cache(maxsize=None)

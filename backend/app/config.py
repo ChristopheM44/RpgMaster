@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 
 from pydantic_settings import BaseSettings
 
@@ -26,10 +28,15 @@ class Settings(BaseSettings):
     app_port: int = 8000
     app_debug: bool = True
     log_level: str = "info"
+    cors_origins: str = "http://localhost:5173"
+    app_access_token: str = ""
+    runtime_dir: str = ".runtime"
 
     # Game
     default_language: str = "fr"
     max_context_messages: int = 20
+    max_player_action_chars: int = 4000
+    ws_event_queue_size: int = 256
     tts_async: bool = True
     llm_budget_mode: str = "sober"
     ollama_max_concurrent_requests: int = 1
@@ -39,26 +46,65 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
+
+def get_cors_origins() -> list[str]:
+    """Return configured CORS origins from comma-separated or JSON env input."""
+    raw = settings.cors_origins.strip()
+    if not raw:
+        return []
+    if raw.startswith("["):
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            return [raw]
+        return [str(item).strip() for item in data if str(item).strip()]
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def get_runtime_dir() -> Path:
+    """Runtime storage directory for local mutable settings and secrets."""
+    path = Path(settings.runtime_dir).expanduser()
+    if not path.is_absolute():
+        path = Path(__file__).parent.parent / path
+    return path
+
 # ---------------------------------------------------------------------------
 # Runtime LLM overrides (survivent aux redémarrages via llm_runtime.json)
 # Surchargent les valeurs .env sans nécessiter de redémarrage du serveur.
 # ---------------------------------------------------------------------------
 
-_RUNTIME_LLM_FILE = Path(__file__).parent.parent / "llm_runtime.json"
+_LEGACY_RUNTIME_LLM_FILE = Path(__file__).parent.parent / "llm_runtime.json"
+_RUNTIME_LLM_FILE = get_runtime_dir() / "llm_runtime.json"
 _runtime_llm: dict = {}
 
 
 def _load_runtime_llm() -> None:
     global _runtime_llm
-    if _RUNTIME_LLM_FILE.exists():
+    runtime_file = _RUNTIME_LLM_FILE if _RUNTIME_LLM_FILE.exists() else _LEGACY_RUNTIME_LLM_FILE
+    if runtime_file.exists():
         try:
-            _runtime_llm = json.loads(_RUNTIME_LLM_FILE.read_text(encoding="utf-8"))
+            _runtime_llm = json.loads(runtime_file.read_text(encoding="utf-8"))
         except Exception:
             _runtime_llm = {}
 
 
 def _save_runtime_llm() -> None:
-    _RUNTIME_LLM_FILE.write_text(json.dumps(_runtime_llm), encoding="utf-8")
+    _RUNTIME_LLM_FILE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    try:
+        os.chmod(_RUNTIME_LLM_FILE.parent, 0o700)
+    except OSError:
+        pass
+    payload = json.dumps(_runtime_llm, ensure_ascii=False)
+    with NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        dir=str(_RUNTIME_LLM_FILE.parent),
+        delete=False,
+    ) as tmp:
+        tmp.write(payload)
+        tmp_path = Path(tmp.name)
+    os.chmod(tmp_path, 0o600)
+    os.replace(tmp_path, _RUNTIME_LLM_FILE)
 
 
 def update_llm_settings(

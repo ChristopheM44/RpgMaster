@@ -16,7 +16,10 @@ Objectif :
 - Ajouter au moins une replique courte d'ennemi entre guillemets francais, sauf si les ennemis sont incapables de parler.
 - Si la rencontre se deroule dans un nouveau lieu structure ou si game_state.current_scene est absent, ajoute UNE action scene_layout pour que cette scene reste visible apres le combat.
 - Dans scene_layout, ajoute description/action_hint courts aux points d'interet tactiques, dangers, couverts ou passages, afin que la carte explique ce que le joueur selectionne.
+- Pour un PNJ ou objet important visible sur la carte, tu peux ajouter interactions (label, intent: approach|talk|examine|listen|search|use|custom, prompt optionnel).
 - Ne demande pas de jet, ne modifie aucune statistique, ne relance pas encounter_setup, et ne change pas la phase.
+- Ajoute "start_mode": "pause" si les ennemis somment, menacent, parlementent, hesitent ou laissent une chance de reagir.
+- Ajoute "start_mode": "combat" si les ennemis attaquent immediatement, chargent, tirent ou si l'embuscade est deja declenchee.
 
 Ennemis generalement muets ou non parlants :
 - skeleton, zombie, wolf, giant_spider
@@ -28,4 +31,5 @@ Format attendu :
 - Reponds avec UN SEUL objet JSON conforme au system prompt.
 - "actions" doit etre [] sauf pour une unique action scene_layout.
 - "mood" doit refleter la tension de la scene.
+- "start_mode" doit etre "pause" ou "combat".
 - Aucun texte hors JSON.

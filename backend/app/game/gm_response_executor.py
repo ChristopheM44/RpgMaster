@@ -24,6 +24,16 @@ CANON_DIRTY_ACTIONS = {
     "state_transition",
 }
 
+SCENE_POI_INTERACTION_INTENTS = {
+    "approach",
+    "talk",
+    "examine",
+    "listen",
+    "search",
+    "use",
+    "custom",
+}
+
 
 class GMExecutionResult(BaseModel):
     """Resultat de l'application d'une reponse GM."""
@@ -541,6 +551,9 @@ class GMResponseExecutor:
                 normalized_poi["description"] = description
             if action_hint:
                 normalized_poi["action_hint"] = action_hint
+            interactions = cls._normalize_poi_interactions(poi.get("interactions"))
+            if interactions:
+                normalized_poi["interactions"] = interactions
             layout["pois"].append(normalized_poi)
 
         for idx, exit_data in enumerate(raw.get("exits", []) or []):
@@ -569,6 +582,45 @@ class GMResponseExecutor:
                     layout["party_positions"][str(char_id)] = position
 
         return layout
+
+    @classmethod
+    def _normalize_poi_interactions(cls, value: Any) -> list[dict[str, Any]]:
+        if not isinstance(value, list):
+            return []
+
+        interactions: list[dict[str, Any]] = []
+        for idx, raw in enumerate(value):
+            if not isinstance(raw, dict):
+                continue
+
+            label = cls._clean_optional_text(raw.get("label"), max_len=48)
+            if not label:
+                continue
+
+            intent = str(raw.get("intent") or "custom").strip().lower()
+            if intent not in SCENE_POI_INTERACTION_INTENTS:
+                intent = "custom"
+
+            interaction: dict[str, Any] = {
+                "id": cls._clean_optional_text(raw.get("id"), max_len=48) or f"custom_{idx + 1}",
+                "label": label,
+                "intent": intent,
+            }
+
+            prompt = cls._clean_optional_text(raw.get("prompt"), max_len=180)
+            icon = cls._clean_optional_text(raw.get("icon"), max_len=48)
+            if prompt:
+                interaction["prompt"] = prompt
+            if icon:
+                interaction["icon"] = icon
+            if isinstance(raw.get("default"), bool):
+                interaction["default"] = raw["default"]
+
+            interactions.append(interaction)
+            if len(interactions) >= 5:
+                break
+
+        return interactions
 
     @staticmethod
     def _clean_optional_text(value: Any, max_len: int = 220) -> str:

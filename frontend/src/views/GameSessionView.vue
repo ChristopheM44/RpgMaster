@@ -15,6 +15,8 @@ import SaveLoadPanel from '../components/ui/SaveLoadPanel.vue'
 import AdventureStartModal from '../components/ui/AdventureStartModal.vue'
 import ConfirmDialog from '../components/common/ConfirmDialog.vue'
 import RestDialog from '../components/ui/RestDialog.vue'
+import { buildScenePoiInteractionPrompt } from '../utils/scenePoiInteractions'
+import type { ScenePoiInteraction } from '../types'
 
 const route = useRoute()
 const router = useRouter()
@@ -167,8 +169,8 @@ function handleSceneExit(_exitId: string, label: string) {
   handleAction('free_text', `Je me dirige vers ${label}.`)
 }
 
-function handleScenePoi(_poiId: string, name: string) {
-  handleAction('free_text', `J'examine ${name}.`)
+function handleScenePoi(_poiId: string, name: string, interaction?: ScenePoiInteraction) {
+  handleAction('free_text', buildScenePoiInteractionPrompt(name, interaction))
 }
 
 const mobileIsMyTurn = computed(() => gameStore.currentTurnId === charStore.myCharacter?.id)

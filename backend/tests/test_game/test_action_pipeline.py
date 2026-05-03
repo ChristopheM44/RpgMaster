@@ -266,6 +266,17 @@ class TestPipelineExecutorUnits:
                                 "icon": "mist",
                                 "description": "Brume froide et margelle instable.",
                                 "action_hint": "Examiner avant de s'approcher.",
+                                "interactions": [
+                                    {
+                                        "id": "listen",
+                                        "label": "Écouter",
+                                        "intent": "listen",
+                                        "prompt": "J'écoute les sons venus du puits.",
+                                        "icon": "clue",
+                                        "default": True,
+                                    },
+                                    {"label": "", "intent": "talk"},
+                                ],
                             }
                         ],
                         "exits": [
@@ -295,10 +306,48 @@ class TestPipelineExecutorUnits:
         assert scene["terrain"] == "stone_chamber"
         assert scene["pois"][0]["description"] == "Brume froide et margelle instable."
         assert scene["pois"][0]["action_hint"] == "Examiner avant de s'approcher."
+        assert scene["pois"][0]["interactions"] == [
+            {
+                "id": "listen",
+                "label": "Écouter",
+                "intent": "listen",
+                "prompt": "J'écoute les sons venus du puits.",
+                "icon": "clue",
+                "default": True,
+            }
+        ]
         assert scene["exits"][0]["description"] == "Issue solide vers une pièce voisine."
         assert scene["exits"][0]["position"] == {"col": 7, "row": 4}
         assert bus.published[-1][0] == EventType.SCENE_LAYOUT_CHANGED
         assert bus.published[-1][1]["scene"] == scene
+
+    async def test_executor_scene_layout_sanitizes_poi_interactions(self) -> None:
+        layout = GMResponseExecutor._normalize_scene_layout({
+            "cols": 8,
+            "rows": 8,
+            "pois": [
+                {
+                    "id": "toben",
+                    "name": "Toben",
+                    "kind": "npc",
+                    "position": {"col": 2, "row": 3},
+                    "interactions": [
+                        {"label": "Négocier", "intent": "parley", "prompt": "Je négocie avec Toben."},
+                        {"intent": "talk", "prompt": "Sans label"},
+                        "invalid",
+                    ],
+                }
+            ],
+        })
+
+        assert layout["pois"][0]["interactions"] == [
+            {
+                "id": "custom_1",
+                "label": "Négocier",
+                "intent": "custom",
+                "prompt": "Je négocie avec Toben.",
+            }
+        ]
 
     async def test_pipeline_ignores_gm_damage_apply_in_combat(self) -> None:
         active = _make_combat_active()

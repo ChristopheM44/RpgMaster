@@ -61,6 +61,7 @@ tts_service/.venv/
 # Runtime settings (config dynamique TTS + LLM — peut contenir des clés API)
 backend/runtime_settings.json
 backend/llm_runtime.json
+backend/.runtime/
 
 .ollama
 .claude/worktrees/

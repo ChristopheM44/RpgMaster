@@ -270,6 +270,7 @@ export type WsEventType =
   | 'roll_result'
   | 'turn_start'
   | 'turn_end'
+  | 'round_start'
   | 'phase_change'
   | 'combat_start'
   | 'combat_end'
@@ -342,6 +343,25 @@ export interface PointOfInterest {
   icon?: string
   description?: string
   action_hint?: string
+  interactions?: ScenePoiInteraction[]
+}
+
+export type ScenePoiInteractionIntent =
+  | 'approach'
+  | 'talk'
+  | 'examine'
+  | 'listen'
+  | 'search'
+  | 'use'
+  | 'custom'
+
+export interface ScenePoiInteraction {
+  id?: string
+  label: string
+  intent: ScenePoiInteractionIntent
+  prompt?: string
+  icon?: string
+  default?: boolean
 }
 
 export interface SceneExit {

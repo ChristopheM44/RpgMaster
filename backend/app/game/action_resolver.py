@@ -89,6 +89,7 @@ class ActionResolver:
         self._combat_gm: GMAgent = combat_gm_agent or (
             gm_agent if gm_agent is not None else CombatGMAgent()
         )
+        self._pipeline: Optional[Any] = None
 
     # ------------------------------------------------------------------
     # Point d'entrée principal
@@ -120,15 +121,9 @@ class ActionResolver:
             target_id: ID de la cible (optionnel).
             active: Session active en mémoire.
         """
-        from app.game.action_pipeline import ActionPipeline, ActionRequest
+        from app.game.action_pipeline import ActionRequest
 
-        pipeline = ActionPipeline(
-            self._gm,
-            event_bus,
-            db,
-            mechanics=self,
-            combat_gm_agent=self._combat_gm_for_call(),
-        )
+        pipeline = self._pipeline_for_call(db)
         await pipeline.resolve_and_publish(
             ActionRequest(
                 session_id=session_id,
@@ -146,6 +141,23 @@ class ActionResolver:
             active,
             db,
         )
+
+    def _pipeline_for_call(self, db: Optional[Any]) -> Any:
+        """Return the reusable action pipeline for this resolver."""
+        from app.game.action_pipeline import ActionPipeline
+
+        if self._pipeline is None:
+            self._pipeline = ActionPipeline(
+                self._gm,
+                event_bus,
+                db,
+                mechanics=self,
+                combat_gm_agent=self._combat_gm_for_call(),
+            )
+        else:
+            self._pipeline._db = db
+            self._pipeline._combat_gm = self._combat_gm_for_call()
+        return self._pipeline
 
     def _combat_gm_for_call(self) -> GMAgent:
         """Retourne le MJ combat effectif.

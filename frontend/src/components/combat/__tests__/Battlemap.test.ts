@@ -22,6 +22,35 @@ const scene: SceneLayout = {
       description: 'Une brume froide sort de la margelle.',
       action_hint: "L'examiner avant de s'approcher.",
     },
+    {
+      id: 'toben',
+      name: 'Toben',
+      kind: 'npc',
+      icon: 'npc',
+      position: { col: 2, row: 3 },
+      description: 'Un vieil habitué nerveux.',
+    },
+    {
+      id: 'chest',
+      name: 'Coffre rouillé',
+      kind: 'loot',
+      icon: 'chest',
+      position: { col: 3, row: 5 },
+      interactions: [
+        {
+          id: 'force-open',
+          label: 'Forcer',
+          intent: 'use',
+          prompt: "Je tente de forcer le coffre rouillé.",
+          icon: 'door',
+        },
+        {
+          id: 'empty-label',
+          label: '',
+          intent: 'custom',
+        },
+      ],
+    },
   ],
   exits: [
     {
@@ -95,7 +124,7 @@ describe('Battlemap', () => {
     expect(wrapper.emitted('sceneExit')).toEqual([[scene.exits[0]!.id, scene.exits[0]!.label]])
   })
 
-  it('confirms POI examination only after selection', async () => {
+  it('shows standard POI actions and emits the chosen interaction after selection', async () => {
     const wrapper = mount(Battlemap, {
       props: {
         mode: 'exploration',
@@ -109,10 +138,83 @@ describe('Battlemap', () => {
     expect(wrapper.find('[data-testid="legend-icon-poi-well"][data-icon-id="fog"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="map-icon-poi-well"][data-icon-id="fog"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('Une brume froide')
+    expect(wrapper.text()).toContain('Observer à distance')
+    expect(wrapper.text()).toContain('Contourner')
 
-    await wrapper.find('[data-testid="map-confirm"]').trigger('click')
+    await wrapper.find('[data-testid="map-poi-action-examine"]').trigger('click')
 
-    expect(wrapper.emitted('scenePoi')).toEqual([[scene.pois[0]!.id, scene.pois[0]!.name]])
+    expect(wrapper.emitted('scenePoi')).toEqual([[
+      scene.pois[0]!.id,
+      scene.pois[0]!.name,
+      {
+        id: 'examine',
+        label: 'Observer à distance',
+        intent: 'examine',
+        icon: 'trap-danger',
+        default: true,
+      },
+    ]])
+  })
+
+  it('shows contextual NPC actions after selecting an NPC POI', async () => {
+    const wrapper = mount(Battlemap, {
+      props: {
+        mode: 'exploration',
+        sceneLayout: scene,
+      },
+    })
+
+    await wrapper.find('button[aria-label="Toben"]').trigger('click')
+
+    expect(wrapper.emitted('scenePoi')).toBeUndefined()
+    expect(wrapper.text()).toContain('Se diriger vers')
+    expect(wrapper.text()).toContain('Parler')
+    expect(wrapper.text()).toContain('Observer')
+    expect(wrapper.text()).toContain('Écouter')
+
+    await wrapper.find('[data-testid="map-poi-action-talk"]').trigger('click')
+
+    expect(wrapper.emitted('scenePoi')).toEqual([[
+      'toben',
+      'Toben',
+      {
+        id: 'talk',
+        label: 'Parler',
+        intent: 'talk',
+        icon: 'npc',
+        default: true,
+      },
+    ]])
+  })
+
+  it('merges custom POI interactions with defaults and prioritizes custom intents', async () => {
+    const wrapper = mount(Battlemap, {
+      props: {
+        mode: 'exploration',
+        sceneLayout: scene,
+      },
+    })
+
+    await wrapper.find('button[aria-label="Coffre rouillé"]').trigger('click')
+
+    expect(wrapper.text()).toContain('Forcer')
+    expect(wrapper.text()).toContain('Examiner')
+    expect(wrapper.text()).toContain('Fouiller')
+    expect(wrapper.text()).not.toContain('Utiliser')
+
+    await wrapper.find('[data-testid="map-poi-action-force-open"]').trigger('click')
+
+    expect(wrapper.emitted('scenePoi')).toEqual([[
+      'chest',
+      'Coffre rouillé',
+      {
+        id: 'force-open',
+        label: 'Forcer',
+        intent: 'use',
+        prompt: "Je tente de forcer le coffre rouillé.",
+        icon: 'door',
+      },
+    ]])
   })
 
   it('prepares movement and emits move after confirmation', async () => {

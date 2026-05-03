@@ -4,6 +4,46 @@ Cadence : stop après chaque lot → tests + diff review + ✅ user avant d'ench
 
 ---
 
+## SPRINT Sécurité & Robustesse Locale — Audit 2026-05-03 ✅ IMPLÉMENTÉ
+
+### Lot A — Garde-fous backend immédiats
+- [x] Extraire les schémas WS vers `backend/app/api/ws_schemas.py`
+- [x] Valider `join`, `action`, `ping`, `toggle_ai_control`, `trigger_ai_reactions`
+- [x] Borner `content`, IDs, `slot_level`, `hit_dice_spend`, `action_type`, `audience`
+- [x] Ajouter les settings `cors_origins`, `max_player_action_chars`, `ws_event_queue_size`, `runtime_dir`, `app_access_token`
+- [x] Restreindre CORS via config et méthodes explicites
+- [x] Ajouter auth optionnelle HTTP `/api/*` + WS via token local
+- [x] Déplacer la cible runtime LLM vers `backend/.runtime/llm_runtime.json` avec écriture atomique `0600` et fallback lecture legacy
+
+### Lot B — Robustesse session / EventBus / state
+- [x] Ajouter un lock `asyncio.Lock` par session dans `SessionManager`
+- [x] Sérialiser les mutations WS critiques (`join`, `action`, IA, fermeture)
+- [x] Borne par défaut des queues EventBus à `ws_event_queue_size`
+- [x] Renommer l'implémentation concrète en `InProcessEventBus`, alias compatible `EventBus`
+- [x] Ajouter métriques simples EventBus : dropped events, max queue size, subscribers
+- [x] Ajouter `game/state_schema.py`, `schema_version=1`, validation partielle et migration à l’ouverture/sauvegarde
+
+### Lot C — Transitions / frontend / compatibilité
+- [x] Autoriser `ENCOUNTER_START -> EXPLORATION`
+- [x] Remplacer la consommation destructrice de `pending_phase_transition` par une consommation après succès
+- [x] Ajouter `GMResponse.start_mode` pour les intros de rencontre (`pause` / `combat`) avec fallback texte existant
+- [x] Persister le `characterId` WS frontend dans `sessionStorage`
+- [x] Envoyer `VITE_RPGMASTER_ACCESS_TOKEN` sur HTTP et WS si configuré
+- [x] Gérer `round_start`, `turn_end`, `player_joined`, `player_left` côté WS frontend
+- [x] Extraire `ConnectionManager` vers `backend/app/api/connection_manager.py`
+- [x] Réutiliser une instance durable de `ActionPipeline` via `ActionResolver`
+
+> Vérifications : `backend/.venv/bin/pytest backend/tests -q` → 1161 passed ;
+> `cd frontend && npm run type-check && npm run test && npm run build` → OK ;
+> `ruff check` ciblé sur les fichiers modifiés → OK.
+>
+> Reste volontairement hors lot : extraction profonde de tous les handlers
+> `ws_game.py`, service unique complet des tours IA combat, et renommage final
+> `ActionResolver -> ActionService`. Les fondations de sécurité/robustesse sont
+> en place pour faire ces extractions ensuite avec moins de risque.
+
+---
+
 ## SPRINT 1 — Flux narratif unifié 🎯
 
 ### Lot 1.1 — Mutualisation des helpers d'agents ✅ TERMINÉ

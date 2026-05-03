@@ -306,7 +306,7 @@
         {"id": "dagger"},
         {"id": "scholar_pack"}
       ],
-      "known_spells": ["eldritch_blast", "prestidigitation", "hex", "arms_of_hadar"],
+      "known_spells": ["eldritch_blast", "prestidigitation", "hex", "charm_person"],
       "proficiencies": {
         "skills": ["arcana", "history", "deception", "intimidation"],
         "saving_throws": ["wisdom", "charisma"],

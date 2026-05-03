@@ -6,6 +6,9 @@ assurant que tout s'exécute dans le même event loop interne du TestClient.
 """
 from __future__ import annotations
 
+import pytest
+from starlette.websockets import WebSocketDisconnect
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -66,6 +69,28 @@ class TestWebSocketConnection:
             assert "phase" in data["payload"]
             assert data["payload"]["phase"] == "lobby"
 
+    def test_connect_requires_access_token_when_configured(self, ws_client, monkeypatch) -> None:
+        from app.config import settings
+
+        session_id = _create_session(ws_client)
+        monkeypatch.setattr(settings, "app_access_token", "test-token")
+
+        with pytest.raises(WebSocketDisconnect):
+            with ws_client.websocket_connect(f"/ws/game/{session_id}"):
+                pass
+
+    def test_connect_accepts_access_token_query_param(self, ws_client, monkeypatch) -> None:
+        from app.config import settings
+
+        session_id = _create_session(ws_client)
+        monkeypatch.setattr(settings, "app_access_token", "test-token")
+
+        with ws_client.websocket_connect(
+            f"/ws/game/{session_id}?access_token=test-token"
+        ) as ws:
+            data = ws.receive_json()
+            assert data["event_type"] == "session_state"
+
 
 # ---------------------------------------------------------------------------
 # Ping / pong
@@ -112,6 +137,31 @@ class TestJoin:
 
 
 class TestPlayerAction:
+    def test_action_content_too_long_returns_error(self, ws_client) -> None:
+        session_id = _create_session(ws_client)
+        with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
+            ws.receive_json()  # session_state
+            ws.send_json({
+                "type": "action",
+                "action_type": "free_text",
+                "content": "x" * 4001,
+            })
+            data = ws.receive_json()
+            assert data["event_type"] == "error"
+            assert "content" in data["payload"]["message"]
+
+    def test_toggle_ai_control_invalid_character_id_returns_error(self, ws_client) -> None:
+        session_id = _create_session(ws_client)
+        with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
+            ws.receive_json()  # session_state
+            ws.send_json({
+                "type": "toggle_ai_control",
+                "character_id": "../../../etc/passwd",
+                "is_ai": True,
+            })
+            data = ws.receive_json()
+            assert data["event_type"] == "error"
+
     def test_free_text_action_returns_narration(self, ws_client) -> None:
         session_id = _create_session(ws_client)
         with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
@@ -125,6 +175,7 @@ class TestPlayerAction:
             assert narration["event_type"] == "narration"
             # Le GMAgent génère la narration (ou fallback si Ollama indisponible)
             assert len(narration["payload"]["text"]) > 0
+            _receive_until(ws, "turn_end")
 
     def test_action_produces_turn_end_event(self, ws_client) -> None:
         session_id = _create_session(ws_client)

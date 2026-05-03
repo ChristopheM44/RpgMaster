@@ -87,6 +87,15 @@ class TestPublish:
         await bus.publish(event)  # should be dropped silently, not raise
         assert q.qsize() == 1  # still only one item
 
+    async def test_full_queue_records_drop_metrics(self, bus: EventBus) -> None:
+        bus.subscribe("session-1", maxsize=1)
+        event = GameEvent(event_type=EventType.NARRATION, session_id="session-1", payload={})
+        await bus.publish(event)
+        await bus.publish(event)
+
+        assert bus.dropped_event_count("session-1") == 1
+        assert bus.stats("session-1")["max_queue_size"] == 1
+
 
 # ---------------------------------------------------------------------------
 # publish_to_session (convenience wrapper)

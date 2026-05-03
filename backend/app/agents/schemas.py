@@ -45,6 +45,13 @@ class GMResponse(BaseModel):
             "'mixed' (les deux)"
         ),
     )
+    start_mode: Optional[str] = Field(
+        None,
+        description=(
+            "Pour une intro de rencontre uniquement : 'pause' laisse répondre "
+            "les joueurs avant l'initiative, 'combat' lance directement le combat."
+        ),
+    )
 
 
 class ContextMessage(BaseModel):

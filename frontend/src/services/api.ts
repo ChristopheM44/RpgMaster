@@ -25,11 +25,16 @@ import type {
 } from '../types'
 
 const BASE_URL = 'http://localhost:8000/api'
+const ACCESS_TOKEN = import.meta.env.VITE_RPGMASTER_ACCESS_TOKEN?.trim()
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const headers = new Headers(options?.headers)
+  if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+  if (ACCESS_TOKEN) headers.set('Authorization', `Bearer ${ACCESS_TOKEN}`)
+
   const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers,
   })
   if (!res.ok) {
     const text = await res.text()

@@ -7,8 +7,6 @@ Pure logic: no I/O, no async, no database access.
 """
 from __future__ import annotations
 
-from typing import Dict, FrozenSet, List
-
 from app.models.session import SessionStatus
 
 # ---------------------------------------------------------------------------
@@ -16,7 +14,7 @@ from app.models.session import SessionStatus
 # ---------------------------------------------------------------------------
 
 #: Maps each phase to the set of phases it is allowed to transition to.
-VALID_TRANSITIONS: Dict[SessionStatus, FrozenSet[SessionStatus]] = {
+VALID_TRANSITIONS: dict[SessionStatus, frozenset[SessionStatus]] = {
     SessionStatus.LOBBY: frozenset(
         [SessionStatus.CHARACTER_CREATION]
     ),
@@ -27,7 +25,7 @@ VALID_TRANSITIONS: Dict[SessionStatus, FrozenSet[SessionStatus]] = {
         [SessionStatus.ENCOUNTER_START, SessionStatus.REST, SessionStatus.SESSION_END]
     ),
     SessionStatus.ENCOUNTER_START: frozenset(
-        [SessionStatus.COMBAT]
+        [SessionStatus.COMBAT, SessionStatus.EXPLORATION]
     ),
     SessionStatus.COMBAT: frozenset(
         [SessionStatus.ENCOUNTER_END]
@@ -94,7 +92,7 @@ class GameLoop:
         """Return True if the transition from *current* to *target* is allowed."""
         return target in VALID_TRANSITIONS.get(current, frozenset())
 
-    def get_valid_transitions(self, phase: SessionStatus) -> List[SessionStatus]:
+    def get_valid_transitions(self, phase: SessionStatus) -> list[SessionStatus]:
         """Return the list of valid next phases from *phase*."""
         return list(VALID_TRANSITIONS.get(phase, frozenset()))
 

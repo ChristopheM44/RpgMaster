@@ -4,6 +4,10 @@ import { useCharacterStore } from '../../stores/character'
 import { useGameStore } from '../../stores/game'
 import RpgMapIcon from '../common/RpgMapIcon.vue'
 import {
+  resolveScenePoiInteractions,
+  type ResolvedScenePoiInteraction,
+} from '../../utils/scenePoiInteractions'
+import {
   iconForCombatZone,
   iconForCombatant,
   iconForExit,
@@ -16,6 +20,7 @@ import type {
   CombatantState,
   GridPosition,
   PointOfInterest,
+  ScenePoiInteraction,
   SceneExit,
   SceneLayout,
 } from '../../types'
@@ -32,6 +37,7 @@ interface SelectedThing {
   description: string
   meta?: string
   actionLabel?: string
+  actions?: ResolvedScenePoiInteraction[]
   iconId: RpgMapIconId
   iconLabel?: string
 }
@@ -72,7 +78,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   move: [col: number, row: number]
   sceneExit: [exitId: string, label: string]
-  scenePoi: [poiId: string, name: string]
+  scenePoi: [poiId: string, name: string, interaction?: ScenePoiInteraction]
   target: [targetId: string, mode: MapInteractionMode]
   modeChange: [mode: MapInteractionMode]
 }>()
@@ -427,6 +433,7 @@ function defaultPoiDescription(poi: PointOfInterest): string {
 }
 
 function selectPoi(poi: PointOfInterest) {
+  const actions = resolveScenePoiInteractions(poi)
   selected.value = {
     kind: 'poi',
     id: poi.id,
@@ -434,7 +441,7 @@ function selectPoi(poi: PointOfInterest) {
     position: poi.position,
     description: poi.description || defaultPoiDescription(poi),
     meta: poi.kind.replaceAll('_', ' '),
-    actionLabel: 'Examiner',
+    actions,
     iconId: iconForPoi(poi),
     iconLabel: poi.name,
   }
@@ -639,6 +646,20 @@ function confirmSelection() {
   } else if (current.kind === 'combatant' && (props.interactionMode === 'attack' || props.interactionMode === 'spell')) {
     emit('target', current.id, props.interactionMode)
   }
+}
+
+function selectPoiAction(action: ResolvedScenePoiInteraction) {
+  const current = selected.value
+  if (!current || current.kind !== 'poi') return
+  const interaction: ScenePoiInteraction = {
+    ...(action.id ? { id: action.id } : {}),
+    label: action.label,
+    intent: action.intent,
+    ...(action.prompt ? { prompt: action.prompt } : {}),
+    ...(action.icon ? { icon: action.icon } : {}),
+    ...(action.default !== undefined ? { default: action.default } : {}),
+  }
+  emit('scenePoi', current.id, current.name, interaction)
 }
 
 function coordinateLabel(position: GridPosition): string {
@@ -975,6 +996,28 @@ function markerToneStyle(tone: LegendEntry['tone']) {
             <p class="mt-3 text-sm leading-relaxed" :style="{ color: 'var(--color-parchment-dark)' }">
               {{ selected.description }}
             </p>
+            <div
+              v-if="selected.kind === 'poi' && selected.actions?.length"
+              class="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1"
+            >
+              <button
+                v-for="action in selected.actions"
+                :key="action.id"
+                class="flex items-center justify-start gap-2 rounded border px-3 py-2 text-left text-[11px] font-bold uppercase tracking-[0.1em] transition hover:bg-white/[0.05]"
+                :data-testid="`map-poi-action-${action.id}`"
+                :data-action-intent="action.intent"
+                :style="{ borderColor: 'rgba(240,199,100,0.26)', color: 'var(--color-parchment)' }"
+                type="button"
+                @click="selectPoiAction(action)"
+              >
+                <RpgMapIcon
+                  :icon-id="action.iconId"
+                  :size="17"
+                  :label="action.label"
+                />
+                <span class="min-w-0 truncate">{{ action.label }}</span>
+              </button>
+            </div>
             <button
               v-if="selected.actionLabel"
               class="rpg-btn-primary mt-4 w-full justify-center !py-2 !text-[11px]"

@@ -44,6 +44,11 @@ class TestCanTransition:
             SessionStatus.ENCOUNTER_START, SessionStatus.COMBAT
         ) is True
 
+    def test_encounter_start_can_deescalate_to_exploration(self, loop: GameLoop) -> None:
+        assert loop.can_transition(
+            SessionStatus.ENCOUNTER_START, SessionStatus.EXPLORATION
+        ) is True
+
     def test_encounter_start_cannot_skip_to_encounter_end(self, loop: GameLoop) -> None:
         assert loop.can_transition(
             SessionStatus.ENCOUNTER_START, SessionStatus.ENCOUNTER_END

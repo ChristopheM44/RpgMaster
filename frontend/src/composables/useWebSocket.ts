@@ -26,6 +26,7 @@ import type {
 } from '../types'
 
 const WS_BASE = 'ws://localhost:8000'
+const ACCESS_TOKEN = import.meta.env.VITE_RPGMASTER_ACCESS_TOKEN?.trim()
 const PING_INTERVAL_MS = 25_000
 const RECONNECT_DELAY_MS = 3_000
 const MAX_RECONNECTS = 5
@@ -40,6 +41,7 @@ export function useWebSocket(sessionId: string) {
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let intentionalClose = false
   let pendingCharacterId: string | undefined
+  const characterStorageKey = `rpgmaster.ws.${sessionId}.character_id`
 
   const isReconnecting = computed(
     () => !gameStore.connected && reconnectCount.value > 0 && reconnectCount.value < MAX_RECONNECTS,
@@ -49,21 +51,41 @@ export function useWebSocket(sessionId: string) {
     () => !gameStore.connected && reconnectCount.value >= MAX_RECONNECTS,
   )
 
+  function readStoredCharacterId(): string | undefined {
+    try {
+      return sessionStorage.getItem(characterStorageKey) || undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  function rememberCharacterId(characterId?: string): string | undefined {
+    const next = characterId ?? readStoredCharacterId()
+    if (next) {
+      try {
+        sessionStorage.setItem(characterStorageKey, next)
+      } catch {
+        // Storage can be unavailable in private contexts; reconnect still uses memory.
+      }
+    }
+    return next
+  }
+
   function connect(characterId?: string) {
     intentionalClose = false
-    pendingCharacterId = characterId
+    pendingCharacterId = rememberCharacterId(characterId)
     // Prevent duplicate connections: skip if already open or connecting
     if (ws.value && ws.value.readyState !== WebSocket.CLOSED) return
 
-    const socket = new WebSocket(`${WS_BASE}/ws/game/${sessionId}`)
+    const socket = new WebSocket(buildWsUrl(sessionId))
     ws.value = socket
 
     socket.onopen = () => {
       reconnectCount.value = 0
       gameStore.setConnected(true)
 
-      if (characterId) {
-        send({ type: 'join', character_id: characterId })
+      if (pendingCharacterId) {
+        send({ type: 'join', character_id: pendingCharacterId })
       }
 
       pingTimer = setInterval(() => send({ type: 'ping' }), PING_INTERVAL_MS)
@@ -71,8 +93,8 @@ export function useWebSocket(sessionId: string) {
 
     socket.onmessage = (event) => {
       try {
-        const msg: WsEvent = JSON.parse(event.data)
-        handleEvent(msg)
+        const msg: unknown = JSON.parse(event.data)
+        if (isWsEvent(msg)) handleEvent(msg)
       } catch {
         // ignore malformed messages
       }
@@ -110,6 +132,12 @@ export function useWebSocket(sessionId: string) {
         break
       case 'turn_start':
         gameStore.applyTurnStart(msg.payload as TurnStartPayload)
+        break
+      case 'turn_end':
+      case 'round_start':
+      case 'player_joined':
+      case 'player_left':
+        gameStore.setProcessing(false)
         break
       case 'ai_thinking':
         gameStore.applyAiThinking(msg.payload as AiThinkingPayload)
@@ -236,7 +264,7 @@ export function useWebSocket(sessionId: string) {
   function reconnect() {
     reconnectCount.value = 0
     gameStore.setError(null)
-    connect(pendingCharacterId)
+    connect(pendingCharacterId ?? readStoredCharacterId())
   }
 
   function disconnect() {
@@ -255,4 +283,19 @@ export function useWebSocket(sessionId: string) {
   onUnmounted(disconnect)
 
   return { connect, disconnect, reconnect, send, sendAction, toggleAiControl, triggerAiReactions, reconnectCount, isReconnecting, isDisconnected }
+}
+
+function buildWsUrl(sessionId: string): string {
+  const url = new URL(`${WS_BASE}/ws/game/${sessionId}`)
+  if (ACCESS_TOKEN) url.searchParams.set('access_token', ACCESS_TOKEN)
+  return url.toString()
+}
+
+function isWsEvent(value: unknown): value is WsEvent {
+  return (
+    typeof value === 'object'
+    && value !== null
+    && typeof (value as { event_type?: unknown }).event_type === 'string'
+    && 'payload' in value
+  )
 }

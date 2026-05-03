@@ -14,6 +14,29 @@ async def test_list_sessions_empty(async_client):
 
 
 @pytest.mark.asyncio
+async def test_api_requires_access_token_when_configured(async_client, monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "app_access_token", "test-token")
+
+    response = await async_client.get("/api/sessions/")
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_api_accepts_bearer_access_token(async_client, monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "app_access_token", "test-token")
+
+    response = await async_client.get(
+        "/api/sessions/",
+        headers={"Authorization": "Bearer test-token"},
+    )
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_create_session(async_client):
     """Création d'une session retourne 201 avec les données correctes."""
     response = await async_client.post("/api/sessions/", json={"name": "La Caverne du Dragon"})

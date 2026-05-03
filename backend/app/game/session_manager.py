@@ -14,14 +14,18 @@ Responsibilities:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.game.game_loop import GameLoop, InvalidTransitionError
+from app.game.game_loop import GameLoop
+from app.game.state_schema import migrate_state_data
 from app.game.turn_manager import TurnManager
 from app.models.game_state import GameState
 from app.models.session import Session, SessionStatus
@@ -55,13 +59,13 @@ class ActiveSession:
     phase: SessionStatus
     game_loop: GameLoop = field(default_factory=GameLoop)
     turn_manager: TurnManager = field(default_factory=TurnManager)
-    state_data: Dict[str, Any] = field(default_factory=dict)
+    state_data: dict[str, Any] = field(default_factory=dict)
     turn_number: int = 0
     round_number: int = 0
     is_dirty: bool = False
     # Maps combatant_id → PlayerAgent for AI-controlled companion players.
     # Type is Any to avoid circular imports; callers should use PlayerAgent instances.
-    ai_players: Dict[str, Any] = field(default_factory=dict)
+    ai_players: dict[str, Any] = field(default_factory=dict)
     # Intent classifié par le MJ pour la dernière action joueur :
     # 'social' | 'environmental' | 'mixed' | None
     last_gm_intent: Optional[str] = None
@@ -98,7 +102,8 @@ class SessionManager:
     """
 
     def __init__(self) -> None:
-        self._sessions: Dict[str, ActiveSession] = {}
+        self._sessions: dict[str, ActiveSession] = {}
+        self._locks: dict[str, asyncio.Lock] = {}
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -120,10 +125,12 @@ class SessionManager:
         session = await self._load_session(session_id, db)
         game_state = await self._load_or_create_game_state(session_id, db)
 
+        state_data = migrate_state_data(dict(game_state.state_data or {}))
+
         active = ActiveSession(
             session_id=session_id,
             phase=session.status,
-            state_data=dict(game_state.state_data),
+            state_data=state_data,
             turn_number=game_state.turn_number,
             round_number=game_state.round_number,
         )
@@ -155,6 +162,7 @@ class SessionManager:
 
         await self.save_state(session_id, db)
         del self._sessions[session_id]
+        self._locks.pop(session_id, None)
         logger.info("Session %s closed.", session_id)
 
     # ------------------------------------------------------------------
@@ -168,6 +176,16 @@ class SessionManager:
     def is_active(self, session_id: str) -> bool:
         """Return True if the session is currently open in memory."""
         return session_id in self._sessions
+
+    def lock_for_session(self, session_id: str) -> asyncio.Lock:
+        """Return the per-session mutation lock."""
+        return self._locks.setdefault(session_id, asyncio.Lock())
+
+    @asynccontextmanager
+    async def session_lock(self, session_id: str) -> AsyncIterator[None]:
+        """Serialize stateful operations for one active session."""
+        async with self.lock_for_session(session_id):
+            yield
 
     @property
     def active_session_ids(self) -> list:
@@ -190,6 +208,7 @@ class SessionManager:
             return
 
         # Embed TurnManager snapshot into state_data
+        active.state_data = migrate_state_data(active.state_data)
         active.state_data["turn_manager"] = active.turn_manager.to_dict()
         active.state_data["phase"] = active.phase.value
 

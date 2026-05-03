@@ -17,10 +17,11 @@ import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
-from enum import auto
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional, Protocol
 
 from pydantic import BaseModel, Field
+
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +106,7 @@ class GameEvent(BaseModel):
     event_type: str
     session_id: str
     event_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    payload: Dict[str, Any] = Field(default_factory=dict)
+    payload: dict[str, Any] = Field(default_factory=dict)
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     source: Optional[str] = None
 
@@ -117,7 +118,30 @@ class GameEvent(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class EventBus:
+class EventBusProtocol(Protocol):
+    def subscribe(self, session_id: str, maxsize: Optional[int] = None) -> asyncio.Queue:
+        ...
+
+    def unsubscribe(self, session_id: str, queue: asyncio.Queue) -> None:
+        ...
+
+    def subscriber_count(self, session_id: str) -> int:
+        ...
+
+    async def publish(self, event: GameEvent) -> None:
+        ...
+
+    async def publish_to_session(
+        self,
+        session_id: str,
+        event_type: str,
+        payload: dict[str, Any],
+        source: Optional[str] = None,
+    ) -> None:
+        ...
+
+
+class InProcessEventBus:
     """In-process pub/sub broker for :class:`GameEvent` objects.
 
     Usage::
@@ -139,27 +163,30 @@ class EventBus:
         bus.unsubscribe("session-abc", queue)
     """
 
-    def __init__(self) -> None:
+    def __init__(self, default_maxsize: int = 256) -> None:
         # session_id -> list of subscriber queues
-        self._subscribers: Dict[str, List[asyncio.Queue]] = {}
+        self._subscribers: dict[str, list[asyncio.Queue]] = {}
+        self._default_maxsize = max(0, int(default_maxsize))
+        self._dropped_events: dict[str, int] = {}
+        self._max_queue_size: dict[str, int] = {}
 
     # ------------------------------------------------------------------
     # Subscription management
     # ------------------------------------------------------------------
 
-    def subscribe(self, session_id: str, maxsize: int = 0) -> asyncio.Queue:
+    def subscribe(self, session_id: str, maxsize: Optional[int] = None) -> asyncio.Queue:
         """Register a new subscriber for *session_id*.
 
         Args:
             session_id: The session to subscribe to.
-            maxsize: Maximum queue depth (0 = unlimited).  Pass a small
-                     positive integer to apply back-pressure on slow consumers.
+            maxsize: Maximum queue depth. None uses the bus default.
 
         Returns:
             A new :class:`asyncio.Queue` that will receive all subsequent
             events published to *session_id*.
         """
-        queue: asyncio.Queue = asyncio.Queue(maxsize=maxsize)
+        effective_maxsize = self._default_maxsize if maxsize is None else max(0, int(maxsize))
+        queue: asyncio.Queue = asyncio.Queue(maxsize=effective_maxsize)
         self._subscribers.setdefault(session_id, []).append(queue)
         logger.debug(
             "EventBus: new subscriber for session %s (%d total).",
@@ -186,6 +213,32 @@ class EventBus:
         """Return the number of active subscribers for *session_id*."""
         return len(self._subscribers.get(session_id, []))
 
+    def dropped_event_count(self, session_id: Optional[str] = None) -> int:
+        """Return dropped events for one session, or total dropped events."""
+        if session_id is not None:
+            return self._dropped_events.get(session_id, 0)
+        return sum(self._dropped_events.values())
+
+    def max_queue_size_observed(self, session_id: Optional[str] = None) -> int:
+        """Return the maximum queue depth observed."""
+        if session_id is not None:
+            return self._max_queue_size.get(session_id, 0)
+        return max(self._max_queue_size.values(), default=0)
+
+    def stats(self, session_id: Optional[str] = None) -> dict[str, int]:
+        """Small in-process metrics snapshot for tests and diagnostics."""
+        if session_id is not None:
+            return {
+                "subscribers": self.subscriber_count(session_id),
+                "dropped_events": self.dropped_event_count(session_id),
+                "max_queue_size": self.max_queue_size_observed(session_id),
+            }
+        return {
+            "subscribers": sum(len(items) for items in self._subscribers.values()),
+            "dropped_events": self.dropped_event_count(),
+            "max_queue_size": self.max_queue_size_observed(),
+        }
+
     # ------------------------------------------------------------------
     # Publishing
     # ------------------------------------------------------------------
@@ -209,7 +262,14 @@ class EventBus:
         for queue in list(subscribers):  # snapshot to avoid mutation during iteration
             try:
                 queue.put_nowait(event)
+                self._max_queue_size[event.session_id] = max(
+                    self._max_queue_size.get(event.session_id, 0),
+                    queue.qsize(),
+                )
             except asyncio.QueueFull:
+                self._dropped_events[event.session_id] = (
+                    self._dropped_events.get(event.session_id, 0) + 1
+                )
                 logger.warning(
                     "EventBus: queue full for session %s subscriber, dropping %s.",
                     event.session_id,
@@ -227,7 +287,7 @@ class EventBus:
         self,
         session_id: str,
         event_type: str,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         source: Optional[str] = None,
     ) -> None:
         """Convenience wrapper to build and publish a :class:`GameEvent`.
@@ -252,4 +312,7 @@ class EventBus:
 # ---------------------------------------------------------------------------
 
 #: Shared event bus instance — import and use directly.
-event_bus = EventBus()
+event_bus = InProcessEventBus(default_maxsize=settings.ws_event_queue_size)
+
+# Backward-compatible alias used by existing tests and callers.
+EventBus = InProcessEventBus
