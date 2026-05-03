@@ -17,6 +17,8 @@ import type {
   AdventureJournal,
   Quest,
   ChronicleEntry,
+  SceneLayout,
+  SceneLayoutChangedPayload,
 } from '../types'
 
 export const useGameStore = defineStore('game', () => {
@@ -35,6 +37,7 @@ export const useGameStore = defineStore('game', () => {
   const adventureJournal = ref<AdventureJournal | null>(null)
   const quests = ref<Quest[]>([])
   const chronicle = ref<ChronicleEntry[]>([])
+  const currentScene = ref<SceneLayout | null>(null)
 
   // ─── Combat ─────────────────────────────────────────────────────────────────
   const combatants = ref<CombatantState[]>([])
@@ -69,6 +72,10 @@ export const useGameStore = defineStore('game', () => {
     chronicle.value = payload.chronicle
   }
 
+  function applySceneLayout(payload: SceneLayoutChangedPayload | SceneLayout) {
+    currentScene.value = 'scene' in payload ? payload.scene : payload
+  }
+
   function applySessionState(payload: SessionStatePayload) {
     const prevPhase = phase.value
     phase.value = payload.phase
@@ -78,6 +85,7 @@ export const useGameStore = defineStore('game', () => {
     if (payload.adventure_journal) adventureJournal.value = payload.adventure_journal
     if (payload.quests) quests.value = payload.quests
     if (payload.chronicle) chronicle.value = payload.chronicle
+    if ('current_scene' in payload) currentScene.value = payload.current_scene ?? null
 
     if (payload.turn_order.length > 0) {
       const idx = payload.current_turn_index
@@ -355,6 +363,7 @@ export const useGameStore = defineStore('game', () => {
     adventureJournal.value = null
     quests.value = []
     chronicle.value = []
+    currentScene.value = null
   }
 
   return {
@@ -371,6 +380,7 @@ export const useGameStore = defineStore('game', () => {
     adventureJournal,
     quests,
     chronicle,
+    currentScene,
     connected,
     error,
     isProcessing,
@@ -381,6 +391,7 @@ export const useGameStore = defineStore('game', () => {
     applyJournalUpdated,
     applyQuestUpdated,
     applyChronicleUpdated,
+    applySceneLayout,
     applySessionState,
     addNarration,
     addRollResult,

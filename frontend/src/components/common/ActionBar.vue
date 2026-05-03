@@ -26,6 +26,7 @@ const addressedTo = ref<string | null>(null)
 const isMyTurn = computed(
   () => gameStore.currentTurnId === charStore.myCharacter?.id,
 )
+const canActNow = computed(() => !gameStore.isInCombat || isMyTurn.value)
 
 const activeCombatantName = computed(() => {
   const c = gameStore.combatants.find((c) => c.id === gameStore.currentTurnId)
@@ -70,7 +71,7 @@ const combatActions = [
 ]
 
 const canSend = computed(
-  () => gameStore.connected && !gameStore.isProcessing,
+  () => gameStore.connected && !gameStore.isProcessing && canActNow.value,
 )
 
 const isCombatImmersive = computed(() => props.variant === 'combat-immersive')
@@ -108,6 +109,7 @@ const combatItems = computed(() => {
 })
 
 function onCombatAction(actionType: string) {
+  if (!canActNow.value) return
   if (actionType === 'cast_spell') {
     showSpellPanel.value = true
   } else if (actionType === 'attack') {
@@ -340,7 +342,7 @@ function buildAddressingPayload(text: string): Record<string, unknown> | undefin
       <textarea
         v-model="input"
         :rows="isCombatImmersive ? 2 : 2"
-        :placeholder="gameStore.isProcessing ? 'Le Maître du Jeu répond…' : 'Décrivez votre action, parlez, ou posez une question au MJ…'"
+        :placeholder="gameStore.isProcessing ? 'Le Maître du Jeu répond…' : gameStore.isInCombat && !isMyTurn ? 'En attente de votre tour…' : 'Décrivez votre action, parlez, ou posez une question au MJ…'"
         :disabled="!canSend"
         class="rpg-input flex-1 resize-none"
         :style="{ fontFamily: 'inherit', fontSize: isCombatImmersive ? '13px' : '14px' }"
@@ -365,7 +367,7 @@ function buildAddressingPayload(text: string): Record<string, unknown> | undefin
         <button class="rpg-btn-tonal tone-blood !py-1 !text-[11px]" :disabled="!canSend" @click="onDeathSave">
           💀 Jet de sauvegarde
         </button>
-        <button class="rpg-btn-secondary !py-1 !text-[11px]" @click="emit('action', 'end_turn')">
+        <button class="rpg-btn-secondary !py-1 !text-[11px]" :disabled="!canSend" @click="emit('action', 'end_turn')">
           ⏭ Fin du tour
         </button>
       </template>
@@ -376,8 +378,8 @@ function buildAddressingPayload(text: string): Record<string, unknown> | undefin
           v-for="action in combatActions"
           :key="action.type"
           class="rpg-btn-tonal !py-1 !text-[11px]"
-          :class="[action.tone, !isMyTurn ? 'opacity-40 !cursor-not-allowed' : '']"
-          :disabled="!isMyTurn"
+          :class="[action.tone, !canActNow ? 'opacity-40 !cursor-not-allowed' : '']"
+          :disabled="!canActNow || !gameStore.connected || gameStore.isProcessing"
           @click="onCombatAction(action.type)"
         >
           {{ action.icon }} {{ action.label }}

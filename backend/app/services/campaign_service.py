@@ -31,12 +31,36 @@ async def create_campaign(name: str, description: str, db: AsyncSession) -> Camp
 
 async def get_campaign(campaign_id: str, db: AsyncSession) -> Optional[Campaign]:
     result = await db.execute(select(Campaign).where(Campaign.id == campaign_id))
-    return result.scalar_one_or_none()
+    campaign = result.scalar_one_or_none()
+    if campaign is None:
+        return None
+
+    changed = await normalize_campaign_sessions(campaign, db)
+    if changed:
+        await db.commit()
+        await db.refresh(campaign)
+    return campaign
 
 
 async def list_campaigns(db: AsyncSession) -> list[Campaign]:
     result = await db.execute(select(Campaign).order_by(Campaign.created_at.desc()))
-    return list(result.scalars().all())
+    campaigns = list(result.scalars().all())
+    if not campaigns:
+        return campaigns
+
+    session_ids_result = await db.execute(select(Session.id))
+    existing_session_ids = set(session_ids_result.scalars().all())
+
+    changed = False
+    for campaign in campaigns:
+        changed |= _reconcile_campaign_sessions(campaign, existing_session_ids)
+
+    if changed:
+        await db.commit()
+        for campaign in campaigns:
+            await db.refresh(campaign)
+
+    return campaigns
 
 
 async def attach_session(campaign_id: str, session_id: str, db: AsyncSession) -> Campaign:
@@ -174,3 +198,60 @@ async def award_xp(
     await db.commit()
     await db.refresh(campaign)
     return campaign
+
+
+async def remove_session_references(session_id: str, db: AsyncSession) -> int:
+    """Retire une session supprimée de toutes les campagnes qui la référencent."""
+    result = await db.execute(select(Campaign))
+    campaigns = list(result.scalars().all())
+    changed = 0
+
+    for campaign in campaigns:
+        ids = list(campaign.session_ids or [])
+        if session_id not in ids:
+            continue
+
+        remaining_ids = {sid for sid in ids if sid != session_id}
+        if _reconcile_campaign_sessions(campaign, remaining_ids):
+            changed += 1
+
+    return changed
+
+
+async def normalize_campaign_sessions(campaign: Campaign, db: AsyncSession) -> bool:
+    """Supprime les références vers des sessions inexistantes et recale l'index courant."""
+    ids = list(campaign.session_ids or [])
+    if not ids:
+        return _reconcile_campaign_sessions(campaign, set())
+
+    result = await db.execute(select(Session.id).where(Session.id.in_(ids)))
+    existing_session_ids = set(result.scalars().all())
+    return _reconcile_campaign_sessions(campaign, existing_session_ids)
+
+
+def _reconcile_campaign_sessions(campaign: Campaign, valid_session_ids: set[str]) -> bool:
+    session_ids = list(campaign.session_ids or [])
+    current_index = campaign.current_session_index
+
+    filtered_ids = [session_id for session_id in session_ids if session_id in valid_session_ids]
+
+    if not filtered_ids:
+        normalized_index = 0
+    else:
+        removed_before_current = sum(
+            1
+            for index, session_id in enumerate(session_ids)
+            if session_id not in valid_session_ids and index < current_index
+        )
+        normalized_index = current_index - removed_before_current
+        normalized_index = max(0, min(normalized_index, len(filtered_ids) - 1))
+
+    changed = (
+        filtered_ids != session_ids
+        or normalized_index != current_index
+    )
+    if changed:
+        campaign.session_ids = filtered_ids
+        campaign.current_session_index = normalized_index
+
+    return changed

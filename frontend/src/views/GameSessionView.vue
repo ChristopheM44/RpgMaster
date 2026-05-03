@@ -9,6 +9,7 @@ import { gameApi } from '../services/api'
 import NarrativeLog from '../components/narrative/NarrativeLog.vue'
 import ExplorationLayout from '../components/character/ExplorationLayout.vue'
 import CombatLayout from '../components/combat/CombatLayout.vue'
+import Battlemap from '../components/combat/Battlemap.vue'
 import ActionBar from '../components/common/ActionBar.vue'
 import SaveLoadPanel from '../components/ui/SaveLoadPanel.vue'
 import AdventureStartModal from '../components/ui/AdventureStartModal.vue'
@@ -31,6 +32,7 @@ const showStartModal = ref(false)
 const showLobbyConfirm = ref(false)
 const showEndCombatConfirm = ref(false)
 const showRestDialog = ref(false)
+const showMobileSceneMap = ref(true)
 
 async function initSession() {
   gameStore.reset()
@@ -86,7 +88,12 @@ function confirmGoToLobby() {
 const needsStart = computed(() =>
   ['lobby', 'character_creation'].includes(gameStore.phase),
 )
-const canStartCombat = computed(() => gameStore.phase === 'exploration')
+const canStartCombat = computed(() =>
+  ['exploration', 'encounter_start'].includes(gameStore.phase),
+)
+const startCombatLabel = computed(() =>
+  gameStore.phase === 'encounter_start' ? '⚔ Engager' : '⚔ Combat',
+)
 const canRest = computed(() =>
   ['exploration', 'encounter_end'].includes(gameStore.phase),
 )
@@ -98,10 +105,15 @@ function handleAction(
   extra?: Record<string, unknown>,
 ) {
   const charId = charStore.myCharacter?.id
+  const selectedTarget = gameStore.combatants.find(
+    (c) => c.id === gameStore.selectedCombatantId && c.kind === 'monster' && c.hp_current > 0,
+  )
+  const resolvedTargetId =
+    targetId ?? (actionType === 'free_text' && gameStore.isInCombat ? selectedTarget?.id : undefined)
   if (actionType === 'free_text' && content) {
     gameStore.addPlayerEntry(content, charStore.myCharacter?.name)
   }
-  sendAction(actionType, content, charId, targetId, extra)
+  sendAction(actionType, content, charId, resolvedTargetId, extra)
 }
 
 async function handleStartConfirm(mode: 'libre' | 'script' | 'auto', script?: string) {
@@ -136,7 +148,6 @@ function takeLongRest() {
 }
 function resetCombat() { sendAction('reset_combat', undefined, charStore.myCharacter?.id) }
 function dismissError() { gameStore.setError(null) }
-function handleEndTurn() { sendAction('end_turn', undefined, charStore.myCharacter?.id) }
 function confirmEndCombat() { showEndCombatConfirm.value = true }
 function openSheet(id: string) {
   router.push({ name: 'character-sheet', params: { charId: id }, query: { session: sessionId } })
@@ -149,6 +160,10 @@ function endCombat() {
 
 function handleTriggerAi() {
   triggerAiReactions()
+}
+
+function handleSceneExit(_exitId: string, label: string) {
+  handleAction('free_text', `Je me dirige vers ${label}.`)
 }
 
 watch(() => gameStore.currentTurnId, (turnId) => {
@@ -287,19 +302,13 @@ onUnmounted(() => { disconnect() })
           v-if="canStartCombat"
           class="rpg-btn-tonal tone-blood !py-1.5 !text-[11px]"
           @click="startCombat"
-        >⚔ Combat</button>
+        >{{ startCombatLabel }}</button>
 
         <button
           v-if="canRest"
           class="rpg-btn-tonal tone-arcane !py-1.5 !text-[11px]"
           @click="openRestDialog"
         >☽ Repos</button>
-
-        <button
-          v-if="gameStore.isInCombat"
-          class="rpg-btn-primary !py-1.5 !text-[11px]"
-          @click="handleEndTurn"
-        >◐ Tour suivant</button>
 
         <button
           v-if="gameStore.isInCombat"
@@ -360,17 +369,40 @@ onUnmounted(() => { disconnect() })
       v-if="gameStore.isInCombat"
       @action="handleAction"
       @end-combat="confirmEndCombat"
-      @next-turn="handleEndTurn"
       @open-sheet="openSheet"
     />
     <ExplorationLayout
       v-else
+      @action="handleAction"
       @start-combat="startCombat"
       @open-sheet="openSheet"
     />
 
     <!-- ─── Mobile layout ────────────────────────────────────────────────── -->
     <div class="flex min-h-0 flex-1 flex-col overflow-hidden md:hidden">
+      <div
+        v-if="!gameStore.isInCombat && gameStore.currentScene"
+        class="shrink-0 border-b"
+        :style="{ borderColor: 'var(--color-border)' }"
+      >
+        <button
+          class="flex w-full items-center justify-between px-4 py-2 text-left"
+          type="button"
+          @click="showMobileSceneMap = !showMobileSceneMap"
+        >
+          <span class="rpg-eyebrow" :style="{ color: 'var(--color-gold)' }">Scène visible</span>
+          <span class="text-xs" :style="{ color: 'var(--color-text-muted)' }">
+            {{ showMobileSceneMap ? 'Replier' : 'Déplier' }}
+          </span>
+        </button>
+        <div v-if="showMobileSceneMap" class="h-[320px] min-h-0">
+          <Battlemap
+            mode="exploration"
+            :scene-layout="gameStore.currentScene"
+            @scene-exit="handleSceneExit"
+          />
+        </div>
+      </div>
       <NarrativeLog />
     </div>
 

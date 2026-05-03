@@ -173,7 +173,7 @@ class GMResponseExecutor:
             logger.error("roll_request: calcul du jet echoue : %s", exc)
             return None
 
-        return {
+        payload = {
             "dice_notation": "1d20",
             "rolls": result.all_rolls,
             "d20": result.d20_roll,
@@ -186,6 +186,9 @@ class GMResponseExecutor:
             "character_id": target_id,
             "character_name": char_data.get("name", target_id or ""),
         }
+        if params.get("social_target"):
+            payload["social_target_id"] = params.get("social_target")
+        return payload
 
     async def execute_action(
         self,
@@ -211,6 +214,8 @@ class GMResponseExecutor:
             await self._apply_quest_add(session_id, params, active)
         elif action_type == "chronicle_add":
             await self._apply_chronicle_add(session_id, params, active)
+        elif action_type == "scene_layout":
+            await self._apply_scene_layout(session_id, params, active)
         elif action_type == "social_outcome":
             logger.debug("social_outcome recu sans handler mecanique : %s", params)
         else:
@@ -471,6 +476,113 @@ class GMResponseExecutor:
             {"chronicle": list(chronicle)},
             source=self._source,
         )
+
+    async def _apply_scene_layout(
+        self,
+        session_id: str,
+        params: dict[str, Any],
+        active: ActiveSession,
+    ) -> None:
+        layout = self._normalize_scene_layout(params)
+        if not layout:
+            logger.warning("scene_layout ignore : params invalides - %s", params)
+            return
+
+        active.state_data["current_scene"] = layout
+        active.mark_dirty()
+        await self._event_bus.publish_to_session(
+            session_id,
+            EventType.SCENE_LAYOUT_CHANGED,
+            {"scene": layout},
+            source=self._source,
+        )
+
+    @classmethod
+    def _normalize_scene_layout(cls, params: dict[str, Any]) -> dict[str, Any]:
+        raw = params.get("scene") or params.get("layout") or params
+        if not isinstance(raw, dict):
+            return {}
+
+        cols = cls._clamp_int(raw.get("cols"), default=8, minimum=3, maximum=24)
+        rows = cls._clamp_int(raw.get("rows"), default=8, minimum=3, maximum=24)
+        try:
+            cell_size_m = float(raw.get("cell_size_m", 1.5))
+        except (TypeError, ValueError):
+            cell_size_m = 1.5
+        cell_size_m = max(0.5, min(cell_size_m, 6.0))
+
+        layout: dict[str, Any] = {
+            "cols": cols,
+            "rows": rows,
+            "cell_size_m": cell_size_m,
+            "terrain": str(raw.get("terrain") or "unknown"),
+            "pois": [],
+            "exits": [],
+            "party_positions": {},
+        }
+
+        for idx, poi in enumerate(raw.get("pois", []) or []):
+            if not isinstance(poi, dict):
+                continue
+            position = cls._normalize_position(poi.get("position"), cols, rows)
+            if position is None:
+                continue
+            poi_id = str(poi.get("id") or f"poi_{idx + 1}")
+            layout["pois"].append({
+                "id": poi_id,
+                "name": str(poi.get("name") or poi_id),
+                "kind": str(poi.get("kind") or "point"),
+                "position": position,
+                "icon": str(poi.get("icon") or "marker"),
+            })
+
+        for idx, exit_data in enumerate(raw.get("exits", []) or []):
+            if not isinstance(exit_data, dict):
+                continue
+            position = cls._normalize_position(exit_data.get("position"), cols, rows)
+            if position is None:
+                continue
+            exit_id = str(exit_data.get("id") or f"exit_{idx + 1}")
+            layout["exits"].append({
+                "id": exit_id,
+                "label": str(exit_data.get("label") or exit_id),
+                "position": position,
+                "leads_to": str(exit_data.get("leads_to") or ""),
+            })
+
+        party_positions = raw.get("party_positions") or {}
+        if isinstance(party_positions, dict):
+            for char_id, position_data in party_positions.items():
+                position = cls._normalize_position(position_data, cols, rows)
+                if position is not None:
+                    layout["party_positions"][str(char_id)] = position
+
+        return layout
+
+    @staticmethod
+    def _normalize_position(
+        position: Any,
+        cols: int,
+        rows: int,
+    ) -> Optional[dict[str, int]]:
+        if not isinstance(position, dict):
+            return None
+        return {
+            "col": GMResponseExecutor._clamp_int(
+                position.get("col"), default=0, minimum=0, maximum=cols - 1
+            ),
+            "row": GMResponseExecutor._clamp_int(
+                position.get("row"), default=0, minimum=0, maximum=rows - 1
+            ),
+        }
+
+    @staticmethod
+    def _clamp_int(value: Any, *, default: int, minimum: int, maximum: int) -> int:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            parsed = default
+        return max(minimum, min(parsed, maximum))
 
 
 async def execute_gm_response(

@@ -80,6 +80,7 @@ class EventType(str):
     JOURNAL_UPDATED = "journal_updated"
     QUEST_UPDATED = "quest_updated"
     CHRONICLE_UPDATED = "chronicle_updated"
+    SCENE_LAYOUT_CHANGED = "scene_layout_changed"
 
     # Errors
     ERROR = "error"

@@ -138,6 +138,32 @@ async def test_delete_session(async_client):
 
 
 @pytest.mark.asyncio
+async def test_delete_session_removes_campaign_reference(async_client):
+    """La suppression d'une session nettoie aussi les campagnes qui la référencent."""
+    campaign_resp = await async_client.post(
+        "/api/campaigns",
+        json={"name": "Chronique test", "description": ""},
+    )
+    campaign_id = campaign_resp.json()["id"]
+
+    advance_resp = await async_client.post(
+        f"/api/campaigns/{campaign_id}/advance",
+        json={"new_session_name": "Session 1"},
+    )
+    session_id = advance_resp.json()["new_session_id"]
+
+    delete_resp = await async_client.delete(f"/api/sessions/{session_id}")
+    assert delete_resp.status_code == 204
+
+    campaign_detail = await async_client.get(f"/api/campaigns/{campaign_id}")
+    assert campaign_detail.status_code == 200
+    data = campaign_detail.json()
+    assert data["session_ids"] == []
+    assert data["current_session_index"] == 0
+    assert data["counts"]["sessions"] == 0
+
+
+@pytest.mark.asyncio
 async def test_delete_session_not_found(async_client):
     """404 lors de la suppression d'une session inexistante."""
     response = await async_client.delete("/api/sessions/00000000-0000-0000-0000-000000000000")

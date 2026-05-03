@@ -130,6 +130,31 @@ async def test_run_combat_turn_with_context_manager(gm_agent: GMAgent) -> None:
     assert captured_messages[0]["role"] == "system"
 
 
+async def test_run_encounter_intro(gm_agent: GMAgent) -> None:
+    """run_encounter_intro() produit une GMResponse sans action mécanique."""
+    payload = _valid_gm_json(
+        narration=(
+            "Le brasero dévoile trois bandits autour d'une table renversée. "
+            "Le plus grand lève son arbalète : « Reculez ou videz vos bourses. »"
+        ),
+        mood="tense",
+        actions=[],
+    )
+    with patch.object(gm_agent._client, "chat", new=AsyncMock(return_value=payload)):
+        response = await gm_agent.run_encounter_intro(
+            game_state={"phase": "ENCOUNTER_START"},
+            combatants=[
+                {"id": "bandit_1", "name": "Bandit", "hp": 11, "monster_id": "bandit"},
+            ],
+            messages=[],
+        )
+
+    assert isinstance(response, GMResponse)
+    assert "«" in response.narration
+    assert response.actions == []
+    assert response.mood == "tense"
+
+
 # ---------------------------------------------------------------------------
 # run_npc_dialogue()
 # ---------------------------------------------------------------------------

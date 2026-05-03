@@ -292,6 +292,7 @@ export type WsEventType =
   | 'journal_updated'
   | 'quest_updated'
   | 'chronicle_updated'
+  | 'scene_layout_changed'
 
 export interface WsEvent<T = unknown> {
   event_type: WsEventType
@@ -333,6 +334,35 @@ export interface ChronicleEntry {
   note: string
 }
 
+export interface PointOfInterest {
+  id: string
+  name: string
+  kind: string
+  position: GridPosition
+  icon?: string
+}
+
+export interface SceneExit {
+  id: string
+  label: string
+  position: GridPosition
+  leads_to?: string
+}
+
+export interface SceneLayout {
+  cols: number
+  rows: number
+  cell_size_m: number
+  terrain?: string
+  pois: PointOfInterest[]
+  exits: SceneExit[]
+  party_positions: Record<string, GridPosition>
+}
+
+export interface SceneLayoutChangedPayload {
+  scene: SceneLayout
+}
+
 export interface SessionStatePayload {
   session_id: string
   phase: string
@@ -344,6 +374,7 @@ export interface SessionStatePayload {
   adventure_journal?: AdventureJournal
   quests?: Quest[]
   chronicle?: ChronicleEntry[]
+  current_scene?: SceneLayout | null
 }
 
 export interface TurnEntry {

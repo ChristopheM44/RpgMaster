@@ -22,6 +22,7 @@ import type {
   CombatantMovedPayload,
   CombatantStatusChangedPayload,
   CombatantRemovedPayload,
+  SceneLayoutChangedPayload,
 } from '../types'
 
 const WS_BASE = 'ws://localhost:8000'
@@ -184,6 +185,9 @@ export function useWebSocket(sessionId: string) {
         break
       case 'chronicle_updated':
         gameStore.applyChronicleUpdated(msg.payload as { chronicle: import('../types').ChronicleEntry[] })
+        break
+      case 'scene_layout_changed':
+        gameStore.applySceneLayout(msg.payload as SceneLayoutChangedPayload)
         break
       case 'pong':
         break

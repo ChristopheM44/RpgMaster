@@ -34,7 +34,9 @@ Connection lifecycle
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
+import re
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
@@ -59,7 +61,7 @@ from app.services.equipment_service import (
     EquipmentService,
     ItemNotFoundError,
 )
-from app.services.message_service import persist_narration
+from app.services.message_service import load_recent_messages, persist_narration
 from app.services.rest_service import RestService, RestServiceError, normalize_character_hit_dice
 
 logger = logging.getLogger(__name__)
@@ -74,6 +76,69 @@ session_manager = SessionManager()
 action_resolver = ActionResolver()
 equipment_service = EquipmentService()
 rest_service = RestService(session_manager=session_manager)
+
+_TURN_BOUND_COMBAT_ACTIONS = {
+    "attack",
+    "cast_spell",
+    "death_save",
+    "disengage",
+    "dash",
+    "dodge",
+    "end_turn",
+    "equip",
+    "free_text",
+    "hide",
+    "move",
+    "shove",
+    "stabilize",
+    "use_item",
+    "wait",
+}
+
+_SOCIAL_COMBAT_MARKERS = (
+    "rends toi",
+    "rends-toi",
+    "rendez vous",
+    "rendez-vous",
+    "pose tes armes",
+    "posez vos armes",
+    "depose",
+    "dépose",
+    "clemence",
+    "clémence",
+    "parlement",
+    "negoc",
+    "négoc",
+    "intimid",
+    "persuad",
+)
+
+_ENCOUNTER_PAUSE_MARKERS = (
+    "pas un pas",
+    "recule",
+    "halte",
+    "ne bougez",
+    "rendez",
+    "posez vos armes",
+    "pose tes armes",
+    "sommation",
+    "menace",
+    "a nous",
+    "à nous",
+    "que faites-vous",
+    "que faites vous",
+)
+
+_IMMEDIATE_ATTACK_MARKERS = (
+    "attaquent",
+    "attaque aussitot",
+    "attaque aussitôt",
+    "chargent",
+    "fondent sur",
+    "se ruent",
+    "tirent",
+    "frappent",
+)
 
 # ---------------------------------------------------------------------------
 # Incoming message schemas
@@ -225,6 +290,7 @@ def _build_session_state_payload(session_id: str) -> dict[str, Any]:
         "adventure_journal": active.state_data.get("adventure_journal", _default_journal),
         "quests": active.state_data.get("quests", []),
         "chronicle": active.state_data.get("chronicle", []),
+        "current_scene": active.state_data.get("current_scene"),
     }
 
 
@@ -262,10 +328,30 @@ def _monster_base_id(combatant_id: str) -> str:
     return "_".join(combatant_id.rsplit("_", 1)[:-1]) if "_" in combatant_id else combatant_id
 
 
+def _monster_instance_number(combatant_id: str, display_name: str = "") -> int:
+    """Return the stable encounter instance number carried by id/name."""
+    for value, pattern in (
+        (combatant_id, r"_(\d+)$"),
+        (display_name, r"\b(\d+)$"),
+    ):
+        match = re.search(pattern, value or "")
+        if match:
+            return max(1, int(match.group(1)))
+    return 1
+
+
 def _monster_token(name: str, count: int) -> str:
     letters = "".join(part[0] for part in name.replace("-", " ").split() if part)
     prefix = (letters or name[:1] or "?").upper()[:2]
     return f"{prefix}{count}"
+
+
+def _monster_token_for_combatant(
+    monster_name: str,
+    combatant_id: str,
+    display_name: str,
+) -> str:
+    return _monster_token(monster_name, _monster_instance_number(combatant_id, display_name))
 
 
 def _monster_color(monster_type: str | None) -> str:
@@ -375,7 +461,6 @@ def _build_combat_start_payload(active: Any) -> dict[str, Any]:
     grid_positions: dict[str, Any] = active.state_data.get("grid_positions", {})
     turn_data = active.turn_manager.to_dict()
     current_idx = turn_data.get("index", 0)
-    type_counts: dict[str, int] = {}
 
     encounter_service._ensure_loaded()
 
@@ -407,7 +492,6 @@ def _build_combat_start_payload(active: Any) -> dict[str, Any]:
         if not is_player:
             base_id = info.get("monster_id") or _monster_base_id(cid)
             monster_data = encounter_service._monsters_by_id.get(base_id, {})
-            type_counts[base_id] = type_counts.get(base_id, 0) + 1
             monster_name = (
                 monster_data.get("name_fr")
                 or monster_data.get("name")
@@ -416,7 +500,8 @@ def _build_combat_start_payload(active: Any) -> dict[str, Any]:
             payload.update({
                 "species": monster_data.get("type"),
                 "cr": monster_data.get("cr"),
-                "token": info.get("token") or _monster_token(monster_name, type_counts[base_id]),
+                "token": info.get("token")
+                or _monster_token_for_combatant(monster_name, cid, str(payload["name"])),
                 "color": info.get("color") or _monster_color(monster_data.get("type")),
                 "ability_scores": monster_data.get("ability_scores", {}),
                 "actions": _format_monster_actions(monster_data.get("actions", [])),
@@ -429,6 +514,233 @@ def _build_combat_start_payload(active: Any) -> dict[str, Any]:
         "grid_config": grid_cfg,
         "grid_decoration": active.state_data.get("grid_decoration"),
     }
+
+
+def _encounter_intro_combatants(combatants_info: dict[str, Any]) -> list[dict[str, Any]]:
+    """Compact enemy snapshot for the encounter-intro prompt."""
+    enemies: list[dict[str, Any]] = []
+    for combatant_id, info in combatants_info.items():
+        if info.get("is_player", False):
+            continue
+        enemies.append({
+            "id": combatant_id,
+            "name": info.get("name", combatant_id),
+            "hp": info.get("hp"),
+            "hp_max": info.get("hp_max"),
+            "monster_id": info.get("monster_id"),
+            "species": info.get("species"),
+            "cr": info.get("cr"),
+        })
+    return enemies
+
+
+def _is_unhelpful_intro(text: Optional[str]) -> bool:
+    if not text or not text.strip():
+        return True
+    lowered = text.casefold()
+    return "temporairement indisponible" in lowered or "systeme llm" in lowered
+
+
+def _is_async_callable(candidate: Any) -> bool:
+    if inspect.iscoroutinefunction(candidate):
+        return True
+    candidate_type = type(candidate)
+    return (
+        candidate_type.__module__ == "unittest.mock"
+        and candidate_type.__name__ == "AsyncMock"
+    )
+
+
+async def _generate_encounter_intro(
+    session_id: str,
+    active: Any,
+    db: AsyncSession,
+    combatants_info: dict[str, Any],
+) -> Optional[str]:
+    """Ask the GM for a one-shot cinematic encounter intro when available."""
+    gm_agent = getattr(action_resolver, "_gm", None)
+    run_intro = getattr(gm_agent, "run_encounter_intro", None)
+    if not callable(run_intro) or not _is_async_callable(run_intro):
+        return None
+
+    response: Any = None
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.AI_THINKING,
+        {"agent_kind": "gm", "thinking": True},
+        source="ws_game",
+    )
+    try:
+        recent_messages = await load_recent_messages(session_id, db)
+        response = await run_intro(
+            game_state={**active.state_data, "phase": SessionStatus.ENCOUNTER_START.value},
+            combatants=_encounter_intro_combatants(combatants_info),
+            messages=recent_messages,
+        )
+    except Exception as exc:
+        logger.warning("_generate_encounter_intro: intro LLM ignorée : %s", exc)
+        return None
+    finally:
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.AI_THINKING,
+            {"agent_kind": "gm", "thinking": False},
+            source="ws_game",
+        )
+
+    await _execute_intro_scene_layout(session_id, active, response)
+    narration = getattr(response, "narration", "")
+    if _is_unhelpful_intro(narration):
+        return None
+    return str(narration).strip()
+
+
+async def _execute_intro_scene_layout(
+    session_id: str,
+    active: Any,
+    response: Any,
+) -> None:
+    scene_actions = [
+        action
+        for action in getattr(response, "actions", []) or []
+        if getattr(action, "type", "") == "scene_layout"
+    ]
+    if not scene_actions:
+        return
+
+    from app.agents.schemas import GMResponse
+    from app.game.gm_response_executor import GMResponseExecutor
+
+    scene_response = GMResponse(narration="", actions=scene_actions[:1])
+    await GMResponseExecutor(event_bus, source="ws_game").execute_gm_response(
+        scene_response,
+        active,
+        session_id=session_id,
+    )
+
+
+def _normalized_phrase(text: Optional[str]) -> str:
+    if not text:
+        return ""
+    normalized = text.casefold().replace("’", "'")
+    return re.sub(r"\s+", " ", normalized)
+
+
+def _should_pause_for_encounter_intro(text: Optional[str]) -> bool:
+    """Return True when the intro reads like a threat/sommation, not an attack."""
+    normalized = _normalized_phrase(text)
+    if not normalized:
+        return False
+    if any(marker in normalized for marker in _IMMEDIATE_ATTACK_MARKERS):
+        return False
+    return (
+        any(marker in normalized for marker in _ENCOUNTER_PAUSE_MARKERS)
+        or "«" in normalized
+        or '"' in normalized
+    )
+
+
+async def _pause_at_encounter_start(
+    session_id: str,
+    active: Any,
+    db: AsyncSession,
+    pending: dict[str, Any] | None,
+    intro_text: str,
+) -> None:
+    """Publish a roleplay encounter opening without rolling initiative yet."""
+    active.turn_manager.reset()
+    active.state_data.pop("combatants", None)
+    active.state_data.pop("grid_positions", None)
+    active.state_data.pop("grid_config", None)
+    active.state_data.pop("grid_decoration", None)
+
+    pending_encounter = dict(pending or {})
+    pending_encounter["intro_played"] = True
+    pending_encounter["intro_text"] = intro_text
+    active.state_data["pending_encounter"] = pending_encounter
+    active.phase = SessionStatus.ENCOUNTER_START
+    active.state_data["phase"] = SessionStatus.ENCOUNTER_START.value
+    active.mark_dirty()
+    await session_manager.save_state(session_id, db)
+
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.PHASE_CHANGE,
+        {"phase": SessionStatus.ENCOUNTER_START.value},
+        source="ws_game",
+    )
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.SESSION_STATE,
+        _build_session_state_payload(session_id),
+        source="ws_game",
+    )
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.NARRATION,
+        {"text": intro_text, "speaker": "Maître du Jeu"},
+        source="ws_game",
+    )
+    await persist_narration(session_id, intro_text, "Maître du Jeu", db)
+
+
+def _is_combat_social_text(text: Optional[str]) -> bool:
+    normalized = _normalized_phrase(text)
+    return any(marker in normalized for marker in _SOCIAL_COMBAT_MARKERS)
+
+
+def _active_npc_ids(active: Any) -> list[str]:
+    combatants: dict[str, Any] = active.state_data.get("combatants", {})
+    result: list[str] = []
+    for cid, cdata in combatants.items():
+        if not isinstance(cdata, dict) or cdata.get("is_player", True):
+            continue
+        status = str(cdata.get("status", "active")).lower()
+        try:
+            hp = int(cdata.get("hp", 1))
+        except (TypeError, ValueError):
+            hp = 1
+        if hp > 0 and status not in INACTIVE_STATUSES:
+            result.append(cid)
+    return result
+
+
+def _combat_target_id(action: PlayerActionMessage, active: Any) -> Optional[str]:
+    if action.target_id:
+        return action.target_id
+    if action.action_type != "free_text" or not _is_combat_social_text(action.content):
+        return None
+    active_npcs = _active_npc_ids(active)
+    return active_npcs[0] if len(active_npcs) == 1 else None
+
+
+async def _reject_out_of_turn_action(
+    session_id: str,
+    action: PlayerActionMessage,
+    active: Any,
+) -> bool:
+    if action.action_type not in _TURN_BOUND_COMBAT_ACTIONS or not action.character_id:
+        return False
+    current = active.turn_manager.current_turn
+    if current is None:
+        return False
+    if action.action_type == "end_turn" and current.is_ai_controlled:
+        return False
+    if action.character_id == current.combatant_id:
+        return False
+
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.ERROR,
+        {
+            "message": (
+                f"Ce n'est pas le tour de ce personnage. "
+                f"Tour actuel : {current.name}."
+            )
+        },
+        source="ws_game",
+    )
+    return True
 
 
 async def _auto_death_save(
@@ -671,6 +983,8 @@ async def _handle_start_combat(
     active: Any,
     db: AsyncSession,
     encounter_id: Optional[str] = None,
+    *,
+    force: bool = False,
 ) -> None:
     """Spawn an encounter, roll initiative, and start combat.
 
@@ -701,9 +1015,15 @@ async def _handle_start_combat(
 
     # 1. Priorité : encounter déclaré par le GM via encounter_setup
     pending = active.state_data.pop("pending_encounter", None)
+    intro_already_played = bool(pending and pending.get("intro_played"))
+    should_generate_intro = pending is not None and not intro_already_played
     if pending:
         monster_ids = pending.get("monster_ids", [])
-        intro_text = pending.get("context") or None
+        intro_text = (
+            "Les armes se lèvent. L'initiative est lancée — le combat commence !"
+            if intro_already_played
+            else pending.get("context") or None
+        )
         if monster_ids:
             candidate = encounter_service.build_from_monster_ids(monster_ids)
             if candidate.entries:
@@ -795,6 +1115,13 @@ async def _handle_start_combat(
             "ability_scores": monster_data.get("ability_scores", {}),
             "actions": _format_monster_actions(monster_data.get("actions", [])),
             "color": _monster_color(monster_data.get("type")),
+            "token": _monster_token_for_combatant(
+                monster_data.get("name_fr")
+                or monster_data.get("name")
+                or npc["name"],
+                cid,
+                npc["name"],
+            ),
         }
         npc_names.append(npc["name"])
 
@@ -819,6 +1146,25 @@ async def _handle_start_combat(
     active.state_data["grid_config"] = {
         "cols": grid_cols, "rows": grid_rows, "cell_size_m": 1.5
     }
+
+    if should_generate_intro:
+        generated_intro = await _generate_encounter_intro(
+            session_id,
+            active,
+            db,
+            combatants_info,
+        )
+        if generated_intro:
+            intro_text = generated_intro
+            if not force and _should_pause_for_encounter_intro(generated_intro):
+                await _pause_at_encounter_start(
+                    session_id,
+                    active,
+                    db,
+                    pending,
+                    generated_intro,
+                )
+                return
 
     active.phase = SessionStatus.COMBAT
     active.round_number = 1
@@ -1528,7 +1874,13 @@ async def _handle_toggle_ai_control(
                     )
                 pending_transition = active.state_data.pop("pending_phase_transition", None)
                 if pending_transition == "COMBAT" and active.phase != SessionStatus.COMBAT:
-                    await _handle_start_combat(session_id, active, db, encounter_id=None)
+                    await _handle_start_combat(
+                        session_id,
+                        active,
+                        db,
+                        encounter_id=None,
+                        force=active.phase == SessionStatus.ENCOUNTER_START,
+                    )
             except Exception as exc:
                 logger.error("toggle_ai_control: exploration reactions failed: %s", exc)
 
@@ -1591,7 +1943,13 @@ async def _handle_trigger_ai_reactions(
         )
     pending_transition = active.state_data.pop("pending_phase_transition", None)
     if pending_transition == "COMBAT" and active.phase != SessionStatus.COMBAT:
-        await _handle_start_combat(session_id, active, db, encounter_id=None)
+        await _handle_start_combat(
+            session_id,
+            active,
+            db,
+            encounter_id=None,
+            force=active.phase == SessionStatus.ENCOUNTER_START,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1624,7 +1982,7 @@ async def _dispatch_action(
             target_id=action.target_id,
         )
     ):
-        await _handle_start_combat(session_id, active, db, encounter_id=None)
+        await _handle_start_combat(session_id, active, db, encounter_id=None, force=True)
         return
 
     if active.phase == SessionStatus.COMBAT:
@@ -1636,6 +1994,8 @@ async def _dispatch_action(
             and current.is_ai_controlled
         ):
             await _handle_ai_turns(session_id, active, db)
+            return
+        if await _reject_out_of_turn_action(session_id, action, active):
             return
 
     # ----------------------------------------------------------------
@@ -1673,7 +2033,13 @@ async def _dispatch_action(
     if action.action_type == "start_combat":
         # Optional: client may pass encounter_id in content to trigger a preset
         encounter_id: Optional[str] = action.content if action.content else None
-        await _handle_start_combat(session_id, active, db, encounter_id=encounter_id)
+        await _handle_start_combat(
+            session_id,
+            active,
+            db,
+            encounter_id=encounter_id,
+            force=True,
+        )
         return
 
     if action.action_type in ("take_rest", "long_rest"):
@@ -1716,11 +2082,18 @@ async def _dispatch_action(
 
         pending_transition = active.state_data.pop("pending_phase_transition", None)
         if pending_transition == "COMBAT" and active.phase != SessionStatus.COMBAT:
-            await _handle_start_combat(session_id, active, db, encounter_id=None)
+            await _handle_start_combat(
+                session_id,
+                active,
+                db,
+                encounter_id=None,
+                force=active.phase == SessionStatus.ENCOUNTER_START,
+            )
             return
 
         active.turn_number += 1
         active.mark_dirty()
+        await session_manager.save_state(session_id, db)
         await event_bus.publish_to_session(
             session_id,
             EventType.TURN_END,
@@ -1734,7 +2107,7 @@ async def _dispatch_action(
         action_type=action.action_type,
         content=action.content,
         character_id=action.character_id,
-        target_id=action.target_id,
+        target_id=_combat_target_id(action, active) or action.target_id,
         active=active,
         db=db,
         spell_id=action.spell_id,
@@ -1743,7 +2116,13 @@ async def _dispatch_action(
 
     pending_transition = active.state_data.pop("pending_phase_transition", None)
     if pending_transition == "COMBAT" and active.phase != SessionStatus.COMBAT:
-        await _handle_start_combat(session_id, active, db, encounter_id=None)
+        await _handle_start_combat(
+            session_id,
+            active,
+            db,
+            encounter_id=None,
+            force=True,
+        )
         return
 
     # After resolution: check for inactive NPC combatants

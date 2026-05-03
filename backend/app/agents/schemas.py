@@ -12,7 +12,8 @@ class GMAction(BaseModel):
         ...,
         description=(
             "Type d'action : roll_request | damage_apply | "
-            "condition_add | condition_remove | combatant_status | state_transition"
+            "condition_add | condition_remove | combatant_status | "
+            "state_transition | encounter_setup | scene_layout"
         ),
     )
     target: Optional[str] = Field(None, description="ID du personnage cible, ou null")

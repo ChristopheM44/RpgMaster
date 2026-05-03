@@ -122,6 +122,45 @@ def _narrations(published) -> list[dict]:
 
 
 class TestPipelineExecutorUnits:
+    async def test_social_combat_text_gets_fallback_charisma_roll(self) -> None:
+        active = _make_combat_active(monster_id="bandit_1")
+        active.state_data["characters"]["hero_1"]["ability_scores"] = {"cha": 14}
+        active.state_data["combatants"]["bandit_1"]["name"] = "Bandit 1"
+        bus = _FakeBus()
+
+        gm = MagicMock()
+        gm.think = AsyncMock(return_value=AgentResponse(
+            content="Le bandit serre les dents, son cimeterre encore levé.",
+            actions=[],
+        ))
+        gm.narrate_outcome_response = AsyncMock(return_value=GMResponse(
+            narration="Le bandit hésite sous l'ordre lancé.",
+            actions=[],
+        ))
+
+        pipeline = ActionPipeline(gm, bus, mechanics=ActionResolver(gm_agent=gm))
+        with patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast",
+                   new=AsyncMock()):
+            await pipeline.resolve_and_publish(
+                ActionRequest(
+                    session_id=SESSION_ID,
+                    actor_id="hero_1",
+                    actor_name="Aria",
+                    actor_kind="player",
+                    action_type="free_text",
+                    content="Pose tes armes et rends-toi.",
+                    target_id="bandit_1",
+                ),
+                active,
+            )
+
+        event_types = [event_type for event_type, _ in bus.published]
+        assert EventType.ROLL_RESULT in event_types
+        gm.narrate_outcome_response.assert_awaited_once()
+        roll_payload = next(payload for event_type, payload in bus.published if event_type == EventType.ROLL_RESULT)
+        assert roll_payload["character_id"] == "hero_1"
+        assert roll_payload["social_target_id"] == "bandit_1"
+
     async def test_roll_request_publishes_only_outcome_narration(self) -> None:
         active = _make_combat_active()
         active.state_data["characters"]["hero_1"]["ability_scores"] = {"wis": 16}
@@ -202,6 +241,58 @@ class TestPipelineExecutorUnits:
             EventType.CONDITION_CHANGED,
             EventType.CONDITION_CHANGED,
         ]
+
+    async def test_executor_scene_layout_updates_current_scene_and_publishes(self) -> None:
+        active = _make_combat_active()
+        bus = _FakeBus()
+        executor = GMResponseExecutor(bus)
+
+        response = AgentResponse(
+            content="La salle circulaire se révèle.",
+            actions=[
+                GMAction(
+                    type="scene_layout",
+                    params={
+                        "cols": 8,
+                        "rows": 8,
+                        "cell_size_m": 1.5,
+                        "terrain": "stone_chamber",
+                        "pois": [
+                            {
+                                "id": "well",
+                                "name": "Puits scellé",
+                                "kind": "hazard",
+                                "position": {"col": 4, "row": 4},
+                                "icon": "mist",
+                            }
+                        ],
+                        "exits": [
+                            {
+                                "id": "wooden_door",
+                                "label": "Porte de chêne",
+                                "position": {"col": 99, "row": 4},
+                                "leads_to": "bandit_room",
+                            }
+                        ],
+                        "party_positions": {"hero_1": {"col": 1, "row": 4}},
+                    },
+                )
+            ],
+        )
+
+        result = await executor.execute_gm_response(
+            response,
+            active,
+            session_id=SESSION_ID,
+            fallback_actor_id="hero_1",
+        )
+
+        scene = active.state_data["current_scene"]
+        assert result.pending_rolls == []
+        assert scene["terrain"] == "stone_chamber"
+        assert scene["exits"][0]["position"] == {"col": 7, "row": 4}
+        assert bus.published[-1][0] == EventType.SCENE_LAYOUT_CHANGED
+        assert bus.published[-1][1]["scene"] == scene
 
     async def test_pipeline_ignores_gm_damage_apply_in_combat(self) -> None:
         active = _make_combat_active()
@@ -765,7 +856,226 @@ class TestMonsterPipeline:
 
 
 # ---------------------------------------------------------------------------
-# 4. Cohérence entre les trois acteurs
+# 4. Encounter intro
+# ---------------------------------------------------------------------------
+
+
+class TestEncounterIntro:
+    async def test_monster_tokens_stay_stable_when_initiative_reorders(self) -> None:
+        from app.api import ws_game
+
+        active = _make_combat_active(monster_id="bandit_1")
+        active.state_data["combatants"] = {
+            "hero_1": {
+                "name": "Aria",
+                "hp": 20,
+                "hp_max": 20,
+                "is_player": True,
+                "is_ai": False,
+                "ac": 14,
+            },
+            "bandit_1": {
+                "name": "Bandit 1",
+                "hp": 11,
+                "hp_max": 11,
+                "is_player": False,
+                "is_ai": True,
+                "status": "active",
+                "monster_id": "bandit",
+                "ac": 12,
+            },
+            "bandit_2": {
+                "name": "Bandit 2",
+                "hp": 11,
+                "hp_max": 11,
+                "is_player": False,
+                "is_ai": True,
+                "status": "active",
+                "monster_id": "bandit",
+                "ac": 12,
+            },
+            "bandit_3": {
+                "name": "Bandit 3",
+                "hp": 11,
+                "hp_max": 11,
+                "is_player": False,
+                "is_ai": True,
+                "status": "active",
+                "monster_id": "bandit",
+                "ac": 12,
+            },
+        }
+        active.state_data["grid_positions"] = {
+            cid: {"col": idx, "row": 0}
+            for idx, cid in enumerate(active.state_data["combatants"])
+        }
+        active.turn_manager._order = [
+            TurnEntry("bandit_3", "Bandit 3", 19, False, True),
+            TurnEntry("hero_1", "Aria", 12, True, False),
+            TurnEntry("bandit_2", "Bandit 2", 7, False, True),
+            TurnEntry("bandit_1", "Bandit 1", 2, False, True),
+        ]
+        active.turn_manager._index = 2
+
+        payload = ws_game._build_combat_start_payload(active)
+        tokens = {c["name"]: c.get("token") for c in payload["combatants"]}
+
+        assert tokens["Bandit 1"] == "B1"
+        assert tokens["Bandit 2"] == "B2"
+        assert tokens["Bandit 3"] == "B3"
+
+    async def test_generate_encounter_intro_uses_gm_dedicated_method(self) -> None:
+        from app.api import ws_game
+
+        active = _make_combat_active()
+        published, capture = _event_collector()
+
+        async def run_encounter_intro(**kwargs):
+            assert kwargs["combatants"][0]["id"] == "goblin_1"
+            return GMResponse(
+                narration="Le gobelin ricane : « Approchez donc. »",
+                actions=[],
+            )
+
+        mock_resolver = MagicMock()
+        mock_resolver._gm.run_encounter_intro = AsyncMock(side_effect=run_encounter_intro)
+
+        with patch("app.api.ws_game.action_resolver", mock_resolver), \
+             patch("app.api.ws_game.event_bus.publish_to_session", new=capture), \
+             patch("app.api.ws_game.load_recent_messages", new=AsyncMock(return_value=[])):
+            intro = await ws_game._generate_encounter_intro(
+                SESSION_ID,
+                active,
+                MagicMock(),
+                active.state_data["combatants"],
+            )
+
+        assert intro == "Le gobelin ricane : « Approchez donc. »"
+        mock_resolver._gm.run_encounter_intro.assert_awaited_once()
+        assert [event_type for event_type, _ in published] == [
+            EventType.AI_THINKING,
+            EventType.AI_THINKING,
+        ]
+
+    async def test_generate_encounter_intro_applies_scene_layout_action(self) -> None:
+        from app.api import ws_game
+
+        active = _make_combat_active()
+        published, capture = _event_collector()
+
+        mock_resolver = MagicMock()
+        mock_resolver._gm.run_encounter_intro = AsyncMock(return_value=GMResponse(
+            narration="Une cave basse s'ouvre autour d'un brasero.",
+            actions=[
+                GMAction(
+                    type="scene_layout",
+                    params={
+                        "cols": 7,
+                        "rows": 6,
+                        "terrain": "cellar",
+                        "pois": [
+                            {
+                                "id": "brazier",
+                                "name": "Brasero",
+                                "kind": "light",
+                                "position": {"col": 3, "row": 2},
+                            }
+                        ],
+                        "exits": [],
+                        "party_positions": {"hero_1": {"col": 1, "row": 3}},
+                    },
+                )
+            ],
+        ))
+
+        with patch("app.api.ws_game.action_resolver", mock_resolver), \
+             patch("app.api.ws_game.event_bus.publish_to_session", new=capture), \
+             patch("app.api.ws_game.load_recent_messages", new=AsyncMock(return_value=[])):
+            intro = await ws_game._generate_encounter_intro(
+                SESSION_ID,
+                active,
+                MagicMock(),
+                active.state_data["combatants"],
+            )
+
+        assert intro == "Une cave basse s'ouvre autour d'un brasero."
+        assert active.state_data["current_scene"]["terrain"] == "cellar"
+        assert any(event_type == EventType.SCENE_LAYOUT_CHANGED for event_type, _ in published)
+
+    async def test_sommation_intro_pauses_in_encounter_start(self) -> None:
+        from app.api import ws_game
+
+        active = _make_combat_active(monster_id="bandit_1")
+        active.phase = SessionStatus.EXPLORATION
+        active.state_data["phase"] = "exploration"
+        active.state_data["pending_encounter"] = {
+            "monster_ids": ["bandit"],
+            "context": "Un bandit surgit dans les ruines.",
+        }
+        published, capture = _event_collector()
+
+        mock_resolver = MagicMock()
+        mock_resolver._gm.run_encounter_intro = AsyncMock(return_value=GMResponse(
+            narration="Le bandit lève sa lame : « Pas un pas de plus. »",
+            actions=[],
+        ))
+
+        with patch("app.api.ws_game.action_resolver", mock_resolver), \
+             patch("app.api.ws_game.event_bus.publish_to_session", new=capture), \
+             patch("app.api.ws_game._sync_ai_control_from_db",
+                   new=AsyncMock(return_value=False)), \
+             patch("app.api.ws_game.session_manager.save_state", new=AsyncMock()), \
+             patch("app.api.ws_game.load_recent_messages", new=AsyncMock(return_value=[])), \
+             patch("app.api.ws_game.persist_narration", new=AsyncMock()), \
+             patch("app.api.ws_game._build_session_state_payload",
+                   return_value={"phase": "encounter_start"}):
+            await ws_game._handle_start_combat(SESSION_ID, active, None)
+
+        event_types = [event_type for event_type, _ in published]
+        assert active.phase == SessionStatus.ENCOUNTER_START
+        assert active.state_data["pending_encounter"]["intro_played"] is True
+        assert "combatants" not in active.state_data
+        assert "combat_start" not in event_types
+        assert EventType.PHASE_CHANGE in event_types
+
+    async def test_forced_combat_from_encounter_start_does_not_replay_intro(self) -> None:
+        from app.api import ws_game
+
+        active = _make_combat_active(monster_id="bandit_1")
+        active.phase = SessionStatus.ENCOUNTER_START
+        active.state_data["phase"] = "encounter_start"
+        active.state_data["pending_encounter"] = {
+            "monster_ids": ["bandit"],
+            "intro_played": True,
+            "intro_text": "Le bandit lève sa lame : « Pas un pas de plus. »",
+        }
+        old_intro = active.state_data["pending_encounter"]["intro_text"]
+        published, capture = _event_collector()
+
+        mock_resolver = MagicMock()
+        mock_resolver._gm.run_encounter_intro = AsyncMock()
+
+        with patch("app.api.ws_game.action_resolver", mock_resolver), \
+             patch("app.api.ws_game.event_bus.publish_to_session", new=capture), \
+             patch("app.api.ws_game._sync_ai_control_from_db",
+                   new=AsyncMock(return_value=False)), \
+             patch("app.api.ws_game._handle_ai_turns", new=AsyncMock()), \
+             patch("app.api.ws_game.session_manager.save_state", new=AsyncMock()), \
+             patch("app.api.ws_game.persist_narration", new=AsyncMock()), \
+             patch("app.api.ws_game._build_session_state_payload",
+                   return_value={"phase": "combat"}):
+            await ws_game._handle_start_combat(SESSION_ID, active, None, force=True)
+
+        event_types = [event_type for event_type, _ in published]
+        narrations = _narrations(published)
+        assert active.phase == SessionStatus.COMBAT
+        assert "combat_start" in event_types
+        assert narrations[-1]["text"] != old_intro
+        mock_resolver._gm.run_encounter_intro.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# 5. Cohérence entre les trois acteurs
 # ---------------------------------------------------------------------------
 
 

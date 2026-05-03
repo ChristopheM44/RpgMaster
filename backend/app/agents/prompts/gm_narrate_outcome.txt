@@ -18,6 +18,7 @@ Instructions :
 - Si l'issue révèle une embuscade ou des ennemis qui passent immédiatement à l'attaque, nomme clairement les ennemis et leur hostilité dans la narration.
 - Si l'issue d'un jet social en combat fait qu'un PNJ se rend, fuit ou cesse d'être hostile, ajoute une action combatant_status :
   target = id exact du PNJ dans game_state.combatants, params.status = "surrendered" ou "fled".
+  Si le jet mentionne une cible sociale, utilise cet id en priorité.
 - Narration courte et immersive : 1 à 3 phrases en français médiéval fantastique.
 - Ne répète pas l'action déjà décrite dans les messages récents.
 - Si aucune action mécanique supplémentaire n'est requise, laisse le tableau "actions" vide [].

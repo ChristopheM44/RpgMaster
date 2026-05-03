@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import uuid
 from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-from app.agents.schemas import AgentContext, AgentResponse, GMResponse
+from app.agents.schemas import AgentContext, AgentResponse, GMAction, GMResponse
 from app.game.combat_triggers import prime_combat_from_hostile_narration
 from app.game.constants import INACTIVE_STATUSES
 from app.game.event_bus import EventType, event_bus
@@ -34,6 +35,33 @@ _FALLBACK_NARRATION = (
     "Le Maître du Jeu observe la situation... "
     "(Le système de narration est temporairement indisponible.)"
 )
+
+_SOCIAL_COMBAT_MARKERS = (
+    "rends toi",
+    "rends-toi",
+    "rendez vous",
+    "rendez-vous",
+    "pose tes armes",
+    "posez vos armes",
+    "depose",
+    "dépose",
+    "clemence",
+    "clémence",
+    "parlement",
+    "negoc",
+    "négoc",
+    "intimid",
+    "persuad",
+)
+
+
+def _normalized_text(text: Optional[str]) -> str:
+    return re.sub(r"\s+", " ", (text or "").casefold().replace("’", "'"))
+
+
+def _is_combat_social_text(text: Optional[str]) -> bool:
+    normalized = _normalized_text(text)
+    return any(marker in normalized for marker in _SOCIAL_COMBAT_MARKERS)
 
 
 class ActionRequest(BaseModel):
@@ -268,6 +296,13 @@ class ActionPipeline:
             finally:
                 await self._publish_ai_thinking(request.session_id, False)
 
+        if gm_response and phase_value == "COMBAT":
+            gm_response = self._with_social_roll_fallback(
+                gm_response,
+                request,
+                target_id,
+            )
+
         if gm_response:
             active.last_gm_intent = gm_response.action_intent
         elif (
@@ -386,6 +421,12 @@ class ActionPipeline:
                 roll_events.extend(outcome_exec.pending_rolls)
                 executed_actions.extend(outcome_exec.executed_actions)
                 canon_dirty = canon_dirty or outcome_exec.canon_dirty
+            elif narration_text:
+                await self._publish_gm_narration(
+                    request.session_id,
+                    narration_text,
+                    actual_db,
+                )
 
         if canon_dirty and actual_db is not None:
             try:
@@ -601,6 +642,46 @@ class ActionPipeline:
         return AgentResponse(content=str(candidate), actions=[])
 
     @staticmethod
+    def _with_social_roll_fallback(
+        response: AgentResponse,
+        request: ActionRequest,
+        social_target_id: Optional[str],
+    ) -> AgentResponse:
+        if (
+            request.actor_kind != "player"
+            or request.action_type != "free_text"
+            or not request.actor_id
+            or not _is_combat_social_text(request.content)
+        ):
+            return response
+
+        if any(
+            gm_action.type in {"roll_request", "combatant_status"}
+            for gm_action in response.actions
+        ):
+            return response
+
+        actions = [
+            *response.actions,
+            GMAction(
+                type="roll_request",
+                target=request.actor_id,
+                params={
+                    "ability": "cha",
+                    "type": "check",
+                    "dc": 12,
+                    "reason": "social_combat",
+                    "social_target": social_target_id,
+                },
+            ),
+        ]
+        return AgentResponse(
+            content=response.content,
+            actions=actions,
+            action_intent=response.action_intent or "mixed",
+        )
+
+    @staticmethod
     def _without_combat_damage_actions(response: AgentResponse) -> AgentResponse:
         actions = [
             gm_action for gm_action in response.actions if gm_action.type != "damage_apply"
@@ -642,6 +723,13 @@ class ActionPipeline:
     ) -> str:
         if request.content:
             text = request.content
+            if (
+                request.action_type == "free_text"
+                and target_name
+                and _is_combat_social_text(request.content)
+            ):
+                target_id = request.target_id or "unknown"
+                text = f"{text} [Cible sociale : {target_name} ({target_id})]"
         elif request.action_type == "attack" and target_name:
             if request.actor_kind == "monster":
                 text = f"[Tour du monstre] {actor_name} attaque {target_name}."
@@ -673,12 +761,27 @@ class ActionPipeline:
 
     @staticmethod
     def _default_target_id(request: ActionRequest, state_data: dict[str, Any]) -> Optional[str]:
-        if request.actor_kind != "monster" or request.action_type != "attack":
-            return None
-
         combatants = state_data.get("combatants", {})
         if not isinstance(combatants, dict):
             return None
+
+        if request.action_type == "free_text" and _is_combat_social_text(request.content):
+            active_npcs: list[str] = []
+            for combatant_id, cdata in combatants.items():
+                if not isinstance(cdata, dict) or cdata.get("is_player", True):
+                    continue
+                status = str(cdata.get("status", "active")).lower()
+                try:
+                    hp = int(cdata.get("hp", 0))
+                except (TypeError, ValueError):
+                    hp = 0
+                if hp > 0 and status not in INACTIVE_STATUSES:
+                    active_npcs.append(combatant_id)
+            return active_npcs[0] if len(active_npcs) == 1 else None
+
+        if request.actor_kind != "monster" or request.action_type != "attack":
+            return None
+
         for combatant_id, cdata in combatants.items():
             if not isinstance(cdata, dict):
                 continue

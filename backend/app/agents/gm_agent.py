@@ -106,6 +106,24 @@ class GMAgent(BaseAgent):
         )
         return await self._call_and_parse(user_prompt, context_manager)
 
+    async def run_encounter_intro(
+        self,
+        game_state: dict[str, Any],
+        combatants: list[dict[str, Any]] | dict[str, Any],
+        messages: Optional[list] = None,
+        context_manager: Optional[ContextManager] = None,
+    ) -> GMResponse:
+        """Génère l'ouverture cinématique unique d'une rencontre."""
+        user_prompt = self._render_prompt(
+            "gm_encounter_intro.txt",
+            {
+                "game_state": json.dumps(game_state, ensure_ascii=False, indent=2),
+                "combatants": json.dumps(combatants, ensure_ascii=False, indent=2),
+                "recent_messages": self._format_messages(messages),
+            },
+        )
+        return await self._call_and_parse(user_prompt, context_manager)
+
     async def run_npc_dialogue(
         self,
         npc_name: str,
@@ -163,9 +181,14 @@ class GMAgent(BaseAgent):
     ) -> GMResponse:
         """Narre l'issue de jets et conserve les actions mécaniques éventuelles."""
         rolls_text = "\n".join(
-            "- {label}: {breakdown} → {outcome}".format(
+            "- {label}: {breakdown}{target} → {outcome}".format(
                 label=r.get("label", "Jet"),
                 breakdown=r.get("breakdown", ""),
+                target=(
+                    f" [cible sociale: {r.get('social_target_id')}]"
+                    if r.get("social_target_id")
+                    else ""
+                ),
                 outcome=(
                     "SUCCÈS" if r.get("success") is True
                     else "ÉCHEC" if r.get("success") is False

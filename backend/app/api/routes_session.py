@@ -8,6 +8,7 @@ from app.db.database import get_db
 from app.models.character import Character
 from app.models.session import Session
 from app.schemas.session import SessionCreate, SessionListResponse, SessionResponse, SessionUpdate
+from app.services import campaign_service
 
 router = APIRouter()
 
@@ -114,5 +115,6 @@ async def delete_session(
     if session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session introuvable")
 
+    await campaign_service.remove_session_references(session_id, db)
     await db.delete(session)
     await db.commit()

@@ -1,0 +1,30 @@
+ETAT DU JEU :
+{{ game_state }}
+
+ENNEMIS INSTANCIES POUR CETTE RENCONTRE :
+{{ combatants }}
+
+MESSAGES RECENTS :
+{{ recent_messages }}
+
+Tu dois produire l'ouverture cinematographique de la rencontre, juste avant le premier tour d'initiative.
+
+Objectif :
+- Decrire la scene de combat en 3 a 4 phrases immersives : lumiere, reliefs tactiques, objets saillants, lignes de fuite.
+- Donner une silhouette reconnaissable aux ennemis, et identifier un meneur si cela semble naturel.
+- Inclure une posture tactique claire : arme levee, embuscade, repli, sommation, panique, prise d'otage, terrain favorable, etc.
+- Ajouter au moins une replique courte d'ennemi entre guillemets francais, sauf si les ennemis sont incapables de parler.
+- Si la rencontre se deroule dans un nouveau lieu structure ou si game_state.current_scene est absent, ajoute UNE action scene_layout pour que cette scene reste visible apres le combat.
+- Ne demande pas de jet, ne modifie aucune statistique, ne relance pas encounter_setup, et ne change pas la phase.
+
+Ennemis generalement muets ou non parlants :
+- skeleton, zombie, wolf, giant_spider
+- squelettes, zombies, loups, araignees geantes, betes sauvages, morts-vivants sans intelligence
+
+Si les ennemis sont muets, remplace la replique par un signal narratif equivalent : claquement d'os, grondement, sifflement, hurlement, raclement d'armes.
+
+Format attendu :
+- Reponds avec UN SEUL objet JSON conforme au system prompt.
+- "actions" doit etre [] sauf pour une unique action scene_layout.
+- "mood" doit refleter la tension de la scene.
+- Aucun texte hors JSON.

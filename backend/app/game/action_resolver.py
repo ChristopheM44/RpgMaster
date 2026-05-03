@@ -926,6 +926,7 @@ class ActionResolver:
         - ``damage_apply`` : réduit les PV d'un combattant dans state_data.
         - ``condition_add`` / ``condition_remove`` : publie un événement de condition.
         - ``combatant_status`` : marque un PNJ comme actif, vaincu, rendu ou en fuite.
+        - ``scene_layout`` : mémorise le schéma compact du lieu d'exploration.
         - ``state_transition`` : ignoré ici (géré par SessionManager).
         """
         if action_type == "damage_apply":
@@ -1073,6 +1074,22 @@ class ActionResolver:
                 )
             else:
                 logger.debug("state_transition reçue sans phase cible : %s", params)
+
+        elif action_type == "scene_layout":
+            from app.game.gm_response_executor import GMResponseExecutor
+
+            layout = GMResponseExecutor._normalize_scene_layout(params)
+            if not layout:
+                logger.warning("scene_layout ignoré : params invalides — %s", params)
+                return
+            active.state_data["current_scene"] = layout
+            active.mark_dirty()
+            await event_bus.publish_to_session(
+                session_id,
+                EventType.SCENE_LAYOUT_CHANGED,
+                {"scene": layout},
+                source="action_resolver",
+            )
 
         elif action_type == "journal_update":
             journal: dict[str, Any] = active.state_data.setdefault("adventure_journal", {

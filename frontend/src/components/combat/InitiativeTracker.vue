@@ -2,10 +2,6 @@
 import { computed } from 'vue'
 import { useGameStore } from '../../stores/game'
 
-const emit = defineEmits<{
-  nextTurn: []
-}>()
-
 const gameStore = useGameStore()
 
 const orderedCombatants = computed(() =>
@@ -106,9 +102,6 @@ function isAiCompanion(combatant: (typeof gameStore.combatants)[0]): boolean {
     </div>
 
     <div class="space-y-2 border-t p-3" :style="{ borderColor: 'var(--color-border)' }">
-      <button class="rpg-btn-primary w-full justify-center !py-2 !text-[11px]" @click="emit('nextTurn')">
-        Tour suivant
-      </button>
       <div class="grid grid-cols-3 gap-1.5">
         <button class="rpg-btn-secondary justify-center !px-1 !py-1 !text-[9px] opacity-45" disabled title="Bientôt">+ Allié</button>
         <button class="rpg-btn-secondary justify-center !px-1 !py-1 !text-[9px] opacity-45" disabled title="Bientôt">+ Ennemi</button>

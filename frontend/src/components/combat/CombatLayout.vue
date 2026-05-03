@@ -11,7 +11,6 @@ import SelectedDetailPanel from './SelectedDetailPanel.vue'
 const emit = defineEmits<{
   action: [actionType: string, content?: string, targetId?: string, extra?: Record<string, unknown>]
   endCombat: []
-  nextTurn: []
   openSheet: [id: string]
 }>()
 
@@ -27,7 +26,7 @@ const speedM = computed(() => {
 
 <template>
   <div class="hidden min-h-0 flex-1 overflow-hidden md:flex">
-    <InitiativeTracker @next-turn="emit('nextTurn')" />
+    <InitiativeTracker />
 
     <main class="flex min-w-0 flex-1 flex-col overflow-hidden">
       <div class="flex min-h-0 flex-[1.45] overflow-hidden">

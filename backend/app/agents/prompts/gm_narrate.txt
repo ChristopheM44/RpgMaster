@@ -14,6 +14,8 @@ ACTION DU JOUEUR :
 En tant que Maître du Jeu, décris ce qui se passe et ce que les personnages perçoivent.
 
 Instructions :
+- Avant d'écrire, identifie le lieu actuel depuis game_state.current_scene, game_state.adventure_journal et les messages récents. Ne remplace pas ce lieu par un décor générique.
+- Si le groupe est en sous-sol/cave/donjon/salle souterraine, conserve cette réalité physique : pas de ciel, soleil, vent extérieur, météo ou plafond ouvert sauf élément déjà établi.
 - Détermine action_intent selon l'action du joueur :
   * "social" si le joueur s'adresse à ses compagnons (question, demande d'avis, proposition de plan).
   * "environmental" si le joueur agit sur le monde (explorer, examiner, bouger, utiliser).
@@ -23,6 +25,9 @@ Instructions :
 - Varie les registres sensoriels : vue, ouïe, odorat, toucher, ressenti émotionnel.
 - Si l'action du joueur nécessite un jet de dés (escalader, persuader, crocheter, percevoir…), inclus un roll_request et limite la narration à 1 phrase de cadrage. Ne donne pas le résultat, l'indice ou la conséquence avant le jet.
 - Si la scène introduit un nouveau lieu ou change l'heure/météo/le jour : émets journal_update avec uniquement les champs qui changent.
+- Si la narration introduit un nouveau lieu structuré (pièce, salle, clairière, place, carrefour), ou si game_state.current_scene est absent alors que le lieu actuel est structuré, émets UNE action scene_layout :
+  grille de 6 à 12 cases de côté, 2 à 5 points d'intérêt, 1 à 3 sorties, positions approximatives du groupe si connues.
+  Le schéma peut être sommaire mais doit rester cohérent avec le texte. Ne répète pas scene_layout si le lieu n'a pas changé.
 - Si la narration introduit une quête ou rumeur (donnée par un PNJ, découverte, mystère) : émets quest_add avec un id court en snake_case.
 - Si la narration nomme un nouveau PNJ ou lieu important : émets chronicle_add (kind="npc" ou "location"). Pas les monstres de combat, pas les personnages joueurs.
 - N'émets journal_update, quest_add, chronicle_add QUE quand l'état change. Pas à chaque tour.
@@ -31,6 +36,8 @@ Instructions :
     2. state_transition vers COMBAT.
   Le moteur utilisera encounter_setup pour instancier exactement les ennemis que tu as narrés.
   N'utilise encounter_setup QUE pour une nouvelle rencontre, pas si le combat est déjà en cours.
+  Dans ce cas, ne donne pas encore de longs dialogues aux ennemis : limite-toi à 1-2 phrases de menace ou de révélation.
+  Une narration dédiée d'ouverture de rencontre ajoutera juste après les voix, postures et détails tactiques.
 - Si aucune action mécanique n'est requise, laisse le tableau "actions" vide [].
 - Évite de commencer la narration par « Vous » ou « Le groupe » à chaque fois — varie les formules.
 
