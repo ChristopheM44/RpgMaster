@@ -1,173 +1,74 @@
-# Audit RpgMaster - Suivi refacto post-audit
+# Plan de refacto consolide RpgMaster
 
-> Derniere mise a jour : 2026-05-03
+> Derniere mise a jour : 2026-05-04
 
-Objectif du cycle : terminer le refacto demarre apres audit sans reprendre les lots deja livres, en gardant la compatibilite des tests existants.
-
----
-
-## Etat global
-
-| Lot | Statut | Resultat |
-|-----|--------|----------|
-| Securite / robustesse locale | Termine | Schemas WS, auth locale optionnelle, EventBus borne, locks session, state schema v1 |
-| Lot 4 - Extraction progressive `ws_game.py` | Termine | Payloads et handlers intro/combat/IA extraits avec facade compatible |
-| Lot 5 - ActionPipeline / Resolver | Termine | Mecanique extraite dans `action_mechanics.py`, `ActionResolver` conserve comme facade |
-| Lot 6 - Combat et transitions | Termine | Boucle unique des tours IA combat compagnons + monstres, `start_mode` couvert |
-| Lot 7 - Frontend WS | Termine | Types WS alignes backend, guards runtime legers, reconnexion/token preserves |
-
-Il ne reste pas de lot technique post-audit ouvert dans ce fichier. Les seules actions restantes sont des smokes manuels UI/WebSocket si besoin.
+Objectif : garder un seul plan actif apres les deux audits, avec une cible **local renforce**. Les audits restent des sources de diagnostic, pas des roadmaps a appliquer telles quelles.
 
 ---
 
-## Fondations deja livrees
+## Orientation
 
-- [x] `backend/app/api/ws_schemas.py`
-- [x] `backend/app/api/connection_manager.py`
-- [x] `backend/app/security.py`
-- [x] `backend/app/game/state_schema.py`
-- [x] `EventBus` renomme en `InProcessEventBus`, alias compatible `EventBus`
-- [x] `schema_version=1` dans `state_data`
-- [x] Locks par session dans `SessionManager`
-- [x] Auth locale optionnelle via `app_access_token`
-- [x] Frontend token optionnel `VITE_RPGMASTER_ACCESS_TOKEN`
-- [x] Reconnexion WS frontend avec `characterId` persistant
-- [x] `ENCOUNTER_START -> EXPLORATION` autorise
-- [x] `GMResponse.start_mode` ajoute pour les intros de rencontre
-
-Derniere validation connue avant ce cycle :
-
-- `backend/.venv/bin/pytest backend/tests -q` -> `1161 passed`
-- `cd frontend && npm run type-check && npm run test && npm run build` -> OK
-- `ruff check` cible sur fichiers modifies -> OK
+- Cible principale : outil local / reseau de confiance, pas service public multi-tenant.
+- Priorite : securite locale, robustesse WebSocket, reduction progressive de la dette, preservation du comportement de jeu.
+- Hors chemin critique : JWT utilisateurs, table `api_keys`, Redis, Postgres, rate limiting lourd, refacto profond de `player_agent.py`, JSON mode LLM natif.
 
 ---
 
-## Lot 4 - Extraction progressive de `ws_game.py` - Termine
+## Deja livre avant ce cycle
 
-But : reduire `backend/app/api/ws_game.py` sans changement comportemental.
-
-- [x] Creer `backend/app/api/ws_payloads.py`
-  - `build_session_state_payload`
-  - `build_combat_start_payload`
-  - helpers tokens/couleurs/actions monstres
-  - snapshot personnage et calcul AC
-- [x] Creer `backend/app/api/ws_handlers/encounter_intro.py`
-  - intro rencontre dediee
-  - `start_mode`
-  - pause en `ENCOUNTER_START`
-  - execution sure du `scene_layout` d'intro
-- [x] Creer `backend/app/api/ws_handlers/combat.py`
-  - helpers purs de ciblage social combat
-  - guard hors tour
-  - textes et raisons de fin de combat
-- [x] Creer `backend/app/api/ws_handlers/ai_control.py`
-  - boucle des tours IA combat extraite
-  - resolution compagnon + monstre depuis un meme point d'entree
-- [x] Garder `game_websocket()`, `_dispatch_action()` et les fonctions privees historiques de `ws_game.py` comme facade compatible avec les tests.
-- [x] Tests ajoutes :
-  - `backend/tests/test_api/test_ws_payloads.py`
-  - `backend/tests/test_api/test_ws_encounter_intro.py`
-  - `backend/tests/test_api/test_ws_combat_handlers.py`
-
-Notes :
-
-- `ws_game.py` reste volontairement la facade WebSocket principale.
-- L'extraction est progressive : les handlers equipement/repos et le dispatch global restent en place pour eviter un big bang.
+- [x] Schemas WebSocket stricts dans `backend/app/api/ws_schemas.py`.
+- [x] `ConnectionManager`, locks par session, `state_schema` v1.
+- [x] `EventBus` borne avec logs/metrics de drops.
+- [x] Extraction initiale `ws_payloads.py` et handlers `encounter_intro.py`, `combat.py`, `ai_control.py`.
+- [x] Tests WS/API/frontend existants autour des payloads, intros, combat handlers et `useWebSocket`.
+- [x] Frontend token optionnel `VITE_RPGMASTER_ACCESS_TOKEN`.
 
 ---
 
-## Lot 5 - ActionPipeline / Resolver - Termine
+## Lots restants
 
-But : clarifier `ActionResolver` sans casser les tests existants.
+### Lot A - Securite et configuration locale
 
-- [x] Creer `backend/app/game/action_mechanics.py`.
-- [x] Deplacer les helpers mecaniques historiques :
-  - `_resolve_attack`
-  - `_normalize_roll_event`
-  - `_resolve_generic_roll`
-  - `_resolve_cast_spell`
-  - `_resolve_death_save`
-  - `_apply_death_save_outcome`
-  - `_resolve_stabilize`
-  - `_execute_roll_request`
-- [x] Garder `ActionResolver` comme facade compatible via heritage `ActionMechanics`.
-- [x] Garder la reutilisation durable de `ActionPipeline` par `ActionResolver`.
-- [x] Ne pas renommer `ActionResolver` en `ActionService` : risque inutile pour le moment.
-- [x] Tests ajoutes :
-  - `backend/tests/test_game/test_action_mechanics.py`
+- [ ] Revoquer/rotater toute cle exposee hors repo.
+- [x] Remettre la config runtime LLM locale sur `http://localhost:11434` sans cle API stockee.
+- [x] Completer `.env.example` avec `APP_ACCESS_TOKEN`, `VITE_RPGMASTER_ACCESS_TOKEN`, `RUNTIME_DIR`, `LLM_BUDGET_MODE`, `OLLAMA_MAX_CONCURRENT_REQUESTS`.
+- [x] Refuser le demarrage si `APP_DEBUG=false` et aucun `APP_ACCESS_TOKEN` n'est configure.
+- [x] Redacter les secrets presents dans les audits locaux non trackes.
 
----
+### Lot B - WebSocket et API
 
-## Lot 6 - Combat et transitions - Termine
+- [x] Deplacer le singleton `session_manager` hors de `api/ws_game.py` vers un runtime partage.
+- [x] Garder un alias temporaire dans `ws_game.py` pour compatibilite tests/imports historiques.
+- [x] Valider au `join` WS que le `character_id` existe et appartient a la session.
+- [x] Remplacer les messages `str(ValidationError)` envoyes au client par des erreurs generiques.
+- [x] Ajouter un schema Pydantic `SaveSlotCreate` pour `POST /game/{session_id}/saves`.
+- [ ] Continuer l'extraction progressive de `ws_game.py` sans big bang.
 
-But : unifier la logique des tours IA combat.
+### Lot C - Robustesse async, prompts et mecanique
 
-- [x] Extraire la boucle commune dans `backend/app/api/ws_handlers/ai_control.py`.
-- [x] Garder `_handle_ai_turns()` dans `ws_game.py` comme facade.
-- [x] Eviter la duplication :
-  - compagnons IA -> `AIPlayerManager.process_ai_turns(..., max_turns=1)`
-  - monstres -> meme boucle WS extraite, action resolue par `ActionResolver`
-- [x] `trigger_ai_reactions` en combat repasse par `_handle_ai_turns()`, y compris si le tour courant est un monstre et qu'il n'y a aucun compagnon IA.
-- [x] Verification `pending_phase_transition` :
-  - consommation apres succes dans `_consume_pending_combat_transition`
-  - pas de suppression avant `_handle_start_combat`
-- [x] `start_mode: "pause" | "combat"` integre :
-  - fallback texte pour sommation
-  - `start_mode="pause"` garde `ENCOUNTER_START`
-  - `start_mode="combat"` force le lancement direct meme avec marqueurs de pause
-- [x] Test dedie ajoute dans `backend/tests/test_game/test_action_pipeline.py`.
+- [x] Ajouter `create_logged_task(coro, name)` et l'utiliser pour TTS/welcome narration fire-and-forget.
+- [x] Delimiter les entrees joueur dans les prompts GM/combat/social/outcome.
+- [x] Extraire `game/roll_executor.py` pour mutualiser `roll_request`.
+- [x] Transformer `ActionResolver` vers la composition avec `ActionMechanics`, en gardant les methodes facade.
+- [x] Documenter `ActiveSession.state_data` comme source autoritaire pendant une session active.
+- [x] Ajouter un helper unique de synchronisation personnage pour HP/equipement/slots/hit dice/conditions.
+
+### Lot D - Frontend
+
+- [x] Creer une liste source unique `WS_EVENT_TYPES_LIST as const` et deriver `WsEventType`.
+- [x] Ajouter des guards pour `combat_action`, `combatant_moved`, `combatant_status_changed`, `scene_layout_changed`.
+- [x] Passer la reconnexion WS en backoff exponentiel + jitter.
+- [x] Migrer `campaignStore` vers `frontend/src/services/api.ts`.
+- [x] Supprimer le counter store/test inutilise.
+- [x] Limiter la queue audio TTS et exposer `cancelAll()`.
 
 ---
 
-## Lot 7 - Frontend WS - Termine
+## Verifications attendues
 
-But : finaliser l'alignement protocole frontend/backend.
-
-- [x] Aligner `WsEventType` avec `EventType` backend :
-  - ajout `dialogue`
-  - ajout `damage_applied`
-  - conservation de `pong` comme extension protocolaire WS hors `EventType`
-- [x] Ajouter des guards runtime legers dans `useWebSocket.ts` :
-  - `session_state`
-  - `narration` / `dialogue`
-  - `roll_result`
-  - `turn_start`
-  - `phase_change`
-  - `combat_start`
-  - `hp_changed`
-  - updates personnage critiques
-  - `error` / `audio`
-- [x] Revalider les chemins existants :
-  - token HTTP/WS conserve (`VITE_RPGMASTER_ACCESS_TOKEN`)
-  - reconnexion avec `characterId` persistant conservee
-  - handlers `player_joined`, `player_left`, `turn_end`, `round_start` conserves
-- [x] Tests frontend ajoutes dans `frontend/src/composables/__tests__/useWebSocket.test.ts`.
-
----
-
-## Verifications de ce cycle
-
-Verifications deja executees pendant l'implementation :
-
-- `backend/.venv/bin/pytest backend/tests/test_api/test_ws_payloads.py backend/tests/test_api/test_ws_encounter_intro.py backend/tests/test_api/test_ws_combat_handlers.py backend/tests/test_game/test_action_mechanics.py backend/tests/test_game/test_action_resolver.py backend/tests/test_game/test_action_pipeline.py -q` -> `50 passed`
-- `cd frontend && npm run type-check` -> OK
-- `cd frontend && npm run test -- useWebSocket` -> OK (`4 passed`)
-
-Verifications finales :
-
-- [x] `backend/.venv/bin/pytest backend/tests/test_game backend/tests/test_api -q` -> `262 passed`
-- [x] `backend/.venv/bin/ruff check ...` cible fichiers modifies -> OK
-- [x] `cd frontend && npm run type-check && npm run test && npm run build` -> OK (`8 files`, `19 tests`, build OK)
-
----
-
-## Hors lot / manuel
-
-- [ ] Smoke manuel UI/WebSocket complet : 1 humain + 1 compagnon IA + 1 monstre.
-- [ ] Smoke manuel equipement/repos si besoin.
-- [ ] Couverture API/agents supplementaire hors refacto :
-  - `tests/test_api/test_routes_admin.py`
-  - `tests/test_api/test_routes_campaign.py`
-  - `tests/test_api/test_routes_encounters.py`
-  - etoffer `tests/test_game/test_ai_player_manager.py`
+- Backend cible : `backend/.venv/bin/pytest backend/tests/test_game/test_ws_game.py backend/tests/test_api/test_ws_payloads.py backend/tests/test_api/test_ws_encounter_intro.py backend/tests/test_api/test_ws_combat_handlers.py -q`.
+- Securite/API : tests pour token obligatoire hors debug, join personnage absent/hors session, erreurs Pydantic generiques, `SaveSlotCreate`.
+- Action pipeline : tests pour `roll_executor`, composition `ActionResolver`, attaque/sort/death save/stabilize.
+- Prompt safety : test de rendu avec texte joueur contenant `ignore previous instructions`.
+- Frontend : `cd frontend && npm run type-check && npm run test && npm run build`.
+- Smoke manuel final : 1 humain + 1 compagnon IA + 1 monstre, puis equipement/repos.

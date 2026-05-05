@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import uuid
 from typing import Optional
 
@@ -9,10 +8,14 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.ws_payloads import build_session_state_payload, character_snapshot
 from app.db.database import get_db
+from app.game.async_tasks import create_logged_task
 from app.game.event_bus import EventType, event_bus
+from app.game.runtime import session_manager
 from app.game.turn_manager import CombatantInfo
 from app.models.character import Character
+from app.models.game_state import GameState
 from app.models.message import Message
 from app.models.save_slot import SaveSlot
 from app.models.session import Session, SessionStatus
@@ -25,11 +28,17 @@ class StartGameBody(BaseModel):
     auto_generate: bool = False
 
 
+class SaveSlotCreate(BaseModel):
+    name: str
+
+
+def _build_session_state_payload(session_id: str) -> dict:
+    return build_session_state_payload(session_id, session_manager.get_session(session_id))
+
+
 @router.get("/{session_id}/state")
 async def get_game_state(session_id: str, db: AsyncSession = Depends(get_db)):
     """Get current game state."""
-    from app.api.ws_game import session_manager
-
     active = session_manager.get_session(session_id)
     if active:
         return {
@@ -53,8 +62,6 @@ async def start_game(
     db: AsyncSession = Depends(get_db),
 ):
     """Start a game session — transition to EXPLORATION and set up participants."""
-    from app.api.ws_game import _build_session_state_payload, _character_snapshot, session_manager
-
     try:
         active = await session_manager.open_session(session_id, db)
     except KeyError:
@@ -98,7 +105,7 @@ async def start_game(
 
     # Store character snapshots in state_data for later combat use
     active.state_data["characters"] = {
-        c.id: _character_snapshot(c)
+        c.id: character_snapshot(c)
         for c in characters
     }
 
@@ -162,7 +169,10 @@ async def start_game(
     elif body.auto_generate:
         # Le MJ génère une accroche d'aventure adapée au groupe (fire-and-forget)
         from app.api.ws_game import _send_welcome_narration
-        asyncio.create_task(_send_welcome_narration(session_id, active, db))
+        create_logged_task(
+            _send_welcome_narration(session_id, active, db),
+            "routes_game.send_welcome_narration",
+        )
     else:
         # Mode libre : texte d'accueil neutre
         welcome_text = (
@@ -189,11 +199,13 @@ async def start_game(
 
 
 @router.post("/{session_id}/saves")
-async def create_save(session_id: str, body: dict, db: AsyncSession = Depends(get_db)):
+async def create_save(
+    session_id: str,
+    body: SaveSlotCreate,
+    db: AsyncSession = Depends(get_db),
+):
     """Creer un point de sauvegarde nomme pour la session."""
-    from app.api.ws_game import session_manager
-
-    name = (body.get("name") or "").strip()
+    name = body.name.strip()
     if not name:
         raise HTTPException(status_code=422, detail="Le nom de la sauvegarde est requis.")
 
@@ -214,7 +226,6 @@ async def create_save(session_id: str, body: dict, db: AsyncSession = Depends(ge
         state_data["turn_manager"] = active.turn_manager.to_dict()
         state_data["phase"] = phase_val
     else:
-        from app.models.game_state import GameState
         gs_result = await db.execute(
             select(GameState).where(GameState.session_id == session_id)
         )
@@ -331,9 +342,6 @@ async def delete_save(session_id: str, save_id: str, db: AsyncSession = Depends(
 @router.post("/{session_id}/saves/{save_id}/load")
 async def load_save(session_id: str, save_id: str, db: AsyncSession = Depends(get_db)):
     """Restaurer la session a partir d'une sauvegarde."""
-    from app.api.ws_game import session_manager
-    from app.models.game_state import GameState
-
     result = await db.execute(
         select(SaveSlot).where(
             SaveSlot.id == save_id, SaveSlot.session_id == session_id
@@ -398,7 +406,6 @@ async def load_save(session_id: str, save_id: str, db: AsyncSession = Depends(ge
     if session_manager.is_active(session_id):
         await session_manager.close_session(session_id, db)
     await session_manager.open_session(session_id, db)
-    from app.api.ws_game import _build_session_state_payload
 
     # Notifier les clients connectes
     await event_bus.publish_to_session(

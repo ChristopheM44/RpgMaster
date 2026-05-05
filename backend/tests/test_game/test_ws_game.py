@@ -115,18 +115,38 @@ class TestPingPong:
 class TestJoin:
     def test_join_broadcasts_player_joined(self, ws_client) -> None:
         session_id = _create_session(ws_client)
+        character = _create_character(ws_client, session_id)
         with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
             ws.receive_json()  # session_state
-            ws.send_json({"type": "join", "character_id": "hero-1"})
+            ws.send_json({"type": "join", "character_id": character["id"]})
             data = ws.receive_json()
             assert data["event_type"] == "player_joined"
-            assert data["payload"]["character_id"] == "hero-1"
+            assert data["payload"]["character_id"] == character["id"]
 
     def test_join_missing_character_id_returns_error(self, ws_client) -> None:
         session_id = _create_session(ws_client)
         with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
             ws.receive_json()  # session_state
             ws.send_json({"type": "join"})  # character_id manquant
+            data = ws.receive_json()
+            assert data["event_type"] == "error"
+
+    def test_join_unknown_character_returns_error(self, ws_client) -> None:
+        session_id = _create_session(ws_client)
+        with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
+            ws.receive_json()  # session_state
+            ws.send_json({"type": "join", "character_id": "hero-1"})
+            data = ws.receive_json()
+            assert data["event_type"] == "error"
+            assert data["payload"]["message"] == "Personnage introuvable dans cette session."
+
+    def test_join_character_from_other_session_returns_error(self, ws_client) -> None:
+        session_id = _create_session(ws_client)
+        other_session_id = _create_session(ws_client, "Other Session")
+        other_character = _create_character(ws_client, other_session_id)
+        with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
+            ws.receive_json()  # session_state
+            ws.send_json({"type": "join", "character_id": other_character["id"]})
             data = ws.receive_json()
             assert data["event_type"] == "error"
 
@@ -148,7 +168,7 @@ class TestPlayerAction:
             })
             data = ws.receive_json()
             assert data["event_type"] == "error"
-            assert "content" in data["payload"]["message"]
+            assert data["payload"]["message"] == "Message WebSocket invalide."
 
     def test_toggle_ai_control_invalid_character_id_returns_error(self, ws_client) -> None:
         session_id = _create_session(ws_client)

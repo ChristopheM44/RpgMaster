@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from app.game.action_mechanics import ActionMechanics
 from app.game.action_resolver import ActionResolver
+from app.game.roll_executor import execute_roll_request
 
 
 def test_action_mechanics_normalizes_attack_roll_event() -> None:
@@ -30,5 +32,30 @@ def test_action_mechanics_normalizes_attack_roll_event() -> None:
 def test_action_resolver_keeps_action_mechanics_facade() -> None:
     resolver = ActionResolver(gm_agent=AsyncMock())
 
-    assert isinstance(resolver, ActionMechanics)
+    assert not isinstance(resolver, ActionMechanics)
     assert resolver._resolve_generic_roll("test")["type"] == "generic_roll"
+
+
+def test_roll_executor_supports_social_target_metadata() -> None:
+    active = SimpleNamespace(
+        state_data={
+            "characters": {
+                "hero-1": {
+                    "name": "Aria",
+                    "ability_scores": {"cha": 14},
+                    "level": 1,
+                    "skill_proficiencies": ["persuasion"],
+                }
+            }
+        }
+    )
+
+    event = execute_roll_request(
+        {"skill": "persuasion", "dc": 10, "social_target": "goblin-1"},
+        "hero-1",
+        active,
+    )
+
+    assert event is not None
+    assert event["character_id"] == "hero-1"
+    assert event["social_target_id"] == "goblin-1"

@@ -13,6 +13,7 @@ from app.engine.character_creation import get_class_features
 from app.engine.dice import RollResult, roll
 from app.game.event_bus import EventType, event_bus
 from app.game.session_manager import ActiveSession, SessionManager
+from app.game.state_sync import sync_character_state
 from app.models.character import Character
 from app.models.session import SessionStatus
 from app.services.message_service import persist_narration
@@ -263,15 +264,13 @@ class RestService:
 
     @staticmethod
     def _sync_character_update(active: ActiveSession, update: RestCharacterUpdate) -> None:
-        chars_data = active.state_data.get("characters", {})
-        if update.character_id in chars_data:
-            chars_data[update.character_id]["hp"] = update.hp
-            chars_data[update.character_id]["hit_dice"] = dict(update.hit_dice)
-            chars_data[update.character_id]["spell_slots"] = dict(update.spell_slots)
-
-        combatants = active.state_data.get("combatants", {})
-        if update.character_id in combatants:
-            combatants[update.character_id]["hp"] = update.hp
+        sync_character_state(
+            active,
+            update.character_id,
+            hp=update.hp,
+            hit_dice=dict(update.hit_dice),
+            spell_slots=dict(update.spell_slots),
+        )
 
     async def _save_active_state(self, session_id: str, db: AsyncSession) -> None:
         if self._session_manager is not None:

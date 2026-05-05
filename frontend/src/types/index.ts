@@ -264,38 +264,41 @@ export interface GameStateResponse {
 
 // ─── WebSocket Protocol ───────────────────────────────────────────────────────
 
-export type WsEventType =
-  | 'session_state'
-  | 'narration'
-  | 'dialogue'
-  | 'roll_result'
-  | 'damage_applied'
-  | 'turn_start'
-  | 'turn_end'
-  | 'round_start'
-  | 'phase_change'
-  | 'combat_start'
-  | 'combat_end'
-  | 'combat_action'
-  | 'combatant_moved'
-  | 'combatant_status_changed'
-  | 'combatant_removed'
-  | 'hp_changed'
-  | 'condition_changed'
-  | 'death_save_updated'
-  | 'spell_slot_updated'
-  | 'equipment_updated'
-  | 'hit_dice_updated'
-  | 'player_joined'
-  | 'player_left'
-  | 'ai_thinking'
-  | 'audio'
-  | 'error'
-  | 'pong'
-  | 'journal_updated'
-  | 'quest_updated'
-  | 'chronicle_updated'
-  | 'scene_layout_changed'
+export const WS_EVENT_TYPES_LIST = [
+  'session_state',
+  'narration',
+  'dialogue',
+  'roll_result',
+  'damage_applied',
+  'turn_start',
+  'turn_end',
+  'round_start',
+  'phase_change',
+  'combat_start',
+  'combat_end',
+  'combat_action',
+  'combatant_moved',
+  'combatant_status_changed',
+  'combatant_removed',
+  'hp_changed',
+  'condition_changed',
+  'death_save_updated',
+  'spell_slot_updated',
+  'equipment_updated',
+  'hit_dice_updated',
+  'player_joined',
+  'player_left',
+  'ai_thinking',
+  'audio',
+  'error',
+  'pong',
+  'journal_updated',
+  'quest_updated',
+  'chronicle_updated',
+  'scene_layout_changed',
+] as const
+
+export type WsEventType = typeof WS_EVENT_TYPES_LIST[number]
 
 export interface WsEvent<T = unknown> {
   event_type: WsEventType

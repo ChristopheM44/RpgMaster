@@ -2,6 +2,7 @@ import { ref, computed, onUnmounted } from 'vue'
 import { useGameStore } from '../stores/game'
 import { useCharacterStore } from '../stores/character'
 import { useAudio } from './useAudio'
+import { WS_EVENT_TYPES_LIST } from '../types'
 import type {
   WsEvent,
   SessionStatePayload,
@@ -23,46 +24,16 @@ import type {
   CombatantStatusChangedPayload,
   CombatantRemovedPayload,
   SceneLayoutChangedPayload,
+  GridPosition,
 } from '../types'
 
 const WS_BASE = 'ws://localhost:8000'
 const ACCESS_TOKEN = import.meta.env.VITE_RPGMASTER_ACCESS_TOKEN?.trim()
 const PING_INTERVAL_MS = 25_000
-const RECONNECT_DELAY_MS = 3_000
-const MAX_RECONNECTS = 5
-const WS_EVENT_TYPES = new Set([
-  'session_state',
-  'narration',
-  'dialogue',
-  'roll_result',
-  'damage_applied',
-  'condition_changed',
-  'hp_changed',
-  'turn_start',
-  'turn_end',
-  'round_start',
-  'combat_start',
-  'combat_end',
-  'combat_action',
-  'combatant_moved',
-  'combatant_status_changed',
-  'combatant_removed',
-  'phase_change',
-  'player_joined',
-  'player_left',
-  'audio',
-  'ai_thinking',
-  'spell_slot_updated',
-  'equipment_updated',
-  'hit_dice_updated',
-  'death_save_updated',
-  'journal_updated',
-  'quest_updated',
-  'chronicle_updated',
-  'scene_layout_changed',
-  'error',
-  'pong',
-])
+const BASE_RECONNECT_DELAY_MS = 1_000
+const MAX_RECONNECT_DELAY_MS = 30_000
+const MAX_RECONNECTS = 10
+const WS_EVENT_TYPES = new Set<string>(WS_EVENT_TYPES_LIST)
 
 export function useWebSocket(sessionId: string) {
   const gameStore = useGameStore()
@@ -138,7 +109,7 @@ export function useWebSocket(sessionId: string) {
       gameStore.setConnected(false)
       if (!intentionalClose && reconnectCount.value < MAX_RECONNECTS) {
         reconnectCount.value++
-        const delay = RECONNECT_DELAY_MS * reconnectCount.value
+        const delay = reconnectDelayMs(reconnectCount.value)
         reconnectTimer = setTimeout(() => connect(pendingCharacterId), delay)
       } else if (!intentionalClose && reconnectCount.value >= MAX_RECONNECTS) {
         gameStore.setError('Connexion perdue. Rechargez la page pour rejoindre la session.')
@@ -233,15 +204,13 @@ export function useWebSocket(sessionId: string) {
         break
       }
       case 'combat_action':
-        if (isRecord(msg.payload)) gameStore.addCombatAction(msg.payload as unknown as CombatActionPayload)
+        if (isCombatActionPayload(msg.payload)) gameStore.addCombatAction(msg.payload)
         break
       case 'combatant_moved':
-        if (isRecord(msg.payload)) gameStore.moveCombatant(msg.payload as unknown as CombatantMovedPayload)
+        if (isCombatantMovedPayload(msg.payload)) gameStore.moveCombatant(msg.payload)
         break
       case 'combatant_status_changed':
-        if (isRecord(msg.payload)) {
-          gameStore.applyCombatantStatusChanged(msg.payload as unknown as CombatantStatusChangedPayload)
-        }
+        if (isCombatantStatusChangedPayload(msg.payload)) gameStore.applyCombatantStatusChanged(msg.payload)
         break
       case 'combatant_removed':
         if (isCombatantRemovedPayload(msg.payload)) gameStore.removeCombatant(msg.payload.combatant_id)
@@ -265,9 +234,7 @@ export function useWebSocket(sessionId: string) {
         gameStore.applyChronicleUpdated(msg.payload as { chronicle: import('../types').ChronicleEntry[] })
         break
       case 'scene_layout_changed':
-        if (isRecord(msg.payload)) {
-          gameStore.applySceneLayout(msg.payload as unknown as SceneLayoutChangedPayload)
-        }
+        if (isSceneLayoutChangedPayload(msg.payload)) gameStore.applySceneLayout(msg.payload)
         break
       case 'damage_applied':
         break
@@ -342,6 +309,15 @@ function buildWsUrl(sessionId: string): string {
   const url = new URL(`${WS_BASE}/ws/game/${sessionId}`)
   if (ACCESS_TOKEN) url.searchParams.set('access_token', ACCESS_TOKEN)
   return url.toString()
+}
+
+function reconnectDelayMs(attempt: number): number {
+  const exponential = Math.min(
+    MAX_RECONNECT_DELAY_MS,
+    BASE_RECONNECT_DELAY_MS * 2 ** Math.max(0, attempt - 1),
+  )
+  const jitter = Math.floor(Math.random() * Math.min(1_000, exponential * 0.25))
+  return exponential + jitter
 }
 
 function isWsEvent(value: unknown): value is WsEvent {
@@ -427,8 +403,60 @@ function isHitDiceUpdatedPayload(value: unknown): value is HitDiceUpdatedPayload
   return isRecord(value) && typeof value.character_id === 'string' && isRecord(value.hit_dice)
 }
 
+function isGridPosition(value: unknown): value is GridPosition {
+  return isRecord(value) && typeof value.col === 'number' && typeof value.row === 'number'
+}
+
+function isCombatActionPayload(value: unknown): value is CombatActionPayload {
+  return (
+    isRecord(value)
+    && typeof value.attacker_id === 'string'
+    && typeof value.attacker_name === 'string'
+    && (typeof value.target_id === 'string' || value.target_id === null)
+    && typeof value.target_name === 'string'
+    && typeof value.action_type === 'string'
+    && typeof value.action_name === 'string'
+    && typeof value.d20 === 'number'
+    && typeof value.attack_roll === 'number'
+    && typeof value.attack_bonus === 'number'
+    && typeof value.target_ac === 'number'
+    && typeof value.hit === 'boolean'
+    && typeof value.critical === 'boolean'
+    && (typeof value.damage === 'number' || value.damage === null)
+    && typeof value.damage_notation === 'string'
+  )
+}
+
+function isCombatantMovedPayload(value: unknown): value is CombatantMovedPayload {
+  return (
+    isRecord(value)
+    && typeof value.combatant_id === 'string'
+    && isGridPosition(value.position)
+    && typeof value.movement_used_m === 'number'
+  )
+}
+
+function isCombatantStatusChangedPayload(value: unknown): value is CombatantStatusChangedPayload {
+  return (
+    isRecord(value)
+    && typeof value.combatant_id === 'string'
+    && typeof value.status === 'string'
+    && (value.combatant_name === undefined || typeof value.combatant_name === 'string')
+    && (value.reason === undefined || typeof value.reason === 'string')
+  )
+}
+
 function isCombatantRemovedPayload(value: unknown): value is CombatantRemovedPayload {
   return isRecord(value) && typeof value.combatant_id === 'string'
+}
+
+function isSceneLayoutChangedPayload(value: unknown): value is SceneLayoutChangedPayload {
+  return (
+    isRecord(value)
+    && isRecord(value.scene)
+    && typeof value.scene.cols === 'number'
+    && typeof value.scene.rows === 'number'
+  )
 }
 
 function isAudioPayload(value: unknown): value is AudioPayload {

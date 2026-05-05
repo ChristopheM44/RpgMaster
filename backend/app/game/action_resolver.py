@@ -9,7 +9,6 @@ Pure orchestration : ce module ne contient pas de logique de règles.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 import uuid
 from typing import Any, Literal, Optional
@@ -17,6 +16,7 @@ from typing import Any, Literal, Optional
 from app.agents.combat_gm_agent import CombatGMAgent
 from app.agents.gm_agent import GMAgent
 from app.game.action_mechanics import ActionMechanics
+from app.game.async_tasks import create_logged_task
 from app.game.event_bus import EventType, event_bus
 from app.game.session_manager import ActiveSession
 from app.llm.voxtral_client import tts_router
@@ -24,7 +24,7 @@ from app.llm.voxtral_client import tts_router
 logger = logging.getLogger(__name__)
 
 
-class ActionResolver(ActionMechanics):
+class ActionResolver:
     """Orchestre le traitement complet d'une action joueur.
 
     Injectez un *gm_agent* personnalisé pour les tests (mock).
@@ -46,13 +46,25 @@ class ActionResolver(ActionMechanics):
         self,
         gm_agent: Optional[GMAgent] = None,
         combat_gm_agent: Optional[GMAgent] = None,
+        mechanics: Optional[ActionMechanics] = None,
     ) -> None:
         self._gm: GMAgent = gm_agent or GMAgent()
         self._combat_gm_explicit = combat_gm_agent is not None
         self._combat_gm: GMAgent = combat_gm_agent or (
             gm_agent if gm_agent is not None else CombatGMAgent()
         )
+        self._mechanics = mechanics or ActionMechanics()
         self._pipeline: Optional[Any] = None
+
+    def __getattr__(self, name: str) -> Any:
+        """Backward-compatible facade for legacy mechanical helper names."""
+        if (
+            name.startswith("_resolve")
+            or name.startswith("_apply")
+            or name == "_normalize_roll_event"
+        ):
+            return getattr(self._mechanics, name)
+        raise AttributeError(name)
 
     # ------------------------------------------------------------------
     # Point d'entrée principal
@@ -165,8 +177,9 @@ class ActionResolver(ActionMechanics):
 
             await persist_narration(session_id, narration_text, "Maître du Jeu", db)
 
-        asyncio.create_task(
-            tts_router.synthesize_and_broadcast(narration_text, session_id, narration_id)
+        create_logged_task(
+            tts_router.synthesize_and_broadcast(narration_text, session_id, narration_id),
+            "action_resolver.tts_narration",
         )
 
     # ------------------------------------------------------------------
@@ -228,8 +241,9 @@ class ActionResolver(ActionMechanics):
         if db is not None:
             from app.services.message_service import persist_narration
             await persist_narration(session_id, gm_resp.narration, "Maître du Jeu", db)
-        asyncio.create_task(
-            tts_router.synthesize_and_broadcast(gm_resp.narration, session_id, narration_id)
+        create_logged_task(
+            tts_router.synthesize_and_broadcast(gm_resp.narration, session_id, narration_id),
+            "action_resolver.tts_social_conclude",
         )
 
     # ------------------------------------------------------------------

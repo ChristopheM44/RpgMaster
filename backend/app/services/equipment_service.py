@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.engine.dice import RollResult, roll
 from app.game.constants import ARMOR_CATEGORIES
 from app.game.session_manager import ActiveSession
+from app.game.state_sync import sync_character_state
 from app.models.character import Character
 
 
@@ -193,21 +194,8 @@ class EquipmentService:
         character_id: str,
         equipment: list[dict[str, Any]],
     ) -> None:
-        if active is None:
-            return
-        chars_data = active.state_data.get("characters", {})
-        if character_id in chars_data:
-            chars_data[character_id]["equipment"] = equipment
-        active.mark_dirty()
+        sync_character_state(active, character_id, equipment=equipment)
 
     @staticmethod
     def _sync_hp(active: Optional[ActiveSession], character_id: str, hp: int) -> None:
-        if active is None:
-            return
-        chars_data = active.state_data.get("characters", {})
-        if character_id in chars_data:
-            chars_data[character_id]["hp"] = hp
-        combatants = active.state_data.get("combatants", {})
-        if character_id in combatants:
-            combatants[character_id]["hp"] = hp
-        active.mark_dirty()
+        sync_character_state(active, character_id, hp=hp)

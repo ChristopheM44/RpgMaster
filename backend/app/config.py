@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from urllib.parse import urlsplit, urlunsplit
 
 from pydantic_settings import BaseSettings
 
@@ -78,6 +79,31 @@ _RUNTIME_LLM_FILE = get_runtime_dir() / "llm_runtime.json"
 _runtime_llm: dict = {}
 
 
+def _normalize_runtime_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    return value.strip()
+
+
+def _normalize_ollama_base_url(value: str | None) -> str | None:
+    normalized = _normalize_runtime_text(value)
+    if not normalized:
+        return normalized
+    parts = urlsplit(normalized)
+    path = parts.path.rstrip("/")
+    if path == "/api":
+        path = ""
+    return urlunsplit((parts.scheme, parts.netloc, path, parts.query, parts.fragment))
+
+
+def _normalize_openai_base_url(value: str | None) -> str | None:
+    return _normalize_runtime_text(value)
+
+
+def _normalize_api_key(value: str | None) -> str | None:
+    return _normalize_runtime_text(value)
+
+
 def _load_runtime_llm() -> None:
     global _runtime_llm
     runtime_file = _RUNTIME_LLM_FILE if _RUNTIME_LLM_FILE.exists() else _LEGACY_RUNTIME_LLM_FILE
@@ -119,7 +145,11 @@ def update_llm_settings(
 ) -> None:
     """Met à jour le(s) setting(s) LLM en mémoire et persiste."""
     if ollama_base_url is not None:
-        _runtime_llm["ollama_base_url"] = ollama_base_url
+        normalized = _normalize_ollama_base_url(ollama_base_url)
+        if normalized:
+            _runtime_llm["ollama_base_url"] = normalized
+        else:
+            _runtime_llm.pop("ollama_base_url", None)
     if gm_model is not None:
         _runtime_llm["gm_model"] = gm_model
     if player_model is not None:
@@ -129,22 +159,30 @@ def update_llm_settings(
     if llm_provider is not None:
         _runtime_llm["llm_provider"] = llm_provider
     if openai_base_url is not None:
-        _runtime_llm["openai_base_url"] = openai_base_url
+        normalized = _normalize_openai_base_url(openai_base_url)
+        if normalized:
+            _runtime_llm["openai_base_url"] = normalized
+        else:
+            _runtime_llm.pop("openai_base_url", None)
     if openai_api_key is not None:
-        if openai_api_key == "":
+        normalized = _normalize_api_key(openai_api_key)
+        if normalized == "":
             _runtime_llm.pop("openai_api_key", None)
         else:
-            _runtime_llm["openai_api_key"] = openai_api_key
+            _runtime_llm["openai_api_key"] = normalized
     if ollama_api_key is not None:
-        if ollama_api_key == "":
+        normalized = _normalize_api_key(ollama_api_key)
+        if normalized == "":
             _runtime_llm.pop("ollama_api_key", None)
         else:
-            _runtime_llm["ollama_api_key"] = ollama_api_key
+            _runtime_llm["ollama_api_key"] = normalized
     _save_runtime_llm()
 
 
 def get_ollama_url() -> str:
-    return _runtime_llm.get("ollama_base_url", settings.ollama_base_url)
+    runtime_url = _normalize_ollama_base_url(_runtime_llm.get("ollama_base_url"))
+    settings_url = _normalize_ollama_base_url(settings.ollama_base_url)
+    return runtime_url or settings_url or "http://localhost:11434"
 
 
 def get_gm_model() -> str:
@@ -171,7 +209,12 @@ def get_ollama_max_concurrent_requests() -> int:
 
 
 def get_ollama_api_key() -> str:
-    return _runtime_llm.get("ollama_api_key", "")
+    return _normalize_api_key(_runtime_llm.get("ollama_api_key")) or ""
+
+
+def get_ollama_auth_headers() -> dict[str, str] | None:
+    api_key = get_ollama_api_key()
+    return {"Authorization": f"Bearer {api_key}"} if api_key else None
 
 
 def is_ollama_api_key_set() -> bool:
@@ -183,11 +226,12 @@ def get_llm_provider() -> str:
 
 
 def get_openai_base_url() -> str:
-    return _runtime_llm.get("openai_base_url", "")
+    runtime_url = _normalize_openai_base_url(_runtime_llm.get("openai_base_url"))
+    return runtime_url or ""
 
 
 def get_openai_api_key() -> str:
-    return _runtime_llm.get("openai_api_key", "")
+    return _normalize_api_key(_runtime_llm.get("openai_api_key")) or ""
 
 
 def is_openai_api_key_set() -> bool:

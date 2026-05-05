@@ -43,6 +43,7 @@ describe('useWebSocket', () => {
     setActivePinia(createPinia())
     sessionStorage.clear()
     WebSocketMock.instances = []
+    vi.useRealTimers()
     vi.stubGlobal('WebSocket', WebSocketMock)
   })
 
@@ -147,6 +148,34 @@ describe('useWebSocket', () => {
     })
 
     socket.disconnect()
+    vi.unstubAllGlobals()
+  })
+
+  it('reconnects with exponential delay and jitter', () => {
+    vi.useFakeTimers()
+    vi.spyOn(Math, 'random').mockReturnValue(0)
+
+    const socket = useWebSocket('session-1')
+    socket.connect('hero-1')
+    WebSocketMock.instances[0]!.open()
+
+    WebSocketMock.instances[0]!.close()
+    expect(socket.reconnectCount.value).toBe(1)
+    vi.advanceTimersByTime(999)
+    expect(WebSocketMock.instances).toHaveLength(1)
+    vi.advanceTimersByTime(1)
+    expect(WebSocketMock.instances).toHaveLength(2)
+
+    WebSocketMock.instances[1]!.close()
+    expect(socket.reconnectCount.value).toBe(2)
+    vi.advanceTimersByTime(1_999)
+    expect(WebSocketMock.instances).toHaveLength(2)
+    vi.advanceTimersByTime(1)
+    expect(WebSocketMock.instances).toHaveLength(3)
+
+    socket.disconnect()
+    vi.restoreAllMocks()
+    vi.useRealTimers()
     vi.unstubAllGlobals()
   })
 })

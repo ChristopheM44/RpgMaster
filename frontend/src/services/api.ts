@@ -22,12 +22,22 @@ import type {
   OllamaHealthResponse,
   LlmSettings,
   LlmSettingsUpdate,
+  Campaign,
+  CampaignCreate,
+  CampaignAdvanceBody,
+  CampaignAdvanceResponse,
+  CampaignForgeDraftResponse,
+  CampaignGmDossierResponse,
+  CampaignImportSourceBody,
+  CampaignImportSourceResponse,
+  CampaignPlayerContract,
+  CampaignScenario,
 } from '../types'
 
 const BASE_URL = 'http://localhost:8000/api'
 const ACCESS_TOKEN = import.meta.env.VITE_RPGMASTER_ACCESS_TOKEN?.trim()
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
+export async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const headers = new Headers(options?.headers)
   if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
   if (ACCESS_TOKEN) headers.set('Authorization', `Bearer ${ACCESS_TOKEN}`)
@@ -188,6 +198,61 @@ export const saveApi = {
 
   delete: (sessionId: string, saveId: string) =>
     request<void>(`/game/${sessionId}/saves/${saveId}`, { method: 'DELETE' }),
+}
+
+// ─── Campaigns ────────────────────────────────────────────────────────────────
+
+export const campaignApi = {
+  list: () => request<Campaign[]>('/campaigns'),
+
+  create: (data: CampaignCreate) =>
+    request<Campaign>('/campaigns', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  get: (id: string) => request<Campaign>(`/campaigns/${id}`),
+
+  getScenario: (id: string) => request<CampaignScenario>(`/campaigns/${id}/scenario`),
+
+  getGmDossier: (id: string) =>
+    request<CampaignGmDossierResponse>(`/campaigns/${id}/gm-dossier`),
+
+  importSource: (campaignId: string, body: CampaignImportSourceBody) =>
+    request<CampaignImportSourceResponse>(`/campaigns/${campaignId}/import-source`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  forgeDraft: (
+    campaignId: string,
+    brief: Record<string, unknown>,
+    options: Record<string, unknown>,
+  ) =>
+    request<CampaignForgeDraftResponse>(`/campaigns/${campaignId}/forge-draft`, {
+      method: 'POST',
+      body: JSON.stringify({ brief, options }),
+    }),
+
+  validateContract: (campaignId: string, playerContract: CampaignPlayerContract) =>
+    request<CampaignForgeDraftResponse>(`/campaigns/${campaignId}/validate-contract`, {
+      method: 'POST',
+      body: JSON.stringify({ player_contract: playerContract }),
+    }),
+
+  attachSession: (campaignId: string, sessionId: string) =>
+    request<Campaign>(`/campaigns/${campaignId}/sessions`, {
+      method: 'POST',
+      body: JSON.stringify({ session_id: sessionId }),
+    }),
+
+  advance: (campaignId: string, body: CampaignAdvanceBody) =>
+    request<CampaignAdvanceResponse>(`/campaigns/${campaignId}/advance`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  delete: (id: string) => request<void>(`/campaigns/${id}`, { method: 'DELETE' }),
 }
 
 // ─── Pregen ───────────────────────────────────────────────────────────────────

@@ -17,7 +17,11 @@ from app.api.routes_srd import router as srd_router
 from app.api.ws_game import router as ws_router
 from app.config import get_cors_origins
 from app.llm.voxtral_client import tts_router
-from app.security import access_token_required, request_has_valid_access_token
+from app.security import (
+    access_token_required,
+    request_has_valid_access_token,
+    validate_access_token_configuration,
+)
 
 
 @asynccontextmanager
@@ -29,6 +33,8 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    validate_access_token_configuration()
+
     app = FastAPI(
         title="RpgMaster",
         description="AI-powered D&D 5.2 Game Master",

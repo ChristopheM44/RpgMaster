@@ -22,6 +22,7 @@ from pydantic import BaseModel, field_validator
 from app.config import (
     get_gm_model,
     get_llm_provider,
+    get_ollama_auth_headers,
     get_ollama_url,
     get_openai_base_url,
     get_player_model,
@@ -145,7 +146,10 @@ async def get_tts_health() -> TtsHealthResponse:
 async def get_llm_health() -> OllamaHealthResponse:
     """Vérifie la disponibilité d'Ollama et retourne la liste des modèles installés."""
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with httpx.AsyncClient(
+            timeout=5.0,
+            headers=get_ollama_auth_headers(),
+        ) as client:
             resp = await client.get(f"{get_ollama_url()}/api/tags")
             resp.raise_for_status()
             data = resp.json()

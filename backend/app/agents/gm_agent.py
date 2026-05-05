@@ -7,6 +7,7 @@ from typing import Any, Optional
 
 from app.agents.base_agent import BaseAgent
 from app.agents.context_manager import ContextManager
+from app.agents.prompt_safety import delimit_user_input
 from app.agents.schemas import AgentContext, AgentResponse, GMAction, GMResponse
 from app.llm.base_client import LLMClient
 from app.llm.budget import record_llm_call
@@ -80,7 +81,7 @@ class GMAgent(BaseAgent):
             "gm_narrate.txt",
             {
                 "game_state": json.dumps(game_state, ensure_ascii=False, indent=2),
-                "player_action": player_action or "",
+                "player_action": delimit_user_input(player_action),
                 "recent_messages": self._format_messages(messages),
             },
         )
@@ -99,7 +100,7 @@ class GMAgent(BaseAgent):
             "gm_combat.txt",
             {
                 "game_state": json.dumps(game_state, ensure_ascii=False, indent=2),
-                "player_action": player_action or "",
+                "player_action": delimit_user_input(player_action),
                 "roll_results": json.dumps(roll_results or {}, ensure_ascii=False),
                 "recent_messages": self._format_messages(messages),
             },
@@ -165,7 +166,7 @@ class GMAgent(BaseAgent):
             {
                 "npc_name": npc_name,
                 "npc_personality": npc_personality,
-                "player_message": player_message,
+                "player_message": delimit_user_input(player_message),
                 "recent_messages": self._format_messages(messages),
             },
         )
@@ -186,7 +187,7 @@ class GMAgent(BaseAgent):
             "gm_social_conclude.txt",
             {
                 "game_state": json.dumps(game_state, ensure_ascii=False, indent=2),
-                "player_action": player_action,
+                "player_action": delimit_user_input(player_action),
                 "companion_responses": responses_text,
             },
         )
@@ -229,7 +230,7 @@ class GMAgent(BaseAgent):
             {
                 "game_state": json.dumps(context.game_state, ensure_ascii=False, indent=2),
                 "recent_messages": self._format_messages(context.messages or []),
-                "player_action": context.player_action or "",
+                "player_action": delimit_user_input(context.player_action),
                 "roll_results": rolls_text,
             },
         )

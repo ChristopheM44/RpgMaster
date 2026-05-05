@@ -6,7 +6,6 @@ Il ne choisit pas les actions et ne fait pas avancer les tours.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 import re
 import uuid
@@ -15,6 +14,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field
 
 from app.agents.schemas import AgentContext, AgentResponse, GMAction, GMResponse
+from app.game.async_tasks import create_logged_task
 from app.game.combat_triggers import prime_combat_from_hostile_narration
 from app.game.constants import INACTIVE_STATUSES
 from app.game.event_bus import EventType, event_bus
@@ -553,8 +553,9 @@ class ActionPipeline:
 
             await persist_narration(session_id, narration_text, "Maître du Jeu", db)
 
-        asyncio.create_task(
-            tts_router.synthesize_and_broadcast(narration_text, session_id, narration_id)
+        create_logged_task(
+            tts_router.synthesize_and_broadcast(narration_text, session_id, narration_id),
+            "action_pipeline.tts_narration",
         )
 
     async def _narrate_outcome(

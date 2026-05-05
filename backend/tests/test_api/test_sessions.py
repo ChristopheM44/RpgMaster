@@ -36,6 +36,17 @@ async def test_api_accepts_bearer_access_token(async_client, monkeypatch):
     assert response.status_code == 200
 
 
+def test_app_requires_access_token_when_debug_disabled(monkeypatch):
+    from app.config import settings
+    from app.main import create_app
+
+    monkeypatch.setattr(settings, "app_debug", False)
+    monkeypatch.setattr(settings, "app_access_token", "")
+
+    with pytest.raises(RuntimeError, match="APP_ACCESS_TOKEN"):
+        create_app()
+
+
 @pytest.mark.asyncio
 async def test_create_session(async_client):
     """Création d'une session retourne 201 avec les données correctes."""

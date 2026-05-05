@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { campaignApi } from '../services/api'
 import type {
   Campaign,
   CampaignCreate,
@@ -13,8 +14,6 @@ import type {
   CampaignScenario,
 } from '../types'
 
-const API = 'http://localhost:8000/api/campaigns'
-
 export const useCampaignStore = defineStore('campaign', () => {
   const campaigns = ref<Campaign[]>([])
   const currentCampaign = ref<Campaign | null>(null)
@@ -27,8 +26,7 @@ export const useCampaignStore = defineStore('campaign', () => {
     loading.value = true
     error.value = null
     try {
-      const res = await fetch(API)
-      campaigns.value = await res.json()
+      campaigns.value = await campaignApi.list()
     } catch (e) {
       error.value = 'Erreur de chargement des campagnes'
     } finally {
@@ -38,13 +36,7 @@ export const useCampaignStore = defineStore('campaign', () => {
 
   async function createCampaign(body: CampaignCreate): Promise<Campaign | null> {
     try {
-      const res = await fetch(API, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      if (!res.ok) throw new Error('Création échouée')
-      const campaign: Campaign = await res.json()
+      const campaign = await campaignApi.create(body)
       campaigns.value.unshift(campaign)
       return campaign
     } catch {
@@ -55,9 +47,7 @@ export const useCampaignStore = defineStore('campaign', () => {
 
   async function fetchCampaign(id: string): Promise<Campaign | null> {
     try {
-      const res = await fetch(`${API}/${id}`)
-      if (!res.ok) return null
-      const campaign: Campaign = await res.json()
+      const campaign = await campaignApi.get(id)
       currentCampaign.value = campaign
       return campaign
     } catch {
@@ -67,9 +57,7 @@ export const useCampaignStore = defineStore('campaign', () => {
 
   async function fetchScenario(id: string): Promise<CampaignScenario | null> {
     try {
-      const res = await fetch(`${API}/${id}/scenario`)
-      if (!res.ok) throw new Error()
-      const scenario: CampaignScenario = await res.json()
+      const scenario = await campaignApi.getScenario(id)
       scenarios.value[id] = scenario
       return scenario
     } catch {
@@ -80,9 +68,7 @@ export const useCampaignStore = defineStore('campaign', () => {
 
   async function fetchGmDossier(id: string): Promise<CampaignGmDossierResponse | null> {
     try {
-      const res = await fetch(`${API}/${id}/gm-dossier`)
-      if (!res.ok) throw new Error()
-      const dossier: CampaignGmDossierResponse = await res.json()
+      const dossier = await campaignApi.getGmDossier(id)
       gmDossiers.value[id] = dossier
       return dossier
     } catch {
@@ -96,13 +82,7 @@ export const useCampaignStore = defineStore('campaign', () => {
     body: CampaignImportSourceBody,
   ): Promise<CampaignImportSourceResponse | null> {
     try {
-      const res = await fetch(`${API}/${campaignId}/import-source`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      if (!res.ok) throw new Error()
-      return await res.json()
+      return await campaignApi.importSource(campaignId, body)
     } catch {
       error.value = "Erreur lors de l'import de la source"
       return null
@@ -115,13 +95,7 @@ export const useCampaignStore = defineStore('campaign', () => {
     options: Record<string, unknown>,
   ): Promise<CampaignForgeDraftResponse | null> {
     try {
-      const res = await fetch(`${API}/${campaignId}/forge-draft`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ brief, options }),
-      })
-      if (!res.ok) throw new Error()
-      return await res.json()
+      return await campaignApi.forgeDraft(campaignId, brief, options)
     } catch {
       error.value = 'Erreur lors de la forge de campagne'
       return null
@@ -133,13 +107,7 @@ export const useCampaignStore = defineStore('campaign', () => {
     playerContract: CampaignPlayerContract,
   ): Promise<CampaignForgeDraftResponse | null> {
     try {
-      const res = await fetch(`${API}/${campaignId}/validate-contract`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ player_contract: playerContract }),
-      })
-      if (!res.ok) throw new Error()
-      const data: CampaignForgeDraftResponse = await res.json()
+      const data = await campaignApi.validateContract(campaignId, playerContract)
       const updated = await fetchCampaign(campaignId)
       if (updated) {
         const idx = campaigns.value.findIndex((c) => c.id === campaignId)
@@ -155,13 +123,7 @@ export const useCampaignStore = defineStore('campaign', () => {
 
   async function attachSession(campaignId: string, sessionId: string): Promise<Campaign | null> {
     try {
-      const res = await fetch(`${API}/${campaignId}/sessions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId }),
-      })
-      if (!res.ok) throw new Error()
-      const updated: Campaign = await res.json()
+      const updated = await campaignApi.attachSession(campaignId, sessionId)
       currentCampaign.value = updated
       return updated
     } catch {
@@ -172,13 +134,9 @@ export const useCampaignStore = defineStore('campaign', () => {
 
   async function advance(campaignId: string, newSessionName: string): Promise<CampaignAdvanceResponse | null> {
     try {
-      const res = await fetch(`${API}/${campaignId}/advance`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ new_session_name: newSessionName } as CampaignAdvanceBody),
-      })
-      if (!res.ok) throw new Error()
-      const data: CampaignAdvanceResponse = await res.json()
+      const data = await campaignApi.advance(campaignId, {
+        new_session_name: newSessionName,
+      } as CampaignAdvanceBody)
       currentCampaign.value = data.campaign
       return data
     } catch {
@@ -188,7 +146,7 @@ export const useCampaignStore = defineStore('campaign', () => {
   }
 
   async function deleteCampaign(id: string) {
-    await fetch(`${API}/${id}`, { method: 'DELETE' })
+    await campaignApi.delete(id)
     campaigns.value = campaigns.value.filter((c) => c.id !== id)
     if (currentCampaign.value?.id === id) currentCampaign.value = null
   }

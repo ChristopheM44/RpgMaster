@@ -7,6 +7,7 @@
 import { ref } from 'vue'
 
 let _audioCtx: AudioContext | null = null
+const MAX_QUEUE_SIZE = 20
 
 function getAudioContext(): AudioContext {
   if (!_audioCtx || _audioCtx.state === 'closed') {
@@ -22,6 +23,7 @@ export function useAudio() {
   // File d'attente des buffers à jouer
   const _queue: AudioBuffer[] = []
   let _playing = false
+  let _currentSource: AudioBufferSourceNode | null = null
 
   async function _playNext() {
     if (_playing || _queue.length === 0) return
@@ -31,9 +33,11 @@ export function useAudio() {
     const buffer = _queue.shift()!
     const ctx = getAudioContext()
     const source = ctx.createBufferSource()
+    _currentSource = source
     source.buffer = buffer
     source.connect(ctx.destination)
     source.onended = () => {
+      if (_currentSource === source) _currentSource = null
       _playing = false
       isPlaying.value = _queue.length > 0
       _playNext()
@@ -58,6 +62,9 @@ export function useAudio() {
       }
 
       const audioBuffer = await ctx.decodeAudioData(bytes.buffer)
+      if (_queue.length >= MAX_QUEUE_SIZE) {
+        _queue.shift()
+      }
       _queue.push(audioBuffer)
       _playNext()
     } catch (e) {
@@ -67,5 +74,21 @@ export function useAudio() {
     }
   }
 
-  return { isPlaying, error, playAudioB64 }
+  function cancelAll() {
+    _queue.splice(0)
+    if (_currentSource) {
+      const source = _currentSource
+      _currentSource = null
+      source.onended = null
+      try {
+        source.stop()
+      } catch {
+        // Already stopped.
+      }
+    }
+    _playing = false
+    isPlaying.value = false
+  }
+
+  return { isPlaying, error, playAudioB64, cancelAll }
 }

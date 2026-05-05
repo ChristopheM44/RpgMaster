@@ -64,6 +64,11 @@ from app.api.ws_handlers.encounter_intro import (
     pause_at_encounter_start,
     should_pause_for_encounter_intro,
 )
+from app.api.ws_handlers.lifecycle import (
+    VALIDATION_ERROR_MESSAGE,
+    character_belongs_to_session,
+    send_ws_error,
+)
 from app.api.ws_payloads import (
     build_combat_start_payload,
     build_session_state_payload,
@@ -87,10 +92,11 @@ from app.config import settings
 from app.db.database import get_db
 from app.engine.tactical_grid import GridPosition, initialize_positions, validate_move
 from app.game.action_resolver import ActionResolver
+from app.game.async_tasks import create_logged_task
 from app.game.combat_triggers import prime_combat_from_aggressive_action
 from app.game.constants import INACTIVE_STATUSES
 from app.game.event_bus import EventType, GameEvent, event_bus
-from app.game.session_manager import SessionManager
+from app.game.runtime import rest_service, session_manager
 from app.game.turn_manager import CombatantInfo
 from app.llm.budget import is_sober_mode
 from app.models.character import Character
@@ -103,20 +109,14 @@ from app.services.equipment_service import (
     ItemNotFoundError,
 )
 from app.services.message_service import load_recent_messages, persist_narration
-from app.services.rest_service import RestService, RestServiceError, normalize_character_hit_dice
+from app.services.rest_service import RestServiceError, normalize_character_hit_dice
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# ---------------------------------------------------------------------------
-# Module-level session manager (shared across all WS connections)
-# ---------------------------------------------------------------------------
-
-session_manager = SessionManager()
 action_resolver = ActionResolver()
 equipment_service = EquipmentService()
-rest_service = RestService(session_manager=session_manager)
 
 # Module-level singleton
 connection_manager = ConnectionManager()
@@ -2083,7 +2083,7 @@ async def game_websocket(
     connection_manager.connect(session_id, websocket)
     queue = event_bus.subscribe(session_id, maxsize=settings.ws_event_queue_size)
 
-    relay_task = asyncio.create_task(_relay_events(websocket, queue))
+    relay_task = create_logged_task(_relay_events(websocket, queue), "ws_game.relay_events")
 
     # ------------------------------------------------------------------
     # 3. Send initial session state
@@ -2119,12 +2119,8 @@ async def game_websocket(
             if msg_type == "ping":
                 try:
                     PingMessage(**raw)
-                except ValidationError as exc:
-                    await websocket.send_json({
-                        "event_type": EventType.ERROR,
-                        "session_id": session_id,
-                        "payload": {"message": str(exc)},
-                    })
+                except ValidationError:
+                    await send_ws_error(websocket, session_id, VALIDATION_ERROR_MESSAGE)
                     continue
                 await websocket.send_json({"event_type": "pong"})
                 continue
@@ -2133,16 +2129,20 @@ async def game_websocket(
             if msg_type == "join":
                 try:
                     join = JoinMessage(**raw)
-                except ValidationError as exc:
-                    await websocket.send_json({
-                        "event_type": EventType.ERROR,
-                        "session_id": session_id,
-                        "payload": {"message": str(exc)},
-                    })
+                except ValidationError:
+                    await send_ws_error(websocket, session_id, VALIDATION_ERROR_MESSAGE)
                     continue
 
                 async with session_manager.session_lock(session_id):
                     character_id = join.character_id
+                    if not await character_belongs_to_session(session_id, character_id, db):
+                        character_id = None
+                        await send_ws_error(
+                            websocket,
+                            session_id,
+                            "Personnage introuvable dans cette session.",
+                        )
+                        continue
                     await event_bus.publish_to_session(
                         session_id,
                         EventType.PLAYER_JOINED,
@@ -2186,12 +2186,8 @@ async def game_websocket(
             if msg_type == "action":
                 try:
                     action = PlayerActionMessage(**raw)
-                except ValidationError as exc:
-                    await websocket.send_json({
-                        "event_type": EventType.ERROR,
-                        "session_id": session_id,
-                        "payload": {"message": str(exc)},
-                    })
+                except ValidationError:
+                    await send_ws_error(websocket, session_id, VALIDATION_ERROR_MESSAGE)
                     continue
 
                 try:
@@ -2218,12 +2214,8 @@ async def game_websocket(
                             next_is_ai=msg.is_ai,
                             db=db,
                         )
-                except ValidationError as exc:
-                    await websocket.send_json({
-                        "event_type": EventType.ERROR,
-                        "session_id": session_id,
-                        "payload": {"message": str(exc)},
-                    })
+                except ValidationError:
+                    await send_ws_error(websocket, session_id, VALIDATION_ERROR_MESSAGE)
                 except Exception as exc:
                     logger.error(
                         "Unhandled error in toggle_ai_control: %s", exc, exc_info=True
@@ -2246,12 +2238,8 @@ async def game_websocket(
                             db,
                             trigger_character_id=msg.character_id,
                         )
-                except ValidationError as exc:
-                    await websocket.send_json({
-                        "event_type": EventType.ERROR,
-                        "session_id": session_id,
-                        "payload": {"message": str(exc)},
-                    })
+                except ValidationError:
+                    await send_ws_error(websocket, session_id, VALIDATION_ERROR_MESSAGE)
                 except Exception as exc:
                     logger.error(
                         "Unhandled error in trigger_ai_reactions: %s", exc, exc_info=True

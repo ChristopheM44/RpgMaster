@@ -47,7 +47,10 @@ class ActiveSession:
         phase: Current :class:`SessionStatus` (mirrors ``Session.status``).
         game_loop: Stateless transition validator.
         turn_manager: Stateful turn order tracker.
-        state_data: Mutable game state dict (mirrors ``GameState.state_data``).
+        state_data: Mutable game state dict. During an active session this is
+            the authoritative character/game snapshot; typed ``Character``
+            columns are persistence/loading snapshots synchronized at explicit
+            service boundaries.
         turn_number: Monotonic counter incremented on every turn.
         round_number: Combat/exploration round counter (reset on new encounter).
         is_dirty: True when ``state_data`` has unsaved changes.
