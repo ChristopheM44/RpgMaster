@@ -13,7 +13,14 @@ from typing import Any, Optional
 _MAX_INFERRED_COMBATANTS = 12
 
 _MONSTER_ALIASES: dict[str, tuple[str, ...]] = {
-    "bandit": ("bandit", "brigand", "malfrat", "hors la loi"),
+    "bandit": (
+        "bandit",
+        "brigand",
+        "malfrat",
+        "hors la loi",
+        "zhentarim",
+        "emissaire zhentarim",
+    ),
     "cultist": ("cultiste", "adorateur", "fanatique"),
     "goblin": ("gobelin", "goblin"),
     "hobgoblin": ("hobgobelin", "hobgoblin"),
@@ -68,6 +75,13 @@ _AGGRESSIVE_PATTERNS = (
     r"\b(?:j|je|nous|on)\s*(?:'|e\s+)?tire\b",
     r"\b(?:j|je|nous|on)\s*(?:'|e\s+)?vise\b",
     r"\b(?:j|je)\s+me\s+jette\s+dans\s+la\s+melee\b",
+    r"\battaque\s+(?:en\s+)?melee\b",
+    r"\battaque\s+au\s+corps\s+a\s+corps\b",
+    r"\bcible\s+prioritaire\b",
+    r"\b(?:je\s+)?prends?\s+(?:pour\s+)?cible\b",
+    r"\bprendre\s+pour\s+cible\b",
+    r"\bengage(?:r|ons?)?\s+(?:l'|les?\s+|un\s+|une\s+|des\s+)?"
+    r"(?:ennemis?|adversaires?|hostiles?|menaces?)\b",
     r"\baux\s+armes\b",
 )
 
