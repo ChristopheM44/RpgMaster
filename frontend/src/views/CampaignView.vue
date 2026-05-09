@@ -470,7 +470,7 @@ function cloneContract(contract: CampaignPlayerContract): CampaignPlayerContract
   <div class="flex min-h-[calc(100vh-56px)] bg-bg text-parchment">
     <section class="flex min-w-0 flex-1 flex-col">
       <div class="relative flex items-end gap-6 px-6 py-8 md:px-14">
-        <div class="pointer-events-none absolute -left-10 -top-14 h-48 w-72 rounded-full bg-[radial-gradient(ellipse,rgba(255,130,71,0.12),transparent_70%)]" />
+        <div class="rpg-campaign-hero-glow pointer-events-none absolute -left-10 -top-14 h-48 w-72 rounded-full" />
         <div class="relative min-w-0 flex-1">
           <div class="rpg-eyebrow"><span class="rpg-sparkle">✦</span>Vos chroniques</div>
           <h1 class="font-display text-[44px] font-bold leading-none tracking-[0.03em]">Campagnes</h1>
@@ -491,15 +491,13 @@ function cloneContract(contract: CampaignPlayerContract): CampaignPlayerContract
           <article
             v-for="campaign in campaignStore.campaigns"
             :key="campaign.id"
-            class="relative cursor-pointer overflow-hidden rounded-[10px] border p-4 transition"
-            :class="selectedCampaign?.id === campaign.id
-              ? 'border-ember bg-[linear-gradient(135deg,rgba(255,130,71,0.12),var(--color-surface))] shadow-[0_0_24px_rgba(255,130,71,0.15)]'
-              : 'border-border bg-surface hover:border-border-strong'"
+            class="rpg-campaign-card relative cursor-pointer overflow-hidden rounded-[10px] border p-4 transition"
+            :class="{ 'is-selected': selectedCampaign?.id === campaign.id }"
             @click="selectCampaign(campaign)"
           >
             <div
               v-if="selectedCampaign?.id === campaign.id"
-              class="absolute inset-y-0 left-0 w-[3px] bg-[linear-gradient(180deg,var(--color-ember),var(--color-gold))]"
+              class="rpg-campaign-accent-bar absolute inset-y-0 left-0 w-[3px]"
             />
             <div class="flex items-start gap-3">
               <div class="min-w-0 flex-1">
@@ -521,7 +519,7 @@ function cloneContract(contract: CampaignPlayerContract): CampaignPlayerContract
             <div class="mt-3">
               <div class="h-1 overflow-hidden rounded border border-border bg-black/40">
                 <div
-                  class="h-full bg-[linear-gradient(90deg,var(--color-gold-deep),var(--color-ember))]"
+                  class="rpg-campaign-progress-fill h-full"
                   :style="{ width: `${progressPercent(campaign)}%` }"
                 />
               </div>
@@ -532,10 +530,10 @@ function cloneContract(contract: CampaignPlayerContract): CampaignPlayerContract
             </div>
 
             <div class="mt-3 flex flex-wrap gap-1.5">
-              <span class="rounded border border-border bg-black/30 px-2 py-1 font-mono text-[10px] text-text-muted">◆ {{ campaign.counts?.sessions ?? campaign.session_ids.length }} sessions</span>
-              <span class="rounded border border-border bg-black/30 px-2 py-1 font-mono text-[10px] text-text-muted">✦ {{ campaign.counts?.characters ?? campaign.character_ids.length }} persos</span>
-              <span class="rounded border border-border bg-black/30 px-2 py-1 font-mono text-[10px] text-gold">◷ {{ campaign.counts?.quests_active ?? 0 }} quêtes</span>
-              <span class="rounded border border-border bg-black/30 px-2 py-1 font-mono text-[10px] text-text-muted">◉ {{ campaign.counts?.npcs ?? 0 }} PNJ</span>
+              <span class="rpg-chip rpg-tone-muted font-mono text-[10px]">◆ {{ campaign.counts?.sessions ?? campaign.session_ids.length }} sessions</span>
+              <span class="rpg-chip rpg-tone-muted font-mono text-[10px]">✦ {{ campaign.counts?.characters ?? campaign.character_ids.length }} persos</span>
+              <span class="rpg-chip rpg-tone-gold font-mono text-[10px]">◷ {{ campaign.counts?.quests_active ?? 0 }} quêtes</span>
+              <span class="rpg-chip rpg-tone-muted font-mono text-[10px]">◉ {{ campaign.counts?.npcs ?? 0 }} PNJ</span>
             </div>
           </article>
         </div>
@@ -544,10 +542,10 @@ function cloneContract(contract: CampaignPlayerContract): CampaignPlayerContract
 
     <aside
       v-if="selectedCampaign"
-      class="flex w-[580px] shrink-0 flex-col border-l border-border bg-[linear-gradient(180deg,var(--color-bg-elev),var(--color-bg))]"
+      class="rpg-campaign-aside flex w-[580px] shrink-0 flex-col border-l border-border"
     >
       <header class="relative overflow-hidden border-b border-border px-7 py-6">
-        <div class="pointer-events-none absolute -right-10 -top-16 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(255,130,71,0.18),transparent_70%)]" />
+        <div class="rpg-campaign-side-glow pointer-events-none absolute -right-10 -top-16 h-56 w-56 rounded-full" />
         <div class="relative">
           <div class="rpg-eyebrow"><span class="rpg-sparkle">✦</span>Campagne sélectionnée</div>
           <h2 class="mt-1 font-display text-[28px] font-bold leading-tight">{{ selectedCampaign.name }}</h2>
@@ -555,20 +553,20 @@ function cloneContract(contract: CampaignPlayerContract): CampaignPlayerContract
             {{ selectedCampaign.tagline || selectedCampaign.description || 'Chronique à forger.' }}
           </p>
           <div class="mt-4 grid grid-cols-4 gap-2">
-            <div class="rounded-md border border-border bg-black/30 p-2">
+            <div class="rpg-campaign-stat rounded-md border p-2">
               <div class="text-[9px] font-bold uppercase tracking-[0.16em] text-text-dim">Sessions</div>
               <div class="font-display text-[22px] font-bold">{{ selectedCampaign.counts?.sessions ?? selectedCampaign.session_ids.length }}</div>
             </div>
-            <div class="rounded-md border border-border bg-black/30 p-2">
+            <div class="rpg-campaign-stat rounded-md border p-2">
               <div class="text-[9px] font-bold uppercase tracking-[0.16em] text-text-dim">Persos</div>
               <div class="font-display text-[22px] font-bold text-gold">{{ selectedCampaign.counts?.characters ?? selectedCampaign.character_ids.length }}</div>
             </div>
-            <div class="rounded-md border border-border bg-black/30 p-2">
+            <div class="rpg-campaign-stat rounded-md border p-2">
               <div class="text-[9px] font-bold uppercase tracking-[0.16em] text-text-dim">Quêtes</div>
               <div class="font-display text-[22px] font-bold text-ember">{{ selectedCampaign.counts?.quests_active ?? 0 }}</div>
               <div class="font-mono text-[9px] text-text-dim">{{ selectedCampaign.counts?.quests_done ?? 0 }} fini</div>
             </div>
-            <div class="rounded-md border border-border bg-black/30 p-2">
+            <div class="rpg-campaign-stat rounded-md border p-2">
               <div class="text-[9px] font-bold uppercase tracking-[0.16em] text-text-dim">Chronique</div>
               <div class="font-display text-[22px] font-bold text-arcane">{{ selectedCampaign.counts?.chronicle_entries ?? 0 }}</div>
               <div class="font-mono text-[9px] text-text-dim">entrées</div>
@@ -598,23 +596,19 @@ function cloneContract(contract: CampaignPlayerContract): CampaignPlayerContract
           <div
             v-for="(sid, idx) in selectedCampaign.session_ids"
             :key="sid"
-            class="flex items-center gap-3 rounded-lg border p-3"
-            :class="idx === selectedCampaign.current_session_index
-              ? 'border-[rgba(255,130,71,0.35)] bg-[linear-gradient(90deg,rgba(255,130,71,0.10),var(--color-surface))]'
-              : 'border-border bg-surface'"
+            class="rpg-campaign-session-row flex items-center gap-3 rounded-lg border p-3"
+            :class="{ 'is-active': idx === selectedCampaign.current_session_index }"
           >
             <div
-              class="flex h-8 w-8 items-center justify-center rounded-md font-display text-sm font-bold"
-              :class="idx === selectedCampaign.current_session_index
-                ? 'bg-[linear-gradient(135deg,var(--color-ember),var(--color-gold))] text-bg'
-                : 'border border-border bg-black/30 text-text-muted'"
+              class="rpg-campaign-index-badge flex h-8 w-8 items-center justify-center rounded-md border font-display text-sm font-bold"
+              :class="{ 'is-active': idx === selectedCampaign.current_session_index }"
             >
               {{ idx + 1 }}
             </div>
             <div class="min-w-0 flex-1">
               <div class="font-display text-[13px] font-bold tracking-wide">
                 Session {{ idx + 1 }}
-                <span v-if="idx === selectedCampaign.current_session_index" class="ml-2 rounded border border-ember/40 bg-ember/15 px-1.5 py-0.5 text-[9px] uppercase tracking-widest text-ember">active</span>
+                <span v-if="idx === selectedCampaign.current_session_index" class="rpg-chip rpg-tone-ember ml-2 px-1.5 py-0.5 text-[9px] uppercase tracking-widest">active</span>
               </div>
               <div class="truncate font-serif text-[11px] italic text-text-muted">{{ sessionLabel(selectedCampaign, idx) }}</div>
             </div>
@@ -630,7 +624,7 @@ function cloneContract(contract: CampaignPlayerContract): CampaignPlayerContract
               ▶ Jouer la session courante
             </button>
             <button
-              class="mt-2 w-full rounded-lg border border-arcane/30 bg-arcane/10 px-4 py-2.5 font-display text-[11px] font-bold uppercase tracking-[0.12em] text-arcane"
+              class="rpg-quick-action rpg-tone-arcane mt-2 w-full rounded-lg border px-4 py-2.5 font-display"
               @click="showAdvance = true"
             >
               → {{ selectedCampaign.session_ids.length === 0 ? 'Démarrer une session' : 'Session suivante (transférer personnages)' }}
@@ -649,27 +643,25 @@ function cloneContract(contract: CampaignPlayerContract): CampaignPlayerContract
               ✦ Arc narratif — {{ scenario.timeline.length }} chapitres
             </div>
             <div class="relative">
-              <div class="absolute bottom-5 left-[13px] top-5 w-px bg-[linear-gradient(180deg,var(--color-border-strong),var(--color-border)_55%,transparent)]" />
+              <div class="rpg-campaign-timeline-line absolute bottom-5 left-[13px] top-5 w-px" />
               <div
                 v-for="chapter in scenario.timeline"
                 :key="chapter.id"
                 class="relative flex gap-3.5 pb-4 last:pb-0"
               >
                 <div
-                  class="z-[1] flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-display text-[11px] font-bold"
+                  class="rpg-campaign-timeline-dot z-[1] flex h-7 w-7 shrink-0 items-center justify-center rounded-full border font-display text-[11px] font-bold"
                   :class="chapter.state === 'active'
-                    ? 'bg-[linear-gradient(135deg,var(--color-ember),var(--color-gold))] text-bg shadow-[0_0_14px_rgba(255,130,71,0.5)]'
+                    ? 'is-active'
                     : chapter.state === 'done'
-                      ? 'border border-border-strong bg-surface-raised text-gold'
-                      : 'border border-border bg-surface text-text-muted'"
+                      ? 'is-done'
+                      : 'is-planned'"
                 >
                   {{ chapter.num }}
                 </div>
                 <div
-                  class="flex-1 rounded-lg border p-3"
-                  :class="chapter.state === 'active'
-                    ? 'border-ember/35 bg-[linear-gradient(135deg,rgba(255,130,71,0.08),var(--color-surface))]'
-                    : 'border-border bg-surface'"
+                  class="rpg-campaign-chapter-card flex-1 rounded-lg border p-3"
+                  :class="{ 'is-active': chapter.state === 'active' }"
                 >
                   <div class="flex items-baseline gap-2">
                     <h3 class="font-display text-[13px] font-bold">{{ chapter.title }}</h3>
@@ -749,7 +741,7 @@ function cloneContract(contract: CampaignPlayerContract): CampaignPlayerContract
           </div>
 
           <template v-if="authorMode && gmDossier">
-            <div class="rounded-lg border border-ember/25 bg-[linear-gradient(135deg,rgba(255,130,71,0.08),var(--color-surface))] p-4">
+            <div class="rpg-campaign-author-panel rounded-lg border p-4">
               <div class="text-[9px] font-bold uppercase tracking-[0.22em] text-ember">Arc narratif privé</div>
               <p class="mt-2 font-serif text-sm leading-relaxed text-parchment-dark">
                 {{ gmDossier.narrative_arc || 'Aucun arc privé.' }}
@@ -763,10 +755,8 @@ function cloneContract(contract: CampaignPlayerContract): CampaignPlayerContract
               <div
                 v-for="(chapter, chapterIdx) in gmDossier.chapters"
                 :key="chapter.id || chapter.title || chapterIdx"
-                class="rounded-lg border p-4"
-                :class="gmDossierResponse?.active_chapter_id === chapter.id
-                  ? 'border-ember/35 bg-[linear-gradient(135deg,rgba(255,130,71,0.08),var(--color-surface))]'
-                  : 'border-border bg-surface'"
+                class="rpg-campaign-private-card rounded-lg border p-4"
+                :class="{ 'is-active': gmDossierResponse?.active_chapter_id === chapter.id }"
               >
                 <div class="flex items-start gap-2">
                   <div class="min-w-0 flex-1">
@@ -885,11 +875,11 @@ function cloneContract(contract: CampaignPlayerContract): CampaignPlayerContract
     <Teleport to="body">
       <div
         v-if="showForge"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(8,6,12,0.72)] p-4 backdrop-blur-md"
+        class="rpg-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4"
         @click.self="closeForge"
       >
-        <div class="relative max-h-[90vh] w-full max-w-[640px] overflow-y-auto overflow-x-hidden rounded-[14px] border border-border-strong bg-[linear-gradient(180deg,var(--color-bg-elev),var(--color-bg))] p-7 shadow-[0_24px_80px_rgba(0,0,0,0.6),0_0_0_1px_rgba(240,199,100,0.08)]">
-          <div class="pointer-events-none absolute -right-12 -top-20 h-60 w-60 rounded-full bg-[radial-gradient(circle,rgba(255,130,71,0.18),transparent_70%)]" />
+        <div class="rpg-dialog-panel rpg-tone-gold relative max-h-[90vh] w-full max-w-[640px] overflow-y-auto overflow-x-hidden rounded-[14px] border p-7">
+          <div class="rpg-campaign-modal-glow pointer-events-none absolute -right-12 -top-20 h-60 w-60 rounded-full" />
           <div class="relative">
             <div class="rpg-eyebrow"><span class="rpg-sparkle">✦</span>Forger une nouvelle chronique</div>
             <h2 class="mt-1 font-display text-[28px] font-bold leading-tight">Nouvelle campagne</h2>

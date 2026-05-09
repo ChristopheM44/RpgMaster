@@ -701,32 +701,29 @@ function markerToneStyle(tone: LegendEntry['tone']) {
 
 <template>
   <section
-    class="flex min-h-0 flex-1 flex-col overflow-hidden border"
+    class="rpg-map-shell flex min-h-0 flex-1 flex-col overflow-hidden border"
     :class="[
+      isExploration ? 'is-exploration' : 'is-combat',
       isFullscreen ? 'fixed inset-3 z-[60] rounded-lg shadow-2xl' : 'rounded-none',
       isCollapsed ? 'shrink-0 flex-none' : '',
     ]"
     :style="{
-      borderColor: isExploration ? 'rgba(240,199,100,0.18)' : 'rgba(232,69,69,0.24)',
-      background: 'var(--color-bg-elev)',
       height: isFullscreen || isCollapsed ? undefined : panelHeight ?? (isExploration ? 'min(54vh, 520px)' : undefined),
     }"
   >
     <div
-      class="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b px-4 py-3"
-      :style="{ borderColor: 'var(--color-border)' }"
+      class="rpg-border flex shrink-0 flex-wrap items-center justify-between gap-3 border-b px-4 py-3"
     >
       <div class="min-w-0">
         <div class="flex flex-wrap items-center gap-2">
-          <div class="rpg-eyebrow" :style="{ color: isExploration ? 'var(--color-gold)' : 'var(--color-blood-light)' }">
+          <div class="rpg-eyebrow" :class="isExploration ? 'rpg-text-gold' : 'rpg-text-blood-light'">
             {{ mapTitle }}
           </div>
           <span
-            class="rounded border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]"
-            :style="{ borderColor: 'var(--color-border-strong)', color: 'var(--color-text-muted)' }"
+            class="rpg-border-strong rpg-text-muted rounded border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]"
           >{{ activeModeLabel }}</span>
         </div>
-        <div class="mt-1 truncate text-xs capitalize" :style="{ color: 'var(--color-text-muted)' }">
+        <div class="rpg-text-muted mt-1 truncate text-xs capitalize">
           {{ cols * cellSizeM }} × {{ rows * cellSizeM }} m
           <template v-if="isExploration"> · {{ terrainLabel }}</template>
           · {{ summary }}
@@ -764,20 +761,18 @@ function markerToneStyle(tone: LegendEntry['tone']) {
     <div v-if="!isCollapsed" class="flex min-h-0 flex-1 flex-col lg:flex-row">
       <div class="flex min-h-0 flex-1 items-center justify-center overflow-auto p-4">
         <div
-          class="relative overflow-hidden rounded border"
+          class="rpg-map-grid-frame relative overflow-hidden rounded border"
           data-testid="battlemap-grid"
           :style="{
             width: `${cols * cellPx}px`,
             height: `${rows * cellPx}px`,
-            borderColor: 'rgba(247,199,107,0.22)',
             background: mapBackground,
-            boxShadow: 'inset 0 0 45px rgba(0,0,0,0.55), 0 14px 40px rgba(0,0,0,0.28)',
           }"
         >
           <svg class="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
             <defs>
               <pattern id="combat-grid" :width="cellPx" :height="cellPx" patternUnits="userSpaceOnUse">
-                <path :d="`M ${cellPx} 0 L 0 0 0 ${cellPx}`" fill="none" stroke="rgba(255,235,180,0.08)" stroke-width="1" />
+                <path class="rpg-map-grid-stroke" :d="`M ${cellPx} 0 L 0 0 0 ${cellPx}`" fill="none" stroke-width="1" />
               </pattern>
             </defs>
             <rect width="100%" height="100%" fill="url(#combat-grid)" />
@@ -794,8 +789,8 @@ function markerToneStyle(tone: LegendEntry['tone']) {
               <button
                 v-for="cell in zone.cells"
                 :key="`${zone.id}-${cell.col},${cell.row}`"
-                class="absolute z-10 flex items-center justify-center border bg-gold/10"
-                :style="{ ...cellBoxStyle(cell), borderColor: 'rgba(240,199,100,0.20)' }"
+                class="rpg-map-zone-cell absolute z-10 flex items-center justify-center border bg-gold/10"
+                :style="cellBoxStyle(cell)"
                 type="button"
                 :aria-label="zone.name"
                 @click.stop="selectZone(cell, zone)"
@@ -833,7 +828,7 @@ function markerToneStyle(tone: LegendEntry['tone']) {
             <button
               v-for="poi in displayPois"
               :key="`poi-${poi.id}`"
-              class="absolute z-40 flex h-9 w-9 items-center justify-center rounded-lg border shadow-[0_8px_18px_rgba(0,0,0,0.35)] transition hover:scale-105"
+              class="rpg-map-poi-marker absolute z-40 flex h-9 w-9 items-center justify-center rounded-lg border transition hover:scale-105"
               :style="{ ...markerStyle(poi.position), ...markerToneStyle(toneForPoi(poi)) }"
               type="button"
               :aria-label="poi.name"
@@ -852,8 +847,8 @@ function markerToneStyle(tone: LegendEntry['tone']) {
             <button
               v-for="exit in activeScene?.exits ?? []"
               :key="`exit-${exit.id}`"
-              class="absolute z-40 flex h-10 w-10 items-center justify-center rounded-full border shadow-[0_0_18px_rgba(72,187,156,0.28)] transition hover:scale-105"
-              :style="{ ...markerStyle(exit.position), borderColor: 'rgba(79,216,192,0.62)', background: 'rgba(18,64,57,0.78)', color: 'var(--color-teal)' }"
+              class="rpg-map-exit-marker absolute z-40 flex h-10 w-10 items-center justify-center rounded-full border transition hover:scale-105"
+              :style="markerStyle(exit.position)"
               type="button"
               :aria-label="exit.label"
               :title="exit.label"
@@ -871,12 +866,9 @@ function markerToneStyle(tone: LegendEntry['tone']) {
             <button
               v-for="marker in partyMarkers"
               :key="`party-${marker.id}`"
-              class="absolute z-50 flex h-10 w-10 items-center justify-center rounded-full border text-[10px] font-bold text-white shadow-[0_8px_18px_rgba(0,0,0,0.42)] transition hover:scale-105"
-              :style="{
-                ...markerStyle(marker.position),
-                borderColor: marker.id === myCharacterId ? 'var(--color-gold)' : 'rgba(247,236,208,0.35)',
-                background: 'radial-gradient(circle at 35% 25%, rgba(255,255,255,0.28), var(--color-arcane) 58%, var(--color-ember))',
-              }"
+              class="rpg-map-party-marker absolute z-50 flex h-10 w-10 items-center justify-center rounded-full border text-[10px] font-bold text-white transition hover:scale-105"
+              :class="{ 'is-mine': marker.id === myCharacterId }"
+              :style="markerStyle(marker.position)"
               type="button"
               :aria-label="marker.name"
               :title="marker.name"
@@ -985,11 +977,10 @@ function markerToneStyle(tone: LegendEntry['tone']) {
       </div>
 
       <aside
-        class="flex max-h-[48%] min-h-[210px] shrink-0 flex-col border-t lg:max-h-none lg:w-[320px] lg:border-l lg:border-t-0"
-        :style="{ borderColor: 'var(--color-border)', background: 'rgba(14,13,20,0.52)' }"
+        class="rpg-map-side-panel flex max-h-[48%] min-h-[210px] shrink-0 flex-col border-t lg:max-h-none lg:w-[320px] lg:border-l lg:border-t-0"
       >
-        <div class="border-b p-4" :style="{ borderColor: 'var(--color-border)' }">
-          <div class="rpg-eyebrow mb-2" :style="{ color: 'var(--color-gold)' }">Sélection</div>
+        <div class="rpg-border border-b p-4">
+          <div class="rpg-eyebrow rpg-text-gold mb-2">Sélection</div>
           <template v-if="selected">
             <div class="flex items-start justify-between gap-3">
               <div class="flex min-w-0 items-start gap-2.5">
@@ -1003,17 +994,16 @@ function markerToneStyle(tone: LegendEntry['tone']) {
                 />
                 <div class="min-w-0">
                   <h3 class="truncate font-display text-base font-bold text-parchment">{{ selected.name }}</h3>
-                  <p class="mt-0.5 text-xs capitalize" :style="{ color: 'var(--color-text-muted)' }">
+                  <p class="rpg-text-muted mt-0.5 text-xs capitalize">
                     {{ selected.meta }} · {{ coordinateLabel(selected.position) }}
                   </p>
                 </div>
               </div>
               <span
-                class="rounded border px-2 py-1 font-mono text-[10px]"
-                :style="{ borderColor: 'rgba(247,199,107,0.25)', color: 'var(--color-gold)' }"
+                class="rpg-map-coordinate-chip rounded border px-2 py-1 font-mono text-[10px]"
               >{{ coordinateLabel(selected.position) }}</span>
             </div>
-            <p class="mt-3 text-sm leading-relaxed" :style="{ color: 'var(--color-parchment-dark)' }">
+            <p class="rpg-text-secondary mt-3 text-sm leading-relaxed">
               {{ selected.description }}
             </p>
             <div
@@ -1023,10 +1013,9 @@ function markerToneStyle(tone: LegendEntry['tone']) {
               <button
                 v-for="action in selected.actions"
                 :key="action.id"
-                class="flex items-center justify-start gap-2 rounded border px-3 py-2 text-left text-[11px] font-bold uppercase tracking-[0.1em] transition hover:bg-white/[0.05]"
+                class="rpg-map-action-button flex items-center justify-start gap-2 rounded border px-3 py-2 text-left text-[11px] font-bold uppercase tracking-[0.1em] transition hover:bg-white/[0.05]"
                 :data-testid="`map-poi-action-${action.id}`"
                 :data-action-intent="action.intent"
-                :style="{ borderColor: 'rgba(240,199,100,0.26)', color: 'var(--color-parchment)' }"
                 type="button"
                 @click="selectPoiAction(action)"
               >
@@ -1046,22 +1035,22 @@ function markerToneStyle(tone: LegendEntry['tone']) {
               @click="confirmSelection"
             >{{ selected.actionLabel }}</button>
           </template>
-          <p v-else class="text-sm leading-relaxed" :style="{ color: 'var(--color-text-muted)' }">
+          <p v-else class="rpg-text-muted text-sm leading-relaxed">
             Sélectionnez un repère, une sortie, une cible ou une destination pour voir ce que votre clic peut entraîner.
           </p>
         </div>
 
         <div class="min-h-0 flex-1 overflow-y-auto p-4">
           <div class="mb-2 flex items-center justify-between gap-3">
-            <div class="rpg-eyebrow" :style="{ color: 'var(--color-text-muted)' }">Légende</div>
-            <span class="text-[10px]" :style="{ color: 'var(--color-text-dim)' }">{{ legendEntries.length }} éléments</span>
+            <div class="rpg-eyebrow rpg-text-muted">Légende</div>
+            <span class="rpg-text-dim text-[10px]">{{ legendEntries.length }} éléments</span>
           </div>
           <div class="space-y-2">
             <button
               v-for="entry in legendEntries"
               :key="entry.id"
-              class="flex w-full items-center gap-2 rounded border px-2.5 py-2 text-left transition hover:bg-white/[0.04]"
-              :style="{ borderColor: isLegendEntrySelected(entry) ? 'rgba(240,199,100,0.42)' : 'var(--color-border)' }"
+              class="rpg-map-legend-row flex w-full items-center gap-2 rounded border px-2.5 py-2 text-left transition hover:bg-white/[0.04]"
+              :class="{ 'is-selected': isLegendEntrySelected(entry) }"
               type="button"
               :disabled="!entry.position"
               @click="selectLegend(entry)"
@@ -1080,9 +1069,9 @@ function markerToneStyle(tone: LegendEntry['tone']) {
               </span>
               <span class="min-w-0 flex-1">
                 <span class="block truncate text-sm font-semibold text-parchment">{{ entry.label }}</span>
-                <span class="block truncate text-xs" :style="{ color: 'var(--color-text-muted)' }">{{ entry.detail }}</span>
+                <span class="rpg-text-muted block truncate text-xs">{{ entry.detail }}</span>
               </span>
-              <span v-if="entry.position" class="font-mono text-[10px]" :style="{ color: 'var(--color-text-dim)' }">
+              <span v-if="entry.position" class="rpg-text-dim font-mono text-[10px]">
                 {{ coordinateLabel(entry.position) }}
               </span>
             </button>

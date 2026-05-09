@@ -62,41 +62,39 @@ const pcWeapons = computed(() => {
 
 <template>
   <aside
-    class="flex w-[320px] shrink-0 flex-col overflow-y-auto border-l"
-    :style="{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elev)' }"
+    class="rpg-detail-panel flex w-[320px] shrink-0 flex-col overflow-y-auto border-l"
   >
     <div v-if="!combatant" class="flex flex-1 items-center justify-center p-6 text-center">
-      <p class="font-serif italic text-sm" :style="{ color: 'var(--color-text-muted)' }">Aucun combattant sélectionné.</p>
+      <p class="rpg-text-muted font-serif italic text-sm">Aucun combattant sélectionné.</p>
     </div>
 
     <template v-else>
       <div
-        class="border-b p-5"
-        :style="{
-          borderColor: 'var(--color-border)',
-          background: combatant.kind === 'monster'
-            ? `linear-gradient(180deg, ${combatant.color ?? 'rgba(232,69,69,0.25)'}33, transparent)`
-            : 'linear-gradient(180deg, rgba(192,144,255,0.12), transparent)',
-        }"
+        class="rpg-detail-header rpg-border border-b p-5"
+        :class="combatant.kind === 'monster' ? 'is-monster' : 'is-pc'"
+        :style="combatant.kind === 'monster' && combatant.color
+          ? { background: `linear-gradient(180deg, ${combatant.color}33, transparent)` }
+          : undefined"
       >
         <div class="flex items-start gap-3">
           <div
-            class="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border font-display text-lg font-bold text-white"
-            :style="{
-              background: combatant.kind === 'monster'
-                ? `radial-gradient(circle at 35% 25%, rgba(255,255,255,0.24), ${combatant.color ?? 'var(--color-blood)'})`
-                : 'linear-gradient(135deg, var(--color-arcane), var(--color-ember))',
-              borderColor: combatant.is_active ? 'var(--color-gold)' : 'rgba(247,236,208,0.18)',
-            }"
+            class="rpg-detail-token flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border font-display text-lg font-bold text-white"
+            :class="[
+              combatant.kind === 'monster' ? 'is-monster' : 'is-pc',
+              combatant.is_active ? 'is-active' : '',
+            ]"
+            :style="combatant.kind === 'monster' && combatant.color
+              ? { '--rpg-token-color': combatant.color }
+              : undefined"
           >
             {{ combatant.token ?? combatant.name.charAt(0).toUpperCase() }}
           </div>
           <div class="min-w-0 flex-1">
-            <div class="rpg-eyebrow mb-1" :style="{ color: combatant.kind === 'monster' ? 'var(--color-blood)' : 'var(--color-arcane-light)' }">
+            <div class="rpg-eyebrow mb-1" :class="combatant.kind === 'monster' ? 'rpg-text-blood' : 'rpg-text-arcane-light'">
               {{ combatant.kind === 'monster' ? 'Créature' : 'Personnage' }}
             </div>
             <h2 class="truncate font-display text-xl font-bold text-parchment">{{ combatant.name }}</h2>
-            <p class="truncate text-xs capitalize" :style="{ color: 'var(--color-text-muted)' }">
+            <p class="rpg-text-muted truncate text-xs capitalize">
               <template v-if="combatant.kind === 'monster'">
                 {{ combatant.species ?? 'monstre' }} · FP {{ combatant.cr ?? '—' }}
               </template>
@@ -108,21 +106,21 @@ const pcWeapons = computed(() => {
         </div>
 
         <div class="mt-4 grid grid-cols-4 gap-2">
-          <div class="rounded border p-2 text-center" :style="{ borderColor: 'rgba(247,236,208,0.1)' }">
+          <div class="rpg-detail-stat rounded border p-2 text-center">
             <div class="font-mono text-sm font-bold text-parchment">{{ combatant.hp_current }}/{{ combatant.hp_max }}</div>
-            <div class="text-[9px] uppercase" :style="{ color: 'var(--color-text-dim)' }">PV</div>
+            <div class="rpg-text-dim text-[9px] uppercase">PV</div>
           </div>
-          <div class="rounded border p-2 text-center" :style="{ borderColor: 'rgba(247,236,208,0.1)' }">
+          <div class="rpg-detail-stat rounded border p-2 text-center">
             <div class="font-mono text-sm font-bold text-parchment">{{ combatant.ac }}</div>
-            <div class="text-[9px] uppercase" :style="{ color: 'var(--color-text-dim)' }">CA</div>
+            <div class="rpg-text-dim text-[9px] uppercase">CA</div>
           </div>
-          <div class="rounded border p-2 text-center" :style="{ borderColor: 'rgba(247,236,208,0.1)' }">
+          <div class="rpg-detail-stat rounded border p-2 text-center">
             <div class="font-mono text-sm font-bold text-parchment">{{ combatant.initiative }}</div>
-            <div class="text-[9px] uppercase" :style="{ color: 'var(--color-text-dim)' }">Init</div>
+            <div class="rpg-text-dim text-[9px] uppercase">Init</div>
           </div>
-          <div class="rounded border p-2 text-center" :style="{ borderColor: 'rgba(247,236,208,0.1)' }">
+          <div class="rpg-detail-stat rounded border p-2 text-center">
             <div class="font-mono text-sm font-bold text-parchment">{{ combatant.action_economy?.movement ?? 9 }}</div>
-            <div class="text-[9px] uppercase" :style="{ color: 'var(--color-text-dim)' }">Vit</div>
+            <div class="rpg-text-dim text-[9px] uppercase">Vit</div>
           </div>
         </div>
 
@@ -144,24 +142,23 @@ const pcWeapons = computed(() => {
             <div
               v-for="item in pcWeapons"
               :key="String(item.id ?? weaponName(item))"
-              class="rounded border px-3 py-2"
-              :style="{ borderColor: 'rgba(247,236,208,0.1)', background: 'rgba(255,255,255,0.025)' }"
+              class="rpg-detail-card rounded border px-3 py-2"
             >
               <div class="text-sm font-semibold text-parchment">{{ weaponName(item) }}</div>
-              <div class="text-xs" :style="{ color: 'var(--color-text-muted)' }">
+              <div class="rpg-text-muted text-xs">
                 {{ item.damage_dice ?? item.damage ?? 'Dégâts selon fiche' }}
               </div>
             </div>
-            <p v-if="pcWeapons.length === 0" class="text-sm italic" :style="{ color: 'var(--color-text-muted)' }">Aucune arme listée.</p>
+            <p v-if="pcWeapons.length === 0" class="rpg-text-muted text-sm italic">Aucune arme listée.</p>
           </div>
         </section>
 
         <section v-if="combatant.kind === 'pc'">
           <h3 class="rpg-eyebrow mb-2">Économie</h3>
           <div class="grid grid-cols-3 gap-2">
-            <div class="rounded border p-2 text-center text-xs" :style="{ borderColor: combatant.action_economy?.action !== false ? 'rgba(111,217,111,0.35)' : 'rgba(247,236,208,0.1)' }">Action</div>
-            <div class="rounded border p-2 text-center text-xs" :style="{ borderColor: combatant.action_economy?.bonus_action !== false ? 'rgba(111,217,111,0.35)' : 'rgba(247,236,208,0.1)' }">Bonus</div>
-            <div class="rounded border p-2 text-center text-xs" :style="{ borderColor: combatant.action_economy?.reaction !== false ? 'rgba(111,217,111,0.35)' : 'rgba(247,236,208,0.1)' }">Réaction</div>
+            <div class="rpg-economy-box rounded border p-2 text-center text-xs" :class="{ 'is-available': combatant.action_economy?.action !== false }">Action</div>
+            <div class="rpg-economy-box rounded border p-2 text-center text-xs" :class="{ 'is-available': combatant.action_economy?.bonus_action !== false }">Bonus</div>
+            <div class="rpg-economy-box rounded border p-2 text-center text-xs" :class="{ 'is-available': combatant.action_economy?.reaction !== false }">Réaction</div>
           </div>
         </section>
 
@@ -171,16 +168,15 @@ const pcWeapons = computed(() => {
             <div
               v-for="action in combatant.actions ?? []"
               :key="action.name"
-              class="rounded border px-3 py-2"
-              :style="{ borderColor: 'rgba(232,69,69,0.22)', background: 'rgba(232,69,69,0.045)' }"
+              class="rpg-detail-card danger rounded border px-3 py-2"
             >
               <div class="flex items-center justify-between gap-2">
                 <span class="text-sm font-semibold text-parchment">{{ action.name }}</span>
-                <span class="font-mono text-xs" :style="{ color: 'var(--color-gold)' }">
+                <span class="rpg-text-gold font-mono text-xs">
                   {{ action.attack_bonus !== undefined ? `+${action.attack_bonus}` : '' }}
                 </span>
               </div>
-              <p class="mt-1 text-xs" :style="{ color: 'var(--color-text-muted)' }">
+              <p class="rpg-text-muted mt-1 text-xs">
                 {{ action.damage_dice ?? action.description ?? 'Action spéciale' }}
               </p>
             </div>
@@ -190,7 +186,7 @@ const pcWeapons = computed(() => {
         <section v-if="combatant.conditions.length">
           <h3 class="rpg-eyebrow mb-2">Conditions</h3>
           <div class="flex flex-wrap gap-1.5">
-            <span v-for="condition in combatant.conditions" :key="condition" class="rpg-chip">{{ condition }}</span>
+            <span v-for="condition in combatant.conditions" :key="condition" class="rpg-chip rpg-tone-blood">{{ condition }}</span>
           </div>
         </section>
 
@@ -200,18 +196,17 @@ const pcWeapons = computed(() => {
             <div
               v-for="(score, ability) in combatant.ability_scores"
               :key="ability"
-              class="rounded border p-2 text-center"
-              :style="{ borderColor: 'rgba(247,236,208,0.1)' }"
+              class="rpg-detail-stat rounded border p-2 text-center"
             >
-              <div class="text-[10px] uppercase" :style="{ color: 'var(--color-text-dim)' }">{{ abilityLabels[ability] ?? ability }}</div>
-              <div class="font-mono text-sm text-parchment">{{ score }} <span :style="{ color: 'var(--color-text-muted)' }">{{ mod(score) }}</span></div>
+              <div class="rpg-text-dim text-[10px] uppercase">{{ abilityLabels[ability] ?? ability }}</div>
+              <div class="font-mono text-sm text-parchment">{{ score }} <span class="rpg-text-muted">{{ mod(score) }}</span></div>
             </div>
           </div>
         </section>
 
         <section v-if="combatant.description">
           <h3 class="rpg-eyebrow mb-2">Notes MJ</h3>
-          <p class="text-sm leading-relaxed" :style="{ color: 'var(--color-text-muted)' }">{{ combatant.description }}</p>
+          <p class="rpg-text-muted text-sm leading-relaxed">{{ combatant.description }}</p>
         </section>
       </div>
     </template>

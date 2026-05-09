@@ -25,16 +25,12 @@ watch(
       class="flex shrink-0 items-baseline gap-4 px-10 pt-8 pb-4"
     >
       <h2
-        class="font-display text-[32px] font-bold tracking-[0.05em] leading-none"
-        :style="{ color: 'var(--color-parchment)' }"
+        class="rpg-text-main font-display text-[32px] font-bold tracking-[0.05em] leading-none"
       >
-        <span :style="{ color: 'var(--color-ember)' }">✦</span>
+        <span class="rpg-text-ember">✦</span>
         Récit
       </h2>
-      <div
-        class="flex-1 h-px"
-        :style="{ background: 'linear-gradient(90deg, var(--color-border-strong), transparent)' }"
-      />
+      <div class="rpg-divider flex-1 h-px" />
     </div>
 
     <!-- Log -->
@@ -44,8 +40,7 @@ watch(
     >
       <p
         v-if="gameStore.narrativeLog.length === 0"
-        class="mt-16 text-center font-serif italic text-lg"
-        :style="{ color: 'var(--color-text-muted)' }"
+        class="rpg-text-muted mt-16 text-center font-serif italic text-lg"
       >
         En attente du début de la session…
       </p>
@@ -54,51 +49,41 @@ watch(
 
         <!-- Narration GM -->
         <div v-if="entry.type === 'narration'" class="space-y-3">
-          <div class="rpg-eyebrow" :style="{ color: 'var(--color-ember)' }">
+          <div class="rpg-eyebrow">
             ✦ {{ entry.speaker ?? 'Maître du Jeu' }}
           </div>
           <p
-            class="font-serif leading-[1.8] text-pretty"
-            style="font-size: 17px;"
-            :style="{ color: 'var(--color-parchment-dark)' }"
+            class="rpg-text-secondary font-serif leading-[1.8] text-[17px] text-pretty"
           >{{ entry.text }}</p>
         </div>
 
         <!-- Dialogue compagnon / PNJ -->
         <div
           v-else-if="entry.type === 'dialogue'"
-          class="flex gap-3 rounded-lg border-l-2 py-2.5 pl-4 pr-3"
-          :style="{
-            borderColor: entry.speaker_kind === 'companion' ? 'rgba(192,144,255,0.55)' : 'rgba(240,199,100,0.45)',
-            background: entry.speaker_kind === 'companion' ? 'rgba(192,144,255,0.07)' : 'rgba(240,199,100,0.06)',
-          }"
+          class="rpg-dialogue-entry flex gap-3 rounded-lg border-l-2 py-2.5 pl-4 pr-3"
+          :class="{ 'is-companion': entry.speaker_kind === 'companion' }"
         >
           <div class="min-w-0 flex-1">
             <span
               v-if="entry.speaker"
               class="mr-2 text-sm font-display font-semibold"
-              :style="{ color: entry.speaker_kind === 'companion' ? 'var(--color-arcane)' : 'var(--color-gold)' }"
+              :class="entry.speaker_kind === 'companion' ? 'rpg-text-arcane' : 'rpg-text-gold'"
             >{{ entry.speaker }}</span>
-            <span class="text-sm leading-relaxed" :style="{ color: 'var(--color-parchment)' }">{{ entry.text }}</span>
+            <span class="rpg-text-main text-sm leading-relaxed">{{ entry.text }}</span>
           </div>
         </div>
 
         <!-- Action joueur -->
         <div
           v-else-if="entry.type === 'player'"
-          class="flex gap-3 rounded-lg border-l-2 py-2.5 pl-4 pr-3"
-          :style="{
-            borderColor: 'rgba(192,144,255,0.5)',
-            background: 'rgba(192,144,255,0.05)',
-          }"
+          class="rpg-player-entry flex gap-3 rounded-lg border-l-2 py-2.5 pl-4 pr-3"
         >
           <div class="min-w-0 flex-1">
             <span
               v-if="entry.speaker"
-              class="mr-2 text-sm font-display font-semibold"
-              :style="{ color: 'var(--color-arcane)' }"
+              class="rpg-text-arcane mr-2 text-sm font-display font-semibold"
             >{{ entry.speaker }}</span>
-            <span class="text-sm" :style="{ color: 'var(--color-parchment)' }">{{ entry.text }}</span>
+            <span class="rpg-text-main text-sm">{{ entry.text }}</span>
           </div>
         </div>
 
@@ -110,34 +95,29 @@ watch(
         <!-- Action de combat -->
         <div
           v-else-if="entry.type === 'combat_action' && entry.combatAction"
-          class="rounded-lg border px-4 py-3 text-sm space-y-2"
-          :style="{
-            background: 'rgba(232,69,69,0.06)',
-            borderColor: 'rgba(232,69,69,0.2)',
-          }"
+          class="rpg-combat-log-entry rounded-lg border px-4 py-3 text-sm space-y-2"
         >
-          <div class="flex items-center gap-2 font-semibold" :style="{ color: 'var(--color-blood)' }">
+          <div class="rpg-text-blood flex items-center gap-2 font-semibold">
             <span>⚔</span>
             <span class="font-display">{{ entry.combatAction.attacker_name }}</span>
-            <span class="text-xs font-normal" :style="{ color: 'var(--color-text-muted)' }">attaque</span>
+            <span class="rpg-text-muted text-xs font-normal">attaque</span>
             <span class="font-display">{{ entry.combatAction.target_name }}</span>
             <span
               v-if="entry.combatAction.critical"
-              class="rpg-chip ml-auto"
-              :style="{ color: 'var(--color-gold)', borderColor: 'rgba(240,199,100,0.4)', background: 'rgba(240,199,100,0.1)' }"
+              class="rpg-chip rpg-tone-gold ml-auto"
             >Critique !</span>
           </div>
-          <div class="flex flex-wrap gap-3 text-xs" :style="{ color: 'var(--color-text-muted)' }">
-            <span>d20 : <span class="font-mono font-bold" :style="{ color: 'var(--color-parchment)' }">{{ entry.combatAction.d20 }}</span></span>
-            <span>Total : <span class="font-mono font-bold" :style="{ color: 'var(--color-parchment)' }">{{ entry.combatAction.attack_roll }}</span> vs CA {{ entry.combatAction.target_ac }}</span>
-            <span v-if="entry.combatAction.hit" class="font-semibold" :style="{ color: 'var(--color-green)' }">Touché</span>
-            <span v-else :style="{ color: 'var(--color-text-dim)' }">Raté</span>
-            <span v-if="entry.combatAction.hit && entry.combatAction.damage !== null" class="font-semibold" :style="{ color: 'var(--color-blood)' }">{{ entry.combatAction.damage }} dégâts</span>
+          <div class="rpg-text-muted flex flex-wrap gap-3 text-xs">
+            <span>d20 : <span class="rpg-text-main font-mono font-bold">{{ entry.combatAction.d20 }}</span></span>
+            <span>Total : <span class="rpg-text-main font-mono font-bold">{{ entry.combatAction.attack_roll }}</span> vs CA {{ entry.combatAction.target_ac }}</span>
+            <span v-if="entry.combatAction.hit" class="rpg-text-green font-semibold">Touché</span>
+            <span v-else class="rpg-text-dim">Raté</span>
+            <span v-if="entry.combatAction.hit && entry.combatAction.damage !== null" class="rpg-text-blood font-semibold">{{ entry.combatAction.damage }} dégâts</span>
           </div>
         </div>
 
         <!-- Système -->
-        <div v-else-if="entry.type === 'system'" class="py-1 text-center text-xs" :style="{ color: 'var(--color-text-dim)' }">
+        <div v-else-if="entry.type === 'system'" class="rpg-text-dim py-1 text-center text-xs">
           ──── {{ entry.text }} ────
         </div>
 
@@ -146,14 +126,13 @@ watch(
       <!-- GM pense -->
       <div
         v-if="gameStore.isProcessing || gameStore.isGmThinking"
-        class="flex items-center gap-3 rounded-lg border-l-2 py-3 pl-4"
-        :style="{ borderColor: 'rgba(240,199,100,0.3)', background: 'rgba(240,199,100,0.04)' }"
+        class="rpg-thinking-entry flex items-center gap-3 rounded-lg border-l-2 py-3 pl-4"
       >
-        <span class="font-serif italic text-sm" :style="{ color: 'var(--color-gold)', opacity: '0.7' }">
+        <span class="rpg-text-gold font-serif italic text-sm opacity-70">
           Le Maître du Jeu réfléchit
         </span>
         <span class="flex gap-1">
-          <span v-for="delay in ['0ms', '150ms', '300ms']" :key="delay" class="inline-block h-1.5 w-1.5 rounded-full animate-bounce" :style="{ background: 'var(--color-gold)', opacity: '0.5', animationDelay: delay }" />
+          <span v-for="delay in ['0ms', '150ms', '300ms']" :key="delay" class="rpg-thinking-dot inline-block h-1.5 w-1.5 rounded-full animate-bounce" :style="{ animationDelay: delay }" />
         </span>
       </div>
     </div>

@@ -6,7 +6,7 @@ const gameStore = useGameStore()
 
 function hpColor(cur: number, max: number): string {
   const pct = max > 0 ? cur / max : 0
-  return pct > 0.5 ? 'var(--color-green)' : pct > 0.25 ? '#e5b93a' : 'var(--color-blood)'
+  return pct > 0.5 ? 'var(--color-green)' : pct > 0.25 ? 'var(--color-gold)' : 'var(--color-blood)'
 }
 
 function hpPct(cur: number, max: number): number {
@@ -25,17 +25,12 @@ function isAiCompanion(combatant: (typeof gameStore.combatants)[0]): boolean {
 
     <!-- Section header -->
     <div
-      class="flex shrink-0 items-center justify-between border-b px-4 py-2.5"
-      :style="{ borderColor: 'var(--color-border)' }"
+      class="rpg-border flex shrink-0 items-center justify-between border-b px-4 py-2.5"
     >
-      <span
-        class="rpg-eyebrow"
-        :style="{ color: 'var(--color-blood)' }"
-      >⚔ Combat</span>
+      <span class="rpg-eyebrow rpg-text-blood">⚔ Combat</span>
       <span
         v-if="isInCombat"
-        class="font-mono text-[11px]"
-        :style="{ color: 'rgba(232,69,69,0.7)' }"
+        class="rpg-text-blood-soft font-mono text-[11px]"
       >Round {{ gameStore.roundNumber }}</span>
     </div>
 
@@ -43,8 +38,7 @@ function isAiCompanion(combatant: (typeof gameStore.combatants)[0]): boolean {
     <div class="flex-1 overflow-y-auto px-3 py-3 space-y-2">
       <p
         v-if="!isInCombat"
-        class="mt-4 text-center font-serif italic text-sm"
-        :style="{ color: 'var(--color-text-muted)' }"
+        class="rpg-text-muted mt-4 text-center font-serif italic text-sm"
       >
         Hors combat
       </p>
@@ -52,48 +46,38 @@ function isAiCompanion(combatant: (typeof gameStore.combatants)[0]): boolean {
       <div
         v-for="combatant in gameStore.combatants"
         :key="combatant.id"
-        class="rounded-lg border px-3 py-2.5 transition-all"
-        :style="{
-          background: combatant.is_active ? 'rgba(255,130,71,0.05)' : 'var(--color-surface)',
-          borderColor: combatant.is_active ? 'rgba(255,130,71,0.5)' : 'var(--color-border)',
-          boxShadow: combatant.is_active ? '0 0 16px rgba(255,130,71,0.12)' : 'none',
-        }"
+        class="rpg-combat-card rounded-lg border px-3 py-2.5 transition-all"
+        :class="{ 'is-active': combatant.is_active }"
       >
         <div class="flex items-center gap-2.5">
           <!-- Initiative badge -->
           <div
-            class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md font-mono text-xs font-bold"
-            :style="{
-              background: 'var(--color-surface-raised)',
-              color: combatant.is_active ? 'var(--color-gold)' : 'var(--color-text-muted)',
-            }"
+            class="rpg-initiative-badge flex h-7 w-7 shrink-0 items-center justify-center rounded-md font-mono text-xs font-bold"
+            :class="combatant.is_active ? 'rpg-text-gold' : 'rpg-text-muted'"
           >{{ combatant.initiative }}</div>
 
           <!-- Name + AI indicator -->
           <span
             class="flex-1 truncate font-display text-sm font-semibold"
-            :style="{ color: combatant.is_active ? 'var(--color-gold)' : 'var(--color-parchment)' }"
+            :class="combatant.is_active ? 'rpg-text-gold' : 'rpg-text-main'"
           >{{ combatant.name }}</span>
           <span
             v-if="isAiCompanion(combatant)"
-            class="shrink-0 text-[9px] font-bold tracking-[0.1em]"
-            :style="{ color: 'var(--color-arcane)' }"
+            class="rpg-text-arcane shrink-0 text-[9px] font-bold tracking-[0.1em]"
           >IA</span>
           <span
             v-if="gameStore.isCharacterThinking(combatant.id)"
-            class="shrink-0 text-[9px] font-bold tracking-[0.08em]"
-            :style="{ color: 'var(--color-gold)' }"
+            class="rpg-text-gold shrink-0 text-[9px] font-bold tracking-[0.08em]"
           >PENSE…</span>
 
           <!-- Active turn diamond -->
-          <span v-if="combatant.is_active" class="shrink-0 text-xs" :style="{ color: 'var(--color-gold)' }">◆</span>
+          <span v-if="combatant.is_active" class="rpg-text-gold shrink-0 text-xs">◆</span>
         </div>
 
         <!-- HP bar (D3 style) -->
         <div class="mt-2 flex items-center gap-2">
           <div
-            class="relative flex-1 overflow-hidden rounded-full"
-            style="height: 8px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.04);"
+            class="rpg-hp-track relative flex-1 overflow-hidden rounded-full"
           >
             <div
               class="absolute inset-y-0 left-0 rounded-full transition-all duration-300"
@@ -107,9 +91,8 @@ function isAiCompanion(combatant: (typeof gameStore.combatants)[0]): boolean {
             />
           </div>
           <span
-            class="shrink-0 font-mono text-xs"
-            :style="{ color: 'var(--color-text-muted)' }"
-          >{{ combatant.hp_current }}<span :style="{ color: 'var(--color-text-dim)' }">/{{ combatant.hp_max }}</span></span>
+            class="rpg-text-muted shrink-0 font-mono text-xs"
+          >{{ combatant.hp_current }}<span class="rpg-text-dim">/{{ combatant.hp_max }}</span></span>
         </div>
 
         <!-- Conditions -->
@@ -117,8 +100,7 @@ function isAiCompanion(combatant: (typeof gameStore.combatants)[0]): boolean {
           <span
             v-for="cond in combatant.conditions"
             :key="cond"
-            class="rpg-chip"
-            :style="{ color: 'var(--color-blood)', borderColor: 'rgba(232,69,69,0.4)' }"
+            class="rpg-chip rpg-tone-blood"
           >{{ cond }}</span>
         </div>
 
@@ -127,33 +109,29 @@ function isAiCompanion(combatant: (typeof gameStore.combatants)[0]): boolean {
           v-if="combatant.hp_current <= 0 && combatant.death_saves"
           class="mt-2 space-y-1"
         >
-          <div v-if="combatant.death_saves.stable" class="text-xs italic" :style="{ color: 'var(--color-green)' }">
+          <div v-if="combatant.death_saves.stable" class="rpg-text-green text-xs italic">
             Stable
           </div>
           <template v-else>
             <div class="flex items-center gap-1.5">
-              <span class="w-14 shrink-0 text-xs" :style="{ color: 'rgba(111,217,111,0.7)' }">Succès</span>
+              <span class="rpg-text-green w-14 shrink-0 text-xs opacity-70">Succès</span>
               <div class="flex gap-1">
                 <span
                   v-for="i in 3"
                   :key="i"
-                  class="h-3 w-3 rounded-full border transition-colors"
-                  :style="i <= (combatant.death_saves.successes ?? 0)
-                    ? { background: 'var(--color-green)', borderColor: 'var(--color-green)' }
-                    : { background: 'transparent', borderColor: 'rgba(247,236,208,0.2)' }"
+                  class="rpg-death-dot h-3 w-3 rounded-full border transition-colors"
+                  :class="{ 'is-success': i <= (combatant.death_saves.successes ?? 0) }"
                 />
               </div>
             </div>
             <div class="flex items-center gap-1.5">
-              <span class="w-14 shrink-0 text-xs" :style="{ color: 'rgba(232,69,69,0.7)' }">Échecs</span>
+              <span class="rpg-text-blood-soft w-14 shrink-0 text-xs">Échecs</span>
               <div class="flex gap-1">
                 <span
                   v-for="i in 3"
                   :key="i"
-                  class="h-3 w-3 rounded-full border transition-colors"
-                  :style="i <= (combatant.death_saves.failures ?? 0)
-                    ? { background: 'var(--color-blood)', borderColor: 'var(--color-blood)' }
-                    : { background: 'transparent', borderColor: 'rgba(247,236,208,0.2)' }"
+                  class="rpg-death-dot h-3 w-3 rounded-full border transition-colors"
+                  :class="{ 'is-failure': i <= (combatant.death_saves.failures ?? 0) }"
                 />
               </div>
             </div>

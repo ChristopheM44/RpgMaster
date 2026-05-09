@@ -77,34 +77,24 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEsc))
 
 <template>
   <div
-    class="fixed inset-0 z-[60] flex items-center justify-center p-4"
-    :style="{ background: 'rgba(7, 6, 12, 0.72)', backdropFilter: 'blur(6px)' }"
+    class="rpg-modal-backdrop fixed inset-0 z-[60] flex items-center justify-center p-4"
     @click.self="emit('cancel')"
   >
     <section
-      class="w-[560px] max-w-full overflow-hidden rounded-[14px] border shadow-2xl"
-      :style="{
-        background: 'linear-gradient(180deg, var(--color-bg-elev), var(--color-bg))',
-        borderColor: 'var(--color-border-strong)',
-      }"
+      class="rpg-dialog-panel rpg-tone-teal w-[560px] max-w-full overflow-hidden rounded-[14px] border shadow-2xl"
       role="dialog"
       aria-modal="true"
     >
-      <div
-        class="h-[3px] w-full"
-        :style="{ background: 'linear-gradient(90deg, transparent, var(--color-teal), transparent)' }"
-      />
+      <div class="rpg-dialog-bar h-[3px] w-full" />
 
       <div class="p-6">
         <div class="mb-5 flex items-center justify-between gap-4">
           <div>
             <div
-              class="text-[10px] font-bold uppercase tracking-[0.24em]"
-              :style="{ color: 'var(--color-teal)' }"
+              class="rpg-text-teal text-[10px] font-bold uppercase tracking-[0.24em]"
             >Repos</div>
             <h2
-              class="font-display text-[22px] font-bold"
-              :style="{ color: 'var(--color-parchment)' }"
+              class="rpg-text-main font-display text-[22px] font-bold"
             >Récupération du groupe</h2>
           </div>
           <button
@@ -116,23 +106,18 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEsc))
         </div>
 
         <div
-          class="mb-5 grid grid-cols-2 gap-2 rounded-lg border p-1"
-          :style="{ borderColor: 'var(--color-border)', background: 'rgba(255,255,255,0.02)' }"
+          class="rpg-segmented mb-5 grid grid-cols-2 gap-2 rounded-lg border p-1"
         >
           <button
             type="button"
-            class="rounded-md px-3 py-2 text-sm font-semibold"
-            :style="mode === 'short'
-              ? { background: 'rgba(79,216,192,0.16)', color: 'var(--color-teal)' }
-              : { color: 'var(--color-text-muted)' }"
+            class="rpg-text-muted rounded-md px-3 py-2 text-sm font-semibold"
+            :class="mode === 'short' ? 'rpg-tone-teal rpg-tone-panel' : ''"
             @click="mode = 'short'"
           >Repos court</button>
           <button
             type="button"
-            class="rounded-md px-3 py-2 text-sm font-semibold"
-            :style="mode === 'long'
-              ? { background: 'rgba(192,144,255,0.16)', color: 'var(--color-arcane-light)' }
-              : { color: 'var(--color-text-muted)' }"
+            class="rpg-text-muted rounded-md px-3 py-2 text-sm font-semibold"
+            :class="mode === 'long' ? 'rpg-tone-arcane rpg-tone-panel' : ''"
             @click="mode = 'long'"
           >Repos long</button>
         </div>
@@ -141,14 +126,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEsc))
           <div
             v-for="character in characters"
             :key="character.id"
-            class="grid grid-cols-[1fr_auto] items-center gap-3 rounded-lg border px-4 py-3"
-            :style="{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }"
+            class="rpg-mini-panel grid grid-cols-[1fr_auto] items-center gap-3 rounded-lg border px-4 py-3"
           >
             <div class="min-w-0">
-              <div class="truncate text-sm font-semibold" :style="{ color: 'var(--color-parchment)' }">
+              <div class="rpg-text-main truncate text-sm font-semibold">
                 {{ character.name }}
               </div>
-              <div class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs" :style="{ color: 'var(--color-text-muted)' }">
+              <div class="rpg-text-muted mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs">
                 <span>PV {{ character.hp_current }}/{{ character.hp_max }}</span>
                 <span>d{{ hitDice(character).die }}</span>
                 <span>{{ availableDice(character) }}/{{ hitDice(character).total }} dispo</span>
@@ -163,8 +147,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEsc))
                 @click="adjust(character, -1)"
               >−</button>
               <div
-                class="flex h-8 w-10 items-center justify-center rounded-md border font-mono text-sm"
-                :style="{ borderColor: 'var(--color-border)', color: 'var(--color-parchment)' }"
+                class="rpg-counter-box flex h-8 w-10 items-center justify-center rounded-md border font-mono text-sm"
               >{{ spend[character.id] ?? 0 }}</div>
               <button
                 type="button"
@@ -178,12 +161,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEsc))
 
         <div
           v-else
-          class="rounded-lg border px-4 py-5 text-sm leading-relaxed"
-          :style="{
-            borderColor: 'var(--color-border)',
-            background: 'var(--color-surface)',
-            color: 'var(--color-parchment-dark)',
-          }"
+          class="rpg-mini-panel rpg-text-secondary rounded-lg border px-4 py-5 text-sm leading-relaxed"
         >
           Le groupe récupère tous ses points de vie, ses emplacements de sorts et ses dés de vie.
         </div>

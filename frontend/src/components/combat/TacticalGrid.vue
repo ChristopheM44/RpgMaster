@@ -113,17 +113,15 @@ function initials(name: string) {
           <div
             v-for="cell in rowCells"
             :key="`${cell.col},${cell.row}`"
-            class="relative flex items-center justify-center"
+            class="relative flex h-7 w-7 items-center justify-center"
             :class="cellClasses(cell.col, cell.row)"
-            style="width: 28px; height: 28px"
             @click="handleCellClick(cell.col, cell.row)"
           >
             <div
               v-if="cellMap[`${cell.col},${cell.row}`]"
-              class="flex h-5 w-5 items-center justify-center rounded-full border font-bold"
+              class="flex h-5 w-5 items-center justify-center rounded-full border text-[7px] leading-none font-bold"
               :class="tokenClasses(cellMap[`${cell.col},${cell.row}`]!)"
               :title="cellMap[`${cell.col},${cell.row}`]!.name"
-              style="font-size: 7px; line-height: 1"
             >
               {{ initials(cellMap[`${cell.col},${cell.row}`]!.name) }}
             </div>

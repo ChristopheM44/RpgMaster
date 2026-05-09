@@ -50,15 +50,22 @@ const emit = defineEmits<{
 
 // ─── Tonalités ────────────────────────────────────────────────────────────
 
-const TONE_PRESETS: Record<Tone, { color: string; glow: string; bg: string; icon: string }> = {
-  danger:  { color: 'var(--color-blood)',  glow: 'rgba(232,69,69,0.35)',  bg: 'rgba(232,69,69,0.10)',  icon: '⚠' },
-  warning: { color: 'var(--color-gold)',   glow: 'rgba(240,199,100,0.35)', bg: 'rgba(240,199,100,0.10)', icon: '⚔' },
-  arcane:  { color: 'var(--color-arcane)', glow: 'rgba(192,144,255,0.35)', bg: 'rgba(192,144,255,0.10)', icon: '✦' },
-  info:    { color: 'var(--color-teal)',   glow: 'rgba(79,216,192,0.30)',  bg: 'rgba(79,216,192,0.10)',  icon: '?' },
+const TONE_ICONS: Record<Tone, string> = {
+  danger: '⚠',
+  warning: '⚔',
+  arcane: '✦',
+  info: '?',
 }
 
-const preset = computed(() => TONE_PRESETS[props.tone])
-const displayIcon = computed(() => props.icon || preset.value.icon)
+const TONE_CLASSES: Record<Tone, string> = {
+  danger: 'rpg-tone-blood',
+  warning: 'rpg-tone-gold',
+  arcane: 'rpg-tone-arcane',
+  info: 'rpg-tone-teal',
+}
+
+const toneClass = computed(() => TONE_CLASSES[props.tone])
+const displayIcon = computed(() => props.icon || TONE_ICONS[props.tone])
 
 // ─── Fermeture Escape + backdrop ──────────────────────────────────────────
 
@@ -77,57 +84,30 @@ function onBackdrop() {
 <template>
   <!-- Backdrop -->
   <div
-    class="fixed inset-0 z-[60] flex items-center justify-center p-4"
-    :style="{
-      background: 'rgba(7, 6, 12, 0.72)',
-      backdropFilter: 'blur(6px)',
-      WebkitBackdropFilter: 'blur(6px)',
-      animation: 'rpg-dialog-fade 120ms ease-out',
-    }"
+    class="rpg-modal-backdrop fixed inset-0 z-[60] flex items-center justify-center p-4"
     @click.self="onBackdrop"
   >
     <!-- Panel -->
     <div
       role="dialog"
       aria-modal="true"
-      class="relative w-[420px] max-w-full overflow-hidden rounded-[14px] border"
-      :style="{
-        background: 'linear-gradient(180deg, var(--color-bg-elev), var(--color-bg))',
-        borderColor: 'var(--color-border-strong)',
-        boxShadow: `0 24px 60px rgba(0,0,0,0.65), 0 0 0 1px ${preset.glow}, 0 0 40px ${preset.glow}`,
-        animation: 'rpg-dialog-in 180ms cubic-bezier(.22,1,.36,1)',
-      }"
+      class="rpg-dialog-panel relative w-[420px] max-w-full overflow-hidden rounded-[14px] border"
+      :class="toneClass"
     >
       <!-- Bandeau supérieur coloré selon la tonalité -->
-      <div
-        class="h-[3px] w-full"
-        :style="{
-          background: `linear-gradient(90deg, transparent, ${preset.color}, transparent)`,
-        }"
-      />
+      <div class="rpg-dialog-bar h-[3px] w-full" />
 
       <!-- Glow radial derrière l'icône -->
       <div
         aria-hidden="true"
-        class="pointer-events-none absolute"
-        :style="{
-          top: '-60px', left: '50%', transform: 'translateX(-50%)',
-          width: '220px', height: '220px', borderRadius: '50%',
-          background: `radial-gradient(circle, ${preset.glow}, transparent 70%)`,
-        }"
+        class="rpg-dialog-glow pointer-events-none absolute"
       />
 
       <div class="relative px-8 pt-7 pb-6">
         <!-- Icône dans un médaillon -->
         <div class="mb-4 flex justify-center">
           <div
-            class="flex h-14 w-14 items-center justify-center rounded-full text-[26px] font-bold"
-            :style="{
-              background: preset.bg,
-              border: `1px solid ${preset.color}50`,
-              color: preset.color,
-              boxShadow: `0 0 24px ${preset.glow}, inset 0 0 12px ${preset.glow}`,
-            }"
+            class="rpg-dialog-icon flex h-14 w-14 items-center justify-center rounded-full text-[26px] font-bold"
           >
             {{ displayIcon }}
           </div>
@@ -135,8 +115,7 @@ function onBackdrop() {
 
         <!-- Eyebrow -->
         <div
-          class="mb-2 text-center text-[10px] font-bold uppercase tracking-[0.25em]"
-          :style="{ color: preset.color }"
+          class="rpg-tone-text mb-2 text-center text-[10px] font-bold uppercase tracking-[0.25em]"
         >
           <span class="rpg-sparkle">✦</span>
           <span>Confirmation requise</span>
@@ -144,15 +123,13 @@ function onBackdrop() {
 
         <!-- Titre -->
         <h2
-          class="mb-2 text-center font-display text-[22px] font-bold leading-[1.15] tracking-wide"
-          :style="{ color: 'var(--color-parchment)' }"
+          class="rpg-text-main mb-2 text-center font-display text-[22px] font-bold leading-[1.15] tracking-wide"
         >{{ title }}</h2>
 
         <!-- Message -->
         <p
           v-if="message"
-          class="mx-auto mb-6 max-w-[320px] text-center font-serif text-[14px] italic leading-relaxed"
-          :style="{ color: 'var(--color-parchment-dark)', textWrap: 'pretty' }"
+          class="rpg-text-secondary rpg-pretty mx-auto mb-6 max-w-[320px] text-center font-serif text-[14px] italic leading-relaxed"
         >{{ message }}</p>
 
         <!-- Slot pour contenu custom (liste, warning supplémentaire…) -->
@@ -161,10 +138,7 @@ function onBackdrop() {
         </div>
 
         <!-- Séparateur éditorial -->
-        <div
-          class="mx-auto mb-5 h-px w-24"
-          :style="{ background: `linear-gradient(90deg, transparent, ${preset.color}50, transparent)` }"
-        />
+        <div class="rpg-dialog-divider mx-auto mb-5 h-px w-24" />
 
         <!-- Actions -->
         <div class="flex gap-3">

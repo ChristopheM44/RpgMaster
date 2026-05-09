@@ -298,45 +298,30 @@ void personalityTraits
 
 <template>
   <div
-    class="h-full flex flex-col overflow-hidden"
-    style="background: var(--color-bg); color: var(--color-parchment)"
+    class="rpg-sheet-root h-full flex flex-col overflow-hidden"
   >
     <!-- ── TOP BAR ──────────────────────────────────────────────────────────── -->
     <header
-      class="flex-shrink-0 flex items-center gap-[18px] px-6 border-b z-10"
-      style="
-        height: 56px;
-        border-color: var(--color-border);
-        background: linear-gradient(180deg, var(--color-bg-elev), transparent);
-        backdrop-filter: blur(8px);
-      "
+      class="rpg-sheet-header flex-shrink-0 flex items-center gap-[18px] px-6 border-b z-10"
     >
       <!-- Logo mark -->
       <div class="flex items-center gap-2.5">
         <div
-          class="flex items-center justify-center font-display font-bold rounded-lg flex-shrink-0"
-          style="
-            width: 32px; height: 32px;
-            background: linear-gradient(135deg, var(--color-ember), var(--color-gold));
-            color: var(--color-bg);
-            font-size: 16px;
-            box-shadow: 0 0 20px rgba(255,130,71,0.3);
-          "
+          class="rpg-brand-mark flex h-8 w-8 items-center justify-center font-display text-base font-bold rounded-lg flex-shrink-0"
         >⚔</div>
-        <span class="font-display font-bold" style="font-size: 15px; letter-spacing: 0.07em">RPGMASTER</span>
+        <span class="rpg-sheet-brand-text font-display font-bold">RPGMASTER</span>
       </div>
 
-      <span style="color: var(--color-text-dim); font-size: 13px">/</span>
+      <span class="rpg-text-dim text-[13px]">/</span>
 
       <!-- Breadcrumbs -->
-      <div class="flex items-center gap-2" style="font-size: 12px; color: var(--color-text-muted)">
+      <div class="rpg-sheet-crumbs flex items-center gap-2">
         <span>Lobby</span>
-        <span style="color: var(--color-text-dim)">›</span>
+        <span class="rpg-text-dim">›</span>
         <span>Session</span>
-        <span style="color: var(--color-text-dim)">›</span>
+        <span class="rpg-text-dim">›</span>
         <span
-          class="font-semibold"
-          style="color: var(--color-gold); letter-spacing: 0.5px"
+          class="rpg-sheet-crumb-current font-semibold"
         >{{ character?.name ?? '…' }}</span>
       </div>
 
@@ -350,15 +335,13 @@ void personalityTraits
     <!-- ── ERROR ────────────────────────────────────────────────────────────── -->
     <div
       v-if="error"
-      class="flex-1 flex items-center justify-center font-serif italic"
-      style="color: var(--color-blood-light)"
+      class="rpg-text-blood-light flex-1 flex items-center justify-center font-serif italic"
     >{{ error }}</div>
 
     <!-- ── LOADING ──────────────────────────────────────────────────────────── -->
     <div
       v-else-if="loading"
-      class="flex-1 flex items-center justify-center font-serif italic"
-      style="color: var(--color-text-muted)"
+      class="rpg-text-muted flex-1 flex items-center justify-center font-serif italic"
     >
       <span class="rpg-pulse">Déroulement du parchemin…</span>
     </div>
@@ -368,51 +351,24 @@ void personalityTraits
 
       <!-- HERO HEADER -->
       <div
-        class="flex-shrink-0 relative overflow-hidden"
-        style="
-          padding: 28px 56px 24px;
-          border-bottom: 1px solid var(--color-border);
-          background: linear-gradient(180deg, rgba(255,130,71,0.04), transparent);
-        "
+        class="rpg-sheet-hero flex-shrink-0 relative overflow-hidden"
       >
-        <!-- Ambient glow -->
-        <div
-          class="absolute pointer-events-none rounded-full"
-          style="
-            top: -100px; right: -50px;
-            width: 280px; height: 280px;
-            background: radial-gradient(circle, rgba(255,130,71,0.25), transparent 70%);
-          "
-        />
-
         <div class="relative flex items-center gap-6">
           <!-- Avatar -->
           <div
-            class="flex-shrink-0 flex items-center justify-center font-display font-bold"
-            style="
-              width: 88px; height: 88px;
-              border-radius: 14px;
-              background: linear-gradient(135deg, var(--color-ember), var(--color-gold));
-              color: var(--color-bg);
-              font-size: 44px;
-              box-shadow:
-                0 0 0 3px var(--color-bg-elev),
-                0 0 0 4px var(--color-ember),
-                0 0 40px rgba(255,130,71,0.4);
-            "
+            class="rpg-sheet-avatar flex-shrink-0 flex items-center justify-center font-display font-bold"
           >{{ character.name[0] }}</div>
 
           <!-- Identity -->
           <div class="flex-1 min-w-0">
             <div class="rpg-eyebrow mb-1">✦ Fiche de personnage</div>
             <h1
-              class="font-display font-bold"
-              style="font-size: 40px; line-height: 1; margin: 0 0 4px; letter-spacing: 0.04em; color: var(--color-parchment)"
+              class="rpg-sheet-title font-display font-bold"
             >{{ character.name }}</h1>
-            <div class="font-serif" style="font-size: 15px; color: var(--color-parchment-dark)">
+            <div class="rpg-sheet-meta font-serif">
               Niv. {{ character.level }} · {{ classLabel }} · {{ character.species }}
-              <span style="margin: 0 10px; color: var(--color-text-dim)">·</span>
-              <span style="color: var(--color-text-muted)">Historique : {{ backgroundLabel }}</span>
+              <span class="rpg-text-dim mx-2.5">·</span>
+              <span class="rpg-text-muted">Historique : {{ backgroundLabel }}</span>
             </div>
           </div>
 
@@ -420,59 +376,53 @@ void personalityTraits
           <div class="flex gap-2.5 flex-shrink-0">
             <!-- Classe d'armure -->
             <div
-              class="text-center rounded-lg border px-4 py-2.5"
-              style="min-width: 90px; background: rgba(0,0,0,0.3); border-color: var(--color-border)"
+              class="rpg-stat-slab text-center rounded-lg border px-4 py-2.5"
             >
-              <div style="font-size: 9px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--color-text-dim)">Classe d'armure</div>
-              <div class="font-display font-bold" style="font-size: 24px; color: var(--color-teal); margin-top: 2px">{{ armorClass }}</div>
+              <div class="rpg-stat-label">Classe d'armure</div>
+              <div class="rpg-stat-value rpg-text-teal font-display font-bold">{{ armorClass }}</div>
             </div>
             <!-- Initiative -->
             <div
-              class="text-center rounded-lg border px-4 py-2.5"
-              style="min-width: 90px; background: rgba(0,0,0,0.3); border-color: var(--color-border)"
+              class="rpg-stat-slab text-center rounded-lg border px-4 py-2.5"
             >
-              <div style="font-size: 9px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--color-text-dim)">Initiative</div>
+              <div class="rpg-stat-label">Initiative</div>
               <div
-                class="font-display font-bold"
-                style="font-size: 24px; margin-top: 2px"
-                :style="{ color: initiative >= 0 ? 'var(--color-gold)' : 'var(--color-blood)' }"
+                class="rpg-stat-value font-display font-bold"
+                :class="initiative >= 0 ? 'rpg-text-gold' : 'rpg-text-blood'"
               >{{ fmtMod(initiative) }}</div>
             </div>
             <!-- Vitesse -->
             <div
-              class="text-center rounded-lg border px-4 py-2.5"
-              style="min-width: 90px; background: rgba(0,0,0,0.3); border-color: var(--color-border)"
+              class="rpg-stat-slab text-center rounded-lg border px-4 py-2.5"
             >
-              <div style="font-size: 9px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--color-text-dim)">Vitesse</div>
-              <div class="font-display font-bold" style="font-size: 24px; color: var(--color-parchment); margin-top: 2px">9m</div>
+              <div class="rpg-stat-label">Vitesse</div>
+              <div class="rpg-stat-value rpg-text-main font-display font-bold">9m</div>
             </div>
             <!-- Maîtrise -->
             <div
-              class="text-center rounded-lg border px-4 py-2.5"
-              style="min-width: 90px; background: rgba(0,0,0,0.3); border-color: var(--color-border)"
+              class="rpg-stat-slab text-center rounded-lg border px-4 py-2.5"
             >
-              <div style="font-size: 9px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--color-text-dim)">Maîtrise</div>
-              <div class="font-display font-bold" style="font-size: 24px; color: var(--color-ember); margin-top: 2px">{{ fmtMod(profBonus) }}</div>
+              <div class="rpg-stat-label">Maîtrise</div>
+              <div class="rpg-stat-value rpg-text-ember font-display font-bold">{{ fmtMod(profBonus) }}</div>
             </div>
           </div>
         </div>
 
         <!-- HP bar -->
-        <div class="relative mt-5" style="max-width: 700px">
+        <div class="relative mt-5 max-w-[700px]">
           <div class="flex justify-between mb-1">
-            <span style="font-size: 10px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--color-text-muted)">
+            <span class="rpg-text-muted text-[10px] font-bold uppercase tracking-[0.2em]">
               Points de vie
             </span>
-            <span class="font-mono font-bold" style="font-size: 13px" :style="{ color: hpColorVar }">
+            <span class="font-mono text-[13px] font-bold" :style="{ color: hpColorVar }">
               {{ character.hp_current }}
-              <span style="color: var(--color-text-dim)">/ {{ character.hp_max }}</span>
-              <span v-if="character.hp_temp > 0" class="ml-1" style="color: var(--color-arcane)">+{{ character.hp_temp }} tmp</span>
+              <span class="rpg-text-dim">/ {{ character.hp_max }}</span>
+              <span v-if="character.hp_temp > 0" class="rpg-text-arcane ml-1">+{{ character.hp_temp }} tmp</span>
             </span>
           </div>
-          <div style="height: 12px; border-radius: 6px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.04); overflow: hidden">
+          <div class="rpg-hp-track tall">
             <div
-              class="h-full transition-all duration-500"
-              style="border-radius: 6px"
+              class="rpg-hp-fill transition-all duration-500"
               :style="{
                 width: hpPercent + '%',
                 background: `linear-gradient(90deg, ${hpColorVar}cc, ${hpColorVar})`,
@@ -484,70 +434,58 @@ void personalityTraits
       </div>
 
       <!-- BODY: 3-column grid -->
-      <div class="flex-1 overflow-y-auto" style="padding: 24px 56px 32px">
-        <div style="display: grid; grid-template-columns: 260px 1fr 320px; gap: 20px; align-items: start">
+      <div class="rpg-sheet-body flex-1 overflow-y-auto">
+        <div class="rpg-sheet-grid">
 
           <!-- ══ LEFT: Ability scores + Saving throws ════════════════════════ -->
-          <div style="display: flex; flex-direction: column; gap: 16px">
+          <div class="rpg-sheet-column">
 
             <!-- Caractéristiques -->
-            <div class="rounded-xl" style="background: var(--color-bg-elev); border: 1px solid var(--color-border); padding: 14px">
-              <div class="flex items-baseline gap-2" style="margin-bottom: 10px">
-                <span style="color: var(--color-ember); font-size: 10px">✦</span>
-                <h3 class="font-display font-bold uppercase" style="font-size: 11px; letter-spacing: 0.2em; color: var(--color-parchment); margin: 0">Caractéristiques</h3>
+            <div class="rpg-sheet-section">
+              <div class="rpg-sheet-section-header">
+                <span class="rpg-sheet-section-star">✦</span>
+                <h3 class="rpg-sheet-section-title font-display font-bold uppercase">Caractéristiques</h3>
               </div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
+              <div class="rpg-sheet-two-grid">
                 <div
                   v-for="(labels, key) in ABILITY_LABELS"
                   :key="key"
-                  class="text-center rounded-lg border"
-                  style="padding: 10px; background: var(--color-surface); border-color: var(--color-border)"
+                  class="rpg-ability-card text-center rounded-lg border"
                 >
-                  <div style="font-size: 9px; font-weight: 700; letter-spacing: 0.2em; color: var(--color-text-dim)">{{ labels.abbr }}</div>
-                  <div class="font-display font-bold" style="font-size: 24px; line-height: 1.1; margin: 2px 0; color: var(--color-parchment)">
+                  <div class="rpg-ability-abbr">{{ labels.abbr }}</div>
+                  <div class="rpg-ability-score font-display font-bold">
                     {{ scores[key] ?? '—' }}
                   </div>
                   <div
-                    class="font-mono font-bold rounded inline-block"
-                    style="font-size: 11px; padding: 2px 8px"
-                    :style="{
-                      color: (mods[key] ?? 0) >= 0 ? 'var(--color-green)' : 'var(--color-blood)',
-                      background: (mods[key] ?? 0) >= 0 ? 'rgba(111,217,111,0.12)' : 'rgba(232,69,69,0.12)',
-                    }"
+                    class="rpg-mod-badge font-mono font-bold rounded inline-block"
+                    :class="(mods[key] ?? 0) >= 0 ? 'is-positive' : 'is-negative'"
                   >{{ fmtMod(mods[key] ?? 0) }}</div>
-                  <div style="font-size: 9px; color: var(--color-text-dim); margin-top: 3px">{{ labels.name_fr }}</div>
+                  <div class="rpg-text-dim mt-[3px] text-[9px]">{{ labels.name_fr }}</div>
                 </div>
               </div>
             </div>
 
             <!-- Jets de sauvegarde -->
-            <div class="rounded-xl" style="background: var(--color-bg-elev); border: 1px solid var(--color-border); padding: 14px">
-              <div class="flex items-baseline gap-2" style="margin-bottom: 10px">
-                <span style="color: var(--color-ember); font-size: 10px">✦</span>
-                <h3 class="font-display font-bold uppercase" style="font-size: 11px; letter-spacing: 0.2em; color: var(--color-parchment); margin: 0">Jets de sauvegarde</h3>
+            <div class="rpg-sheet-section">
+              <div class="rpg-sheet-section-header">
+                <span class="rpg-sheet-section-star">✦</span>
+                <h3 class="rpg-sheet-section-title font-display font-bold uppercase">Jets de sauvegarde</h3>
               </div>
-              <div style="display: flex; flex-direction: column; gap: 4px">
+              <div class="rpg-proficiency-list">
                 <div
                   v-for="(labels, key) in ABILITY_LABELS"
                   :key="key"
-                  class="flex items-center gap-2.5 rounded"
-                  style="padding: 5px 10px"
-                  :style="{ background: saveProficiencies.includes(key) ? 'rgba(240,199,100,0.04)' : 'transparent' }"
+                  class="rpg-proficiency-row flex items-center gap-2.5 rounded"
+                  :class="{ 'is-proficient': saveProficiencies.includes(key) }"
                 >
                   <div
-                    class="rounded-full border flex-shrink-0"
-                    style="width: 10px; height: 10px"
-                    :style="{
-                      background: saveProficiencies.includes(key) ? 'var(--color-gold)' : 'transparent',
-                      borderColor: saveProficiencies.includes(key) ? 'var(--color-gold)' : 'var(--color-border-strong)',
-                      boxShadow: saveProficiencies.includes(key) ? '0 0 6px var(--color-gold)' : 'none',
-                    }"
+                    class="rpg-proficiency-dot rounded-full border flex-shrink-0"
+                    :class="{ 'is-proficient': saveProficiencies.includes(key) }"
                   />
-                  <span class="flex-1 text-sm" style="color: var(--color-parchment-dark)">{{ labels.name_fr }}</span>
+                  <span class="rpg-text-secondary flex-1 text-sm">{{ labels.name_fr }}</span>
                   <span
-                    class="font-mono font-bold"
-                    style="font-size: 12px; width: 28px; text-align: right"
-                    :style="{ color: saveBonus(key) >= 0 ? 'var(--color-green)' : 'var(--color-blood)' }"
+                    class="w-7 text-right font-mono text-xs font-bold"
+                    :class="saveBonus(key) >= 0 ? 'rpg-text-green' : 'rpg-text-blood'"
                   >{{ fmtMod(saveBonus(key)) }}</span>
                 </div>
               </div>
@@ -556,39 +494,33 @@ void personalityTraits
           </div>
 
           <!-- ══ CENTER: Skills + Features + Personality + Spells ══════════ -->
-          <div style="display: flex; flex-direction: column; gap: 16px">
+          <div class="rpg-sheet-column">
 
             <!-- Compétences -->
-            <div class="rounded-xl" style="background: var(--color-bg-elev); border: 1px solid var(--color-border); padding: 14px">
-              <div class="flex items-baseline gap-2" style="margin-bottom: 10px">
-                <span style="color: var(--color-ember); font-size: 10px">✦</span>
-                <h3 class="font-display font-bold uppercase" style="font-size: 11px; letter-spacing: 0.2em; color: var(--color-parchment); margin: 0">Compétences</h3>
-                <span style="font-size: 10px; color: var(--color-text-dim); font-style: italic">— Disque plein = maîtrise</span>
+            <div class="rpg-sheet-section">
+              <div class="rpg-sheet-section-header">
+                <span class="rpg-sheet-section-star">✦</span>
+                <h3 class="rpg-sheet-section-title font-display font-bold uppercase">Compétences</h3>
+                <span class="rpg-text-dim text-[10px] italic">— Disque plein = maîtrise</span>
               </div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px">
+              <div class="rpg-sheet-two-grid compact">
                 <div
                   v-for="skill in SKILLS"
                   :key="skill.id"
-                  class="flex items-center gap-2 rounded"
-                  style="padding: 5px 8px"
-                  :style="{ background: skillProficiencies.includes(skill.id) ? 'rgba(240,199,100,0.05)' : 'transparent' }"
+                  class="rpg-skill-row flex items-center gap-2 rounded"
+                  :class="{ 'is-proficient': skillProficiencies.includes(skill.id) }"
                 >
                   <div
-                    class="rounded-full border flex-shrink-0"
-                    style="width: 9px; height: 9px"
-                    :style="{
-                      background: skillProficiencies.includes(skill.id) ? 'var(--color-gold)' : 'transparent',
-                      borderColor: skillProficiencies.includes(skill.id) ? 'var(--color-gold)' : 'var(--color-border-strong)',
-                    }"
+                    class="rpg-proficiency-dot small rounded-full border flex-shrink-0"
+                    :class="{ 'is-proficient': skillProficiencies.includes(skill.id) }"
                   />
-                  <span class="flex-1" style="font-size: 12px; color: var(--color-parchment-dark)">{{ skill.name_fr }}</span>
-                  <span class="font-mono uppercase" style="font-size: 9px; font-weight: 700; color: var(--color-text-dim); letter-spacing: 0.1em">
+                  <span class="rpg-text-secondary flex-1 text-xs">{{ skill.name_fr }}</span>
+                  <span class="rpg-text-dim font-mono text-[9px] font-bold uppercase tracking-[0.1em]">
                     {{ ABILITY_LABELS[skill.ability]?.abbr }}
                   </span>
                   <span
-                    class="font-mono font-bold"
-                    style="font-size: 11px; width: 22px; text-align: right"
-                    :style="{ color: skillBonus(skill) >= 0 ? 'var(--color-green)' : 'var(--color-blood)' }"
+                    class="w-[22px] text-right font-mono text-[11px] font-bold"
+                    :class="skillBonus(skill) >= 0 ? 'rpg-text-green' : 'rpg-text-blood'"
                   >{{ fmtMod(skillBonus(skill)) }}</span>
                 </div>
               </div>
@@ -597,24 +529,22 @@ void personalityTraits
             <!-- Aptitudes de classe -->
             <div
               v-if="srdClass?.level_1_features?.length"
-              class="rounded-xl"
-              style="background: var(--color-bg-elev); border: 1px solid rgba(255,130,71,0.4); padding: 14px"
+              class="rpg-sheet-section tone-ember"
             >
-              <div class="flex items-baseline gap-2" style="margin-bottom: 10px">
-                <span style="color: var(--color-ember); font-size: 10px">✦</span>
-                <h3 class="font-display font-bold uppercase" style="font-size: 11px; letter-spacing: 0.2em; color: var(--color-ember); margin: 0">Aptitudes de classe</h3>
+              <div class="rpg-sheet-section-header">
+                <span class="rpg-sheet-section-star tone-ember">✦</span>
+                <h3 class="rpg-sheet-section-title tone-ember font-display font-bold uppercase">Aptitudes de classe</h3>
               </div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px">
+              <div class="rpg-sheet-two-grid spacious">
                 <div
                   v-for="feature in srdClass.level_1_features"
                   :key="feature.name"
-                  class="rounded-lg border"
-                  style="padding: 10px; background: var(--color-surface); border-color: var(--color-border)"
+                  class="rpg-feature-card rounded-lg border"
                 >
-                  <div class="font-display font-bold" style="font-size: 12px; color: var(--color-ember); margin-bottom: 3px">
+                  <div class="rpg-feature-title font-display font-bold">
                     {{ feature.name_fr }}
                   </div>
-                  <div class="font-serif" style="font-size: 12px; color: var(--color-parchment-dark); line-height: 1.45">
+                  <div class="rpg-feature-copy font-serif">
                     {{ feature.description }}
                   </div>
                 </div>
@@ -624,22 +554,21 @@ void personalityTraits
             <!-- Personnalité -->
             <div
               v-if="personalityBlock"
-              class="rounded-xl"
-              style="background: var(--color-bg-elev); border: 1px solid rgba(192,144,255,0.4); padding: 14px"
+              class="rpg-sheet-section tone-arcane"
             >
-              <div class="flex items-baseline gap-2" style="margin-bottom: 10px">
-                <span style="color: var(--color-arcane); font-size: 10px">✦</span>
-                <h3 class="font-display font-bold uppercase" style="font-size: 11px; letter-spacing: 0.2em; color: var(--color-arcane); margin: 0">Personnalité</h3>
+              <div class="rpg-sheet-section-header">
+                <span class="rpg-sheet-section-star tone-arcane">✦</span>
+                <h3 class="rpg-sheet-section-title tone-arcane font-display font-bold uppercase">Personnalité</h3>
               </div>
-              <div class="font-serif" style="font-size: 13px; color: var(--color-parchment-dark); line-height: 1.6">
-                <p v-for="(t, i) in personalityBlock.traits" :key="i" style="margin: 0 0 8px">
-                  <span style="color: var(--color-arcane); font-weight: 700">Trait · </span>{{ t }}
+              <div class="rpg-prose-card font-serif">
+                <p v-for="(t, i) in personalityBlock.traits" :key="i">
+                  <span class="rpg-prose-label">Trait · </span>{{ t }}
                 </p>
-                <p v-if="personalityBlock.bonds" style="margin: 0 0 8px">
-                  <span style="color: var(--color-arcane); font-weight: 700">Lien · </span>{{ personalityBlock.bonds }}
+                <p v-if="personalityBlock.bonds">
+                  <span class="rpg-prose-label">Lien · </span>{{ personalityBlock.bonds }}
                 </p>
-                <p v-if="personalityBlock.flaws" style="margin: 0">
-                  <span style="color: var(--color-arcane); font-weight: 700">Défaut · </span>{{ personalityBlock.flaws }}
+                <p v-if="personalityBlock.flaws">
+                  <span class="rpg-prose-label">Défaut · </span>{{ personalityBlock.flaws }}
                 </p>
               </div>
             </div>
@@ -647,40 +576,33 @@ void personalityTraits
             <!-- Magie (spellcasters only) -->
             <div
               v-if="isSpellcaster"
-              class="rounded-xl"
-              style="background: var(--color-bg-elev); border: 1px solid rgba(192,144,255,0.3); padding: 14px"
+              class="rpg-sheet-section tone-arcane"
             >
-              <div class="flex items-baseline gap-2" style="margin-bottom: 12px">
-                <span style="color: var(--color-arcane); font-size: 10px">✦</span>
-                <h3 class="font-display font-bold uppercase" style="font-size: 11px; letter-spacing: 0.2em; color: var(--color-arcane); margin: 0">Magie</h3>
+              <div class="rpg-sheet-section-header is-wide">
+                <span class="rpg-sheet-section-star tone-arcane">✦</span>
+                <h3 class="rpg-sheet-section-title tone-arcane font-display font-bold uppercase">Magie</h3>
               </div>
 
-              <div v-if="spellSlotEntries.length" style="margin-bottom: 16px">
-                <p style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-text-muted); margin: 0 0 8px">
+              <div v-if="spellSlotEntries.length" class="mb-4">
+                <p class="rpg-sheet-subtitle">
                   Emplacements de sorts
                 </p>
                 <div class="flex flex-wrap gap-3">
                   <div
                     v-for="slot in spellSlotEntries"
                     :key="slot.level"
-                    class="rounded-lg border px-3 py-2 text-center"
-                    style="border-color: rgba(192,144,255,0.3); background: rgba(192,144,255,0.08)"
+                    class="rpg-spell-slot-card rounded-lg border px-3 py-2 text-center"
                   >
-                    <p class="font-display font-bold" style="font-size: 11px; color: var(--color-arcane); margin: 0 0 4px">Niv. {{ slot.level }}</p>
+                    <p class="rpg-text-arcane mb-1 font-display text-[11px] font-bold">Niv. {{ slot.level }}</p>
                     <div class="flex gap-1 justify-center">
                       <div
                         v-for="i in slot.total"
                         :key="i"
-                        class="rounded-full border"
-                        style="width: 10px; height: 10px"
-                        :style="{
-                          borderColor: 'rgba(192,144,255,0.6)',
-                          background: i <= slot.total - slot.used ? 'var(--color-arcane)' : 'transparent',
-                          boxShadow: i <= slot.total - slot.used ? '0 0 6px var(--color-arcane)' : 'none',
-                        }"
+                        class="rpg-spell-dot rounded-full border"
+                        :class="{ 'is-filled': i <= slot.total - slot.used }"
                       />
                     </div>
-                    <p class="font-mono" style="font-size: 10px; color: var(--color-text-muted); margin: 6px 0 0">
+                    <p class="rpg-text-muted mt-1.5 font-mono text-[10px]">
                       {{ slot.total - slot.used }}/{{ slot.total }}
                     </p>
                   </div>
@@ -688,27 +610,25 @@ void personalityTraits
               </div>
 
               <div>
-                <p style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-text-muted); margin: 0 0 8px">
+                <p class="rpg-sheet-subtitle">
                   Sorts connus ({{ character.known_spells?.length ?? 0 }})
                 </p>
-                <div v-if="spellDetails.length" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
+                <div v-if="spellDetails.length" class="rpg-sheet-two-grid">
                   <div
                     v-for="spell in spellDetails"
                     :key="spell.id"
-                    class="rounded-lg border px-3 py-2"
-                    style="border-color: rgba(192,144,255,0.2); background: var(--color-surface)"
+                    class="rpg-spell-card rounded-lg border px-3 py-2"
                   >
                     <div class="flex items-start justify-between gap-1">
-                      <p class="font-display font-bold" style="font-size: 12px; color: var(--color-parchment); margin: 0">{{ spell.name_fr }}</p>
+                      <p class="rpg-text-main font-display text-xs font-bold">{{ spell.name_fr }}</p>
                       <span
-                        class="rounded flex-shrink-0"
-                        style="font-size: 10px; font-weight: 700; color: var(--color-arcane); background: rgba(192,144,255,0.15); padding: 2px 6px"
+                        class="rpg-spell-level rounded flex-shrink-0"
                       >{{ spell.level === 0 ? 'Tour' : 'Niv.' + spell.level }}</span>
                     </div>
-                    <p class="font-serif italic" style="font-size: 11px; color: var(--color-text-muted); margin: 2px 0 0">
+                    <p class="rpg-text-muted mt-0.5 font-serif text-[11px] italic">
                       {{ SPELL_SCHOOLS[spell.school] ?? spell.school }}
                     </p>
-                    <p v-if="spell.damage_dice" class="font-mono" style="font-size: 11px; color: var(--color-gold); margin: 4px 0 0">
+                    <p v-if="spell.damage_dice" class="rpg-text-gold mt-1 font-mono text-[11px]">
                       {{ spell.damage_dice }} {{ spell.damage_type }}
                     </p>
                   </div>
@@ -717,8 +637,7 @@ void personalityTraits
                   <span
                     v-for="spellId in character.known_spells"
                     :key="spellId"
-                    class="rpg-chip"
-                    style="color: var(--color-arcane); background: rgba(192,144,255,0.08); border-color: rgba(192,144,255,0.25)"
+                    class="rpg-chip rpg-tone-arcane"
                   >{{ spellId }}</span>
                 </div>
               </div>
@@ -727,62 +646,51 @@ void personalityTraits
           </div>
 
           <!-- ══ RIGHT: Equipment + Conditions + Quick actions ══════════════ -->
-          <div style="display: flex; flex-direction: column; gap: 16px">
+          <div class="rpg-sheet-column">
 
             <!-- Équipement -->
-            <div class="rounded-xl" style="background: var(--color-bg-elev); border: 1px solid var(--color-border); padding: 14px">
-              <div class="flex items-baseline gap-2" style="margin-bottom: 10px">
-                <span style="color: var(--color-ember); font-size: 10px">✦</span>
-                <h3 class="font-display font-bold uppercase" style="font-size: 11px; letter-spacing: 0.2em; color: var(--color-parchment); margin: 0">Équipement</h3>
+            <div class="rpg-sheet-section">
+              <div class="rpg-sheet-section-header">
+                <span class="rpg-sheet-section-star">✦</span>
+                <h3 class="rpg-sheet-section-title font-display font-bold uppercase">Équipement</h3>
               </div>
 
               <p
                 v-if="inventoryError"
-                class="rounded-lg border text-xs"
-                style="padding: 8px 12px; margin-bottom: 10px; border-color: rgba(232,69,69,0.4); background: rgba(232,69,69,0.1); color: var(--color-blood-light)"
+                class="rpg-inventory-alert rounded-lg border text-xs"
               >{{ inventoryError }}</p>
 
-              <div v-if="character.equipment?.length" style="display: flex; flex-direction: column; gap: 6px">
+              <div v-if="character.equipment?.length" class="rpg-equipment-list">
                 <div
                   v-for="(item, idx) in (character.equipment as Record<string, unknown>[])"
                   :key="idx"
-                  class="rounded-lg border"
-                  style="padding: 8px 10px"
-                  :style="{
-                    background: item.equipped ? 'rgba(240,199,100,0.06)' : 'var(--color-surface)',
-                    borderColor: item.equipped ? 'rgba(240,199,100,0.25)' : 'var(--color-border)',
-                  }"
+                  class="rpg-equipment-item rounded-lg border"
+                  :class="{ 'is-equipped': item.equipped }"
                 >
                   <div class="flex items-center gap-1.5">
-                    <span style="font-size: 11px" :style="{ color: item.equipped ? 'var(--color-gold)' : 'var(--color-text-dim)' }">
+                    <span class="text-[11px]" :class="item.equipped ? 'rpg-text-gold' : 'rpg-text-dim'">
                       {{ item.equipped ? '⚔' : '○' }}
                     </span>
                     <span
-                      class="flex-1 font-display font-bold capitalize"
-                      style="font-size: 13px"
-                      :style="{ color: item.equipped ? 'var(--color-parchment)' : 'var(--color-parchment-dark)' }"
+                      class="flex-1 font-display text-[13px] font-bold capitalize"
+                      :class="item.equipped ? 'rpg-text-main' : 'rpg-text-secondary'"
                     >{{ String(item.name_fr ?? item.id ?? 'Objet') }}</span>
                     <span
                       v-if="item.quantity && Number(item.quantity) > 1"
-                      class="font-mono"
-                      style="font-size: 10px; color: var(--color-text-muted)"
+                      class="rpg-text-muted font-mono text-[10px]"
                     >×{{ item.quantity }}</span>
                   </div>
 
                   <div
                     v-if="item.detail || item.damage_dice"
-                    style="font-size: 10px; color: var(--color-text-muted); margin-top: 2px; padding-left: 17px"
+                    class="rpg-text-muted mt-0.5 pl-[17px] text-[10px]"
                   >{{ item.detail ?? (item.damage_dice ? `${item.damage_dice} ${item.damage_type ?? ''}` : '') }}</div>
 
-                  <div class="flex gap-1.5 mt-1.5" style="padding-left: 17px">
+                  <div class="rpg-equipment-actions flex gap-1.5 mt-1.5">
                     <button
                       v-if="isEquippable(item)"
-                      class="rounded border"
-                      style="padding: 2px 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; cursor: pointer; background: transparent; transition: border-color 120ms, color 120ms"
-                      :style="{
-                        borderColor: item.equipped ? 'var(--color-gold)' : 'var(--color-border-strong)',
-                        color: item.equipped ? 'var(--color-gold)' : 'var(--color-text-muted)',
-                      }"
+                      class="rpg-equipment-button rounded border"
+                      :class="{ 'is-equipped': item.equipped }"
                       :disabled="inventoryLoading === item.id"
                       @click="onEquip(String(item.id))"
                     >{{ item.equipped ? 'Retirer' : 'Équiper' }}</button>
@@ -793,49 +701,46 @@ void personalityTraits
                       @click="onUse(String(item.id))"
                     >Utiliser</button>
                     <button
-                      class="rounded border"
-                      style="padding: 2px 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; background: transparent; border-color: var(--color-border); color: var(--color-text-dim)"
+                      class="rpg-equipment-button rpg-border rpg-text-dim rounded border"
                       :disabled="inventoryLoading === item.id"
                       @click="itemToDrop = String(item.id)"
                     >Lâcher</button>
                   </div>
                 </div>
               </div>
-              <p v-else class="font-serif italic text-sm" style="color: var(--color-text-dim)">Aucun objet</p>
+              <p v-else class="rpg-text-dim font-serif italic text-sm">Aucun objet</p>
             </div>
 
             <!-- État (conditions) -->
-            <div class="rounded-xl" style="background: var(--color-bg-elev); border: 1px solid rgba(232,69,69,0.4); padding: 14px">
-              <div class="flex items-baseline gap-2" style="margin-bottom: 10px">
-                <span style="color: var(--color-blood); font-size: 10px">✦</span>
-                <h3 class="font-display font-bold uppercase" style="font-size: 11px; letter-spacing: 0.2em; color: var(--color-blood); margin: 0">État</h3>
+            <div class="rpg-sheet-section tone-blood">
+              <div class="rpg-sheet-section-header">
+                <span class="rpg-sheet-section-star tone-blood">✦</span>
+                <h3 class="rpg-sheet-section-title tone-blood font-display font-bold uppercase">État</h3>
               </div>
               <div v-if="character.conditions?.length" class="flex flex-wrap gap-1.5">
                 <span
                   v-for="cond in character.conditions"
                   :key="cond"
-                  class="rpg-chip capitalize"
-                  style="color: var(--color-blood); background: rgba(232,69,69,0.15); border-color: rgba(232,69,69,0.4)"
+                  class="rpg-chip rpg-tone-blood capitalize"
                 >{{ cond }}</span>
               </div>
               <p
                 v-else
-                class="font-serif italic text-sm text-center"
-                style="color: var(--color-text-muted); padding: 4px 0"
+                class="rpg-text-muted py-1 text-center font-serif italic text-sm"
               >Aucune condition active</p>
             </div>
 
             <!-- Actions rapides -->
-            <div class="rounded-xl" style="background: var(--color-bg-elev); border: 1px solid var(--color-border); padding: 14px">
-              <div class="flex items-baseline gap-2" style="margin-bottom: 10px">
-                <span style="color: var(--color-ember); font-size: 10px">✦</span>
-                <h3 class="font-display font-bold uppercase" style="font-size: 11px; letter-spacing: 0.2em; color: var(--color-parchment); margin: 0">Actions rapides</h3>
+            <div class="rpg-sheet-section">
+              <div class="rpg-sheet-section-header">
+                <span class="rpg-sheet-section-star">✦</span>
+                <h3 class="rpg-sheet-section-title font-display font-bold uppercase">Actions rapides</h3>
               </div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px">
-                <button class="rounded-md border py-2.5" style="font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; color: var(--color-blood); background: rgba(232,69,69,0.08); border-color: rgba(232,69,69,0.4)">⚔ Attaquer</button>
-                <button class="rounded-md border py-2.5" style="font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; color: var(--color-teal); background: rgba(79,216,192,0.08); border-color: rgba(79,216,192,0.4)">◈ Objet</button>
-                <button class="rounded-md border py-2.5" style="font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; color: var(--color-arcane); background: rgba(192,144,255,0.08); border-color: rgba(192,144,255,0.4)">✦ Sort</button>
-                <button class="rounded-md border py-2.5" style="font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; color: var(--color-green); background: rgba(111,217,111,0.08); border-color: rgba(111,217,111,0.4)">☽ Repos</button>
+              <div class="grid grid-cols-2 gap-1.5">
+                <button class="rpg-quick-action rpg-tone-blood rounded-md border py-2.5">⚔ Attaquer</button>
+                <button class="rpg-quick-action rpg-tone-teal rounded-md border py-2.5">◈ Objet</button>
+                <button class="rpg-quick-action rpg-tone-arcane rounded-md border py-2.5">✦ Sort</button>
+                <button class="rpg-quick-action rpg-tone-green rounded-md border py-2.5">☽ Repos</button>
               </div>
             </div>
 

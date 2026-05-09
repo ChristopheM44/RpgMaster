@@ -29,7 +29,7 @@ function hpPct(): number {
 
 function hpColor(): string {
   const pct = hpPct()
-  return pct > 50 ? 'var(--color-green)' : pct > 25 ? '#e5b93a' : 'var(--color-blood)'
+  return pct > 50 ? 'var(--color-green)' : pct > 25 ? 'var(--color-gold)' : 'var(--color-blood)'
 }
 
 // Arme équipée (première arme équipée dans l'équipement)
@@ -75,7 +75,7 @@ const isMyTurn = computed(() =>
       v-if="!ch"
       class="flex flex-1 items-center justify-center p-8 text-center"
     >
-      <p class="font-serif italic text-sm" :style="{ color: 'var(--color-text-muted)' }">
+      <p class="rpg-text-muted font-serif italic text-sm">
         Chargement du personnage…
       </p>
     </div>
@@ -83,33 +83,15 @@ const isMyTurn = computed(() =>
     <template v-else>
       <!-- Character card header -->
       <div
-        class="relative shrink-0 overflow-hidden px-5 pt-5 pb-4"
-        :style="{
-          background: isMyTurn
-            ? 'linear-gradient(180deg, rgba(255,130,71,0.12), rgba(255,130,71,0.04))'
-            : 'linear-gradient(180deg, rgba(192,144,255,0.08), transparent)',
-        }"
+        class="rpg-character-panel-header relative shrink-0 overflow-hidden px-5 pt-5 pb-4"
+        :class="{ 'is-turn': isMyTurn }"
       >
-        <!-- Glow blob -->
-        <div
-          aria-hidden="true"
-          class="pointer-events-none absolute"
-          :style="{
-            top: '-40px', right: '-20px',
-            width: '160px', height: '160px', borderRadius: '80px',
-            background: isMyTurn
-              ? 'radial-gradient(circle, rgba(255,130,71,0.2), transparent 70%)'
-              : 'radial-gradient(circle, rgba(192,144,255,0.15), transparent 70%)',
-          }"
-        />
-
-        <div class="rpg-eyebrow mb-3 relative" :style="{ color: isMyTurn ? 'var(--color-ember)' : 'var(--color-arcane)' }">
+        <div class="rpg-eyebrow mb-3 relative" :class="isMyTurn ? 'rpg-text-ember' : 'rpg-text-arcane'">
           ✦ {{ isMyTurn ? 'Votre tour' : 'Votre personnage' }}
         </div>
         <div
           v-if="gameStore.isCharacterThinking(ch.id)"
-          class="relative mb-3 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[10px] font-bold tracking-[0.08em]"
-          :style="{ color: 'var(--color-gold)', borderColor: 'rgba(240,199,100,0.3)', background: 'rgba(240,199,100,0.08)' }"
+          class="rpg-tone-gold rpg-tone-panel relative mb-3 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[10px] font-bold tracking-[0.08em]"
         >
           <span class="rpg-pulse">◉</span>
           <span>IA en réflexion</span>
@@ -118,22 +100,15 @@ const isMyTurn = computed(() =>
         <div class="relative flex items-center gap-3">
           <!-- Avatar -->
           <div
-            class="flex h-14 w-14 shrink-0 items-center justify-center rounded-[10px] font-display text-[26px] font-bold"
-            :style="{
-              background: 'linear-gradient(135deg, var(--color-ember), var(--color-gold))',
-              color: 'var(--color-bg)',
-              boxShadow: isMyTurn
-                ? '0 0 0 2px var(--color-bg-elev), 0 0 0 3px var(--color-ember), 0 0 20px rgba(255,130,71,0.4)'
-                : '0 0 0 2px var(--color-bg-elev), 0 0 0 3px rgba(192,144,255,0.4)',
-            }"
+            class="rpg-character-avatar flex h-14 w-14 shrink-0 items-center justify-center rounded-[10px] font-display text-[26px] font-bold"
+            :class="{ 'is-turn': isMyTurn }"
           >{{ ch.name.charAt(0).toUpperCase() }}</div>
 
           <div>
             <div
-              class="font-display text-xl font-bold tracking-[0.05em]"
-              :style="{ color: 'var(--color-parchment)' }"
+              class="rpg-text-main font-display text-xl font-bold tracking-[0.05em]"
             >{{ ch.name }}</div>
-            <div class="text-[12px]" :style="{ color: 'var(--color-text-muted)' }">
+            <div class="rpg-text-muted text-[12px]">
               Niv. {{ ch.level }} · {{ ch.char_class }} · {{ ch.species }}
             </div>
           </div>
@@ -148,18 +123,16 @@ const isMyTurn = computed(() =>
               { label: 'Init.', value: String(initiative) },
             ]"
             :key="stat.label"
-            class="flex flex-col items-center rounded-lg border py-2"
-            :style="{ background: 'rgba(0,0,0,0.25)', borderColor: 'var(--color-border)' }"
+            class="rpg-panel-stat flex flex-col items-center rounded-lg border py-2"
           >
-            <div class="text-[9px] font-bold uppercase tracking-[0.2em] mb-0.5" :style="{ color: 'var(--color-text-dim)' }">{{ stat.label }}</div>
-            <div class="font-mono text-base font-bold" :style="{ color: 'var(--color-parchment)' }">{{ stat.value }}</div>
+            <div class="rpg-text-dim mb-0.5 text-[9px] font-bold uppercase tracking-[0.2em]">{{ stat.label }}</div>
+            <div class="rpg-text-main font-mono text-base font-bold">{{ stat.value }}</div>
           </div>
         </div>
 
         <!-- HP bar -->
         <div
-          class="relative mt-3 overflow-hidden rounded-full"
-          style="height: 6px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.04);"
+          class="rpg-hp-track thin relative mt-3 overflow-hidden rounded-full"
         >
           <div
             class="absolute inset-y-0 left-0 rounded-full transition-all duration-300"
@@ -178,12 +151,11 @@ const isMyTurn = computed(() =>
           <div
             v-for="(abbr, key) in ABILITY_ABBR"
             :key="key"
-            class="flex flex-col items-center rounded-md border py-2"
-            :style="{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }"
+            class="rpg-mini-panel flex flex-col items-center rounded-md border py-2"
           >
-            <span class="text-[8px] font-bold uppercase tracking-[0.1em]" :style="{ color: 'var(--color-text-dim)' }">{{ abbr }}</span>
-            <span class="font-display text-sm font-bold" :style="{ color: 'var(--color-parchment)' }">{{ ch.ability_scores[key] ?? '—' }}</span>
-            <span class="font-mono text-[10px] font-bold" :style="{ color: 'var(--color-gold)' }">{{ fmtMod(ch.ability_scores[key] ?? 10) }}</span>
+            <span class="rpg-text-dim text-[8px] font-bold uppercase tracking-[0.1em]">{{ abbr }}</span>
+            <span class="rpg-text-main font-display text-sm font-bold">{{ ch.ability_scores[key] ?? '—' }}</span>
+            <span class="rpg-text-gold font-mono text-[10px] font-bold">{{ fmtMod(ch.ability_scores[key] ?? 10) }}</span>
           </div>
         </div>
       </div>
@@ -197,23 +169,22 @@ const isMyTurn = computed(() =>
       </div>
 
       <!-- Divider -->
-      <div class="shrink-0 mx-5 border-t" :style="{ borderColor: 'var(--color-border)' }" />
+      <div class="rpg-border shrink-0 mx-5 border-t" />
 
       <!-- Combat section -->
       <div class="shrink-0 px-5 py-4">
         <div class="flex items-center gap-2 mb-3">
-          <span class="rpg-eyebrow" :style="{ color: 'var(--color-blood)' }">⚔ Combat</span>
-          <span v-if="!gameStore.isInCombat" class="text-[11px]" :style="{ color: 'var(--color-text-dim)' }">— Hors combat</span>
-          <span v-else class="font-mono text-[11px]" :style="{ color: 'rgba(232,69,69,0.7)' }">— Round {{ gameStore.roundNumber }}</span>
+          <span class="rpg-eyebrow rpg-text-blood">⚔ Combat</span>
+          <span v-if="!gameStore.isInCombat" class="rpg-text-dim text-[11px]">— Hors combat</span>
+          <span v-else class="rpg-text-blood-soft font-mono text-[11px]">— Round {{ gameStore.roundNumber }}</span>
         </div>
 
         <!-- Hors combat -->
         <div
           v-if="!gameStore.isInCombat"
-          class="rounded-lg border px-4 py-4 text-center"
-          :style="{ background: 'rgba(0,0,0,0.2)', borderColor: 'var(--color-border)' }"
+          class="rpg-soft-panel rounded-lg border px-4 py-4 text-center"
         >
-          <div class="mb-3 text-[11px]" :style="{ color: 'var(--color-text-dim)' }">Aucun ennemi à l'horizon</div>
+          <div class="rpg-text-dim mb-3 text-[11px]">Aucun ennemi à l'horizon</div>
           <button
             class="rpg-btn-tonal tone-blood !text-[10px] !py-1.5 !px-3"
             @click="emit('startCombat')"
@@ -225,40 +196,36 @@ const isMyTurn = computed(() =>
           <div
             v-for="combatant in gameStore.combatants"
             :key="combatant.id"
-            class="flex items-center gap-2 rounded-md border px-2.5 py-1.5"
-            :style="{
-              background: combatant.is_active ? 'rgba(255,130,71,0.06)' : 'var(--color-surface)',
-              borderColor: combatant.is_active ? 'rgba(255,130,71,0.4)' : 'var(--color-border)',
-            }"
+            class="rpg-combat-row flex items-center gap-2 rounded-md border px-2.5 py-1.5"
+            :class="{ 'is-active': combatant.is_active }"
           >
             <span
               class="w-6 shrink-0 text-center font-mono text-xs font-bold"
-              :style="{ color: combatant.is_active ? 'var(--color-gold)' : 'var(--color-text-muted)' }"
+              :class="combatant.is_active ? 'rpg-text-gold' : 'rpg-text-muted'"
             >{{ combatant.initiative }}</span>
             <span
               class="flex-1 truncate font-display text-xs font-semibold"
-              :style="{ color: combatant.is_active ? 'var(--color-gold)' : 'var(--color-parchment)' }"
+              :class="combatant.is_active ? 'rpg-text-gold' : 'rpg-text-main'"
             >{{ combatant.name }}</span>
             <span
-              class="shrink-0 font-mono text-[10px]"
-              :style="{ color: 'var(--color-text-muted)' }"
-            >{{ combatant.hp_current }}<span :style="{ color: 'var(--color-text-dim)' }">/{{ combatant.hp_max }}</span></span>
-            <span v-if="combatant.is_active" :style="{ color: 'var(--color-gold)' }">◆</span>
+              class="rpg-text-muted shrink-0 font-mono text-[10px]"
+            >{{ combatant.hp_current }}<span class="rpg-text-dim">/{{ combatant.hp_max }}</span></span>
+            <span v-if="combatant.is_active" class="rpg-text-gold">◆</span>
           </div>
         </div>
       </div>
 
       <!-- Divider -->
-      <div class="shrink-0 mx-5 border-t" :style="{ borderColor: 'var(--color-border)' }" />
+      <div class="rpg-border shrink-0 mx-5 border-t" />
 
       <!-- Equipped weapon -->
       <div v-if="equippedWeapon" class="shrink-0 px-5 py-4">
         <div class="rpg-eyebrow mb-2">✦ Arme équipée</div>
-        <div class="rounded-lg border px-3 py-2.5" :style="{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }">
-          <div class="font-display text-sm font-bold" :style="{ color: 'var(--color-parchment)' }">
+        <div class="rpg-mini-panel rounded-lg border px-3 py-2.5">
+          <div class="rpg-text-main font-display text-sm font-bold">
             {{ (equippedWeapon.name_fr as string) || (equippedWeapon.name as string) || 'Arme' }}
           </div>
-          <div class="mt-0.5 text-[11px]" :style="{ color: 'var(--color-text-muted)' }">
+          <div class="rpg-text-muted mt-0.5 text-[11px]">
             {{ (equippedWeapon.detail as string) || (equippedWeapon.category as string) || '—' }}
           </div>
         </div>
@@ -269,8 +236,7 @@ const isMyTurn = computed(() =>
         <span
           v-for="cond in ch.conditions"
           :key="cond"
-          class="rpg-chip"
-          :style="{ color: 'var(--color-blood)', borderColor: 'rgba(232,69,69,0.4)' }"
+          class="rpg-chip rpg-tone-blood"
         >{{ cond }}</span>
       </div>
     </template>

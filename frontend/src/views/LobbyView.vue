@@ -14,21 +14,21 @@ const newSessionName = ref('')
 const confirmDeleteId = ref<string | null>(null)
 const selectedId = ref<string | null>(null)
 
-const STATUS_META: Record<string, { label: string; color: string; bg: string }> = {
-  lobby:               { label: 'En attente',    color: 'var(--color-text-muted)', bg: 'rgba(247,236,208,0.05)' },
-  character_creation:  { label: 'Création',       color: 'var(--color-arcane)',    bg: 'rgba(192,144,255,0.10)' },
-  exploration:         { label: 'Exploration',    color: 'var(--color-green)',     bg: 'rgba(111,217,111,0.10)' },
-  encounter_start:     { label: 'Rencontre',      color: 'var(--color-blood)',     bg: 'rgba(232,69,69,0.10)' },
-  combat:              { label: 'Combat',         color: 'var(--color-blood)',     bg: 'rgba(232,69,69,0.12)' },
-  encounter_end:       { label: 'Fin rencontre',  color: 'var(--color-gold)',      bg: 'rgba(240,199,100,0.10)' },
-  rest:                { label: 'Repos',          color: 'var(--color-teal)',      bg: 'rgba(79,216,192,0.10)' },
-  level_up:            { label: 'Montée',         color: 'var(--color-gold)',      bg: 'rgba(240,199,100,0.12)' },
-  session_end:         { label: 'Terminée',       color: 'var(--color-text-dim)',  bg: 'rgba(247,236,208,0.03)' },
+const STATUS_META: Record<string, { label: string; tone: string }> = {
+  lobby:              { label: 'En attente', tone: 'rpg-tone-muted' },
+  character_creation: { label: 'Création', tone: 'rpg-tone-arcane' },
+  exploration:        { label: 'Exploration', tone: 'rpg-tone-green' },
+  encounter_start:    { label: 'Rencontre', tone: 'rpg-tone-blood' },
+  combat:             { label: 'Combat', tone: 'rpg-tone-blood' },
+  encounter_end:      { label: 'Fin rencontre', tone: 'rpg-tone-gold' },
+  rest:               { label: 'Repos', tone: 'rpg-tone-teal' },
+  level_up:           { label: 'Montée', tone: 'rpg-tone-gold' },
+  session_end:        { label: 'Terminée', tone: 'rpg-tone-dim' },
 }
 
-const FALLBACK_META = { label: 'En attente', color: 'var(--color-text-muted)', bg: 'rgba(247,236,208,0.05)' }
+const FALLBACK_META = { label: 'En attente', tone: 'rpg-tone-muted' }
 
-function statusMeta(status: string): { label: string; color: string; bg: string } {
+function statusMeta(status: string): { label: string; tone: string } {
   return STATUS_META[status] ?? FALLBACK_META
 }
 
@@ -99,12 +99,10 @@ function formatDate(dateStr: string): string {
       <section class="mb-10">
         <div class="rpg-eyebrow mb-2">✦ Vos aventures</div>
         <h1
-          class="font-display text-[44px] font-bold leading-[1.05] tracking-wide mb-3"
-          :style="{ color: 'var(--color-parchment)' }"
+          class="rpg-text-main font-display text-[44px] font-bold leading-[1.05] tracking-wide mb-3"
         >Lobby</h1>
         <p
-          class="max-w-xl font-serif text-[15px] italic"
-          :style="{ color: 'var(--color-parchment-dark)' }"
+          class="rpg-text-secondary max-w-xl font-serif text-[15px] italic"
         >
           Reprenez une partie en cours, ou forgez une nouvelle légende.
           Votre Maître du Jeu IA vous y attend.
@@ -114,47 +112,20 @@ function formatDate(dateStr: string): string {
       <!-- Erreur globale -->
       <div
         v-if="sessionStore.error"
-        class="mb-6 rounded-lg border px-4 py-3 text-sm"
-        :style="{
-          borderColor: 'rgba(232,69,69,0.4)',
-          background: 'rgba(232,69,69,0.1)',
-          color: 'var(--color-blood-light)',
-        }"
+        class="rpg-tone-blood rpg-tone-panel mb-6 rounded-lg border px-4 py-3 text-sm"
       >⚠ {{ sessionStore.error }}</div>
 
       <!-- New session card -->
       <section
-        class="mb-10 flex items-center gap-5 overflow-hidden rounded-[14px] border px-6 py-5"
-        :style="{
-          borderColor: 'var(--color-border-strong)',
-          background: 'linear-gradient(135deg, rgba(255,130,71,0.08), rgba(240,199,100,0.04))',
-          position: 'relative',
-        }"
+        class="rpg-hero-create-card mb-10 flex items-center gap-5 overflow-hidden rounded-[14px] border px-6 py-5"
       >
         <div
-          aria-hidden="true"
-          class="pointer-events-none absolute"
-          :style="{
-            top: '-60px', right: '-30px',
-            width: '180px', height: '180px', borderRadius: '90px',
-            background: 'radial-gradient(circle, rgba(255,130,71,0.20), transparent 70%)',
-          }"
-        />
-        <div
-          class="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-[10px] text-[22px]"
-          :style="{
-            background: 'linear-gradient(135deg, var(--color-ember), var(--color-gold))',
-            color: 'var(--color-bg)',
-            boxShadow: '0 0 24px rgba(255,130,71,0.3)',
-          }"
+          class="rpg-hero-create-icon relative flex h-12 w-12 shrink-0 items-center justify-center rounded-[10px] text-[22px]"
         >✦</div>
 
         <div class="relative flex-1 min-w-0">
-          <div
-            class="font-display text-lg font-bold"
-            :style="{ color: 'var(--color-parchment)' }"
-          >Nouvelle Partie</div>
-          <div class="text-xs" :style="{ color: 'var(--color-text-muted)' }">
+          <div class="rpg-text-main font-display text-lg font-bold">Nouvelle Partie</div>
+          <div class="rpg-text-muted text-xs">
             Donnez un nom à votre campagne. Le MJ se chargera du reste.
           </div>
         </div>
@@ -178,11 +149,8 @@ function formatDate(dateStr: string): string {
       <!-- Section title with gradient divider -->
       <div class="mb-4 flex items-baseline gap-4">
         <h2 class="rpg-section-title shrink-0">Sessions sauvegardées</h2>
-        <div
-          class="flex-1 h-px"
-          :style="{ background: 'linear-gradient(90deg, var(--color-border-strong), transparent)' }"
-        />
-        <span class="font-mono text-[11px]" :style="{ color: 'var(--color-text-dim)' }">
+        <div class="rpg-divider flex-1 h-px" />
+        <span class="rpg-text-dim font-mono text-[11px]">
           {{ sessionStore.sessions.length }} campagne{{ sessionStore.sessions.length > 1 ? 's' : '' }}
         </span>
       </div>
@@ -190,18 +158,13 @@ function formatDate(dateStr: string): string {
       <!-- Loading -->
       <div
         v-if="sessionStore.loading && sessionStore.sessions.length === 0"
-        class="py-16 text-center"
-        :style="{ color: 'var(--color-text-muted)' }"
+        class="rpg-text-muted py-16 text-center"
       >Chargement…</div>
 
       <!-- Empty -->
       <div
         v-else-if="!sessionStore.loading && sessionStore.sessions.length === 0"
-        class="rounded-[10px] border border-dashed py-16 text-center font-serif italic"
-        :style="{
-          borderColor: 'var(--color-border-strong)',
-          color: 'var(--color-text-muted)',
-        }"
+        class="rpg-empty-state rounded-[10px] border border-dashed py-16 text-center font-serif italic"
       >Aucune session sauvegardée. Créez votre première aventure !</div>
 
       <!-- Sessions list -->
@@ -209,74 +172,47 @@ function formatDate(dateStr: string): string {
         <li
           v-for="session in sessionStore.sessions"
           :key="session.id"
-          class="flex cursor-pointer items-center gap-4 rounded-[10px] border px-4 py-3 transition"
-          :style="{
-            borderColor: selectedId === session.id ? 'var(--color-ember)' : 'var(--color-border)',
-            background: selectedId === session.id
-              ? 'linear-gradient(90deg, rgba(255,130,71,0.10), var(--color-surface))'
-              : 'var(--color-surface)',
-            boxShadow: selectedId === session.id ? '0 0 20px rgba(255,130,71,0.12)' : 'none',
-          }"
+          class="rpg-session-row flex cursor-pointer items-center gap-4 rounded-[10px] border px-4 py-3 transition"
+          :class="{ 'is-selected': selectedId === session.id }"
           @click="selectedId = session.id"
         >
           <!-- Status dot -->
           <span
-            class="h-2.5 w-2.5 shrink-0 rounded-full"
-            :class="{ 'rpg-pulse': PULSING.has(session.status) }"
-            :style="{
-              background: statusMeta(session.status).color,
-              boxShadow: PULSING.has(session.status)
-                ? '0 0 8px ' + statusMeta(session.status).color
-                : 'none',
-            }"
+            class="rpg-status-dot h-2.5 w-2.5 shrink-0 rounded-full"
+            :class="[statusMeta(session.status).tone, { 'rpg-pulse': PULSING.has(session.status) }]"
           />
 
           <!-- Name + date subtitle -->
           <div class="min-w-0 flex-1">
             <div
-              class="truncate font-display text-base font-bold tracking-wide"
-              :style="{ color: 'var(--color-parchment)' }"
+              class="rpg-text-main truncate font-display text-base font-bold tracking-wide"
             >{{ session.name }}</div>
             <div
-              class="truncate font-serif text-[11px] italic"
-              :style="{ color: 'var(--color-text-muted)' }"
+              class="rpg-text-muted truncate font-serif text-[11px] italic"
             >{{ formatDate(session.updated_at) }}</div>
           </div>
 
           <!-- Chars count -->
           <div class="flex shrink-0 items-center gap-1 text-xs">
-            <span :style="{ color: 'var(--color-text-dim)' }">✦</span>
-            <span class="font-mono font-semibold" :style="{ color: 'var(--color-parchment-dark)' }">
+            <span class="rpg-text-dim">✦</span>
+            <span class="rpg-text-secondary font-mono font-semibold">
               {{ session.character_count }}
             </span>
-            <span :style="{ color: 'var(--color-text-muted)' }">perso.</span>
+            <span class="rpg-text-muted">perso.</span>
           </div>
 
           <!-- Status chip -->
           <div class="shrink-0 w-[100px] text-center">
             <span
               class="rpg-chip"
-              :style="{
-                color: statusMeta(session.status).color,
-                background: statusMeta(session.status).bg,
-                borderColor: statusMeta(session.status).color + '40',
-              }"
+              :class="statusMeta(session.status).tone"
             >{{ statusMeta(session.status).label }}</span>
           </div>
 
           <!-- CTA button -->
           <button
-            class="shrink-0 rounded-md border px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.08em] transition"
-            :style="selectedId === session.id ? {
-              background: 'linear-gradient(135deg, var(--color-ember), var(--color-gold))',
-              border: 'none',
-              color: 'var(--color-bg)',
-              boxShadow: '0 2px 12px rgba(255,130,71,0.3)',
-            } : {
-              background: 'transparent',
-              borderColor: 'var(--color-border-strong)',
-              color: 'var(--color-gold)',
-            }"
+            class="rpg-join-button shrink-0 rounded-md border px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.08em] transition"
+            :class="{ 'is-selected': selectedId === session.id }"
             @click.stop="handleJoin(session)"
           >{{ session.status === 'session_end' ? 'Voir →' : 'Rejoindre →' }}</button>
         </li>
@@ -284,60 +220,47 @@ function formatDate(dateStr: string): string {
 
       <p
         v-if="sessionStore.total > sessionStore.sessions.length"
-        class="mt-5 text-center text-xs"
-        :style="{ color: 'var(--color-text-muted)' }"
+        class="rpg-text-muted mt-5 text-center text-xs"
       >{{ sessionStore.sessions.length }} / {{ sessionStore.total }} sessions affichées</p>
     </div>
 
     <!-- ─── Panneau latéral : détail de la session sélectionnée ─────────── -->
     <aside
-      class="hidden w-[380px] shrink-0 overflow-y-auto border-l p-6 md:block"
-      :style="{
-        borderColor: 'var(--color-border)',
-        background: 'var(--color-bg-elev)',
-      }"
+      class="rpg-bg-elev rpg-border hidden w-[380px] shrink-0 overflow-y-auto border-l p-6 md:block"
     >
       <template v-if="selectedSession">
         <div class="rpg-eyebrow mb-2">✦ Aperçu</div>
         <h2
-          class="mb-1 font-display text-[24px] font-bold leading-[1.1] tracking-wide"
-          :style="{ color: 'var(--color-parchment)' }"
+          class="rpg-text-main mb-1 font-display text-[24px] font-bold leading-[1.1] tracking-wide"
         >{{ selectedSession.name }}</h2>
         <p
-          class="mb-5 font-serif text-sm italic"
-          :style="{ color: 'var(--color-parchment-dark)' }"
+          class="rpg-text-secondary mb-5 font-serif text-sm italic"
         >{{ statusMeta(selectedSession.status).label }}</p>
 
         <!-- Info block -->
         <div
-          class="mb-5 rounded-lg border p-3"
-          :style="{
-            borderColor: 'var(--color-border)',
-            background: 'var(--color-surface)',
-          }"
+          class="rpg-info-block mb-5 rounded-lg border p-3"
         >
           <div
-            class="flex items-center justify-between border-b py-2 text-xs"
-            :style="{ borderColor: 'var(--color-border)' }"
+            class="rpg-detail-row flex items-center justify-between border-b py-2 text-xs"
           >
-            <span :style="{ color: 'var(--color-text-muted)' }">Statut</span>
+            <span class="rpg-text-muted">Statut</span>
             <span
               class="font-bold uppercase tracking-[0.1em] text-[11px]"
-              :style="{ color: statusMeta(selectedSession.status).color }"
+              :class="[statusMeta(selectedSession.status).tone, 'rpg-tone-text']"
             >{{ statusMeta(selectedSession.status).label }}</span>
           </div>
           <div
-            class="flex items-center justify-between border-b py-2 text-xs"
-            :style="{ borderColor: 'var(--color-border)' }"
+            class="rpg-detail-row flex items-center justify-between border-b py-2 text-xs"
           >
-            <span :style="{ color: 'var(--color-text-muted)' }">Dernière modif.</span>
-            <span class="font-mono font-semibold" :style="{ color: 'var(--color-parchment)' }">
+            <span class="rpg-text-muted">Dernière modif.</span>
+            <span class="rpg-text-main font-mono font-semibold">
               {{ formatDate(selectedSession.updated_at) }}
             </span>
           </div>
           <div class="flex items-center justify-between py-2 text-xs">
-            <span :style="{ color: 'var(--color-text-muted)' }">Personnages</span>
-            <span class="font-mono font-semibold" :style="{ color: 'var(--color-parchment)' }">
+            <span class="rpg-text-muted">Personnages</span>
+            <span class="rpg-text-main font-mono font-semibold">
               {{ selectedSession.character_count }}
             </span>
           </div>
@@ -346,63 +269,47 @@ function formatDate(dateStr: string): string {
         <!-- Groupe (characters) -->
         <div class="mb-5">
           <div
-            class="mb-2.5 font-mono text-[10px] font-bold uppercase tracking-[0.2em]"
-            :style="{ color: 'var(--color-text-muted)' }"
+            class="rpg-text-muted mb-2.5 font-mono text-[10px] font-bold uppercase tracking-[0.2em]"
           >Groupe</div>
 
           <div v-if="characterStore.sessionCharacters.length" class="flex flex-col gap-1.5">
             <div
               v-for="ch in characterStore.sessionCharacters"
               :key="ch.id"
-              class="flex items-center gap-2.5 rounded-md border px-2.5 py-2"
-              :style="{
-                background: 'var(--color-surface)',
-                borderColor: 'var(--color-border)',
-              }"
+              class="rpg-mini-panel flex items-center gap-2.5 rounded-md border px-2.5 py-2"
             >
               <!-- Avatar -->
               <div
                 class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md font-display text-[13px] font-bold"
-                :style="{
-                  background: ch.is_ai
-                    ? 'linear-gradient(135deg, var(--color-arcane), #7050b0)'
-                    : 'linear-gradient(135deg, var(--color-ember), var(--color-gold))',
-                  color: 'var(--color-bg)',
-                }"
+                :class="ch.is_ai ? 'rpg-avatar-ai' : 'rpg-avatar-player'"
               >{{ ch.name.charAt(0).toUpperCase() }}</div>
 
               <!-- Info -->
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-1.5">
                   <span
-                    class="truncate font-display text-xs font-semibold"
-                    :style="{ color: 'var(--color-parchment)' }"
+                    class="rpg-text-main truncate font-display text-xs font-semibold"
                   >{{ ch.name }}</span>
                   <span
                     v-if="ch.is_ai"
-                    class="shrink-0 text-[8px] font-bold tracking-[0.1em]"
-                    :style="{ color: 'var(--color-arcane)' }"
+                    class="rpg-text-arcane shrink-0 text-[8px] font-bold tracking-[0.1em]"
                   >IA</span>
                 </div>
-                <div class="text-[10px]" :style="{ color: 'var(--color-text-muted)' }">
+                <div class="rpg-text-muted text-[10px]">
                   Niv. {{ ch.level }} · {{ ch.char_class }}
                 </div>
               </div>
 
               <!-- HP -->
-              <div class="shrink-0 font-mono text-[11px]" :style="{ color: 'var(--color-text-muted)' }">
-                {{ ch.hp_current }}<span :style="{ color: 'var(--color-text-dim)' }">/{{ ch.hp_max }}</span>
+              <div class="rpg-text-muted shrink-0 font-mono text-[11px]">
+                {{ ch.hp_current }}<span class="rpg-text-dim">/{{ ch.hp_max }}</span>
               </div>
             </div>
           </div>
 
           <div
             v-else
-            class="rounded-lg border border-dashed py-4 text-center font-serif text-xs italic"
-            :style="{
-              borderColor: 'var(--color-border)',
-              color: 'var(--color-text-muted)',
-            }"
+            class="rpg-border rpg-text-muted rounded-lg border border-dashed py-4 text-center font-serif text-xs italic"
           >Aucun personnage encore</div>
         </div>
 
@@ -422,11 +329,7 @@ function formatDate(dateStr: string): string {
           </div>
 
           <button
-            class="mt-1 rounded-md border py-2 text-[11px] font-semibold uppercase tracking-wider transition"
-            :style="{
-              borderColor: 'rgba(232,69,69,0.25)',
-              color: 'rgba(232,69,69,0.7)',
-            }"
+            class="rpg-danger-outline mt-1 rounded-md border py-2 text-[11px] font-semibold uppercase tracking-wider transition"
             @click="confirmDeleteId = selectedSession.id"
           >Supprimer la session</button>
         </div>
@@ -434,11 +337,7 @@ function formatDate(dateStr: string): string {
 
       <template v-else>
         <div
-          class="mt-10 rounded-lg border border-dashed p-8 text-center font-serif italic"
-          :style="{
-            borderColor: 'var(--color-border-strong)',
-            color: 'var(--color-text-muted)',
-          }"
+          class="rpg-empty-state mt-10 rounded-lg border border-dashed p-8 text-center font-serif italic"
         >Sélectionnez une session à gauche pour en voir le détail.</div>
       </template>
     </aside>

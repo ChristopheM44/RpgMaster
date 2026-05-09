@@ -30,7 +30,7 @@ import type {
 const WS_BASE = 'ws://localhost:8000'
 const ACCESS_TOKEN = import.meta.env.VITE_RPGMASTER_ACCESS_TOKEN?.trim()
 const PING_INTERVAL_MS = 25_000
-const PONG_TIMEOUT_MS = 10_000
+const PONG_TIMEOUT_MS = 90_000
 const BASE_RECONNECT_DELAY_MS = 1_000
 const MAX_RECONNECT_DELAY_MS = 30_000
 const MAX_RECONNECTS = 10
@@ -107,7 +107,8 @@ export function useWebSocket(sessionId: string) {
       }
     }
 
-    socket.onclose = () => {
+    socket.onclose = (event) => {
+      console.warn('[WS] closed — code:', event.code, 'reason:', event.reason || '(none)')
       cleanup()
       gameStore.setConnected(false)
       gameStore.clearProcessingState()

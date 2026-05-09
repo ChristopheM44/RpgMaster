@@ -12,8 +12,7 @@ defineEmits<{
 
 <template>
   <aside
-    class="flex w-[380px] shrink-0 min-h-0 flex-col overflow-y-auto"
-    :style="{ background: 'var(--color-bg-elev)' }"
+    class="rpg-bg-elev flex w-[380px] shrink-0 min-h-0 flex-col overflow-y-auto"
   >
     <!-- Journal header (fixed identity of the panel) -->
     <AdventureJournal />

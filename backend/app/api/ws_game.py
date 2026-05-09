@@ -2058,6 +2058,39 @@ async def _dispatch_action(
 
 
 # ---------------------------------------------------------------------------
+# Background task helpers (keep the WS receive loop free from LLM latency)
+# ---------------------------------------------------------------------------
+
+
+async def _run_action_bg(session_id: str, action: PlayerActionMessage, factory: Any) -> None:
+    """Dispatch a player action in a background task so pings remain responsive."""
+    try:
+        async with factory() as db:
+            async with session_manager.session_lock(session_id):
+                await _dispatch_action(session_id, action, db)
+    except Exception as exc:
+        logger.error("Unhandled error in _dispatch_action (bg): %s", exc, exc_info=True)
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.ERROR,
+            {"message": "Une erreur interne s'est produite. Réessayez."},
+            source="ws_game",
+        )
+
+
+async def _run_welcome_bg(session_id: str, factory: Any) -> None:
+    """Send welcome narration in a background task so pings remain responsive."""
+    try:
+        async with factory() as db:
+            async with session_manager.session_lock(session_id):
+                active = session_manager.get_session(session_id)
+                if active and active.phase == SessionStatus.EXPLORATION:
+                    await _send_welcome_narration(session_id, active, db)
+    except Exception as exc:
+        logger.warning("_run_welcome_bg: error: %s", exc)
+
+
+# ---------------------------------------------------------------------------
 # WebSocket endpoint
 # ---------------------------------------------------------------------------
 
@@ -2174,7 +2207,7 @@ async def game_websocket(
                         if active_on_join:
                             await _sync_ai_control_from_db(session_id, active_on_join, db)
                         if active_on_join and active_on_join.phase == SessionStatus.EXPLORATION:
-                            await _send_welcome_narration(session_id, active_on_join, db)
+                            asyncio.create_task(_run_welcome_bg(session_id, db_session_factory))
                         elif active_on_join and active_on_join.phase == SessionStatus.COMBAT:
                             # Rejouer l'état de combat pour ce client qui se (re)connecte
                             await websocket.send_json({
@@ -2204,18 +2237,7 @@ async def game_websocket(
                     await send_ws_error(websocket, session_id, VALIDATION_ERROR_MESSAGE)
                     continue
 
-                try:
-                    async with db_session_factory() as db:
-                        async with session_manager.session_lock(session_id):
-                            await _dispatch_action(session_id, action, db)
-                except Exception as exc:
-                    logger.error("Unhandled error in _dispatch_action: %s", exc, exc_info=True)
-                    await event_bus.publish_to_session(
-                        session_id,
-                        EventType.ERROR,
-                        {"message": "Une erreur interne s'est produite. Réessayez."},
-                        source="ws_game",
-                    )
+                asyncio.create_task(_run_action_bg(session_id, action, db_session_factory))
                 continue
 
             # --- toggle_ai_control --------------------------------------

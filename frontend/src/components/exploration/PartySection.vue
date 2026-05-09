@@ -74,21 +74,13 @@ async function handleToggleAi(charId: string, currentIsAi: boolean) {
     <div
       v-for="c in characters"
       :key="c.id"
-      class="flex items-center gap-3 rounded-lg px-3 py-2.5"
-      :style="{
-        background: c.id === myId ? 'rgba(212,175,55,0.07)' : 'rgba(255,255,255,0.02)',
-        border: c.id === myId ? '1px solid rgba(212,175,55,0.25)' : '1px solid rgba(255,255,255,0.04)',
-      }"
+      class="rpg-exploration-party-card flex items-center gap-3 rounded-lg px-3 py-2.5"
+      :class="{ 'is-mine': c.id === myId }"
     >
       <!-- Avatar -->
       <div
         class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md font-display text-sm font-bold"
-        :style="{
-          background: c.is_ai
-            ? 'linear-gradient(135deg, var(--color-arcane), #7c3aed)'
-            : 'linear-gradient(135deg, var(--color-ember), var(--color-gold))',
-          color: 'var(--color-bg)',
-        }"
+        :class="c.is_ai ? 'rpg-avatar-ai' : 'rpg-avatar-player'"
       >{{ c.name.charAt(0).toUpperCase() }}</div>
 
       <!-- Info -->
@@ -96,27 +88,21 @@ async function handleToggleAi(charId: string, currentIsAi: boolean) {
         <div class="flex items-center gap-1.5">
           <span
             class="font-display text-[11px] font-bold truncate"
-            :style="{ color: c.id === myId ? 'var(--color-gold)' : 'var(--color-parchment)' }"
+            :class="c.id === myId ? 'rpg-text-gold' : 'rpg-text-main'"
           >{{ c.name }}</span>
           <span
             v-if="c.is_ai"
-            class="shrink-0 rounded px-1 text-[8px] font-bold uppercase tracking-[0.1em]"
-            :style="{
-              color: 'var(--color-arcane)',
-              background: 'rgba(139,92,246,0.12)',
-              border: '1px solid rgba(139,92,246,0.3)',
-            }"
+            class="rpg-ai-badge shrink-0 rounded px-1 text-[8px] font-bold uppercase tracking-[0.1em]"
           >IA</span>
         </div>
 
-        <div class="text-[10px]" :style="{ color: 'var(--color-text-dim)' }">
+        <div class="rpg-text-dim text-[10px]">
           {{ CLASS_FR[c.char_class] ?? c.char_class }} Niv.{{ c.level }}
         </div>
 
         <!-- HP bar -->
         <div
-          class="mt-1.5 h-0.5 w-full overflow-hidden rounded-full"
-          :style="{ background: 'rgba(255,255,255,0.08)' }"
+          class="rpg-hp-track faint mt-1.5 w-full overflow-hidden rounded-full"
         >
           <div
             class="h-full rounded-full transition-all"
@@ -128,14 +114,14 @@ async function handleToggleAi(charId: string, currentIsAi: boolean) {
         </div>
 
         <!-- Stats line -->
-        <div class="mt-1 flex items-center gap-2 font-mono text-[10px]" :style="{ color: 'var(--color-text-muted)' }">
+        <div class="rpg-text-muted mt-1 flex items-center gap-2 font-mono text-[10px]">
           <span>{{ c.hp_current }}/{{ c.hp_max }} PV · CA {{ calcAc(c.ability_scores) }}</span>
           <template v-if="equippedWeaponName(c.equipment)">
-            <span :style="{ color: 'var(--color-text-dim)' }">·</span>
+            <span class="rpg-text-dim">·</span>
             <span>⚔ {{ equippedWeaponName(c.equipment) }}</span>
           </template>
           <template v-if="spellSlotsSummary(c.spell_slots as Record<string, unknown>)">
-            <span :style="{ color: 'var(--color-text-dim)' }">·</span>
+            <span class="rpg-text-dim">·</span>
             <span>✦ {{ spellSlotsSummary(c.spell_slots as Record<string, unknown>)?.left }}/{{ spellSlotsSummary(c.spell_slots as Record<string, unknown>)?.total }}</span>
           </template>
         </div>
@@ -158,8 +144,7 @@ async function handleToggleAi(charId: string, currentIsAi: boolean) {
 
     <div
       v-if="!characters.length"
-      class="py-4 text-center text-[12px] italic"
-      :style="{ color: 'var(--color-text-muted)' }"
+      class="rpg-text-muted py-4 text-center text-[12px] italic"
     >
       Aucun personnage dans la session
     </div>

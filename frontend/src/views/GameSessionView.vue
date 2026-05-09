@@ -212,20 +212,20 @@ const PHASE_LABELS: Record<string, string> = {
   session_end: 'Terminée',
 }
 
-const PHASE_COLORS: Record<string, string> = {
-  lobby: 'var(--color-text-muted)',
-  character_creation: 'var(--color-arcane)',
-  exploration: 'var(--color-green)',
-  encounter_start: 'var(--color-blood)',
-  combat: 'var(--color-blood)',
-  encounter_end: 'var(--color-gold)',
-  rest: 'var(--color-teal)',
-  level_up: 'var(--color-gold)',
-  session_end: 'var(--color-text-dim)',
+const PHASE_TONES: Record<string, string> = {
+  lobby: 'rpg-tone-muted',
+  character_creation: 'rpg-tone-arcane',
+  exploration: 'rpg-tone-green',
+  encounter_start: 'rpg-tone-blood',
+  combat: 'rpg-tone-blood',
+  encounter_end: 'rpg-tone-gold',
+  rest: 'rpg-tone-teal',
+  level_up: 'rpg-tone-gold',
+  session_end: 'rpg-tone-dim',
 }
 
 const phaseLabel = computed(() => PHASE_LABELS[gameStore.phase] ?? gameStore.phase)
-const phaseColor = computed(() => PHASE_COLORS[gameStore.phase] ?? 'var(--color-text-muted)')
+const phaseTone = computed(() => PHASE_TONES[gameStore.phase] ?? 'rpg-tone-muted')
 
 onMounted(initSession)
 onUnmounted(() => { disconnect() })
@@ -233,30 +233,26 @@ onUnmounted(() => { disconnect() })
 
 <template>
   <div
-    class="flex h-full flex-col overflow-hidden"
-    :style="{ background: 'var(--color-bg)', color: 'var(--color-parchment)' }"
+    class="rpg-game-root flex h-full flex-col overflow-hidden"
   >
     <!-- ─── Error / reconnect banners ─────────────────────────────────────── -->
     <div
       v-if="gameStore.error"
-      class="flex shrink-0 items-center justify-between gap-3 border-b px-6 py-2 text-sm"
-      :style="{ background: 'rgba(232,69,69,0.12)', borderColor: 'rgba(232,69,69,0.3)', color: 'var(--color-blood-light)' }"
+      class="rpg-game-banner rpg-tone-blood flex shrink-0 items-center justify-between gap-3 border-b px-6 py-2 text-sm"
     >
       <span>⚠ {{ gameStore.error }}</span>
       <button class="opacity-70 hover:opacity-100" @click="dismissError">✕</button>
     </div>
     <div
       v-if="isReconnecting"
-      class="flex shrink-0 items-center gap-2 border-b px-6 py-1.5 text-xs"
-      :style="{ background: 'rgba(192,144,255,0.08)', borderColor: 'rgba(192,144,255,0.25)', color: 'var(--color-arcane-light)' }"
+      class="rpg-game-banner rpg-tone-arcane flex shrink-0 items-center gap-2 border-b px-6 py-1.5 text-xs"
     >
       <span class="rpg-pulse">◉</span>
       <span>Reconnexion… (tentative {{ reconnectCount }}/5)</span>
     </div>
     <div
       v-if="isDisconnected"
-      class="flex shrink-0 items-center justify-between gap-3 border-b px-6 py-1.5 text-xs"
-      :style="{ background: 'rgba(232,69,69,0.08)', borderColor: 'rgba(232,69,69,0.25)', color: 'var(--color-blood-light)' }"
+      class="rpg-game-banner rpg-tone-blood flex shrink-0 items-center justify-between gap-3 border-b px-6 py-1.5 text-xs"
     >
       <span>● Connexion perdue</span>
       <button class="rpg-btn-tonal tone-blood !py-1 !px-3 !text-[10px]" @click="reconnect">Reconnecter</button>
@@ -264,27 +260,17 @@ onUnmounted(() => { disconnect() })
 
     <!-- ─── Standalone header ─────────────────────────────────────────────── -->
     <header
-      class="flex h-14 shrink-0 items-center gap-6 border-b px-6"
-      :style="{
-        borderColor: 'var(--color-border)',
-        background: 'linear-gradient(180deg, var(--color-bg-elev), rgba(24,22,35,0.9))',
-      }"
+      class="rpg-game-header flex h-14 shrink-0 items-center gap-6 border-b px-6"
     >
       <!-- Left: logo + session name -->
       <div class="flex shrink-0 items-center gap-3">
         <div
-          class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-bold"
-          :style="{
-            background: 'linear-gradient(135deg, var(--color-ember), var(--color-gold))',
-            color: 'var(--color-bg)',
-            boxShadow: '0 0 18px rgba(255,130,71,0.25)',
-          }"
+          class="rpg-brand-mark flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-bold"
         >⚔</div>
         <div>
           <div class="font-display text-[15px] font-bold tracking-[0.1em]">RPGMASTER</div>
           <div
-            class="text-[10px] font-semibold uppercase tracking-[0.2em] leading-none"
-            :style="{ color: 'var(--color-text-dim)' }"
+            class="rpg-text-dim text-[10px] font-semibold uppercase tracking-[0.2em] leading-none"
           >{{ sessionStore.currentSession?.name ?? '—' }}</div>
         </div>
       </div>
@@ -292,29 +278,28 @@ onUnmounted(() => { disconnect() })
       <!-- Centre: phase + actions -->
       <div class="flex flex-1 items-center justify-center gap-2">
         <!-- Phase info -->
-        <div class="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em]" :style="{ color: 'var(--color-text-muted)' }">
+        <div class="rpg-text-muted flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em]">
           <span>Phase</span>
           <span
             class="font-display font-bold"
-            :style="{ color: phaseColor }"
+            :class="[phaseTone, 'rpg-tone-text']"
           >{{ phaseLabel }}</span>
           <template v-if="gameStore.isGmThinking">
-            <span :style="{ color: 'var(--color-text-dim)' }">·</span>
-            <span class="rpg-pulse" :style="{ color: 'var(--color-gold)' }">MJ</span>
+            <span class="rpg-text-dim">·</span>
+            <span class="rpg-text-gold rpg-pulse">MJ</span>
           </template>
           <template v-else-if="gameStore.isAnyAiThinking">
-            <span :style="{ color: 'var(--color-text-dim)' }">·</span>
-            <span class="rpg-pulse" :style="{ color: 'var(--color-gold)' }">IA</span>
+            <span class="rpg-text-dim">·</span>
+            <span class="rpg-text-gold rpg-pulse">IA</span>
           </template>
-          <span v-if="gameStore.isInCombat" :style="{ color: 'var(--color-text-dim)' }">·</span>
+          <span v-if="gameStore.isInCombat" class="rpg-text-dim">·</span>
           <span
             v-if="gameStore.isInCombat"
-            class="font-mono"
-            :style="{ color: 'var(--color-text-muted)' }"
+            class="rpg-text-muted font-mono"
           >Tour {{ gameStore.roundNumber }}</span>
         </div>
 
-        <div class="h-4 w-px mx-1" :style="{ background: 'var(--color-border-strong)' }" />
+        <div class="rpg-divider-vertical h-4 w-px mx-1" />
 
         <!-- Action buttons -->
         <button
@@ -363,7 +348,7 @@ onUnmounted(() => { disconnect() })
           class="rpg-btn-secondary !py-1 !px-3 !text-[11px] shrink-0"
           @click="requestGoToLobby"
         >← Lobby</button>
-        <div class="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em]" :style="{ color: 'var(--color-text-muted)' }">
+        <div class="rpg-text-muted flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em]">
           <span
             class="h-2 w-2 rounded-full"
             :class="{ 'rpg-pulse': isReconnecting }"
@@ -380,12 +365,7 @@ onUnmounted(() => { disconnect() })
     <!-- Save/Load dropdown -->
     <div
       v-if="showSaveLoad"
-      class="fixed right-6 top-14 z-50 w-80 rounded-b-xl border p-5 shadow-2xl"
-      :style="{
-        borderColor: 'var(--color-border-strong)',
-        background: 'var(--color-bg-elev)',
-        boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
-      }"
+      class="rpg-save-popover fixed right-6 top-14 z-50 w-80 rounded-b-xl border p-5 shadow-2xl"
     >
       <div class="rpg-eyebrow mb-3">✦ Sauvegardes</div>
       <SaveLoadPanel :session-id="sessionId" @load-complete="handleLoadComplete" />
@@ -408,8 +388,7 @@ onUnmounted(() => { disconnect() })
     <div class="flex min-h-0 flex-1 flex-col overflow-hidden md:hidden">
       <div
         v-if="!gameStore.isInCombat && gameStore.currentScene"
-        class="shrink-0 border-b"
-        :style="{ borderColor: 'var(--color-border)' }"
+        class="rpg-border shrink-0 border-b"
       >
         <Battlemap
           mode="exploration"
@@ -420,8 +399,7 @@ onUnmounted(() => { disconnect() })
       </div>
       <div
         v-else-if="gameStore.isInCombat"
-        class="shrink-0 border-b"
-        :style="{ borderColor: 'var(--color-border)' }"
+        class="rpg-border shrink-0 border-b"
       >
         <Battlemap
           :my-character-id="charStore.myCharacter?.id"

@@ -26,13 +26,11 @@ function handleScenePoi(_poiId: string, name: string, interaction?: ScenePoiInte
 <template>
   <div class="hidden min-h-0 flex-1 overflow-hidden md:flex">
     <section
-      class="flex min-h-0 flex-1 flex-col overflow-hidden border-r"
-      :style="{ borderColor: 'var(--color-border)' }"
+      class="rpg-border flex min-h-0 flex-1 flex-col overflow-hidden border-r"
     >
       <div
         v-if="gameStore.currentScene"
-        class="shrink-0 border-b"
-        :style="{ borderColor: 'var(--color-border)' }"
+        class="rpg-border shrink-0 border-b"
       >
         <Battlemap
           mode="exploration"

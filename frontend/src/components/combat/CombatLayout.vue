@@ -58,8 +58,7 @@ function handleMapTarget(targetId: string, mode: MapInteractionMode) {
       </div>
 
       <section
-        class="flex min-h-[220px] flex-1 flex-col overflow-hidden border-t"
-        :style="{ borderColor: 'var(--color-border)' }"
+        class="rpg-border flex min-h-[220px] flex-1 flex-col overflow-hidden border-t"
       >
         <NarrativeLog />
       </section>

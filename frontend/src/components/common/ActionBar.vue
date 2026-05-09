@@ -271,15 +271,8 @@ function buildAddressingPayload(text: string): Record<string, unknown> | undefin
   </div>
 
   <div
-    class="shrink-0 border-t"
-    :class="isCombatImmersive ? 'px-4 py-3' : 'px-5 py-4'"
-    :style="{
-      borderColor: isCombatImmersive ? 'rgba(232,69,69,0.26)' : 'var(--color-border)',
-      background: isCombatImmersive
-        ? 'linear-gradient(180deg, rgba(44,28,28,0.96), var(--color-bg-elev))'
-        : 'var(--color-bg-elev)',
-      boxShadow: isCombatImmersive ? '0 -12px 30px rgba(232,69,69,0.08)' : 'none',
-    }"
+    class="rpg-actionbar shrink-0 border-t"
+    :class="[isCombatImmersive ? 'combat-immersive px-4 py-3' : 'px-5 py-4']"
   >
     <!-- Character context line -->
     <div
@@ -287,16 +280,12 @@ function buildAddressingPayload(text: string): Record<string, unknown> | undefin
       class="mb-3 flex items-center gap-2.5"
     >
       <div
-        class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md font-display text-xs font-bold"
-        :style="{
-          background: 'linear-gradient(135deg, var(--color-ember), var(--color-gold))',
-          color: 'var(--color-bg)',
-        }"
+        class="rpg-avatar-player flex h-7 w-7 shrink-0 items-center justify-center rounded-md font-display text-xs font-bold"
       >{{ charStore.myCharacter.name.charAt(0).toUpperCase() }}</div>
-      <span class="text-sm" :style="{ color: 'var(--color-text-muted)' }">
+      <span class="rpg-text-muted text-sm">
         Vous incarnez
-        <strong class="font-display" :style="{ color: 'var(--color-parchment)' }">{{ charStore.myCharacter.name }}</strong>
-        <span v-if="isMyTurn && gameStore.isInCombat" :style="{ color: 'var(--color-ember)' }"> — c'est à vous de jouer</span>
+        <strong class="rpg-text-main font-display">{{ charStore.myCharacter.name }}</strong>
+        <span v-if="isMyTurn && gameStore.isInCombat" class="rpg-text-ember"> — c'est à vous de jouer</span>
         <span v-else-if="gameStore.isInCombat && activeCombatantName" class="italic"> — tour de {{ activeCombatantName }}</span>
       </span>
     </div>
@@ -304,15 +293,13 @@ function buildAddressingPayload(text: string): Record<string, unknown> | undefin
     <!-- Unconscious state -->
     <div
       v-if="isDowned && isMyTurn"
-      class="mb-3 rounded-lg border px-3 py-2 text-sm italic"
-      :style="{ background: 'rgba(232,69,69,0.08)', borderColor: 'rgba(232,69,69,0.3)', color: 'rgba(232,69,69,0.8)' }"
+      class="rpg-danger-message mb-3 rounded-lg border px-3 py-2 text-sm italic"
     >
       Vous êtes inconscient(e). Effectuez votre jet de sauvegarde contre la mort.
     </div>
     <div
       v-else-if="isDowned && !isMyTurn"
-      class="mb-3 rounded-lg border px-3 py-2 text-sm italic"
-      :style="{ background: 'rgba(232,69,69,0.06)', borderColor: 'rgba(232,69,69,0.2)', color: 'rgba(232,69,69,0.6)' }"
+      class="rpg-danger-message is-waiting mb-3 rounded-lg border px-3 py-2 text-sm italic"
     >
       Inconscient(e) — en attente de votre tour.
     </div>
@@ -322,23 +309,18 @@ function buildAddressingPayload(text: string): Record<string, unknown> | undefin
       v-if="!gameStore.isInCombat && aiCompanions.length > 0"
       class="mb-2 flex flex-wrap items-center gap-2"
     >
-      <span class="text-[11px] font-semibold uppercase tracking-[0.14em]" :style="{ color: 'var(--color-text-muted)' }">Parler à</span>
+      <span class="rpg-text-muted text-[11px] font-semibold uppercase tracking-[0.14em]">Parler à</span>
       <button
         v-for="companion in aiCompanions"
         :key="companion.id"
-        class="rounded border px-2.5 py-1 text-xs font-semibold"
-        :style="{
-          borderColor: addressedTo === companion.id ? 'rgba(192,144,255,0.75)' : 'var(--color-border)',
-          background: addressedTo === companion.id ? 'rgba(192,144,255,0.16)' : 'rgba(255,255,255,0.03)',
-          color: addressedTo === companion.id ? 'var(--color-arcane)' : 'var(--color-parchment)',
-        }"
+        class="rpg-companion-chip rounded border px-2.5 py-1 text-xs font-semibold"
+        :class="{ 'is-selected': addressedTo === companion.id }"
         type="button"
         @click="addressCompanion(companion.id, companion.name)"
       >@{{ companion.name }}</button>
       <button
         v-if="addressedTo"
-        class="text-xs"
-        :style="{ color: 'var(--color-text-muted)' }"
+        class="rpg-text-muted text-xs"
         type="button"
         @click="addressedTo = null"
       >Tous</button>
@@ -350,8 +332,8 @@ function buildAddressingPayload(text: string): Record<string, unknown> | undefin
         :rows="isCombatImmersive ? 2 : 2"
         :placeholder="gameStore.isProcessing ? 'Le Maître du Jeu répond…' : gameStore.isInCombat && !isMyTurn ? 'En attente de votre tour…' : 'Décrivez votre action, parlez, ou posez une question au MJ…'"
         :disabled="!canSend"
-        class="rpg-input flex-1 resize-none"
-        :style="{ fontFamily: 'inherit', fontSize: isCombatImmersive ? '13px' : '14px' }"
+        class="rpg-input flex-1 resize-none font-[inherit]"
+        :class="isCombatImmersive ? 'text-[13px]' : 'text-sm'"
         @keydown="onKeydown"
       />
       <button

@@ -37,7 +37,7 @@ function hpPct(c: Character): number {
 
 function hpColor(c: Character): string {
   const pct = hpPct(c)
-  return pct > 50 ? 'var(--color-green)' : pct > 25 ? '#e5b93a' : 'var(--color-blood)'
+  return pct > 50 ? 'var(--color-green)' : pct > 25 ? 'var(--color-gold)' : 'var(--color-blood)'
 }
 
 const isMyChar = (c: Character) => c.id === charStore.myCharacter?.id
@@ -52,8 +52,7 @@ const selected = computed(
 
     <!-- Section header -->
     <div
-      class="flex shrink-0 items-center border-b px-4 py-2.5"
-      :style="{ borderColor: 'var(--color-border)' }"
+      class="rpg-border flex shrink-0 items-center border-b px-4 py-2.5"
     >
       <span class="rpg-eyebrow">✦ Personnages</span>
     </div>
@@ -63,36 +62,27 @@ const selected = computed(
       v-if="charStore.sessionCharacters.length === 0"
       class="flex flex-1 items-center justify-center"
     >
-      <p class="font-serif italic text-sm" :style="{ color: 'var(--color-text-muted)' }">Aucun personnage</p>
+      <p class="rpg-text-muted font-serif italic text-sm">Aucun personnage</p>
     </div>
 
     <div v-else class="flex flex-1 min-h-0 overflow-hidden">
 
       <!-- Left: character list (MiniCharRow style) -->
       <div
-        class="w-[45%] shrink-0 overflow-y-auto border-r py-2 space-y-1.5 px-2"
-        :style="{ borderColor: 'var(--color-border)' }"
+        class="rpg-border w-[45%] shrink-0 overflow-y-auto border-r py-2 space-y-1.5 px-2"
       >
         <button
           v-for="c in charStore.sessionCharacters"
           :key="c.id"
-          class="w-full rounded-lg border px-2.5 py-2 text-left transition-all"
-          :style="{
-            borderColor: selected?.id === c.id ? 'rgba(255,130,71,0.5)' : 'var(--color-border)',
-            background: selected?.id === c.id ? 'rgba(255,130,71,0.05)' : 'var(--color-surface)',
-          }"
+          class="rpg-character-list-button w-full rounded-lg border px-2.5 py-2 text-left transition-all"
+          :class="{ 'is-selected': selected?.id === c.id }"
           @click="charStore.setSelectedCharacter(c)"
         >
           <div class="flex items-center gap-2">
             <!-- Avatar -->
             <div
               class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md font-display text-[13px] font-bold"
-              :style="{
-                background: c.is_ai
-                  ? 'linear-gradient(135deg, var(--color-arcane), #7050b0)'
-                  : 'linear-gradient(135deg, var(--color-ember), var(--color-gold))',
-                color: 'var(--color-bg)',
-              }"
+              :class="c.is_ai ? 'rpg-avatar-ai' : 'rpg-avatar-player'"
             >{{ c.name.charAt(0).toUpperCase() }}</div>
 
             <!-- Name + AI badge -->
@@ -100,15 +90,14 @@ const selected = computed(
               <div class="flex items-center gap-1.5">
                 <span
                   class="truncate font-display text-xs font-semibold"
-                  :style="{ color: isMyChar(c) ? 'var(--color-gold)' : 'var(--color-parchment)' }"
+                  :class="isMyChar(c) ? 'rpg-text-gold' : 'rpg-text-main'"
                 >{{ c.name }}</span>
                 <span
                   v-if="c.is_ai"
-                  class="shrink-0 text-[8px] font-bold tracking-[0.1em]"
-                  :style="{ color: 'var(--color-arcane)' }"
+                  class="rpg-text-arcane shrink-0 text-[8px] font-bold tracking-[0.1em]"
                 >IA</span>
               </div>
-              <div class="text-[10px]" :style="{ color: 'var(--color-text-muted)' }">
+              <div class="rpg-text-muted text-[10px]">
                 Niv. {{ c.level }} · {{ c.char_class }}
               </div>
             </div>
@@ -117,8 +106,7 @@ const selected = computed(
           <!-- HP mini-bar -->
           <div class="mt-1.5">
             <div
-              class="relative w-full overflow-hidden rounded-full"
-              style="height: 4px; background: rgba(0,0,0,0.4);"
+              class="rpg-hp-track mini relative w-full overflow-hidden rounded-full"
             >
               <div
                 class="absolute inset-y-0 left-0 rounded-full transition-all duration-300"
@@ -134,8 +122,8 @@ const selected = computed(
 
         <!-- Name + subtitle -->
         <div>
-          <p class="font-display text-sm font-bold" :style="{ color: 'var(--color-parchment)' }">{{ selected.name }}</p>
-          <p class="text-[11px]" :style="{ color: 'var(--color-text-muted)' }">
+          <p class="rpg-text-main font-display text-sm font-bold">{{ selected.name }}</p>
+          <p class="rpg-text-muted text-[11px]">
             Niv. {{ selected.level }} {{ selected.char_class }} · {{ selected.species }}
           </p>
         </div>
@@ -161,15 +149,14 @@ const selected = computed(
         <!-- HP bar (D3 style) -->
         <div>
           <div class="mb-1.5 flex justify-between text-xs">
-            <span :style="{ color: 'var(--color-text-muted)' }">Points de vie</span>
-            <span class="font-mono font-semibold" :style="{ color: 'var(--color-parchment)' }">
-              {{ selected.hp_current }}<span :style="{ color: 'var(--color-text-dim)' }">/{{ selected.hp_max }}</span>
-              <span v-if="selected.hp_temp > 0" class="ml-1" :style="{ color: 'var(--color-arcane)' }">+{{ selected.hp_temp }}</span>
+            <span class="rpg-text-muted">Points de vie</span>
+            <span class="rpg-text-main font-mono font-semibold">
+              {{ selected.hp_current }}<span class="rpg-text-dim">/{{ selected.hp_max }}</span>
+              <span v-if="selected.hp_temp > 0" class="rpg-text-arcane ml-1">+{{ selected.hp_temp }}</span>
             </span>
           </div>
           <div
-            class="relative w-full overflow-hidden rounded-full"
-            style="height: 8px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.04);"
+            class="rpg-hp-track relative w-full overflow-hidden rounded-full"
           >
             <div
               class="absolute inset-y-0 left-0 rounded-full transition-all duration-300"
@@ -187,15 +174,11 @@ const selected = computed(
           <div
             v-for="(abbr, key) in ABILITY_ABBR"
             :key="key"
-            class="flex flex-col items-center rounded-lg border py-1.5"
-            :style="{
-              background: 'var(--color-surface)',
-              borderColor: 'var(--color-border)',
-            }"
+            class="rpg-mini-panel flex flex-col items-center rounded-lg border py-1.5"
           >
-            <span class="text-[9px] font-bold uppercase tracking-[0.15em]" :style="{ color: 'var(--color-text-dim)' }">{{ abbr }}</span>
-            <span class="font-display text-sm font-bold" :style="{ color: 'var(--color-parchment)' }">{{ selected.ability_scores[key] ?? '—' }}</span>
-            <span class="font-mono text-xs font-bold" :style="{ color: 'var(--color-gold)' }">{{ fmtMod(selected.ability_scores[key] ?? 10) }}</span>
+            <span class="rpg-text-dim text-[9px] font-bold uppercase tracking-[0.15em]">{{ abbr }}</span>
+            <span class="rpg-text-main font-display text-sm font-bold">{{ selected.ability_scores[key] ?? '—' }}</span>
+            <span class="rpg-text-gold font-mono text-xs font-bold">{{ fmtMod(selected.ability_scores[key] ?? 10) }}</span>
           </div>
         </div>
 
@@ -204,8 +187,7 @@ const selected = computed(
           <span
             v-for="cond in selected.conditions"
             :key="cond"
-            class="rpg-chip"
-            :style="{ color: 'var(--color-blood)', borderColor: 'rgba(232,69,69,0.4)' }"
+            class="rpg-chip rpg-tone-blood"
           >{{ cond }}</span>
         </div>
       </div>
