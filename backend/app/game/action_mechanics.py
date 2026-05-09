@@ -130,6 +130,23 @@ class ActionMechanics:
                 "success": raw.get("hit"),
             }
 
+        if roll_type == "skill_check":
+            d20 = int(raw.get("d20_roll", raw.get("d20", 0)))
+            total = int(raw.get("total", d20))
+            return {
+                "dice_notation": str(raw.get("dice_notation", "1d20")),
+                "rolls": list(raw.get("rolls", [d20] if d20 else [])),
+                "d20": d20,
+                "total": total,
+                "modifier": int(raw.get("modifier", total - d20)),
+                "dc": raw.get("dc"),
+                "label": raw.get("label", raw.get("summary", "Jet de compétence")),
+                "success": raw.get("success"),
+                "breakdown": raw.get("breakdown"),
+                "character_id": raw.get("actor_id") or raw.get("character_id"),
+                "social_target_id": raw.get("social_target_id") or raw.get("target_id"),
+            }
+
         if roll_type == "cast_spell":
             atk = raw.get("attack", {})
             if atk:

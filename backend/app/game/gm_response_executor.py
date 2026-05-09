@@ -452,6 +452,30 @@ class GMResponseExecutor:
                 notes.append(note)
                 npc["notes"] = notes
             npc["last_interaction_turn"] = active.state_data.get("turn_number", 0)
+
+            if isinstance(new_quest, dict):
+                quest_id = str(new_quest.get("id") or "").strip()
+                if quest_id:
+                    quests: list[dict[str, Any]] = active.state_data.setdefault("quests", [])
+                    if not isinstance(quests, list):
+                        quests = []
+                        active.state_data["quests"] = quests
+                    idx = next(
+                        (i for i, quest in enumerate(quests) if quest.get("id") == quest_id),
+                        -1,
+                    )
+                    quest_entry = {
+                        "id": quest_id,
+                        "category": new_quest.get("category", "secondaire"),
+                        "title": new_quest.get("title", quest_id),
+                        "summary": new_quest.get("summary", ""),
+                        "urgency": new_quest.get("urgency"),
+                        "status": new_quest.get("status", "active"),
+                    }
+                    if idx >= 0:
+                        quests[idx] = {**quests[idx], **quest_entry}
+                    else:
+                        quests.append(quest_entry)
             active.mark_dirty()
 
             payload: dict[str, Any] = {

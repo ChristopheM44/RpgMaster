@@ -122,6 +122,73 @@ def _narrations(published) -> list[dict]:
 
 
 class TestPipelineExecutorUnits:
+    async def test_free_text_ask_azaka_uses_single_social_skill_check(self) -> None:
+        active = ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.EXPLORATION,
+            state_data={
+                "characters": {
+                    "hero_1": {
+                        "name": "Thorvald",
+                        "level": 1,
+                        "ability_scores": {"cha": 20},
+                        "skill_proficiencies": ["Persuasion"],
+                    },
+                },
+                "npc_states": {
+                    "azaka": {
+                        "name": "Azaka",
+                        "attitude": "indifferent",
+                    }
+                },
+            },
+        )
+        bus = _FakeBus()
+
+        gm = MagicMock()
+        gm.think = AsyncMock(return_value=AgentResponse(
+            content="Azaka jauge la demande avant de répondre.",
+            actions=[
+                GMAction(
+                    type="roll_request",
+                    target="hero_1",
+                    params={"skill": "persuasion", "dc": 15, "social_target": "azaka"},
+                )
+            ],
+        ))
+
+        pipeline = ActionPipeline(gm, bus, mechanics=ActionResolver(gm_agent=gm))
+        with patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast",
+                   new=AsyncMock()):
+            await pipeline.resolve_and_publish(
+                ActionRequest(
+                    session_id=SESSION_ID,
+                    actor_id="hero_1",
+                    actor_name="Thorvald",
+                    actor_kind="player",
+                    action_type="free_text",
+                    content="Je demande à Azaka d'être notre guide.",
+                ),
+                active,
+            )
+
+        roll_payloads = [
+            payload for event_type, payload in bus.published if event_type == EventType.ROLL_RESULT
+        ]
+        assert len(roll_payloads) == 1
+        roll_payload = roll_payloads[0]
+        assert roll_payload["character_id"] == "hero_1"
+        assert roll_payload["social_target_id"] == "azaka"
+        assert roll_payload["modifier"] == 7
+        assert roll_payload["rolls"]
+        assert roll_payload["label"] == "CHA (Persuasion)"
+        assert isinstance(roll_payload["success"], bool)
+
+        ctx = gm.think.await_args.args[0]
+        assert ctx.roll_results["skill"] == "persuasion"
+        assert ctx.roll_results["modifier"] == 7
+        assert ctx.roll_results["social_target_id"] == "azaka"
+
     async def test_social_combat_text_gets_fallback_charisma_roll(self) -> None:
         active = _make_combat_active(monster_id="bandit_1")
         active.state_data["characters"]["hero_1"]["ability_scores"] = {"cha": 14}

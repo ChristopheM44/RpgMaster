@@ -331,6 +331,11 @@ export const useGameStore = defineStore('game', () => {
 
   function restoreHistory(messages: HistoryMessage[]) {
     narrativeLog.value = messages.map((m) => {
+      const metadata = m.metadata ?? {}
+      const metadataString = (key: string) => {
+        const value = metadata[key]
+        return typeof value === 'string' ? value : undefined
+      }
       if (m.message_type === 'roll_result' && m.metadata) {
         return {
           id: m.id,
@@ -347,9 +352,23 @@ export const useGameStore = defineStore('game', () => {
           timestamp: m.created_at,
         }
       }
+      const rawSpeakerKind = metadataString('speaker_kind')
+      const speakerKind = (
+        rawSpeakerKind && ['gm', 'human', 'companion', 'npc', 'monster'].includes(rawSpeakerKind)
+          ? rawSpeakerKind
+          : undefined
+      ) as NarrationPayload['speaker_kind'] | undefined
+      const entryKind =
+        m.message_type === 'dialogue'
+          ? ('dialogue' as const)
+          : m.message_type === 'action'
+            ? ('action' as const)
+            : undefined
       const type =
         m.role === 'system'
           ? ('system' as const)
+          : m.message_type === 'dialogue'
+            ? ('dialogue' as const)
           : m.role === 'player'
             ? ('player' as const)
             : ('narration' as const)
@@ -358,6 +377,10 @@ export const useGameStore = defineStore('game', () => {
         type,
         text: m.content,
         speaker: m.speaker,
+        speaker_id: metadataString('speaker_id') ?? metadataString('character_id'),
+        speaker_kind: speakerKind,
+        entry_kind: entryKind,
+        scene_id: metadataString('scene_id'),
         timestamp: m.created_at,
       }
     })

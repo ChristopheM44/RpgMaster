@@ -51,7 +51,7 @@ def _action(content: str, **extra):
         action_type="free_text",
         content=content,
         character_id="human_1",
-        target_id=None,
+        target_id=extra.get("target_id"),
         spell_id=None,
         slot_level=None,
         addressed_to=extra.get("addressed_to"),
@@ -205,6 +205,57 @@ async def test_mixed_scene_gets_companions_then_world_arbitration() -> None:
 
     resolver.social_conclude.assert_not_called()
     resolver.resolve.assert_awaited_once()
-    resolver.resolve_npc_dialogue.assert_awaited_once()
+    resolver.resolve_npc_dialogue.assert_not_called()
     assert resolver.resolve.await_args.kwargs["persist_actor_action"] is False
     assert exchange.gm_arbitrated is True
+
+
+@pytest.mark.asyncio
+async def test_world_social_action_calls_npc_dialogue_for_npc_poi_only() -> None:
+    active = ActiveSession(
+        session_id="scene-1",
+        phase=SessionStatus.EXPLORATION,
+        state_data={
+            "characters": {"human_1": {"name": "Aria", "is_ai": False}},
+            "current_scene": {
+                "pois": [
+                    {
+                        "id": "azaka",
+                        "name": "Azaka",
+                        "kind": "npc",
+                        "icon": "npc",
+                    },
+                    {
+                        "id": "locked_door",
+                        "name": "Porte verrouillée",
+                        "kind": "clue",
+                        "icon": "door",
+                    },
+                ],
+                "exits": [],
+            },
+        },
+    )
+    resolver = MagicMock()
+    resolver.resolve = AsyncMock(
+        return_value=SimpleNamespace(mechanics={"type": "skill_check", "success": True})
+    )
+    resolver.social_conclude = AsyncMock()
+    resolver.resolve_npc_dialogue = AsyncMock()
+
+    with patch("app.services.narrative_flow_service.event_bus.publish_to_session", new=AsyncMock()):
+        await NarrativeFlowService().handle_exploration_action(
+            session_id="scene-1",
+            action=_action("Je demande à Azaka d'être notre guide."),
+            active=active,
+            action_resolver=resolver,
+            db=None,
+        )
+
+    resolver.resolve.assert_awaited_once()
+    resolver.resolve_npc_dialogue.assert_awaited_once()
+    assert resolver.resolve_npc_dialogue.await_args.kwargs["target_id"] == "azaka"
+    assert resolver.resolve_npc_dialogue.await_args.kwargs["roll_results"] == {
+        "type": "skill_check",
+        "success": True,
+    }

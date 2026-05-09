@@ -151,6 +151,32 @@ describe('useWebSocket', () => {
     vi.unstubAllGlobals()
   })
 
+  it('accepts social_outcome events without adding narrative entries', () => {
+    const socket = useWebSocket('session-1')
+    const gameStore = useGameStore()
+
+    socket.connect('hero-1')
+    WebSocketMock.instances[0]!.open()
+    gameStore.setProcessing(true)
+
+    WebSocketMock.instances[0]!.onmessage?.({
+      data: JSON.stringify({
+        event_type: 'social_outcome',
+        payload: {
+          npc_id: 'azaka',
+          attitude: 'friendly',
+          note: 'Azaka accepte de guider le groupe.',
+        },
+      }),
+    })
+
+    expect(gameStore.isProcessing).toBe(false)
+    expect(gameStore.narrativeLog).toHaveLength(0)
+
+    socket.disconnect()
+    vi.unstubAllGlobals()
+  })
+
   it('reconnects with exponential delay and jitter', () => {
     vi.useFakeTimers()
     vi.spyOn(Math, 'random').mockReturnValue(0)

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from typing import Any, Optional
 
 from app.agents.base_agent import BaseAgent
@@ -58,6 +57,7 @@ class GMAgent(BaseAgent):
                 context_manager=None,
                 player_action=context.player_action,
                 messages=context.messages,
+                roll_results=context.roll_results or None,
             )
         return AgentResponse(
             content=gm_resp.narration,
@@ -75,6 +75,7 @@ class GMAgent(BaseAgent):
         context_manager: Optional[ContextManager] = None,
         player_action: Optional[str] = None,
         messages: Optional[list] = None,
+        roll_results: Optional[dict[str, Any]] = None,
     ) -> GMResponse:
         """Génère une narration d'exploration / générale."""
         user_prompt = self._render_prompt(
@@ -82,6 +83,7 @@ class GMAgent(BaseAgent):
             {
                 "game_state": json.dumps(game_state, ensure_ascii=False, indent=2),
                 "player_action": delimit_user_input(player_action),
+                "roll_results": json.dumps(roll_results or {}, ensure_ascii=False, indent=2),
                 "recent_messages": self._format_messages(messages),
             },
         )
@@ -159,6 +161,7 @@ class GMAgent(BaseAgent):
         player_message: str,
         context_manager: Optional[ContextManager] = None,
         messages: Optional[list] = None,
+        roll_results: Optional[dict[str, Any]] = None,
     ) -> GMResponse:
         """Génère une réplique de PNJ avec sa personnalité."""
         user_prompt = self._render_prompt(
@@ -167,6 +170,7 @@ class GMAgent(BaseAgent):
                 "npc_name": npc_name,
                 "npc_personality": npc_personality,
                 "player_message": delimit_user_input(player_message),
+                "roll_results": json.dumps(roll_results or {}, ensure_ascii=False, indent=2),
                 "recent_messages": self._format_messages(messages),
             },
         )
@@ -268,21 +272,12 @@ class GMAgent(BaseAgent):
     @staticmethod
     def _extract_narration_from_broken_json(raw: str) -> str:
         """Extrait le texte de narration d'un JSON tronqué ou cassé."""
-        # 1. Regex robuste : capture tout jusqu'au prochain champ JSON ou fin de string
-        #    supporte les guillemets échappés et les caractères Unicode.
-        match = re.search(
-            r'"narration"\s*:\s*"((?:[^"\\]|\\.|")*)"?\s*(?:,|\}|$)',
-            raw,
-            re.DOTALL,
-        )
-        text = match.group(1) if match else raw.strip()
-        # Nettoie les échappements JSON basiques
-        text = text.replace('\\n', '\n').replace('\\"', '"').replace('\\\\', '\\')
+        text = GMAgent._extract_json_string_field(raw, "narration")
+        if text is None:
+            return _FALLBACK_NARRATION
 
-        # 2. Si le texte est visiblement tronqué (pas de fin de phrase), couper proprement.
         text = text.strip()
         if text and text[-1] not in {'.', '!', '?', '…', '"', '»', '”'}:
-            # Cherche la dernière fin de phrase suivi d'un espace ou fin de chaîne.
             last_boundary = max(
                 text.rfind('. '),
                 text.rfind('! '),
@@ -296,6 +291,45 @@ class GMAgent(BaseAgent):
             else:
                 text = text + '…'
         return text or _FALLBACK_NARRATION
+
+    @staticmethod
+    def _extract_json_string_field(raw: str, field: str) -> Optional[str]:
+        key = f'"{field}"'
+        key_index = raw.find(key)
+        if key_index < 0:
+            return None
+
+        colon_index = raw.find(":", key_index + len(key))
+        if colon_index < 0:
+            return None
+
+        start = colon_index + 1
+        while start < len(raw) and raw[start].isspace():
+            start += 1
+        if start >= len(raw) or raw[start] != '"':
+            return None
+
+        escaped = False
+        index = start + 1
+        while index < len(raw):
+            char = raw[index]
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                lookahead = index + 1
+                while lookahead < len(raw) and raw[lookahead].isspace():
+                    lookahead += 1
+                if lookahead >= len(raw) or raw[lookahead] in {",", "}", "]"}:
+                    try:
+                        value = json.loads(raw[start:index + 1])
+                    except json.JSONDecodeError:
+                        return None
+                    return str(value)
+            index += 1
+
+        return None
 
     def _parse_gm_response(self, data: dict[str, Any], raw: str) -> GMResponse:
         """Convertit le dict JSON parsé en GMResponse Pydantic."""

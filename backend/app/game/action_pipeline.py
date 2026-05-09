@@ -13,7 +13,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field
 
 from app.agents.schemas import AgentContext, AgentResponse, GMAction, GMResponse
-from app.engine.ability_checks import SKILL_ABILITY, Proficiency, skill_check
+from app.engine.ability_checks import Ability, SKILL_ABILITY, Proficiency, skill_check
 from app.game.action_orchestrator import ActionOrchestrator
 from app.game.combat_triggers import prime_combat_from_hostile_narration
 from app.game.constants import INACTIVE_STATUSES
@@ -94,6 +94,19 @@ _SOCIAL_EXPLORATION_MARKERS: dict[str, str] = {
     "séduire": "persuasion",
     "soudoyer": "persuasion",
     "reconcilier": "persuasion",
+    "demande": "persuasion",
+    "demander": "persuasion",
+    "implorer": "persuasion",
+    "flatter": "persuasion",
+}
+
+_ABILITY_SHORT_KEYS: dict[str, str] = {
+    "strength": "str",
+    "dexterity": "dex",
+    "constitution": "con",
+    "intelligence": "int",
+    "wisdom": "wis",
+    "charisma": "cha",
 }
 
 
@@ -116,6 +129,8 @@ def _detect_social_target_id(text: Optional[str], state_data: dict[str, Any]) ->
         return None
     normalized = _normalized_text(text)
     npc_states = state_data.get("npc_states", {})
+    if not isinstance(npc_states, dict):
+        npc_states = {}
     scene = state_data.get("current_scene", {})
     pois = scene.get("pois", []) if isinstance(scene, dict) else []
 
@@ -136,6 +151,70 @@ def _detect_social_target_id(text: Optional[str], state_data: dict[str, Any]) ->
             return str(poi.get("id", name))
 
     return None
+
+
+def _is_npc_poi(poi: Any) -> bool:
+    if not isinstance(poi, dict):
+        return False
+    kind = str(poi.get("kind") or "").strip().casefold()
+    icon = str(poi.get("icon") or "").strip().casefold()
+    return kind == "npc" or icon == "npc"
+
+
+def _poi_by_id(state_data: dict[str, Any], target_id: Optional[str]) -> Optional[dict[str, Any]]:
+    if not target_id:
+        return None
+    scene = state_data.get("current_scene", {})
+    pois = scene.get("pois", []) if isinstance(scene, dict) else []
+    for poi in pois:
+        if not isinstance(poi, dict):
+            continue
+        if str(poi.get("id") or "") == target_id:
+            return poi
+    return None
+
+
+def _is_valid_npc_target_id(target_id: Optional[str], state_data: dict[str, Any]) -> bool:
+    if not target_id:
+        return False
+    npc_states = state_data.get("npc_states", {})
+    if isinstance(npc_states, dict) and target_id in npc_states:
+        return True
+    poi = _poi_by_id(state_data, target_id)
+    return _is_npc_poi(poi)
+
+
+def resolve_npc_target_id(
+    text: Optional[str],
+    state_data: dict[str, Any],
+    explicit_target_id: Optional[str] = None,
+) -> Optional[str]:
+    """Retourne une cible PNJ valide, jamais un coffre/porte/indice."""
+    if _is_valid_npc_target_id(explicit_target_id, state_data):
+        return explicit_target_id
+
+    detected = _detect_social_target_id(text, state_data)
+    if _is_valid_npc_target_id(detected, state_data):
+        return detected
+    return None
+
+
+def _ability_short_key(ability: Ability | str | None) -> str:
+    if isinstance(ability, Ability):
+        return _ABILITY_SHORT_KEYS.get(ability.value, "cha")
+    text = str(ability or "charisma").strip().lower()
+    return _ABILITY_SHORT_KEYS.get(text, text[:3] or "cha")
+
+
+def _normalized_skill_proficiencies(char_data: dict[str, Any]) -> set[str]:
+    raw = char_data.get("skill_proficiencies", [])
+    if not isinstance(raw, list):
+        return set()
+    return {
+        str(skill).strip().lower().replace(" ", "_").replace("-", "_")
+        for skill in raw
+        if str(skill).strip()
+    }
 
 
 def _calculate_social_dc(
@@ -441,6 +520,11 @@ class ActionPipeline:
                 request,
                 target_id,
                 active.state_data,
+            )
+        if gm_response and roll_results and roll_results.get("type") == "skill_check":
+            gm_response = self._without_redundant_social_roll_requests(
+                gm_response,
+                roll_results,
             )
 
         if gm_response:
@@ -814,7 +898,11 @@ class ActionPipeline:
         if not skill:
             return None
 
-        social_target_id = _detect_social_target_id(request.content, active.state_data)
+        social_target_id = resolve_npc_target_id(
+            request.content,
+            active.state_data,
+            request.target_id,
+        )
         dc = _calculate_social_dc(active.state_data, social_target_id, skill)
 
         characters = active.state_data.get("characters", {})
@@ -822,28 +910,49 @@ class ActionPipeline:
         if not isinstance(char_data, dict):
             return None
 
-        ab_key = str(SKILL_ABILITY.get(skill, "cha"))[:3]
-        score = int(char_data.get("ability_scores", {}).get(ab_key, 10))
+        ability = SKILL_ABILITY.get(skill, Ability.CHA)
+        ab_key = _ability_short_key(ability)
+        ability_scores = char_data.get("ability_scores", {})
+        if not isinstance(ability_scores, dict):
+            ability_scores = {}
+        score = int(
+            ability_scores.get(
+                ab_key,
+                ability_scores.get(ability.value if isinstance(ability, Ability) else "", 10),
+            )
+        )
         level = int(char_data.get("level", 1))
-        skill_profs = set(char_data.get("skill_proficiencies", []))
+        skill_profs = _normalized_skill_proficiencies(char_data)
         prof = Proficiency.PROFICIENT if skill in skill_profs else Proficiency.NONE
 
         result = skill_check(score, skill, level, prof, dc)
+        skill_label = skill.replace("_", " ").title()
+        outcome = "succès" if result.success else "échec"
+        summary = f"{result.label} : {result.breakdown} ({outcome})"
         roll_results: dict[str, Any] = {
             "type": "skill_check",
             "skill": skill,
+            "dice_notation": "1d20",
+            "rolls": result.all_rolls,
             "d20": result.d20_roll,
+            "d20_roll": result.d20_roll,
             "modifier": result.modifier,
             "total": result.total,
             "dc": result.dc,
             "success": result.success,
+            "label": result.label or skill_label,
             "breakdown": result.breakdown,
+            "summary": summary,
             "target_id": social_target_id,
+            "social_target_id": social_target_id,
             "actor_id": request.actor_id,
         }
 
         if social_target_id:
             npc_states = active.state_data.setdefault("npc_states", {})
+            if not isinstance(npc_states, dict):
+                npc_states = {}
+                active.state_data["npc_states"] = npc_states
             npc = npc_states.setdefault(social_target_id, {})
             if isinstance(npc, dict):
                 npc.setdefault("name", social_target_id)
@@ -852,6 +961,29 @@ class ActionPipeline:
                     active.state_data.get("turn_number", 0)
                 )
         return roll_results
+
+    @staticmethod
+    def _without_redundant_social_roll_requests(
+        response: AgentResponse,
+        roll_results: dict[str, Any],
+    ) -> AgentResponse:
+        if roll_results.get("type") != "skill_check":
+            return response
+        actions = [
+            gm_action
+            for gm_action in response.actions
+            if gm_action.type != "roll_request"
+        ]
+        if len(actions) == len(response.actions):
+            return response
+        logger.warning(
+            "ActionPipeline : roll_request GM ignore ; le skill_check social est deja resolu."
+        )
+        return AgentResponse(
+            content=response.content,
+            actions=actions,
+            action_intent=response.action_intent,
+        )
 
     @staticmethod
     def _without_combat_damage_actions(response: AgentResponse) -> AgentResponse:

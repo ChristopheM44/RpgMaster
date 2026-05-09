@@ -33,6 +33,35 @@ def test_action_mechanics_normalizes_attack_roll_event() -> None:
     }
 
 
+def test_action_mechanics_normalizes_social_skill_check_event() -> None:
+    event = ActionMechanics()._normalize_roll_event(
+        {
+            "type": "skill_check",
+            "skill": "persuasion",
+            "dice_notation": "1d20",
+            "rolls": [12],
+            "d20_roll": 12,
+            "modifier": 7,
+            "total": 19,
+            "dc": 15,
+            "success": True,
+            "label": "CHA (Persuasion)",
+            "breakdown": "12 + 5 + 2 prof = 19 vs DC 15 ✓",
+            "actor_id": "hero-1",
+            "social_target_id": "azaka",
+        }
+    )
+
+    assert event["dice_notation"] == "1d20"
+    assert event["rolls"] == [12]
+    assert event["modifier"] == 7
+    assert event["label"] == "CHA (Persuasion)"
+    assert event["success"] is True
+    assert event["dc"] == 15
+    assert event["character_id"] == "hero-1"
+    assert event["social_target_id"] == "azaka"
+
+
 def test_action_resolver_keeps_action_mechanics_facade() -> None:
     resolver = ActionResolver(gm_agent=AsyncMock())
 

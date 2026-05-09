@@ -613,3 +613,108 @@ class TestCombatStateActions:
         )
 
         assert "pending_phase_transition" not in active_session.state_data
+
+
+class TestNpcDialogueRouting:
+    async def test_resolve_npc_dialogue_ignores_non_npc_poi(self, session_row) -> None:
+        active = ActiveSession(
+            session_id=session_row,
+            phase=SessionStatus.EXPLORATION,
+            state_data={
+                "characters": {"hero-1": {"name": "Thorvald"}},
+                "npc_states": {},
+                "current_scene": {
+                    "pois": [
+                        {
+                            "id": "locked_door",
+                            "name": "Porte verrouillée",
+                            "kind": "clue",
+                            "icon": "door",
+                        }
+                    ]
+                },
+            },
+        )
+        mock_gm = MagicMock()
+        mock_gm.run_npc_dialogue = AsyncMock()
+        resolver = ActionResolver(gm_agent=mock_gm)
+
+        await resolver.resolve_npc_dialogue(
+            session_id=session_row,
+            content="J'examine la porte verrouillée.",
+            character_id="hero-1",
+            target_id="locked_door",
+            active=active,
+            db=None,
+        )
+
+        mock_gm.run_npc_dialogue.assert_not_called()
+
+    async def test_npc_dialogue_social_outcome_updates_state_and_canon(
+        self,
+        db_session,
+        session_row,
+    ) -> None:
+        from app.game.event_bus import event_bus
+
+        active = ActiveSession(
+            session_id=session_row,
+            phase=SessionStatus.EXPLORATION,
+            state_data={
+                "characters": {"hero-1": {"name": "Thorvald"}},
+                "npc_states": {
+                    "azaka": {
+                        "name": "Azaka",
+                        "attitude": "indifferent",
+                    }
+                },
+            },
+        )
+        mock_gm = MagicMock()
+        mock_gm.run_npc_dialogue = AsyncMock(return_value=GMResponse(
+            narration="Azaka hoche la tête. « D'accord, je vous guiderai. »",
+            actions=[
+                GMAction(
+                    type="social_outcome",
+                    params={
+                        "npc_id": "azaka",
+                        "attitude_shift": "friendly",
+                        "note": "Azaka accepte de guider le groupe.",
+                        "new_quest": {
+                            "id": "guide_azaka",
+                            "category": "secondaire",
+                            "title": "Engager Azaka",
+                            "summary": "Azaka accepte de servir de guide.",
+                            "status": "active",
+                        },
+                    },
+                )
+            ],
+        ))
+        resolver = ActionResolver(gm_agent=mock_gm)
+
+        with patch.object(event_bus, "publish_to_session", new=AsyncMock()), patch(
+            "app.services.campaign_dossier_service.synthesize_canon_for_session",
+            new=AsyncMock(),
+        ) as synth:
+            await resolver.resolve_npc_dialogue(
+                session_id=session_row,
+                content="Je demande à Azaka d'être notre guide.",
+                character_id="hero-1",
+                target_id="azaka",
+                active=active,
+                db=db_session,
+                roll_results={"type": "skill_check", "success": True},
+            )
+
+        mock_gm.run_npc_dialogue.assert_awaited_once()
+        assert mock_gm.run_npc_dialogue.await_args.kwargs["roll_results"] == {
+            "type": "skill_check",
+            "success": True,
+        }
+        assert active.state_data["npc_states"]["azaka"]["attitude"] == "friendly"
+        assert active.state_data["npc_states"]["azaka"]["notes"] == [
+            "Azaka accepte de guider le groupe."
+        ]
+        assert active.state_data["quests"][0]["id"] == "guide_azaka"
+        synth.assert_awaited_once()

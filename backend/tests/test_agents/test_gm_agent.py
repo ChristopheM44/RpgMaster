@@ -231,7 +231,7 @@ async def test_narrate_fallback_on_ollama_error(gm_agent: GMAgent) -> None:
 
 
 async def test_narrate_fallback_on_non_json_response(gm_agent: GMAgent) -> None:
-    """narrate() utilise le texte brut si le LLM ne retourne pas du JSON."""
+    """narrate() évite d'afficher une sortie brute non JSON."""
     with patch.object(
         gm_agent._client,
         "chat",
@@ -239,7 +239,17 @@ async def test_narrate_fallback_on_non_json_response(gm_agent: GMAgent) -> None:
     ):
         response = await gm_agent.narrate(game_state={})
 
-    assert "Oops" in response.narration
+    assert response.narration == _FALLBACK_NARRATION
+
+
+async def test_narrate_broken_json_extracts_only_narration(gm_agent: GMAgent) -> None:
+    """Le fallback ne doit pas afficher les morceaux JSON après actions."""
+    raw = '{"narration": "Salut.", "actions": [{"type":'
+    with patch.object(gm_agent._client, "chat", new=AsyncMock(return_value=raw)):
+        response = await gm_agent.narrate(game_state={})
+
+    assert response.narration == "Salut."
+    assert "actions" not in response.narration
 
 
 async def test_narrate_handles_json_in_markdown_block(gm_agent: GMAgent) -> None:
@@ -296,6 +306,27 @@ async def test_think_delegates_to_narrate_in_exploration(gm_agent: GMAgent) -> N
         response = await gm_agent.think(context)
 
     assert "forêt" in response.content
+
+
+async def test_think_passes_roll_results_to_exploration_narrate(gm_agent: GMAgent) -> None:
+    gm_agent.narrate = AsyncMock(return_value=GMResponse(narration="Azaka accepte.", actions=[]))
+    context = AgentContext(
+        session_id="sess_1",
+        game_phase="EXPLORATION",
+        player_action="Je demande à Azaka d'être notre guide.",
+        game_state={},
+        roll_results={"type": "skill_check", "success": True, "total": 19},
+    )
+
+    response = await gm_agent.think(context)
+
+    assert response.content == "Azaka accepte."
+    gm_agent.narrate.assert_awaited_once()
+    assert gm_agent.narrate.await_args.kwargs["roll_results"] == {
+        "type": "skill_check",
+        "success": True,
+        "total": 19,
+    }
 
 
 async def test_think_delegates_to_combat_in_combat(gm_agent: GMAgent) -> None:

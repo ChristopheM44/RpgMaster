@@ -246,6 +246,9 @@ export function useWebSocket(sessionId: string) {
       case 'scene_layout_changed':
         if (isSceneLayoutChangedPayload(msg.payload)) gameStore.applySceneLayout(msg.payload)
         break
+      case 'social_outcome':
+        gameStore.setProcessing(false)
+        break
       case 'damage_applied':
         break
       case 'pong':

@@ -201,7 +201,7 @@ class NarrativeFlowService:
             return exchange
 
         if should_arbitrate_world:
-            await action_resolver.resolve(
+            resolved = await action_resolver.resolve(
                 session_id=session_id,
                 action_type=getattr(action, "action_type", "free_text"),
                 content=getattr(action, "content", None),
@@ -214,14 +214,26 @@ class NarrativeFlowService:
                 persist_actor_action=detection.audience != "mixed",
             )
             if hasattr(action_resolver, "resolve_npc_dialogue"):
-                await action_resolver.resolve_npc_dialogue(
-                    session_id=session_id,
-                    content=text,
-                    character_id=getattr(action, "character_id", None),
-                    target_id=getattr(action, "target_id", None),
-                    active=active,
-                    db=db,
+                from app.game.action_pipeline import resolve_npc_target_id
+
+                npc_target_id = resolve_npc_target_id(
+                    text,
+                    active.state_data,
+                    getattr(action, "target_id", None),
                 )
+                roll_results = getattr(resolved, "mechanics", None)
+                if not isinstance(roll_results, dict):
+                    roll_results = None
+                if npc_target_id:
+                    await action_resolver.resolve_npc_dialogue(
+                        session_id=session_id,
+                        content=text,
+                        character_id=getattr(action, "character_id", None),
+                        target_id=npc_target_id,
+                        active=active,
+                        db=db,
+                        roll_results=roll_results,
+                    )
             exchange.gm_arbitrated = True
             return exchange
 

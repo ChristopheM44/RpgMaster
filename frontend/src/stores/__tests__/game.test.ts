@@ -32,4 +32,34 @@ describe('useGameStore map decoration state', () => {
 
     expect(store.gridDecoration).toBeNull()
   })
+
+  it('restores dialogue history as dialogue entries', () => {
+    const store = useGameStore()
+
+    store.restoreHistory([
+      {
+        id: 'msg-1',
+        role: 'gm',
+        speaker: 'Azaka',
+        message_type: 'dialogue',
+        content: 'Je peux vous guider.',
+        metadata: {
+          speaker_id: 'azaka',
+          speaker_kind: 'npc',
+          scene_id: 'scene-1',
+        },
+        created_at: '2026-05-09T12:00:00Z',
+      },
+    ])
+
+    expect(store.narrativeLog[0]).toMatchObject({
+      type: 'dialogue',
+      text: 'Je peux vous guider.',
+      speaker: 'Azaka',
+      speaker_id: 'azaka',
+      speaker_kind: 'npc',
+      entry_kind: 'dialogue',
+      scene_id: 'scene-1',
+    })
+  })
 })

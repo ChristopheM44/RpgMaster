@@ -15,7 +15,7 @@ SCHÉMA DE RÉPONSE JSON (obligatoire) :
   "narration": "Le texte narratif vu par les joueurs (2 à 4 paragraphes, en français).",
   "actions": [
     {
-      "type": "roll_request | damage_apply | condition_add | condition_remove | combatant_status | state_transition | encounter_setup | scene_layout | journal_update | quest_add | chronicle_add",
+      "type": "roll_request | damage_apply | condition_add | condition_remove | combatant_status | state_transition | encounter_setup | scene_layout | journal_update | quest_add | chronicle_add | social_outcome",
       "target": "id_du_personnage ou null",
       "params": {}
     }
@@ -60,6 +60,10 @@ TYPES D'ACTIONS :
                     (params: {"id":"toben","kind":"npc|location","name":"Toben",
                     "note":"Vieil habitué de l'auberge"})
                     Ne pas mettre les monstres de combat ni les personnages joueurs.
+- social_outcome  : enregistrer une conséquence sociale durable avec un PNJ
+                    (params: {"npc_id":"azaka","attitude_shift":"friendly|helpful|indifferent|unfriendly|hostile",
+                    "note":"Azaka accepte de guider le groupe si...", "new_quest": null})
+                    Utilise seulement après une vraie interaction sociale avec ce PNJ.
 
 ACTION_INTENT :
 - "social"        : le joueur s'adresse directement à ses compagnons (question, proposition, demande d'avis)

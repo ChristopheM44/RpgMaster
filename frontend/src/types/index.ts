@@ -296,6 +296,7 @@ export const WS_EVENT_TYPES_LIST = [
   'quest_updated',
   'chronicle_updated',
   'scene_layout_changed',
+  'social_outcome',
 ] as const
 
 export type WsEventType = typeof WS_EVENT_TYPES_LIST[number]
@@ -434,9 +435,21 @@ export interface RollResultPayload {
   rolls: number[]
   total: number
   modifier: number
+  dc?: number | null
+  d20?: number
+  breakdown?: string
+  character_id?: string | null
+  social_target_id?: string | null
   label?: string
   success?: boolean
   character_name?: string
+}
+
+export interface SocialOutcomePayload {
+  npc_id: string
+  attitude?: string
+  note?: string
+  new_quest?: Quest
 }
 
 export interface PhaseChangePayload {

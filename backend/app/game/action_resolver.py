@@ -85,7 +85,7 @@ class ActionResolver:
         actor_name: Optional[str] = None,
         display_text: Optional[str] = None,
         persist_actor_action: bool = True,
-    ) -> None:
+    ) -> Any:
         """Exécute le pipeline complet pour une action.
 
         Args:
@@ -99,7 +99,7 @@ class ActionResolver:
         from app.game.action_pipeline import ActionRequest
 
         pipeline = self._pipeline_for_call(db)
-        await pipeline.resolve_and_publish(
+        return await pipeline.resolve_and_publish(
             ActionRequest(
                 session_id=session_id,
                 actor_id=character_id,
@@ -159,24 +159,39 @@ class ActionResolver:
         target_id: Optional[str],
         active: ActiveSession,
         db: Optional[Any] = None,
+        roll_results: Optional[dict[str, Any]] = None,
     ) -> None:
         """Genere une replique de PNJ via run_npc_dialogue() et la publie.
 
         Cette methode est appelee APRES la resolution mecanique (jet de skill)
         pour incarner la voix du PNJ cible.
         """
-        npc_id = target_id
-        if not npc_id and content:
-            from app.game.action_pipeline import _detect_social_target_id
-            npc_id = _detect_social_target_id(content, active.state_data)
+        from app.game.action_pipeline import _poi_by_id, resolve_npc_target_id
+
+        npc_id = resolve_npc_target_id(content, active.state_data, target_id)
         if not npc_id:
             logger.debug("resolve_npc_dialogue : aucune cible PNJ detectee")
             return
 
-        npc_states = active.state_data.get("npc_states", {})
+        npc_states = active.state_data.setdefault("npc_states", {})
+        if not isinstance(npc_states, dict):
+            npc_states = {}
+            active.state_data["npc_states"] = npc_states
         npc = npc_states.get(npc_id, {}) if isinstance(npc_states, dict) else {}
+        poi = _poi_by_id(active.state_data, npc_id)
         if not isinstance(npc, dict):
             npc = {}
+        if isinstance(poi, dict) and not npc:
+            npc = npc_states.setdefault(
+                npc_id,
+                {
+                    "name": str(poi.get("name") or npc_id),
+                    "attitude": "indifferent",
+                    "personality_hint": str(
+                        poi.get("description") or poi.get("action_hint") or "indifferent"
+                    ),
+                },
+            )
 
         npc_name = str(npc.get("name", npc_id))
         npc_personality = str(npc.get("personality_hint", "indifferent"))
@@ -191,6 +206,7 @@ class ActionResolver:
                 npc_personality=npc_personality,
                 player_message=content or "",
                 messages=recent_messages,
+                roll_results=roll_results,
             )
         except Exception as exc:
             logger.error("resolve_npc_dialogue : echec LLM : %s", exc)
@@ -232,13 +248,25 @@ class ActionResolver:
             )
 
         from app.game.gm_response_executor import execute_gm_response
-        await execute_gm_response(
+        exec_result = await execute_gm_response(
             gm_resp,
             active,
             db,
             session_id=session_id,
             fallback_actor_id=character_id,
         )
+        if exec_result.canon_dirty and db is not None:
+            try:
+                from app.services import campaign_dossier_service
+
+                await campaign_dossier_service.synthesize_canon_for_session(
+                    session_id,
+                    active.state_data,
+                    [],
+                    db,
+                )
+            except Exception as exc:
+                logger.warning("Synthese canon campagne ignoree apres dialogue PNJ : %s", exc)
 
     async def _publish_gm_narration(
         self,

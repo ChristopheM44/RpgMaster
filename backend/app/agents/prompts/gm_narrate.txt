@@ -11,6 +11,9 @@ ACTION DU JOUEUR :
 (Le joueur attend — décris l'environnement immédiat : sons, lumières, odeurs, présences perçues.)
 {% endif %}
 
+RÉSULTAT MÉCANIQUE DÉJÀ RÉSOLU :
+{{ roll_results }}
+
 En tant que Maître du Jeu, décris ce qui se passe et ce que les personnages perçoivent.
 
 Instructions :
@@ -24,7 +27,8 @@ Instructions :
 - Si action_intent = "social" : écris une narration COURTE (1-2 phrases), contexte d'ambiance uniquement.
   Ne décris PAS les réactions des compagnons — ils vont parler eux-mêmes juste après.
 - Varie les registres sensoriels : vue, ouïe, odorat, toucher, ressenti émotionnel.
-- Si l'action du joueur nécessite un jet de dés (escalader, persuader, crocheter, percevoir…), inclus un roll_request et limite la narration à 1 phrase de cadrage. Ne donne pas le résultat, l'indice ou la conséquence avant le jet.
+- Si RÉSULTAT MÉCANIQUE contient un objet JSON non vide, le jet a déjà été résolu par le moteur : narre explicitement la réussite ou l'échec à partir de ce résultat et n'émets JAMAIS de roll_request pour cette action.
+- Si l'action du joueur nécessite un jet de dés et qu'aucun résultat mécanique n'est fourni (escalader, persuader, crocheter, percevoir…), inclus un roll_request et limite la narration à 1 phrase de cadrage. Ne donne pas le résultat, l'indice ou la conséquence avant le jet.
 - Si la scène introduit un nouveau lieu ou change l'heure/météo/le jour : émets journal_update avec uniquement les champs qui changent.
 - Si la narration introduit un nouveau lieu structuré (pièce, salle, clairière, place, carrefour), ou si game_state.current_scene est absent alors que le lieu actuel est structuré, émets UNE action scene_layout :
   grille de 6 à 12 cases de côté, 2 à 5 points d'intérêt, 1 à 3 sorties, positions approximatives du groupe si connues.
