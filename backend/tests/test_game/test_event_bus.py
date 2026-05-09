@@ -5,7 +5,8 @@ import asyncio
 
 import pytest
 
-from app.game.event_bus import EventBus, EventType, GameEvent
+from app.api.ws_game import _relay_events
+from app.game.event_bus import BACKPRESSURE_ERROR_CODE, EventBus, EventType, GameEvent
 
 
 @pytest.fixture
@@ -80,12 +81,18 @@ class TestPublish:
         )
         await bus.publish(event)  # should not raise
 
-    async def test_full_queue_drops_event_silently(self, bus: EventBus) -> None:
+    async def test_full_queue_replaces_backlog_with_backpressure_error(
+        self,
+        bus: EventBus,
+    ) -> None:
         q = bus.subscribe("session-1", maxsize=1)
         event = GameEvent(event_type=EventType.NARRATION, session_id="session-1", payload={})
         await bus.publish(event)  # fills the queue
-        await bus.publish(event)  # should be dropped silently, not raise
+        await bus.publish(event)  # replaces stale backlog with terminal error
         assert q.qsize() == 1  # still only one item
+        terminal = q.get_nowait()
+        assert terminal.event_type == EventType.ERROR
+        assert terminal.payload["code"] == BACKPRESSURE_ERROR_CODE
 
     async def test_full_queue_records_drop_metrics(self, bus: EventBus) -> None:
         bus.subscribe("session-1", maxsize=1)
@@ -143,3 +150,31 @@ class TestGameEventModel:
         json.dumps(dumped)
         assert dumped["event_type"] == EventType.ROLL_RESULT
         assert dumped["payload"]["total"] == 9
+
+
+class TestRelayBackpressure:
+    async def test_relay_closes_websocket_on_backpressure_error(self) -> None:
+        queue: asyncio.Queue = asyncio.Queue()
+        event = GameEvent(
+            event_type=EventType.ERROR,
+            session_id="s1",
+            payload={"code": BACKPRESSURE_ERROR_CODE, "message": "slow"},
+        )
+        await queue.put(event)
+
+        class FakeWebSocket:
+            def __init__(self) -> None:
+                self.sent: list[dict] = []
+                self.close_code: int | None = None
+
+            async def send_json(self, payload: dict) -> None:
+                self.sent.append(payload)
+
+            async def close(self, code: int) -> None:
+                self.close_code = code
+
+        ws = FakeWebSocket()
+        await _relay_events(ws, queue)
+
+        assert ws.sent[0]["event_type"] == EventType.ERROR
+        assert ws.close_code == 1013

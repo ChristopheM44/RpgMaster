@@ -16,10 +16,14 @@ from app.api.routes_session import router as session_router
 from app.api.routes_srd import router as srd_router
 from app.api.ws_game import router as ws_router
 from app.config import get_cors_origins
+from app.db.database import async_session
+from app.game.event_bus import EventType, event_bus
 from app.llm.voxtral_client import tts_router
 from app.security import (
     access_token_required,
+    admin_access_token_required,
     request_has_valid_access_token,
+    request_has_valid_admin_access_token,
     validate_access_token_configuration,
 )
 
@@ -28,6 +32,16 @@ from app.security import (
 async def lifespan(app: FastAPI):
     # Startup: charger les paramètres TTS persistés
     tts_router._runtime = tts_router._load_runtime()
+
+    async def publish_audio(session_id: str, payload: dict) -> None:
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.AUDIO,
+            payload,
+            source="tts_router",
+        )
+
+    tts_router.configure_audio_publisher(publish_audio)
     yield
     # Shutdown: cleanup
 
@@ -41,6 +55,7 @@ def create_app() -> FastAPI:
         version="0.1.0",
         lifespan=lifespan,
     )
+    app.state.db_session_factory = async_session
 
     app.add_middleware(
         CORSMiddleware,
@@ -53,9 +68,23 @@ def create_app() -> FastAPI:
     @app.middleware("http")
     async def require_local_access_token(request: Request, call_next):
         if (
+            request.url.path.startswith("/api/admin/")
+            and request.method != "OPTIONS"
+            and admin_access_token_required()
+            and not request_has_valid_admin_access_token(request)
+        ):
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Invalid or missing admin access token."},
+            )
+        if (
             access_token_required()
             and request.url.path.startswith("/api/")
             and request.method != "OPTIONS"
+            and not (
+                request.url.path.startswith("/api/admin/")
+                and admin_access_token_required()
+            )
             and not request_has_valid_access_token(request)
         ):
             return JSONResponse(

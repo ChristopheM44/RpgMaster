@@ -3,9 +3,13 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
+
 from app.game.action_mechanics import ActionMechanics
 from app.game.action_resolver import ActionResolver
 from app.game.roll_executor import execute_roll_request
+from app.game.session_manager import ActiveSession
+from app.models.session import SessionStatus
 
 
 def test_action_mechanics_normalizes_attack_roll_event() -> None:
@@ -59,3 +63,28 @@ def test_roll_executor_supports_social_target_metadata() -> None:
     assert event is not None
     assert event["character_id"] == "hero-1"
     assert event["social_target_id"] == "goblin-1"
+
+
+@pytest.mark.asyncio
+async def test_action_mechanics_resolves_spell_from_caster_snapshot_without_db() -> None:
+    active = ActiveSession(session_id="session-1", phase=SessionStatus.COMBAT)
+    active.state_data["combatants"] = {"goblin-1": {"ac": 10}}
+
+    result = await ActionMechanics()._resolve_cast_spell(
+        "session-1",
+        "hero-1",
+        "fire_bolt",
+        None,
+        "goblin-1",
+        active,
+        {
+            "char_class": "wizard",
+            "level": 1,
+            "ability_scores": {"int": 16},
+            "slots_remaining": {},
+        },
+    )
+
+    assert result["type"] == "cast_spell"
+    assert result["spell_id"] == "fire_bolt"
+    assert "summary" in result

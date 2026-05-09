@@ -39,7 +39,7 @@ def build_session_state_payload(
         "weather": None,
     }
 
-    return {
+    payload = {
         "session_id": session_id,
         "phase": active.phase.value,
         "turn_number": active.turn_number,
@@ -54,6 +54,9 @@ def build_session_state_payload(
         "chronicle": active.state_data.get("chronicle", []),
         "current_scene": active.state_data.get("current_scene"),
     }
+    if active.phase.value == "combat":
+        payload.update(build_combat_start_payload(active))
+    return payload
 
 
 def compute_ac_from_equipment(equipment: list, dex_mod: int) -> int:

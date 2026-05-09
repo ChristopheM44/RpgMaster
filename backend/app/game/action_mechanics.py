@@ -201,19 +201,14 @@ class ActionMechanics:
         slot_level: Optional[int],
         target_id: Optional[str],
         active: ActiveSession,
-        db: Any,
+        caster: Optional[Any] = None,
     ) -> dict[str, Any]:
         """Résout le lancement d'un sort via le moteur de règles SRD 5.2.
 
         1. Charge les données du sort depuis le JSON SRD.
-        2. Charge le personnage depuis la DB pour lire/mettre à jour ses emplacements.
-        3. Consomme l'emplacement et résout l'attaque/save/dégâts selon le type.
-        4. Diffuse SPELL_SLOT_UPDATED pour que le frontend rafraîchisse ses emplacements.
+        2. Lit le snapshot lanceur déjà hydraté par le caller.
+        3. Résout l'attaque/save/dégâts selon le type.
         """
-        from sqlalchemy import select
-
-        from app.models.character import Character as CharModel
-
         spells = _load_spells()
         spell = spells.get(spell_id)
         if not spell:
@@ -243,60 +238,25 @@ class ActionMechanics:
         }
 
         # ── Chargement du personnage lanceur ──────────────────────────
-        char: Optional[Any] = None
         caster_ability_score: int = 10
         prof_bonus_val: int = 2
 
-        if character_id:
-            result = await db.execute(
-                select(CharModel).where(CharModel.id == character_id)
-            )
-            char = result.scalar_one_or_none()
-
-        if char:
-            ability_key = _SPELLCASTING_ABILITIES.get(char.char_class.lower(), "int")
-            caster_ability_score = int(char.ability_scores.get(ability_key, 10))
-            prof_bonus_val = proficiency_bonus(char.level)
-
-            # ── Consommation de l'emplacement ─────────────────────────
-            if spell_level > 0:
-                db_slots: dict[str, Any] = dict(char.spell_slots) if char.spell_slots else {}
-                slot_key = str(effective_slot)
-                slot_info = db_slots.get(slot_key, {"total": 0, "used": 0})
-                total = int(slot_info.get("total", 0))
-                used = int(slot_info.get("used", 0))
-                remaining = total - used
-
-                if remaining <= 0:
-                    return {
-                        "type": "cast_spell",
-                        "summary": (
-                            f"Aucun emplacement de niveau {effective_slot} "
-                            "disponible."
-                        ),
-                        "error": True,
-                    }
-
-                new_slots = dict(db_slots)
-                new_slots[slot_key] = {"total": total, "used": used + 1}
-                char.spell_slots = new_slots
-                await db.commit()
-
-                payload["slots_remaining"] = {
-                    k: int(v.get("total", 0)) - int(v.get("used", 0))
-                    for k, v in new_slots.items()
-                }
-
-                # Diffuser la mise à jour des emplacements vers le frontend
-                await event_bus.publish_to_session(
-                    session_id,
-                    EventType.SPELL_SLOT_UPDATED,
-                    {
-                        "character_id": character_id,
-                        "spell_slots": new_slots,
-                    },
-                    source="action_resolver",
-                )
+        if caster:
+            if isinstance(caster, dict):
+                char_class = str(caster.get("char_class") or "")
+                ability_scores = caster.get("ability_scores") or {}
+                level = int(caster.get("level") or 1)
+                slots_remaining = caster.get("slots_remaining")
+            else:
+                char_class = str(getattr(caster, "char_class", "") or "")
+                ability_scores = getattr(caster, "ability_scores", {}) or {}
+                level = int(getattr(caster, "level", 1) or 1)
+                slots_remaining = None
+            ability_key = _SPELLCASTING_ABILITIES.get(char_class.lower(), "int")
+            caster_ability_score = int(ability_scores.get(ability_key, 10))
+            prof_bonus_val = proficiency_bonus(level)
+            if isinstance(slots_remaining, dict):
+                payload["slots_remaining"] = slots_remaining
 
         # ── Résolution mécanique selon le type de sort ────────────────
         attack_type: Optional[str] = spell.get("attack_type")

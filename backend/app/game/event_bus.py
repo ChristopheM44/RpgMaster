@@ -87,6 +87,9 @@ class EventType(str):
     ERROR = "error"
 
 
+BACKPRESSURE_ERROR_CODE = "backpressure"
+
+
 # ---------------------------------------------------------------------------
 # GameEvent
 # ---------------------------------------------------------------------------
@@ -247,8 +250,8 @@ class InProcessEventBus:
         """Deliver *event* to all subscribers of ``event.session_id``.
 
         Drops the event silently if there are no subscribers.
-        Drops onto a specific subscriber's queue silently if that queue is
-        full (avoids blocking the publisher on a slow consumer).
+        A full subscriber queue receives a terminal backpressure error after
+        its stale backlog is discarded. The WebSocket relay then closes it.
         """
         subscribers = self._subscribers.get(event.session_id, [])
         if not subscribers:
@@ -275,6 +278,7 @@ class InProcessEventBus:
                     event.session_id,
                     event.event_type,
                 )
+                self._replace_backlog_with_backpressure_error(queue, event.session_id)
 
         logger.debug(
             "EventBus: published %s to %d subscriber(s) for session %s.",
@@ -282,6 +286,34 @@ class InProcessEventBus:
             len(subscribers),
             event.session_id,
         )
+
+    def _replace_backlog_with_backpressure_error(
+        self,
+        queue: asyncio.Queue,
+        session_id: str,
+    ) -> None:
+        while True:
+            try:
+                queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+        try:
+            queue.put_nowait(
+                GameEvent(
+                    event_type=EventType.ERROR,
+                    session_id=session_id,
+                    payload={
+                        "message": "Client WebSocket trop lent; reconnexion requise.",
+                        "code": BACKPRESSURE_ERROR_CODE,
+                    },
+                    source="event_bus",
+                )
+            )
+        except asyncio.QueueFull:
+            logger.error(
+                "EventBus: unable to enqueue backpressure error for session %s.",
+                session_id,
+            )
 
     async def publish_to_session(
         self,

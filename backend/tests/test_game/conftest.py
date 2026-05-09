@@ -11,8 +11,8 @@ Stratégie :
 """
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 import pytest
 from fastapi import FastAPI
@@ -62,6 +62,7 @@ def ws_client():
         await engine.dispose()
 
     application = create_app()
+    application.state.db_session_factory = session_factory
     application.router.lifespan_context = test_lifespan
     application.dependency_overrides[get_db] = override_get_db
 

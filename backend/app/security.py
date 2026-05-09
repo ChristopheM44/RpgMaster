@@ -11,6 +11,10 @@ def _configured_token() -> str:
     return settings.app_access_token.strip()
 
 
+def _configured_admin_token() -> str:
+    return settings.admin_access_token.strip()
+
+
 def _bearer_value(value: Optional[str]) -> str:
     if not value:
         return ""
@@ -22,6 +26,10 @@ def _bearer_value(value: Optional[str]) -> str:
 
 def access_token_required() -> bool:
     return bool(_configured_token())
+
+
+def admin_access_token_required() -> bool:
+    return bool(_configured_admin_token())
 
 
 def validate_access_token_configuration() -> None:
@@ -39,9 +47,21 @@ def is_valid_access_token(token: Optional[str]) -> bool:
     return _bearer_value(token) == expected
 
 
+def is_valid_admin_access_token(token: Optional[str]) -> bool:
+    expected = _configured_admin_token()
+    if expected:
+        return _bearer_value(token) == expected
+    return is_valid_access_token(token)
+
+
 def request_has_valid_access_token(request: Request) -> bool:
     token = request.headers.get("authorization") or request.headers.get("x-rpgmaster-token")
     return is_valid_access_token(token)
+
+
+def request_has_valid_admin_access_token(request: Request) -> bool:
+    token = request.headers.get("authorization") or request.headers.get("x-rpgmaster-token")
+    return is_valid_admin_access_token(token)
 
 
 def websocket_has_valid_access_token(websocket: WebSocket) -> bool:

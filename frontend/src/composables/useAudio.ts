@@ -8,6 +8,7 @@ import { ref } from 'vue'
 
 let _audioCtx: AudioContext | null = null
 const MAX_QUEUE_SIZE = 20
+let _visibilityListenerInstalled = false
 
 function getAudioContext(): AudioContext {
   if (!_audioCtx || _audioCtx.state === 'closed') {
@@ -19,6 +20,7 @@ function getAudioContext(): AudioContext {
 export function useAudio() {
   const isPlaying = ref(false)
   const error = ref<string | null>(null)
+  installVisibilityResume()
 
   // File d'attente des buffers à jouer
   const _queue: AudioBuffer[] = []
@@ -91,4 +93,15 @@ export function useAudio() {
   }
 
   return { isPlaying, error, playAudioB64, cancelAll }
+}
+
+function installVisibilityResume() {
+  if (_visibilityListenerInstalled || typeof document === 'undefined') return
+  _visibilityListenerInstalled = true
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden || !_audioCtx || _audioCtx.state !== 'suspended') return
+    void _audioCtx.resume().catch(() => {
+      // A browser may still require a user gesture; playback will retry later.
+    })
+  })
 }

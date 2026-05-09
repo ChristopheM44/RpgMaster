@@ -13,12 +13,13 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import List, Optional
+from typing import Optional
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, field_validator
 
+from app.api.rate_limit import FixedWindowRateLimiter, client_ip
 from app.config import (
     get_gm_model,
     get_llm_provider,
@@ -36,6 +37,7 @@ from app.llm.voxtral_client import tts_router
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+llm_ping_limiter = FixedWindowRateLimiter(max_requests=5, window_seconds=60.0)
 
 
 # ---------------------------------------------------------------------------
@@ -70,7 +72,7 @@ class TtsHealthResponse(BaseModel):
 
 class OllamaHealthResponse(BaseModel):
     available: bool
-    models: List[str]
+    models: list[str]
     gm_model: str
     player_model: str
 
@@ -207,13 +209,14 @@ async def update_llm_settings_endpoint(body: LlmSettingsUpdate) -> LlmSettingsRe
 
 
 @router.post("/llm/ping", response_model=LlmPingResponse)
-async def ping_llm() -> LlmPingResponse:
+async def ping_llm(request: Request) -> LlmPingResponse:
     """Envoie un prompt trivial au provider LLM actif pour vérifier la configuration.
 
     Utile pour diagnostiquer rapidement un provider cloud mal configuré
     (URL/clé/modèle incorrects) qui ferait taire silencieusement les
     compagnons IA (fallback `wait`).
     """
+    llm_ping_limiter.check(f"llm_ping:{client_ip(request)}")
     provider = get_llm_provider()
     model = get_player_model()
     client = llm_router.get_player_client()

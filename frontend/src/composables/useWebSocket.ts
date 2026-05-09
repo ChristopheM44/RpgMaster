@@ -30,6 +30,7 @@ import type {
 const WS_BASE = 'ws://localhost:8000'
 const ACCESS_TOKEN = import.meta.env.VITE_RPGMASTER_ACCESS_TOKEN?.trim()
 const PING_INTERVAL_MS = 25_000
+const PONG_TIMEOUT_MS = 10_000
 const BASE_RECONNECT_DELAY_MS = 1_000
 const MAX_RECONNECT_DELAY_MS = 30_000
 const MAX_RECONNECTS = 10
@@ -42,6 +43,7 @@ export function useWebSocket(sessionId: string) {
   const ws = ref<WebSocket | null>(null)
   const reconnectCount = ref(0)
   let pingTimer: ReturnType<typeof setInterval> | null = null
+  let pongTimer: ReturnType<typeof setTimeout> | null = null
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let intentionalClose = false
   let pendingCharacterId: string | undefined
@@ -92,7 +94,8 @@ export function useWebSocket(sessionId: string) {
         send({ type: 'join', character_id: pendingCharacterId })
       }
 
-      pingTimer = setInterval(() => send({ type: 'ping' }), PING_INTERVAL_MS)
+      sendPing()
+      pingTimer = setInterval(sendPing, PING_INTERVAL_MS)
     }
 
     socket.onmessage = (event) => {
@@ -107,6 +110,7 @@ export function useWebSocket(sessionId: string) {
     socket.onclose = () => {
       cleanup()
       gameStore.setConnected(false)
+      gameStore.clearProcessingState()
       if (!intentionalClose && reconnectCount.value < MAX_RECONNECTS) {
         reconnectCount.value++
         const delay = reconnectDelayMs(reconnectCount.value)
@@ -239,6 +243,7 @@ export function useWebSocket(sessionId: string) {
       case 'damage_applied':
         break
       case 'pong':
+        clearPongTimer()
         break
     }
   }
@@ -247,6 +252,17 @@ export function useWebSocket(sessionId: string) {
     if (ws.value?.readyState === WebSocket.OPEN) {
       ws.value.send(JSON.stringify(data))
     }
+  }
+
+  function sendPing() {
+    if (ws.value?.readyState !== WebSocket.OPEN) return
+    clearPongTimer()
+    send({ type: 'ping' })
+    pongTimer = setTimeout(() => {
+      if (ws.value?.readyState === WebSocket.OPEN) {
+        ws.value.close()
+      }
+    }, PONG_TIMEOUT_MS)
   }
 
   function sendAction(
@@ -297,7 +313,12 @@ export function useWebSocket(sessionId: string) {
 
   function cleanup() {
     if (pingTimer) { clearInterval(pingTimer); pingTimer = null }
+    clearPongTimer()
     if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
+  }
+
+  function clearPongTimer() {
+    if (pongTimer) { clearTimeout(pongTimer); pongTimer = null }
   }
 
   onUnmounted(disconnect)

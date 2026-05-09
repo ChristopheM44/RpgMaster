@@ -8,6 +8,7 @@ from app.models.character import Character
 from app.models.session import Session, SessionStatus
 from app.services.equipment_service import EquipmentService
 from app.services.rest_service import RestService, build_hit_dice
+from app.services.spellcasting_service import SpellcastingService, SpellcastingServiceError
 
 
 def _hero(session_id: str, **overrides) -> Character:
@@ -204,3 +205,76 @@ async def test_rest_service_long_rest_restores_hp_spell_slots_and_hit_dice(db_se
 
 def test_build_hit_dice_uses_class_hit_die_and_level() -> None:
     assert build_hit_dice("fighter", 3) == {"die": 10, "total": 3, "used": 0}
+
+
+@pytest.mark.asyncio
+async def test_spellcasting_service_consumes_slot_and_publishes_update(db_session) -> None:
+    session = Session(name="Spell", status=SessionStatus.COMBAT)
+    db_session.add(session)
+    await db_session.commit()
+
+    char = _hero(
+        session.id,
+        char_class="wizard",
+        level=1,
+        ability_scores={"str": 8, "dex": 12, "con": 12, "int": 16, "wis": 10, "cha": 10},
+        spell_slots={"1": {"total": 2, "used": 0}},
+    )
+    db_session.add(char)
+    await db_session.commit()
+
+    active = ActiveSession(session_id=session.id, phase=SessionStatus.COMBAT)
+    active.state_data["characters"] = {char.id: {"spell_slots": dict(char.spell_slots)}}
+    published: list[tuple[str, dict]] = []
+
+    class CaptureBus:
+        async def publish_to_session(self, session_id, event_type, payload, source=None):
+            published.append((event_type, payload))
+
+    prepared = await SpellcastingService().prepare_cast(
+        session_id=session.id,
+        character_id=char.id,
+        spell_id="magic_missile",
+        slot_level=1,
+        active=active,
+        db=db_session,
+        event_bus_instance=CaptureBus(),
+    )
+
+    assert prepared is not None
+    assert prepared.spell_slots["1"]["used"] == 1
+    assert prepared.caster["slots_remaining"]["1"] == 1
+    assert active.state_data["characters"][char.id]["spell_slots"]["1"]["used"] == 1
+    assert published == [
+        (
+            "spell_slot_updated",
+            {"character_id": char.id, "spell_slots": {"1": {"total": 2, "used": 1}}},
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_spellcasting_service_rejects_unavailable_slot(db_session) -> None:
+    session = Session(name="No Slots", status=SessionStatus.COMBAT)
+    db_session.add(session)
+    await db_session.commit()
+
+    char = _hero(
+        session.id,
+        char_class="wizard",
+        spell_slots={"1": {"total": 1, "used": 1}},
+    )
+    db_session.add(char)
+    await db_session.commit()
+
+    active = ActiveSession(session_id=session.id, phase=SessionStatus.COMBAT)
+
+    with pytest.raises(SpellcastingServiceError, match="Aucun emplacement"):
+        await SpellcastingService().prepare_cast(
+            session_id=session.id,
+            character_id=char.id,
+            spell_id="magic_missile",
+            slot_level=1,
+            active=active,
+            db=db_session,
+        )

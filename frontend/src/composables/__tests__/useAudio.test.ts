@@ -73,6 +73,45 @@ describe('useAudio', () => {
     expect(source.stop).toHaveBeenCalled()
     expect(audio.isPlaying.value).toBe(false)
 
+    ctx.state = 'closed'
+    vi.unstubAllGlobals()
+  })
+
+  it('resumes a suspended AudioContext when the tab becomes visible', async () => {
+    const source = {
+      buffer: null as AudioBuffer | null,
+      connect: vi.fn(),
+      start: vi.fn(),
+      stop: vi.fn(),
+      onended: null as (() => void) | null,
+    }
+    const ctx = {
+      state: 'running',
+      destination: {},
+      resume: vi.fn(async () => {
+        ctx.state = 'running'
+      }),
+      decodeAudioData: vi.fn(async () => ({ duration: 1 }) as AudioBuffer),
+      createBufferSource: vi.fn(() => source),
+    }
+    class AudioContextMock {
+      constructor() {
+        return ctx
+      }
+    }
+    vi.stubGlobal('AudioContext', AudioContextMock)
+    vi.stubGlobal('atob', vi.fn(() => String.fromCharCode(1, 2, 3)))
+    vi.spyOn(document, 'hidden', 'get').mockReturnValue(false)
+
+    const audio = useAudio()
+    await audio.playAudioB64('AQID')
+    ctx.state = 'suspended'
+    document.dispatchEvent(new Event('visibilitychange'))
+
+    expect(ctx.resume).toHaveBeenCalled()
+
+    ctx.state = 'closed'
+    vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
 })

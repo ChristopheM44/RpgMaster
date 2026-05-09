@@ -39,7 +39,7 @@ import re
 from copy import deepcopy
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -89,13 +89,13 @@ from app.api.ws_schemas import (
     TriggerAiReactionsMessage,
 )
 from app.config import settings
-from app.db.database import get_db
+from app.db.database import async_session
 from app.engine.tactical_grid import GridPosition, initialize_positions, validate_move
 from app.game.action_resolver import ActionResolver
 from app.game.async_tasks import create_logged_task
 from app.game.combat_triggers import prime_combat_from_aggressive_action
 from app.game.constants import INACTIVE_STATUSES
-from app.game.event_bus import EventType, GameEvent, event_bus
+from app.game.event_bus import BACKPRESSURE_ERROR_CODE, EventType, GameEvent, event_bus
 from app.game.runtime import rest_service, session_manager
 from app.game.turn_manager import CombatantInfo
 from app.llm.budget import is_sober_mode
@@ -134,10 +134,22 @@ async def _relay_events(websocket: WebSocket, queue: asyncio.Queue) -> None:
             event: GameEvent = await queue.get()
             payload = event.model_dump(mode="json")
             await websocket.send_json(payload)
+            if (
+                event.event_type == EventType.ERROR
+                and event.payload.get("code") == BACKPRESSURE_ERROR_CODE
+            ):
+                await websocket.close(code=1013)
+                return
     except asyncio.CancelledError:
         pass
     except Exception as exc:
         logger.debug("Relay task ended: %s", exc)
+
+
+def _db_session_factory(websocket: WebSocket) -> Any:
+    app = websocket.scope.get("app")
+    state = getattr(app, "state", None)
+    return getattr(state, "db_session_factory", async_session)
 
 
 # ---------------------------------------------------------------------------
@@ -2054,9 +2066,9 @@ async def _dispatch_action(
 async def game_websocket(
     websocket: WebSocket,
     session_id: str,
-    db: AsyncSession = Depends(get_db),
 ) -> None:
     """Main WebSocket endpoint for real-time game communication."""
+    db_session_factory = _db_session_factory(websocket)
     if not websocket_has_valid_access_token(websocket):
         await websocket.close(code=4401)
         return
@@ -2067,7 +2079,8 @@ async def game_websocket(
     # 1. Open / load session
     # ------------------------------------------------------------------
     try:
-        await session_manager.open_session(session_id, db)
+        async with db_session_factory() as db:
+            await session_manager.open_session(session_id, db)
     except KeyError:
         await websocket.send_json({
             "event_type": EventType.ERROR,
@@ -2122,7 +2135,7 @@ async def game_websocket(
                 except ValidationError:
                     await send_ws_error(websocket, session_id, VALIDATION_ERROR_MESSAGE)
                     continue
-                await websocket.send_json({"event_type": "pong"})
+                await websocket.send_json({"event_type": "pong", "payload": {}})
                 continue
 
             # --- join ---------------------------------------------------
@@ -2133,53 +2146,54 @@ async def game_websocket(
                     await send_ws_error(websocket, session_id, VALIDATION_ERROR_MESSAGE)
                     continue
 
-                async with session_manager.session_lock(session_id):
-                    character_id = join.character_id
-                    if not await character_belongs_to_session(session_id, character_id, db):
-                        character_id = None
-                        await send_ws_error(
-                            websocket,
+                async with db_session_factory() as db:
+                    async with session_manager.session_lock(session_id):
+                        character_id = join.character_id
+                        if not await character_belongs_to_session(session_id, character_id, db):
+                            character_id = None
+                            await send_ws_error(
+                                websocket,
+                                session_id,
+                                "Personnage introuvable dans cette session.",
+                            )
+                            continue
+                        await event_bus.publish_to_session(
                             session_id,
-                            "Personnage introuvable dans cette session.",
+                            EventType.PLAYER_JOINED,
+                            {"character_id": character_id},
+                            source="ws_game",
                         )
-                        continue
-                    await event_bus.publish_to_session(
-                        session_id,
-                        EventType.PLAYER_JOINED,
-                        {"character_id": character_id},
-                        source="ws_game",
-                    )
-                    logger.info(
-                        "Player joined session %s with character %s.",
-                        session_id,
-                        character_id,
-                    )
+                        logger.info(
+                            "Player joined session %s with character %s.",
+                            session_id,
+                            character_id,
+                        )
 
-                    # Si la session est déjà en exploration, le MJ décrit la scène
-                    active_on_join = session_manager.get_session(session_id)
-                    if active_on_join:
-                        await _sync_ai_control_from_db(session_id, active_on_join, db)
-                    if active_on_join and active_on_join.phase == SessionStatus.EXPLORATION:
-                        await _send_welcome_narration(session_id, active_on_join, db)
-                    elif active_on_join and active_on_join.phase == SessionStatus.COMBAT:
-                        # Rejouer l'état de combat pour ce client qui se (re)connecte
-                        await websocket.send_json({
-                            "event_type": "combat_start",
-                            "session_id": session_id,
-                            "payload": _build_combat_start_payload(active_on_join),
-                        })
-                        current = active_on_join.turn_manager.current_turn
-                        if current:
+                        # Si la session est déjà en exploration, le MJ décrit la scène
+                        active_on_join = session_manager.get_session(session_id)
+                        if active_on_join:
+                            await _sync_ai_control_from_db(session_id, active_on_join, db)
+                        if active_on_join and active_on_join.phase == SessionStatus.EXPLORATION:
+                            await _send_welcome_narration(session_id, active_on_join, db)
+                        elif active_on_join and active_on_join.phase == SessionStatus.COMBAT:
+                            # Rejouer l'état de combat pour ce client qui se (re)connecte
                             await websocket.send_json({
-                                "event_type": EventType.TURN_START,
+                                "event_type": "combat_start",
                                 "session_id": session_id,
-                                "payload": {
-                                    "combatant_id": current.combatant_id,
-                                    "combatant_name": current.name,
-                                },
+                                "payload": _build_combat_start_payload(active_on_join),
                             })
-                            if current.is_ai_controlled:
-                                await _handle_ai_turns(session_id, active_on_join, db)
+                            current = active_on_join.turn_manager.current_turn
+                            if current:
+                                await websocket.send_json({
+                                    "event_type": EventType.TURN_START,
+                                    "session_id": session_id,
+                                    "payload": {
+                                        "combatant_id": current.combatant_id,
+                                        "combatant_name": current.name,
+                                    },
+                                })
+                                if current.is_ai_controlled:
+                                    await _handle_ai_turns(session_id, active_on_join, db)
                 continue
 
             # --- action -------------------------------------------------
@@ -2191,8 +2205,9 @@ async def game_websocket(
                     continue
 
                 try:
-                    async with session_manager.session_lock(session_id):
-                        await _dispatch_action(session_id, action, db)
+                    async with db_session_factory() as db:
+                        async with session_manager.session_lock(session_id):
+                            await _dispatch_action(session_id, action, db)
                 except Exception as exc:
                     logger.error("Unhandled error in _dispatch_action: %s", exc, exc_info=True)
                     await event_bus.publish_to_session(
@@ -2207,13 +2222,14 @@ async def game_websocket(
             if msg_type == "toggle_ai_control":
                 try:
                     msg = ToggleAiControlMessage(**raw)
-                    async with session_manager.session_lock(session_id):
-                        await _handle_toggle_ai_control(
-                            session_id,
-                            character_id=msg.character_id,
-                            next_is_ai=msg.is_ai,
-                            db=db,
-                        )
+                    async with db_session_factory() as db:
+                        async with session_manager.session_lock(session_id):
+                            await _handle_toggle_ai_control(
+                                session_id,
+                                character_id=msg.character_id,
+                                next_is_ai=msg.is_ai,
+                                db=db,
+                            )
                 except ValidationError:
                     await send_ws_error(websocket, session_id, VALIDATION_ERROR_MESSAGE)
                 except Exception as exc:
@@ -2232,12 +2248,13 @@ async def game_websocket(
             if msg_type == "trigger_ai_reactions":
                 try:
                     msg = TriggerAiReactionsMessage(**raw)
-                    async with session_manager.session_lock(session_id):
-                        await _handle_trigger_ai_reactions(
-                            session_id,
-                            db,
-                            trigger_character_id=msg.character_id,
-                        )
+                    async with db_session_factory() as db:
+                        async with session_manager.session_lock(session_id):
+                            await _handle_trigger_ai_reactions(
+                                session_id,
+                                db,
+                                trigger_character_id=msg.character_id,
+                            )
                 except ValidationError:
                     await send_ws_error(websocket, session_id, VALIDATION_ERROR_MESSAGE)
                 except Exception as exc:
@@ -2281,8 +2298,9 @@ async def game_websocket(
 
         if connection_manager.connection_count(session_id) == 0:
             try:
-                async with session_manager.session_lock(session_id):
-                    await session_manager.close_session(session_id, db)
+                async with db_session_factory() as db:
+                    async with session_manager.session_lock(session_id):
+                        await session_manager.close_session(session_id, db)
             except Exception as exc:
                 logger.warning(
                     "Error closing session %s on last disconnect: %s", session_id, exc

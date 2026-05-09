@@ -8,13 +8,12 @@ from __future__ import annotations
 
 import logging
 import re
-import uuid
 from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
 from app.agents.schemas import AgentContext, AgentResponse, GMAction, GMResponse
-from app.game.async_tasks import create_logged_task
+from app.game.action_orchestrator import ActionOrchestrator
 from app.game.combat_triggers import prime_combat_from_hostile_narration
 from app.game.constants import INACTIVE_STATUSES
 from app.game.event_bus import EventType, event_bus
@@ -28,6 +27,7 @@ from app.llm.budget import (
     should_use_gm_for_action,
 )
 from app.llm.voxtral_client import tts_router
+from app.services.spellcasting_service import SpellcastingService, SpellcastingServiceError
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +53,8 @@ _SOCIAL_COMBAT_MARKERS = (
     "intimid",
     "persuad",
 )
+
+spellcasting_service = SpellcastingService()
 
 
 def _normalized_text(text: Optional[str]) -> str:
@@ -115,6 +117,11 @@ class ActionPipeline:
         self._mechanics = mechanics
         self._source = source
         self._executor = GMResponseExecutor(event_bus_instance, source=source)
+        self._orchestrator = ActionOrchestrator(
+            event_bus_instance,
+            source=source,
+            tts_router=tts_router,
+        )
 
     async def resolve_and_publish(
         self,
@@ -200,16 +207,36 @@ class ActionPipeline:
                 active,
             )
         elif request.action_type == "cast_spell":
-            if request.spell_id is not None and actual_db is not None:
-                roll_results = await mechanics._resolve_cast_spell(
-                    request.session_id,
-                    request.actor_id,
-                    request.spell_id,
-                    request.slot_level,
-                    target_id,
-                    active,
-                    actual_db,
-                )
+            if request.spell_id is not None:
+                caster_snapshot: Optional[dict[str, Any]] = None
+                if actual_db is not None:
+                    try:
+                        prepared = await spellcasting_service.prepare_cast(
+                            session_id=request.session_id,
+                            character_id=request.actor_id,
+                            spell_id=request.spell_id,
+                            slot_level=request.slot_level,
+                            active=active,
+                            db=actual_db,
+                            event_bus_instance=self._event_bus,
+                        )
+                        caster_snapshot = prepared.caster if prepared is not None else None
+                    except SpellcastingServiceError as exc:
+                        roll_results = {
+                            "type": "cast_spell",
+                            "summary": str(exc),
+                            "error": True,
+                        }
+                if roll_results is None:
+                    roll_results = await mechanics._resolve_cast_spell(
+                        request.session_id,
+                        request.actor_id,
+                        request.spell_id,
+                        request.slot_level,
+                        target_id,
+                        active,
+                        caster_snapshot,
+                    )
                 if roll_results and not roll_results.get("error") and target_id:
                     attack = roll_results.get("attack", {})
                     damage = roll_results.get("damage", {})
@@ -521,12 +548,7 @@ class ActionPipeline:
         return f"{actor_name} agit."
 
     async def _publish_ai_thinking(self, session_id: str, thinking: bool) -> None:
-        await self._event_bus.publish_to_session(
-            session_id,
-            EventType.AI_THINKING,
-            {"agent_kind": "gm", "thinking": thinking},
-            source=self._source,
-        )
+        await self._orchestrator.publish_ai_thinking(session_id, thinking)
 
     async def _publish_gm_narration(
         self,
@@ -534,29 +556,7 @@ class ActionPipeline:
         narration_text: str,
         db: Optional[Any],
     ) -> None:
-        narration_id = str(uuid.uuid4())
-        await self._event_bus.publish_to_session(
-            session_id,
-            EventType.NARRATION,
-            {
-                "text": narration_text,
-                "speaker": "Maître du Jeu",
-                "speaker_kind": "gm",
-                "entry_kind": "narration",
-                "narration_id": narration_id,
-            },
-            source=self._source,
-        )
-
-        if db is not None:
-            from app.services.message_service import persist_narration
-
-            await persist_narration(session_id, narration_text, "Maître du Jeu", db)
-
-        create_logged_task(
-            tts_router.synthesize_and_broadcast(narration_text, session_id, narration_id),
-            "action_pipeline.tts_narration",
-        )
+        await self._orchestrator.publish_gm_narration(session_id, narration_text, db)
 
     async def _narrate_outcome(
         self,

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -45,6 +44,7 @@ async def async_client(db_engine):
             yield session
 
     app = create_app()
+    app.state.db_session_factory = session_factory
     app.dependency_overrides[get_db] = override_get_db
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

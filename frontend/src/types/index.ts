@@ -402,6 +402,9 @@ export interface SessionStatePayload {
   turn_order: TurnEntry[]
   current_turn_index: number
   valid_transitions: string[]
+  combatants?: CombatantState[]
+  grid_config?: GridConfig
+  grid_decoration?: GridDecoration | null
   adventure_journal?: AdventureJournal
   quests?: Quest[]
   chronicle?: ChronicleEntry[]

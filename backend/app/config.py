@@ -31,11 +31,12 @@ class Settings(BaseSettings):
     log_level: str = "info"
     cors_origins: str = "http://localhost:5173"
     app_access_token: str = ""
+    admin_access_token: str = ""
     runtime_dir: str = ".runtime"
 
     # Game
     default_language: str = "fr"
-    max_context_messages: int = 20
+    max_context_messages: int = 50
     max_player_action_chars: int = 4000
     ws_event_queue_size: int = 256
     tts_async: bool = True

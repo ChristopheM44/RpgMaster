@@ -14,13 +14,13 @@ import base64
 import json
 import logging
 import uuid
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import httpx
 
 from app.config import settings
-from app.game.event_bus import EventType, event_bus
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +53,13 @@ _BASE_DELAY = 1.0
 
 class VoxtralError(Exception):
     """Erreur de génération TTS (tous backends)."""
+
+
+AudioPublisher = Callable[[str, dict[str, Any]], Awaitable[None]]
+
+
+async def _noop_audio_publisher(session_id: str, payload: dict[str, Any]) -> None:
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -230,11 +237,15 @@ class TtsRouter:
 
     _RUNTIME_FILE = Path(__file__).parent.parent.parent / "runtime_settings.json"
 
-    def __init__(self) -> None:
+    def __init__(self, publish_audio: Optional[AudioPublisher] = None) -> None:
         self._kokoro = KokoroClient()
         self._vllm = VLLMVoxtralClient()
         # Runtime overrides chargés depuis le fichier de persistance
         self._runtime: dict = self._load_runtime()
+        self._publish_audio: AudioPublisher = publish_audio or _noop_audio_publisher
+
+    def configure_audio_publisher(self, publish_audio: Optional[AudioPublisher]) -> None:
+        self._publish_audio = publish_audio or _noop_audio_publisher
 
     # ------------------------------------------------------------------
     # Configuration runtime
@@ -324,14 +335,12 @@ class TtsRouter:
             wav_bytes = await client.synthesize(text, voice=voice)
             audio_b64 = base64.b64encode(wav_bytes).decode("ascii")
 
-            await event_bus.publish_to_session(
+            await self._publish_audio(
                 session_id,
-                EventType.AUDIO,
                 {
                     "audio_b64": audio_b64,
                     "narration_id": narration_id,
                 },
-                source="tts_router",
             )
             logger.debug(
                 "TTS audio broadcast : session=%s narration=%s backend=%s bytes=%d",

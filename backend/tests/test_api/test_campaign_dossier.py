@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import socket
 
 import pytest
 from sqlalchemy import select
 
 from app.models.game_state import GameState
+from app.security_url import UnsafeUrlError, validate_public_http_url
 from app.services import campaign_dossier_service
 
 SECRET = "SECRET_NEVER_LEAK"
@@ -198,6 +200,136 @@ async def test_campaign_dossier_public_endpoints_never_leak_private_blocks(async
     campaign_list = await async_client.get("/api/campaigns")
     assert campaign_list.status_code == 200
     assert SECRET not in campaign_list.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "url",
+    [
+        "file:///etc/passwd",
+        "ftp://example.com/adventure.txt",
+        "http://localhost/adventure",
+        "http://127.0.0.1/adventure",
+        "http://[::1]/adventure",
+        "http://10.0.0.1/adventure",
+        "http://user:pass@example.com/adventure",
+    ],
+)
+async def test_import_source_rejects_unsafe_urls(async_client, url: str):
+    campaign = await _create_campaign(async_client)
+
+    response = await async_client.post(
+        f"/api/campaigns/{campaign['id']}/import-source",
+        json={"kind": "url", "url": url},
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_public_url_validator_rejects_dns_to_private_ip(monkeypatch):
+    def fake_getaddrinfo(*args, **kwargs):
+        return [
+            (
+                socket.AF_INET,
+                socket.SOCK_STREAM,
+                6,
+                "",
+                ("192.168.1.42", 443),
+            )
+        ]
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+
+    with pytest.raises(UnsafeUrlError):
+        await validate_public_http_url("https://campaign.example/source")
+
+
+@pytest.mark.asyncio
+async def test_import_source_fetches_public_url_without_redirects(async_client, monkeypatch):
+    campaign = await _create_campaign(async_client)
+    captured: dict[str, object] = {}
+
+    async def fake_validate(url: str) -> str:
+        captured["validated_url"] = url
+        return url
+
+    class DummyResponse:
+        status_code = 200
+        is_redirect = False
+        content = b"<html><body><h1>Aventure publique</h1></body></html>"
+        encoding = "utf-8"
+
+        def raise_for_status(self) -> None:
+            return None
+
+    class DummyAsyncClient:
+        def __init__(self, *args, **kwargs):
+            captured["client_kwargs"] = kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url: str) -> DummyResponse:
+            captured["fetched_url"] = url
+            return DummyResponse()
+
+    monkeypatch.setattr(campaign_dossier_service, "validate_public_http_url", fake_validate)
+    monkeypatch.setattr(campaign_dossier_service.httpx, "AsyncClient", DummyAsyncClient)
+
+    response = await async_client.post(
+        f"/api/campaigns/{campaign['id']}/import-source",
+        json={"kind": "url", "url": "https://campaign.example/source"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["source"]["title"] == "https://campaign.example/source"
+    assert captured["validated_url"] == "https://campaign.example/source"
+    assert captured["fetched_url"] == "https://campaign.example/source"
+    assert captured["client_kwargs"] == {"timeout": 5.0, "follow_redirects": False}
+
+
+@pytest.mark.asyncio
+async def test_import_source_rejects_redirects(async_client, monkeypatch):
+    campaign = await _create_campaign(async_client)
+
+    async def fake_validate(url: str) -> str:
+        return url
+
+    class DummyResponse:
+        status_code = 302
+        is_redirect = True
+        content = b""
+        encoding = "utf-8"
+
+        def raise_for_status(self) -> None:
+            return None
+
+    class DummyAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url: str) -> DummyResponse:
+            return DummyResponse()
+
+    monkeypatch.setattr(campaign_dossier_service, "validate_public_http_url", fake_validate)
+    monkeypatch.setattr(campaign_dossier_service.httpx, "AsyncClient", DummyAsyncClient)
+
+    response = await async_client.post(
+        f"/api/campaigns/{campaign['id']}/import-source",
+        json={"kind": "url", "url": "https://campaign.example/source"},
+    )
+
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio

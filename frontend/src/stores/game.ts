@@ -88,6 +88,9 @@ export const useGameStore = defineStore('game', () => {
     if (payload.quests) quests.value = payload.quests
     if (payload.chronicle) chronicle.value = payload.chronicle
     if ('current_scene' in payload) currentScene.value = payload.current_scene ?? null
+    if (payload.combatants) setCombatants(payload.combatants)
+    if (payload.grid_config) gridConfig.value = payload.grid_config
+    if ('grid_decoration' in payload) gridDecoration.value = payload.grid_decoration ?? null
 
     if (payload.turn_order.length > 0) {
       const idx = payload.current_turn_index
@@ -288,6 +291,12 @@ export const useGameStore = defineStore('game', () => {
     isProcessing.value = val
   }
 
+  function clearProcessingState() {
+    isProcessing.value = false
+    isGmThinking.value = false
+    thinkingCharacterIds.value = new Set()
+  }
+
   function applyAiThinking(payload: { agent_kind: 'gm' | 'player_ai'; thinking: boolean; character_id?: string }) {
     if (payload.agent_kind === 'gm') {
       isGmThinking.value = payload.thinking
@@ -423,6 +432,7 @@ export const useGameStore = defineStore('game', () => {
     setConnected,
     setError,
     setProcessing,
+    clearProcessingState,
     applyAiThinking,
     isCharacterThinking,
     consumeEventId,

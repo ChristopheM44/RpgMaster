@@ -178,4 +178,85 @@ describe('useWebSocket', () => {
     vi.useRealTimers()
     vi.unstubAllGlobals()
   })
+
+  it('clears processing state when the socket closes', () => {
+    const socket = useWebSocket('session-1')
+    const gameStore = useGameStore()
+
+    socket.connect('hero-1')
+    WebSocketMock.instances[0]!.open()
+    gameStore.setProcessing(true)
+    gameStore.applyAiThinking({ agent_kind: 'gm', thinking: true })
+
+    WebSocketMock.instances[0]!.close()
+
+    expect(gameStore.isProcessing).toBe(false)
+    expect(gameStore.isGmThinking).toBe(false)
+
+    socket.disconnect()
+    vi.unstubAllGlobals()
+  })
+
+  it('closes and reconnects when pong timeout expires', () => {
+    vi.useFakeTimers()
+    vi.spyOn(Math, 'random').mockReturnValue(0)
+
+    const socket = useWebSocket('session-1')
+    socket.connect('hero-1')
+    WebSocketMock.instances[0]!.open()
+
+    vi.advanceTimersByTime(10_000)
+
+    expect(socket.reconnectCount.value).toBe(1)
+    vi.advanceTimersByTime(1_000)
+    expect(WebSocketMock.instances).toHaveLength(2)
+
+    socket.disconnect()
+    vi.restoreAllMocks()
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  it('applies combatants carried by session_state', () => {
+    const socket = useWebSocket('session-1')
+    const gameStore = useGameStore()
+
+    socket.connect('hero-1')
+    WebSocketMock.instances[0]!.open()
+    WebSocketMock.instances[0]!.onmessage?.({
+      data: JSON.stringify({
+        event_type: 'session_state',
+        payload: {
+          session_id: 'session-1',
+          phase: 'combat',
+          turn_number: 1,
+          round_number: 1,
+          turn_order: [{ id: 'hero-1', name: 'Aria', initiative: 15, is_ai: false, is_player: true }],
+          current_turn_index: 0,
+          valid_transitions: [],
+          combatants: [{
+            id: 'hero-1',
+            name: 'Aria',
+            initiative: 15,
+            hp_current: 8,
+            hp_max: 10,
+            kind: 'pc',
+            conditions: [],
+            is_ai: false,
+            is_active: true,
+            ac: 14,
+          }],
+          grid_config: { cols: 10, rows: 8, cell_size_m: 1.5 },
+          grid_decoration: { obstacles: [{ col: 1, row: 1 }] },
+        },
+      }),
+    })
+
+    expect(gameStore.combatants).toHaveLength(1)
+    expect(gameStore.currentTurnId).toBe('hero-1')
+    expect(gameStore.gridDecoration?.obstacles).toEqual([{ col: 1, row: 1 }])
+
+    socket.disconnect()
+    vi.unstubAllGlobals()
+  })
 })

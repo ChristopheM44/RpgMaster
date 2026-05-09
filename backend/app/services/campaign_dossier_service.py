@@ -16,6 +16,7 @@ from app.agents.campaign_forge_agent import CampaignForgeAgent
 from app.models.campaign import Campaign
 from app.models.campaign_dossier import CampaignDossier
 from app.models.character import Character
+from app.security_url import validate_public_http_url
 
 logger = logging.getLogger(__name__)
 
@@ -492,8 +493,11 @@ async def _session_characters(session_id: str, db: AsyncSession) -> list[Charact
 
 
 async def _fetch_url_text(url: str) -> str:
-    async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
-        response = await client.get(url)
+    safe_url = await validate_public_http_url(url)
+    async with httpx.AsyncClient(timeout=5.0, follow_redirects=False) as client:
+        response = await client.get(safe_url)
+        if response.is_redirect or 300 <= response.status_code < 400:
+            raise ValueError("URL redirects are not allowed.")
         response.raise_for_status()
         raw = response.content[:URL_MAX_BYTES]
     text = raw.decode(response.encoding or "utf-8", errors="replace")
