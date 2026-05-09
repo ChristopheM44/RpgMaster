@@ -108,7 +108,12 @@ export function useWebSocket(sessionId: string) {
     }
 
     socket.onclose = (event) => {
-      console.warn('[WS] closed — code:', event.code, 'reason:', event.reason || '(none)')
+      console.warn(
+        '[WS] closed — code:',
+        event?.code ?? '(unknown)',
+        'reason:',
+        event?.reason || '(none)',
+      )
       cleanup()
       gameStore.setConnected(false)
       gameStore.clearProcessingState()
@@ -257,7 +262,7 @@ export function useWebSocket(sessionId: string) {
 
   function sendPing() {
     if (ws.value?.readyState !== WebSocket.OPEN) return
-    clearPongTimer()
+    if (pongTimer) return
     send({ type: 'ping' })
     pongTimer = setTimeout(() => {
       if (ws.value?.readyState === WebSocket.OPEN) {

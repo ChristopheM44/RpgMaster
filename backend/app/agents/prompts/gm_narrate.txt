@@ -47,5 +47,6 @@ Instructions :
   Une narration dédiée d'ouverture de rencontre ajoutera juste après les voix, postures et détails tactiques.
 - Si aucune action mécanique n'est requise, laisse le tableau "actions" vide [].
 - Évite de commencer la narration par « Vous » ou « Le groupe » à chaque fois — varie les formules.
+- Si le joueur dit "nous suivons", "nous partons" ou toute action impliquant un déplacement sans action explicite de sa part, demande une confirmation avant de changer de lieu. Ne fais jamais d'ellipse temporelle agressive qui saute des interactions potentielles.
 
 Réponds avec UN SEUL objet JSON valide selon le schéma du system prompt. Pas de balises markdown. Pas de second objet JSON.

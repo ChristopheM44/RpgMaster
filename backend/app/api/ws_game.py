@@ -1994,6 +1994,9 @@ async def _dispatch_action(
     if active.phase != SessionStatus.COMBAT:
         from app.services.narrative_flow_service import NarrativeFlowService
 
+        active.turn_number += 1
+        active.mark_dirty()
+
         await NarrativeFlowService().handle_exploration_action(
             session_id=session_id,
             action=action,
@@ -2010,15 +2013,7 @@ async def _dispatch_action(
         ):
             return
 
-        active.turn_number += 1
-        active.mark_dirty()
         await session_manager.save_state(session_id, db)
-        await event_bus.publish_to_session(
-            session_id,
-            EventType.TURN_END,
-            {"turn_number": active.turn_number},
-            source="ws_game",
-        )
         return
 
     await action_resolver.resolve(

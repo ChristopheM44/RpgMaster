@@ -82,6 +82,7 @@ class EventType(str):
     QUEST_UPDATED = "quest_updated"
     CHRONICLE_UPDATED = "chronicle_updated"
     SCENE_LAYOUT_CHANGED = "scene_layout_changed"
+    SOCIAL_OUTCOME = "social_outcome"
 
     # Errors
     ERROR = "error"

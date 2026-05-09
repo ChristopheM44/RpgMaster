@@ -58,6 +58,45 @@ _SOCIAL_MARKERS = (
     "vous me couvrez",
     "couvrez moi",
 )
+_SOCIAL_SKILL_MARKERS = (
+    "persuad",
+    "convainc",
+    "supplier",
+    "plaider",
+    "enjoindre",
+    "intimid",
+    "menac",
+    "terrifier",
+    "brandir",
+    "perspicac",
+    "detecter le mensonge",
+    "sonder",
+    "lire",
+    "deviner",
+    "tromp",
+    "mentir",
+    "feindre",
+    "bluffer",
+    "parlement",
+    "negoc",
+    "charmer",
+    "seduire",
+    "soudoyer",
+    "reconcilier",
+    "demander",
+    "supplier",
+    "implorer",
+    "flatter",
+    "menacer",
+    "intimider",
+    "persuader",
+    "convaincre",
+    "tromper",
+    "bluffer",
+    "négocier",
+    "parlementer",
+    "séduire",
+)
 _WORLD_MARKERS = (
     "j examine",
     "j inspecte",
@@ -174,6 +213,15 @@ class NarrativeFlowService:
                 slot_level=getattr(action, "slot_level", None),
                 persist_actor_action=detection.audience != "mixed",
             )
+            if hasattr(action_resolver, "resolve_npc_dialogue"):
+                await action_resolver.resolve_npc_dialogue(
+                    session_id=session_id,
+                    content=text,
+                    character_id=getattr(action, "character_id", None),
+                    target_id=getattr(action, "target_id", None),
+                    active=active,
+                    db=db,
+                )
             exchange.gm_arbitrated = True
             return exchange
 
@@ -229,11 +277,16 @@ class NarrativeFlowService:
         has_world = action_type in _DIRECT_ACTION_TYPES or any(
             m in normalized for m in _WORLD_MARKERS
         )
+        has_social_skill = any(m in normalized for m in _SOCIAL_SKILL_MARKERS)
 
         if mentioned_id and has_world:
             return AudienceDetection("mixed", [mentioned_id], mentioned_id, "mention+world")
         if mentioned_id:
             return AudienceDetection("companion", [mentioned_id], mentioned_id, "mention")
+        if has_social_skill and companions:
+            return AudienceDetection("mixed", list(companions), None, "social_skill")
+        if has_social_skill:
+            return AudienceDetection("world", [], None, "social_skill")
         if has_social and has_world:
             return AudienceDetection("mixed", list(companions), None, "party+world")
         if has_social:

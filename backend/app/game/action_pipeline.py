@@ -13,6 +13,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field
 
 from app.agents.schemas import AgentContext, AgentResponse, GMAction, GMResponse
+from app.engine.ability_checks import SKILL_ABILITY, Proficiency, skill_check
 from app.game.action_orchestrator import ActionOrchestrator
 from app.game.combat_triggers import prime_combat_from_hostile_narration
 from app.game.constants import INACTIVE_STATUSES
@@ -32,8 +33,8 @@ from app.services.spellcasting_service import SpellcastingService, SpellcastingS
 logger = logging.getLogger(__name__)
 
 _FALLBACK_NARRATION = (
-    "Le Maître du Jeu observe la situation... "
-    "(Le système de narration est temporairement indisponible.)"
+    "Le Maître du Jeu hésite… (Le LLM n'a pas répondu correctement — "
+    "veuillez répéter votre action ou rafraîchir la page.)"
 )
 
 _SOCIAL_COMBAT_MARKERS = (
@@ -64,6 +65,115 @@ def _normalized_text(text: Optional[str]) -> str:
 def _is_combat_social_text(text: Optional[str]) -> bool:
     normalized = _normalized_text(text)
     return any(marker in normalized for marker in _SOCIAL_COMBAT_MARKERS)
+
+
+_SOCIAL_EXPLORATION_MARKERS: dict[str, str] = {
+    "persuad": "persuasion",
+    "convainc": "persuasion",
+    "enjoindre": "persuasion",
+    "supplier": "persuasion",
+    "plaider": "persuasion",
+    "intimid": "intimidation",
+    "menac": "intimidation",
+    "terrifier": "intimidation",
+    "brandir": "intimidation",
+    "perspicac": "insight",
+    "detecter le mensonge": "insight",
+    "sonder": "insight",
+    "lire": "insight",
+    "deviner": "insight",
+    "tromp": "deception",
+    "mentir": "deception",
+    "feindre": "deception",
+    "bluffer": "deception",
+    "parlement": "persuasion",
+    "negoc": "persuasion",
+    "négoc": "persuasion",
+    "charmer": "persuasion",
+    "seduire": "persuasion",
+    "séduire": "persuasion",
+    "soudoyer": "persuasion",
+    "reconcilier": "persuasion",
+}
+
+
+def _is_social_exploration_text(text: Optional[str]) -> bool:
+    normalized = _normalized_text(text)
+    return any(marker in normalized for marker in _SOCIAL_EXPLORATION_MARKERS)
+
+
+def _detect_social_skill(text: Optional[str]) -> Optional[str]:
+    normalized = _normalized_text(text)
+    for marker, skill in _SOCIAL_EXPLORATION_MARKERS.items():
+        if marker in normalized:
+            return skill
+    return None
+
+
+def _detect_social_target_id(text: Optional[str], state_data: dict[str, Any]) -> Optional[str]:
+    """Extrai l'identifiant d'un PNJ cible depuis le texte du joueur."""
+    if not text:
+        return None
+    normalized = _normalized_text(text)
+    npc_states = state_data.get("npc_states", {})
+    scene = state_data.get("current_scene", {})
+    pois = scene.get("pois", []) if isinstance(scene, dict) else []
+
+    # Recherche par nom exact dans npc_states
+    for npc_id, npc in npc_states.items():
+        if not isinstance(npc, dict):
+            continue
+        name = str(npc.get("name", "")).casefold()
+        if name and name in normalized:
+            return npc_id
+
+    # Recherche dans les POIs de la scene
+    for poi in pois:
+        if not isinstance(poi, dict):
+            continue
+        name = str(poi.get("name", "")).casefold()
+        if name and name in normalized:
+            return str(poi.get("id", name))
+
+    return None
+
+
+def _calculate_social_dc(
+    state_data: dict[str, Any],
+    social_target_id: Optional[str],
+    skill: Optional[str],
+) -> int:
+    base = 15
+    if social_target_id:
+        npc_states = state_data.get("npc_states", {})
+        npc = npc_states.get(social_target_id, {})
+        attitude = str(npc.get("attitude", "")).lower()
+        attitude_dcs = {
+            "hostile": 20,
+            "unfriendly": 18,
+            "indifferent": 15,
+            "friendly": 12,
+            "helpful": 10,
+        }
+        base = attitude_dcs.get(attitude, 15)
+
+    if skill == "insight":
+        base = max(10, base - 2)
+    elif skill == "deception":
+        base = min(30, base + 2)
+
+    campaign_context = state_data.get("campaign_context", {})
+    chapter = campaign_context.get("active_chapter", {})
+    for dc_entry in chapter.get("indicative_dcs", []):
+        if str(dc_entry.get("ability", "")).lower() in {
+            "cha",
+            "wis",
+            str(skill)[:3],
+        }:
+            base = int(dc_entry.get("dc", base))
+            break
+
+    return max(5, min(base, 30))
 
 
 class ActionRequest(BaseModel):
@@ -261,6 +371,8 @@ class ActionPipeline:
                                 )
             else:
                 roll_results = mechanics._resolve_generic_roll(request.content)
+        elif request.action_type == "free_text" and _is_social_exploration_text(request.content):
+            roll_results = self._resolve_social_check(request, active)
 
         # 2. Persistance visible puis contexte GM avec resume mecanique.
         if request.persist_actor_action:
@@ -328,6 +440,7 @@ class ActionPipeline:
                 gm_response,
                 request,
                 target_id,
+                active.state_data,
             )
 
         if gm_response:
@@ -647,6 +760,7 @@ class ActionPipeline:
         response: AgentResponse,
         request: ActionRequest,
         social_target_id: Optional[str],
+        state_data: dict[str, Any],
     ) -> AgentResponse:
         if (
             request.actor_kind != "player"
@@ -662,6 +776,7 @@ class ActionPipeline:
         ):
             return response
 
+        dc = _calculate_social_dc(state_data, social_target_id, None)
         actions = [
             *response.actions,
             GMAction(
@@ -670,7 +785,7 @@ class ActionPipeline:
                 params={
                     "ability": "cha",
                     "type": "check",
-                    "dc": 12,
+                    "dc": dc,
                     "reason": "social_combat",
                     "social_target": social_target_id,
                 },
@@ -681,6 +796,62 @@ class ActionPipeline:
             actions=actions,
             action_intent=response.action_intent or "mixed",
         )
+
+    @staticmethod
+    def _resolve_social_check(
+        request: ActionRequest,
+        active: ActiveSession,
+    ) -> Optional[dict[str, Any]]:
+        """Resout un jet de competence social en exploration via le moteur.
+
+        Retourne un dict roll_results injecte dans le contexte GM pour narration.
+        Le LLM ne resout jamais le jet ; il recoit le resultat deterministe.
+        """
+        if not request.actor_id or not request.content:
+            return None
+
+        skill = _detect_social_skill(request.content)
+        if not skill:
+            return None
+
+        social_target_id = _detect_social_target_id(request.content, active.state_data)
+        dc = _calculate_social_dc(active.state_data, social_target_id, skill)
+
+        characters = active.state_data.get("characters", {})
+        char_data = characters.get(request.actor_id, {}) if isinstance(characters, dict) else {}
+        if not isinstance(char_data, dict):
+            return None
+
+        ab_key = str(SKILL_ABILITY.get(skill, "cha"))[:3]
+        score = int(char_data.get("ability_scores", {}).get(ab_key, 10))
+        level = int(char_data.get("level", 1))
+        skill_profs = set(char_data.get("skill_proficiencies", []))
+        prof = Proficiency.PROFICIENT if skill in skill_profs else Proficiency.NONE
+
+        result = skill_check(score, skill, level, prof, dc)
+        roll_results: dict[str, Any] = {
+            "type": "skill_check",
+            "skill": skill,
+            "d20": result.d20_roll,
+            "modifier": result.modifier,
+            "total": result.total,
+            "dc": result.dc,
+            "success": result.success,
+            "breakdown": result.breakdown,
+            "target_id": social_target_id,
+            "actor_id": request.actor_id,
+        }
+
+        if social_target_id:
+            npc_states = active.state_data.setdefault("npc_states", {})
+            npc = npc_states.setdefault(social_target_id, {})
+            if isinstance(npc, dict):
+                npc.setdefault("name", social_target_id)
+                npc.setdefault("attitude", "indifferent")
+                npc["last_interaction_turn"] = (
+                    active.state_data.get("turn_number", 0)
+                )
+        return roll_results
 
     @staticmethod
     def _without_combat_damage_actions(response: AgentResponse) -> AgentResponse:

@@ -24,6 +24,7 @@ CANON_DIRTY_ACTIONS = {
     "quest_add",
     "chronicle_add",
     "state_transition",
+    "social_outcome",
 }
 
 SCENE_POI_INTERACTION_INTENTS = {
@@ -142,7 +143,7 @@ class GMResponseExecutor:
         elif action_type == "scene_layout":
             await self._apply_scene_layout(session_id, params, active)
         elif action_type == "social_outcome":
-            logger.debug("social_outcome recu sans handler mecanique : %s", params)
+            await self._apply_social_outcome(session_id, params, active)
         else:
             logger.warning("GMResponseExecutor : type d'action GM inconnu '%s'.", action_type)
 
@@ -424,6 +425,49 @@ class GMResponseExecutor:
             {"scene": layout},
             source=self._source,
         )
+
+    async def _apply_social_outcome(
+        self,
+        session_id: str,
+        params: dict[str, Any],
+        active: ActiveSession,
+    ) -> None:
+        npc_id = str(params.get("npc_id") or params.get("target") or "").strip()
+        attitude_shift = str(params.get("attitude_shift") or "").strip().lower()
+        note = str(params.get("note") or "").strip()
+        new_quest = params.get("new_quest")
+
+        if not npc_id:
+            logger.warning("social_outcome ignore : npc_id manquant - params=%s", params)
+            return
+
+        npc_states = active.state_data.setdefault("npc_states", {})
+        npc = npc_states.setdefault(npc_id, {})
+        if isinstance(npc, dict):
+            old_attitude = npc.get("attitude", "indifferent")
+            if attitude_shift:
+                npc["attitude"] = attitude_shift
+            if note:
+                notes = list(npc.get("notes", []))
+                notes.append(note)
+                npc["notes"] = notes
+            npc["last_interaction_turn"] = active.state_data.get("turn_number", 0)
+            active.mark_dirty()
+
+            payload: dict[str, Any] = {
+                "npc_id": npc_id,
+                "attitude": npc.get("attitude", old_attitude),
+                "note": note,
+            }
+            if isinstance(new_quest, dict):
+                payload["new_quest"] = new_quest
+
+            await self._event_bus.publish_to_session(
+                session_id,
+                EventType.SOCIAL_OUTCOME,
+                payload,
+                source=self._source,
+            )
 
     @classmethod
     def _normalize_scene_layout(cls, params: dict[str, Any]) -> dict[str, Any]:

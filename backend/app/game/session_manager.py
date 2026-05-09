@@ -129,6 +129,7 @@ class SessionManager:
         game_state = await self._load_or_create_game_state(session_id, db)
 
         state_data = migrate_state_data(dict(game_state.state_data or {}))
+        state_data.setdefault("npc_states", {})
 
         active = ActiveSession(
             session_id=session_id,

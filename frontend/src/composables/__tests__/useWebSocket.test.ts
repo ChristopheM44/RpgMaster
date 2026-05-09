@@ -205,7 +205,7 @@ describe('useWebSocket', () => {
     socket.connect('hero-1')
     WebSocketMock.instances[0]!.open()
 
-    vi.advanceTimersByTime(10_000)
+    vi.advanceTimersByTime(90_000)
 
     expect(socket.reconnectCount.value).toBe(1)
     vi.advanceTimersByTime(1_000)

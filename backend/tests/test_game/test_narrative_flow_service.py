@@ -192,6 +192,7 @@ async def test_mixed_scene_gets_companions_then_world_arbitration() -> None:
     resolver = MagicMock()
     resolver.resolve = AsyncMock()
     resolver.social_conclude = AsyncMock()
+    resolver.resolve_npc_dialogue = AsyncMock()
 
     with patch("app.services.narrative_flow_service.event_bus.publish_to_session", new=AsyncMock()):
         exchange = await NarrativeFlowService().handle_exploration_action(
@@ -204,5 +205,6 @@ async def test_mixed_scene_gets_companions_then_world_arbitration() -> None:
 
     resolver.social_conclude.assert_not_called()
     resolver.resolve.assert_awaited_once()
+    resolver.resolve_npc_dialogue.assert_awaited_once()
     assert resolver.resolve.await_args.kwargs["persist_actor_action"] is False
     assert exchange.gm_arbitrated is True

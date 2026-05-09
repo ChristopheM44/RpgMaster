@@ -250,7 +250,7 @@ class GMAgent(BaseAgent):
 
         try:
             record_llm_call("gm")
-            raw = await self._client.chat(messages=messages, temperature=0.75, max_tokens=2048)
+            raw = await self._client.chat(messages=messages, temperature=0.75, max_tokens=4096)
         except (OllamaError, OpenAICompatibleError) as exc:
             logger.error("GMAgent : appel LLM échoué : %s", exc)
             return GMResponse(narration=_FALLBACK_NARRATION)
@@ -260,12 +260,42 @@ class GMAgent(BaseAgent):
             logger.warning(
                 "GMAgent : le LLM n'a pas retourné du JSON valide — extraction partielle"
             )
-            # Tentative d'extraction du champ narration depuis un JSON tronqué
-            match = re.search(r'"narration"\s*:\s*"((?:[^"\\]|\\.)*)', raw)
-            narration_text = match.group(1) if match else raw.strip()
+            narration_text = self._extract_narration_from_broken_json(raw)
             return GMResponse(narration=narration_text)
 
         return self._parse_gm_response(data, raw)
+
+    @staticmethod
+    def _extract_narration_from_broken_json(raw: str) -> str:
+        """Extrait le texte de narration d'un JSON tronqué ou cassé."""
+        # 1. Regex robuste : capture tout jusqu'au prochain champ JSON ou fin de string
+        #    supporte les guillemets échappés et les caractères Unicode.
+        match = re.search(
+            r'"narration"\s*:\s*"((?:[^"\\]|\\.|")*)"?\s*(?:,|\}|$)',
+            raw,
+            re.DOTALL,
+        )
+        text = match.group(1) if match else raw.strip()
+        # Nettoie les échappements JSON basiques
+        text = text.replace('\\n', '\n').replace('\\"', '"').replace('\\\\', '\\')
+
+        # 2. Si le texte est visiblement tronqué (pas de fin de phrase), couper proprement.
+        text = text.strip()
+        if text and text[-1] not in {'.', '!', '?', '…', '"', '»', '”'}:
+            # Cherche la dernière fin de phrase suivi d'un espace ou fin de chaîne.
+            last_boundary = max(
+                text.rfind('. '),
+                text.rfind('! '),
+                text.rfind('? '),
+                text.rfind('.\n'),
+                text.rfind('!\n'),
+                text.rfind('?\n'),
+            )
+            if last_boundary > len(text) * 0.5:
+                text = text[: last_boundary + 1] + '…'
+            else:
+                text = text + '…'
+        return text or _FALLBACK_NARRATION
 
     def _parse_gm_response(self, data: dict[str, Any], raw: str) -> GMResponse:
         """Convertit le dict JSON parsé en GMResponse Pydantic."""

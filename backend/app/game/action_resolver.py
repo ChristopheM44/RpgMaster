@@ -151,6 +151,95 @@ class ActionResolver:
             return self._gm
         return self._combat_gm
 
+    async def resolve_npc_dialogue(
+        self,
+        session_id: str,
+        content: Optional[str],
+        character_id: Optional[str],
+        target_id: Optional[str],
+        active: ActiveSession,
+        db: Optional[Any] = None,
+    ) -> None:
+        """Genere une replique de PNJ via run_npc_dialogue() et la publie.
+
+        Cette methode est appelee APRES la resolution mecanique (jet de skill)
+        pour incarner la voix du PNJ cible.
+        """
+        npc_id = target_id
+        if not npc_id and content:
+            from app.game.action_pipeline import _detect_social_target_id
+            npc_id = _detect_social_target_id(content, active.state_data)
+        if not npc_id:
+            logger.debug("resolve_npc_dialogue : aucune cible PNJ detectee")
+            return
+
+        npc_states = active.state_data.get("npc_states", {})
+        npc = npc_states.get(npc_id, {}) if isinstance(npc_states, dict) else {}
+        if not isinstance(npc, dict):
+            npc = {}
+
+        npc_name = str(npc.get("name", npc_id))
+        npc_personality = str(npc.get("personality_hint", "indifferent"))
+        recent_messages: list[Any] = []
+        if db is not None:
+            from app.services.message_service import load_recent_messages
+            recent_messages = await load_recent_messages(session_id, db)
+
+        try:
+            gm_resp = await self._gm.run_npc_dialogue(
+                npc_name=npc_name,
+                npc_personality=npc_personality,
+                player_message=content or "",
+                messages=recent_messages,
+            )
+        except Exception as exc:
+            logger.error("resolve_npc_dialogue : echec LLM : %s", exc)
+            return
+
+        dialogue_text = gm_resp.narration or ""
+        if not dialogue_text:
+            return
+
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.DIALOGUE,
+            {
+                "text": dialogue_text,
+                "speaker": npc_name,
+                "speaker_id": npc_id,
+                "speaker_kind": "npc",
+                "entry_kind": "dialogue",
+                "scene_id": str(uuid.uuid4()),
+            },
+            source="action_resolver",
+        )
+
+        if db is not None:
+            from app.models.message import MessageRole, MessageType
+            from app.services.message_service import persist_narration
+            await persist_narration(
+                session_id,
+                dialogue_text,
+                npc_name,
+                db,
+                role=MessageRole.GM,
+                message_type=MessageType.DIALOGUE,
+                metadata={
+                    "speaker_id": npc_id,
+                    "speaker_kind": "npc",
+                    "character_id": character_id,
+                },
+            )
+
+        from app.game.gm_response_executor import execute_gm_response
+        await execute_gm_response(
+            gm_resp,
+            active,
+            db,
+            session_id=session_id,
+            fallback_actor_id=character_id,
+        )
+
     async def _publish_gm_narration(
         self,
         session_id: str,

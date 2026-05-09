@@ -621,6 +621,19 @@ def _fallback_canon(
             merged["rolling_summary"] = _text(event["rolling_summary"], 2000)
     if game_state.get("quests"):
         merged["quests"] = _generic_list(game_state.get("quests"))
+    npc_states = game_state.get("npc_states", {})
+    if isinstance(npc_states, dict):
+        for npc_id, npc in npc_states.items():
+            if not isinstance(npc, dict):
+                continue
+            relation = {
+                "npc_id": npc_id,
+                "name": _text(npc.get("name", npc_id), 120),
+                "attitude": _text(npc.get("attitude", "indifferent"), 20),
+                "context": _text(" ".join(npc.get("notes", [])), 450),
+                "last_seen": _text(npc.get("last_location", ""), 120),
+            }
+            _append_unique(merged["npc_relationships"], relation)
     if not merged["rolling_summary"] and recent_messages:
         last = recent_messages[-1]
         merged["rolling_summary"] = _text(last.get("content") or last.get("text") or "", 500)

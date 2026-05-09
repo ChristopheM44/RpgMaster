@@ -59,7 +59,7 @@ def _assert_gm_thinking_pair(events: list[dict]) -> None:
 
 class TestFreeTextAction:
     def test_free_text_produces_narration_and_turn_end(self, ws_client) -> None:
-        """Action free_text → narration + turn_end, pas de roll_result."""
+        """Action free_text → narration, pas de turn_end hors combat ni roll_result."""
         session_id = _create_session(ws_client)
 
         mock_response = _mock_gm_response("Vous scrutez les ombres avec attention.")
@@ -91,16 +91,15 @@ class TestFreeTextAction:
                         "content": "Je cherche des pièges dans la salle",
                     })
 
-                    raw_events = _collect_all(ws, 4)
+                    raw_events = _collect_all(ws, 3)
                     events = _without_ai_thinking(raw_events)
 
                 _assert_gm_thinking_pair(raw_events)
                 narration = _event(events, "narration")
-                turn_end = _event(events, "turn_end")
                 assert narration["payload"]["speaker"] == "Maître du Jeu"
                 assert "scrutez" in narration["payload"]["text"]
 
-                assert turn_end["payload"]["turn_number"] == 1
+                assert not any(e["event_type"] == "turn_end" for e in events)
 
     def test_free_text_no_roll_result_event(self, ws_client) -> None:
         """Un free_text ne doit pas produire d'événement roll_result."""
@@ -123,14 +122,14 @@ class TestFreeTextAction:
                 "content": "Je regarde autour de moi",
             })
 
-            raw_events = _collect_all(ws, 4)
+            raw_events = _collect_all(ws, 3)
             events = _without_ai_thinking(raw_events)
 
         _assert_gm_thinking_pair(raw_events)
         event_types = set(_event_types(events))
         assert "roll_result" not in event_types
         assert "narration" in event_types
-        assert "turn_end" in event_types
+        assert "turn_end" not in event_types
 
 
 # ---------------------------------------------------------------------------
@@ -139,8 +138,8 @@ class TestFreeTextAction:
 
 
 class TestAttackAction:
-    def test_attack_produces_roll_result_narration_turn_end(self, ws_client) -> None:
-        """Action attack → roll_result + narration + turn_end."""
+    def test_attack_produces_roll_result_narration(self, ws_client) -> None:
+        """Action attack → roll_result + narration, pas turn_end hors combat."""
         session_id = _create_session(ws_client)
         mock_response = _mock_gm_response("Votre épée tranche l'air !")
 
@@ -162,14 +161,14 @@ class TestAttackAction:
                 "target_id": "goblin-1",
             })
 
-            raw_events = _collect_all(ws, 5)
+            raw_events = _collect_all(ws, 4)
             msgs = _without_ai_thinking(raw_events)
 
         _assert_gm_thinking_pair(raw_events)
         event_types = _event_types(msgs)
         assert "roll_result" in event_types
         assert "narration" in event_types
-        assert "turn_end" in event_types
+        assert "turn_end" not in event_types
 
     def test_attack_roll_result_has_expected_fields(self, ws_client) -> None:
         """Le roll_result d'une attaque contient les champs mécaniques nécessaires."""
@@ -192,7 +191,7 @@ class TestAttackAction:
                 "content": "Attaque à la hache",
             })
 
-            raw_events = _collect_all(ws, 5)
+            raw_events = _collect_all(ws, 4)
             msgs = _without_ai_thinking(raw_events)
 
         roll_event = next(m for m in msgs if m["event_type"] == "roll_result")
@@ -228,7 +227,7 @@ class TestAttackAction:
                 "content": "Frappe fatale",
             })
 
-            raw_events = _collect_all(ws, 5)
+            raw_events = _collect_all(ws, 4)
             msgs = _without_ai_thinking(raw_events)
 
         roll_event = next(m for m in msgs if m["event_type"] == "roll_result")
@@ -244,7 +243,7 @@ class TestAttackAction:
 
 class TestCastSpellAction:
     def test_cast_spell_produces_roll_result(self, ws_client) -> None:
-        """cast_spell → roll_result (d20 générique) + narration + turn_end."""
+        """cast_spell → roll_result (d20 générique) + narration, pas turn_end hors combat."""
         session_id = _create_session(ws_client)
         mock_response = _mock_gm_response("Le sort fuse de vos doigts !")
 
@@ -264,7 +263,7 @@ class TestCastSpellAction:
                 "content": "Projectile magique",
             })
 
-            raw_events = _collect_all(ws, 5)
+            raw_events = _collect_all(ws, 3)
             msgs = _without_ai_thinking(raw_events)
 
         _assert_gm_thinking_pair(raw_events)
@@ -314,7 +313,7 @@ class TestGMActions:
                 "content": "Le gobelin encaisse le coup",
             })
 
-            raw_events = _collect_all(ws, 5)
+            raw_events = _collect_all(ws, 4)
             msgs = _without_ai_thinking(raw_events)
 
         _assert_gm_thinking_pair(raw_events)
@@ -353,9 +352,10 @@ class TestTurnProgression:
                     "action_type": "free_text",
                     "content": f"Action {i}",
                 })
-                events = _without_ai_thinking(_collect_all(ws, 4))
-                turn_end = _event(events, "turn_end")
-                assert turn_end["payload"]["turn_number"] == i
+                events = _without_ai_thinking(_collect_all(ws, 3))
+                active = ws_game.session_manager.get_session(session_id)
+                assert active is not None
+                assert active.turn_number == i
 
     def test_gm_called_once_per_action(self, ws_client) -> None:
         """Le GMAgent est appelé exactement une fois par action joueur."""
@@ -374,7 +374,7 @@ class TestTurnProgression:
 
             for _ in range(3):
                 ws.send_json({"type": "action", "action_type": "free_text", "content": "Agir"})
-                _collect_all(ws, 4)
+                _collect_all(ws, 3)
 
         assert mock_gm.think.call_count == 3
 
@@ -401,16 +401,15 @@ class TestResilienceGMFailure:
 
             ws.send_json({"type": "action", "action_type": "free_text", "content": "Agir"})
 
-            raw_events = _collect_all(ws, 4)
+            raw_events = _collect_all(ws, 3)
             events = _without_ai_thinking(raw_events)
 
         _assert_gm_thinking_pair(raw_events)
         narration = _event(events, "narration")
-        turn_end = _event(events, "turn_end")
         assert narration["event_type"] == "narration"
         # Le fallback ne doit pas être vide
         assert len(narration["payload"]["text"]) > 0
-        assert turn_end["event_type"] == "turn_end"
+        assert not any(e["event_type"] == "turn_end" for e in events)
 
 
 # ---------------------------------------------------------------------------
@@ -628,12 +627,7 @@ class TestAutoCombatTrigger:
     def test_state_transition_without_encounter_does_not_start_combat(
         self, ws_client
     ) -> None:
-        """Sans encounter_setup, state_transition COMBAT est ignoré : phase inchangée.
-
-        Séquence attendue :
-          1. narration
-          2. turn_end          (fallback exploration, comme un free_text standard)
-        """
+        """Sans encounter_setup, state_transition COMBAT est ignoré : phase inchangée."""
         session_id = _create_session(ws_client)
 
         mock_response = AgentResponse(
@@ -658,14 +652,14 @@ class TestAutoCombatTrigger:
                 "content": "Je scrute.",
             })
 
-            raw_events = _collect_all(ws, 4)
+            raw_events = _collect_all(ws, 3)
             events = _without_ai_thinking(raw_events)
 
         _assert_gm_thinking_pair(raw_events)
         event_types = _event_types(events)
         assert "combat_start" not in event_types
         assert "narration" in event_types
-        assert "turn_end" in event_types
+        assert "turn_end" not in event_types
 
         active = ws_game.session_manager.get_session(session_id)
         assert active is not None

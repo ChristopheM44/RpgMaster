@@ -48,6 +48,11 @@ def _receive_until(ws, expected_type: str, max_messages: int = 8) -> dict:
     raise AssertionError(f"Événement '{expected_type}' non reçu dans les {max_messages} messages.")
 
 
+def _collect_all(ws, count: int) -> list:
+    """Reçoit *count* messages JSON depuis le WebSocket."""
+    return [ws.receive_json() for _ in range(count)]
+
+
 # ---------------------------------------------------------------------------
 # Connection + initial state
 # ---------------------------------------------------------------------------
@@ -195,9 +200,8 @@ class TestPlayerAction:
             assert narration["event_type"] == "narration"
             # Le GMAgent génère la narration (ou fallback si Ollama indisponible)
             assert len(narration["payload"]["text"]) > 0
-            _receive_until(ws, "turn_end")
 
-    def test_action_produces_turn_end_event(self, ws_client) -> None:
+    def test_action_does_not_produce_turn_end_in_exploration(self, ws_client) -> None:
         session_id = _create_session(ws_client)
         with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
             ws.receive_json()  # session_state
@@ -206,25 +210,26 @@ class TestPlayerAction:
                 "action_type": "free_text",
                 "content": "Je passe prudemment au tour suivant.",
             })
-            msg1 = _receive_until(ws, "narration")
-            msg2 = _receive_until(ws, "turn_end")
-            assert msg1["event_type"] not in ("error",)
-            assert msg2["event_type"] == "turn_end"
-            assert "turn_number" in msg2["payload"]
+            events = _collect_all(ws, 3)
+            types = [e["event_type"] for e in events]
+            assert "narration" in types
+            assert "turn_end" not in types
 
     def test_action_increments_turn_number(self, ws_client) -> None:
         session_id = _create_session(ws_client)
+        from app.api import ws_game
         with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
             ws.receive_json()  # session_state
-            for _ in range(3):
+            for i in range(1, 4):
                 ws.send_json({
                     "type": "action",
                     "action_type": "free_text",
                     "content": "Je continue d'explorer.",
                 })
                 _receive_until(ws, "narration")
-                turn_end = _receive_until(ws, "turn_end")
-            assert turn_end["payload"]["turn_number"] == 3
+            active = ws_game.session_manager.get_session(session_id)
+            assert active is not None
+            assert active.turn_number == 3
 
     def test_reset_combat_exits_combat_phase(self, ws_client) -> None:
         from app.api import ws_game
