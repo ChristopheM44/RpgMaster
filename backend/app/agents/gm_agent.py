@@ -285,6 +285,8 @@ class GMAgent(BaseAgent):
         self,
         game_state: dict[str, Any],
         combat_summary: dict[str, Any],
+        suggested_loot: Optional[dict[str, Any]] = None,
+        suggested_xp: Optional[dict[str, Any]] = None,
         messages: Optional[list] = None,
         context_manager: Optional[ContextManager] = None,
     ) -> GMResponse:
@@ -300,6 +302,16 @@ class GMAgent(BaseAgent):
                 ),
                 "previous_scene": json.dumps(
                     combat_summary.get("previous_scene") or {},
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                "suggested_loot": json.dumps(
+                    suggested_loot or {},
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                "suggested_xp": json.dumps(
+                    suggested_xp or {},
                     ensure_ascii=False,
                     indent=2,
                 ),

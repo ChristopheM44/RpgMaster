@@ -315,7 +315,7 @@ class ClassFeatures:
     num_skill_choices: int                  # how many to pick
     level_1_features: List[str]             # feature names at level 1
     spellcasting_ability: Optional[str]     # None for non-casters
-    caster_type: Optional[str]              # "full", "half", "third", or None
+    caster_type: Optional[str]              # "full", "half", "third", "warlock", or None
 
 
 _CLASS_DATA: Dict[str, ClassFeatures] = {
@@ -490,7 +490,7 @@ _CLASS_DATA: Dict[str, ClassFeatures] = {
         num_skill_choices=2,
         level_1_features=["Otherworldly Patron", "Pact Magic"],
         spellcasting_ability="charisma",
-        caster_type="half",
+        caster_type="warlock",
     ),
 }
 

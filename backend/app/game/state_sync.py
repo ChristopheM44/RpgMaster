@@ -11,6 +11,15 @@ def sync_character_state(
     character_id: str,
     *,
     hp: Optional[int] = None,
+    hp_max: Optional[int] = None,
+    level: Optional[int] = None,
+    xp: Optional[int] = None,
+    gp: Optional[int] = None,
+    sp: Optional[int] = None,
+    cp: Optional[int] = None,
+    xp_to_next_level: Optional[int] = None,
+    ability_scores: Optional[dict[str, int]] = None,
+    pending_asi: Optional[bool] = None,
     equipment: Optional[list[dict[str, Any]]] = None,
     spell_slots: Optional[dict[str, Any]] = None,
     hit_dice: Optional[dict[str, Any]] = None,
@@ -25,6 +34,15 @@ def sync_character_state(
     cdata = characters.get(character_id)
     if cdata is not None:
         changed = _set_if_provided(cdata, "hp", hp) or changed
+        changed = _set_if_provided(cdata, "hp_max", hp_max) or changed
+        changed = _set_if_provided(cdata, "level", level) or changed
+        changed = _set_if_provided(cdata, "xp", xp) or changed
+        changed = _set_if_provided(cdata, "gp", gp) or changed
+        changed = _set_if_provided(cdata, "sp", sp) or changed
+        changed = _set_if_provided(cdata, "cp", cp) or changed
+        changed = _set_if_provided(cdata, "xp_to_next_level", xp_to_next_level) or changed
+        changed = _set_if_provided(cdata, "ability_scores", ability_scores) or changed
+        changed = _set_if_provided(cdata, "pending_asi", pending_asi) or changed
         changed = _set_if_provided(cdata, "equipment", equipment) or changed
         changed = _set_if_provided(cdata, "spell_slots", spell_slots) or changed
         changed = _set_if_provided(cdata, "hit_dice", hit_dice) or changed
@@ -34,6 +52,8 @@ def sync_character_state(
     combatant = combatants.get(character_id)
     if combatant is not None:
         changed = _set_if_provided(combatant, "hp", hp) or changed
+        changed = _set_if_provided(combatant, "hp_max", hp_max) or changed
+        changed = _set_if_provided(combatant, "level", level) or changed
         changed = _set_if_provided(combatant, "conditions", conditions) or changed
 
     if changed:

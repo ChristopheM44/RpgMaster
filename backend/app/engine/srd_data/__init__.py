@@ -67,6 +67,25 @@ def get_equipment() -> Dict[str, Any]:
     return _load("equipment.json")
 
 
+@lru_cache(maxsize=None)
+def get_equipment_flat() -> List[Dict[str, Any]]:
+    """Return all equipment entries across weapons, armor, gear, consumables, and kits."""
+    data = get_equipment()
+    items: list[dict[str, Any]] = []
+    for section in ("weapons", "armor"):
+        grouped = data.get(section, {})
+        if isinstance(grouped, dict):
+            for group in grouped.values():
+                items.extend(group)
+        elif isinstance(grouped, list):
+            items.extend(grouped)
+    for section in ("adventuring_gear", "consumables", "adventurer_kits"):
+        section_items = data.get(section, [])
+        if isinstance(section_items, list):
+            items.extend(section_items)
+    return items
+
+
 def find_class(class_id: str) -> Dict[str, Any]:
     """Return a class by id (case-insensitive). Raises KeyError if not found."""
     key = class_id.lower()
@@ -123,6 +142,15 @@ def find_armor(armor_id: str) -> Dict[str, Any]:
             if a["id"] == key:
                 return a
     raise KeyError(f"Armor '{armor_id}' not found in SRD data")
+
+
+def find_equipment(item_id: str) -> Dict[str, Any]:
+    """Return any equipment entry by id. Raises KeyError if not found."""
+    key = item_id.lower()
+    for item in get_equipment_flat():
+        if str(item.get("id", "")).lower() == key:
+            return item
+    raise KeyError(f"Equipment '{item_id}' not found in SRD data")
 
 
 def spells_by_level(level: int) -> List[Dict[str, Any]]:

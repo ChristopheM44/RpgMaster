@@ -2,6 +2,9 @@
 import { computed } from 'vue'
 import { useCharacterStore } from '../../stores/character'
 import { useGameStore } from '../../stores/game'
+import CurrencyDisplay from './CurrencyDisplay.vue'
+import InventoryPanel from './InventoryPanel.vue'
+import XpBar from './XpBar.vue'
 
 const emit = defineEmits<{
   startCombat: []
@@ -143,6 +146,11 @@ const isMyTurn = computed(() =>
             }"
           />
         </div>
+
+        <div class="relative mt-3 space-y-3">
+          <XpBar :character="ch" />
+          <CurrencyDisplay :character="ch" />
+        </div>
       </div>
 
       <!-- Ability scores -->
@@ -229,6 +237,12 @@ const isMyTurn = computed(() =>
             {{ (equippedWeapon.detail as string) || (equippedWeapon.category as string) || '—' }}
           </div>
         </div>
+      </div>
+
+      <div class="rpg-border shrink-0 mx-5 border-t" />
+
+      <div class="shrink-0 px-5 py-4">
+        <InventoryPanel :character="ch" />
       </div>
 
       <!-- Conditions -->

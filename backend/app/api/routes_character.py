@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
-from app.engine.spells import FULL_CASTER_SLOTS, HALF_CASTER_SLOTS
+from app.engine.spells import FULL_CASTER_SLOTS, HALF_CASTER_SLOTS, WARLOCK_PACT_SLOTS
 from app.game.constants import ARMOR_CATEGORIES
 from app.models.character import Character
 from app.schemas.character import (
@@ -67,6 +67,9 @@ def _get_equipment_lookup() -> dict[str, Any]:
             lookup[item["id"]] = item
     for kit in data.get("adventurer_kits", []):
         lookup[kit["id"]] = kit
+    for section in ("adventuring_gear", "consumables"):
+        for item in data.get(section, []):
+            lookup[item["id"]] = item
     _EQUIPMENT_LOOKUP = lookup
     return _EQUIPMENT_LOOKUP
 
@@ -81,7 +84,8 @@ def _resolve_equipment(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
     for raw in items:
         item_id: str = str(raw.get("id", ""))
-        srd = lookup.get(item_id, {})
+        template_id: str = str(raw.get("template_id") or item_id)
+        srd = lookup.get(template_id, {})
 
         enriched = dict(raw)
 
@@ -89,14 +93,28 @@ def _resolve_equipment(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not enriched.get("name_fr"):
             enriched["name_fr"] = (
                 srd.get("name_fr")
-                or _SPECIAL_ITEM_NAMES.get(item_id)
-                or item_id.replace("_", " ").title()
+                or _SPECIAL_ITEM_NAMES.get(template_id)
+                or template_id.replace("_", " ").title()
             )
 
         # Copier les champs SRD si présents (category, base_ac, dex_cap…)
-        for field in ("category", "base_ac", "dex_cap", "damage_dice", "damage_type", "properties"):
+        enriched.setdefault("template_id", template_id)
+        if "weight_lb" not in enriched and ("weight_lb" in srd or "weight" in srd):
+            enriched["weight_lb"] = srd.get("weight_lb", srd.get("weight", 0.0))
+        for field in (
+            "category",
+            "item_type",
+            "base_ac",
+            "dex_cap",
+            "damage_dice",
+            "damage_type",
+            "properties",
+            "effect",
+            "cost_gp",
+        ):
             if field not in enriched and field in srd:
                 enriched[field] = srd[field]
+        enriched.setdefault("item_type", _infer_item_type(enriched))
 
         # Auto-équiper la première armure et le premier bouclier
         category = enriched.get("category", "")
@@ -113,6 +131,19 @@ def _resolve_equipment(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return resolved
 
 
+def _infer_item_type(item: dict[str, Any]) -> str:
+    category = str(item.get("category") or "").lower()
+    if category == "shield":
+        return "shield"
+    if category in ARMOR_CATEGORIES:
+        return "armor"
+    if "damage_dice" in item:
+        return "weapon"
+    if item.get("effect") or "potion" in str(item.get("id") or "").lower():
+        return "consumable"
+    return "gear"
+
+
 _FULL_CASTERS = {"wizard", "cleric", "druid", "bard", "sorcerer"}
 _HALF_CASTERS = {"paladin", "ranger"}
 
@@ -125,8 +156,7 @@ def _init_spell_slots(char_class: str, level: int) -> dict[str, dict[str, int]]:
     elif cls in _HALF_CASTERS:
         slot_table = HALF_CASTER_SLOTS.get(level, {})
     elif cls == "warlock":
-        # Pact Magic : 1 emplacement niveau 1 au niveau 1
-        slot_table = {1: 1}
+        slot_table = WARLOCK_PACT_SLOTS.get(level, {})
     else:
         return {}
     return {str(slot_lvl): {"total": count, "used": 0} for slot_lvl, count in slot_table.items()}
@@ -150,6 +180,11 @@ async def _normalize_hit_dice_for_response(
         before = dict(char.hit_dice or {})
         normalize_character_hit_dice(char)
         changed = changed or before != dict(char.hit_dice or {})
+        before_equipment = list(char.equipment or [])
+        normalized_equipment = _resolve_equipment(before_equipment)
+        if normalized_equipment != before_equipment:
+            char.equipment = normalized_equipment
+            changed = True
     if changed:
         await db.commit()
 

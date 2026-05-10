@@ -8,6 +8,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engine.dice import RollResult, roll
+from app.engine.inventory import (
+    ATTUNEMENT_LIMIT,
+    count_attuned,
+    encumbrance_level,
+    equipped_slots_for_item,
+    slots_for_item,
+    total_weight,
+)
 from app.game.constants import ARMOR_CATEGORIES
 from app.game.session_manager import ActiveSession
 from app.game.state_sync import sync_character_state
@@ -38,6 +46,7 @@ class EquipmentActionResult:
     hp_delta: int = 0
     hp: Optional[int] = None
     heal_roll: Optional[RollResult] = None
+    slot: Optional[str] = None
 
 
 class EquipmentService:
@@ -51,32 +60,94 @@ class EquipmentService:
         db: AsyncSession,
         active: Optional[ActiveSession] = None,
     ) -> EquipmentActionResult:
+        """Backward-compatible toggle used by existing clients."""
+        char = await self._load_character(character_id, db)
+        equipment = list(char.equipment or [])
+        idx, item = self._find_item(equipment, item_id)
+        if item.get("equipped"):
+            return await self.unequip_item(
+                character_id=character_id,
+                item_id=item_id,
+                db=db,
+                active=active,
+            )
+        return await self._equip_loaded_item(char, equipment, idx, item, db, active)
+
+    async def unequip_item(
+        self,
+        *,
+        character_id: str,
+        item_id: str,
+        db: AsyncSession,
+        active: Optional[ActiveSession] = None,
+    ) -> EquipmentActionResult:
         char = await self._load_character(character_id, db)
         equipment = list(char.equipment or [])
         idx, item = self._find_item(equipment, item_id)
         item_name = self._item_name(item, item_id)
-        new_equipped = not bool(item.get("equipped", False))
-
-        if new_equipped and item.get("category", "") in ARMOR_CATEGORIES:
-            for i, eq in enumerate(equipment):
-                if i != idx and eq.get("category", "") in ARMOR_CATEGORIES:
-                    equipment[i] = {**eq, "equipped": False}
-
-        equipment[idx] = {**item, "equipped": new_equipped}
+        equipment[idx] = {
+            **item,
+            "equipped": False,
+            "occupied_slots": [],
+        }
         char.equipment = equipment
         await db.commit()
         await db.refresh(char)
-
-        self._sync_equipment(active, character_id, equipment)
-        action_label = "équipe" if new_equipped else "retire"
+        self._sync_equipment(active, char.id, equipment)
         return EquipmentActionResult(
             character=char,
             character_id=character_id,
             item_id=item_id,
             item_name=item_name,
             equipment=equipment,
-            equipped=new_equipped,
-            narration=f"{char.name} {action_label} : {item_name}.",
+            equipped=False,
+            narration=f"{char.name} retire : {item_name}.",
+        )
+
+    async def _equip_loaded_item(
+        self,
+        char: Character,
+        equipment: list[dict[str, Any]],
+        idx: int,
+        item: dict[str, Any],
+        db: AsyncSession,
+        active: Optional[ActiveSession],
+    ) -> EquipmentActionResult:
+        item_id = str(item.get("id") or "")
+        item_name = self._item_name(item, item_id)
+        wanted_slots = slots_for_item(item)
+
+        for i, eq in enumerate(equipment):
+            if i == idx or not eq.get("equipped"):
+                continue
+            conflicts = wanted_slots & equipped_slots_for_item(eq)
+            armor_conflict = (
+                item.get("category", "") in ARMOR_CATEGORIES
+                and eq.get("category", "") in ARMOR_CATEGORIES
+            )
+            if conflicts or armor_conflict:
+                equipment[i] = {**eq, "equipped": False, "occupied_slots": []}
+
+        equipment[idx] = {
+            **item,
+            "equipped": True,
+            "slot": str(next(iter(wanted_slots))) if wanted_slots else item.get("slot"),
+            "occupied_slots": sorted(wanted_slots),
+        }
+        char.equipment = equipment
+        await db.commit()
+        await db.refresh(char)
+
+        self._sync_equipment(active, char.id, equipment)
+        return EquipmentActionResult(
+            character=char,
+            character_id=char.id,
+            item_id=item_id,
+            item_name=item_name,
+            equipment=equipment,
+            equipped=True,
+            slot=str(next(iter(wanted_slots))) if wanted_slots else None,
+            narration=f"{char.name} équipe : {item_name}.",
         )
 
     async def use_item(
@@ -160,6 +231,118 @@ class EquipmentService:
             equipment=equipment,
             narration=f"{char.name} lâche {item_name}.",
         )
+
+    async def remove_item(
+        self,
+        *,
+        character_id: str,
+        item_id: str,
+        db: AsyncSession,
+        active: Optional[ActiveSession] = None,
+    ) -> EquipmentActionResult:
+        return await self.drop_item(
+            character_id=character_id,
+            item_id=item_id,
+            db=db,
+            active=active,
+        )
+
+    async def attune_item(
+        self,
+        *,
+        character_id: str,
+        item_id: str,
+        db: AsyncSession,
+        active: Optional[ActiveSession] = None,
+    ) -> EquipmentActionResult:
+        char = await self._load_character(character_id, db)
+        equipment = list(char.equipment or [])
+        idx, item = self._find_item(equipment, item_id)
+        if count_attuned(equipment) >= ATTUNEMENT_LIMIT and not item.get("attuned"):
+            raise EquipmentServiceError("Limite d'harmonisation atteinte")
+        equipment[idx] = {**item, "attuned": True}
+        char.equipment = equipment
+        await db.commit()
+        await db.refresh(char)
+        self._sync_equipment(active, character_id, equipment)
+        name = self._item_name(item, item_id)
+        return EquipmentActionResult(
+            character=char,
+            character_id=character_id,
+            item_id=item_id,
+            item_name=name,
+            equipment=equipment,
+            narration=f"{char.name} s'harmonise avec {name}.",
+        )
+
+    async def unattune_item(
+        self,
+        *,
+        character_id: str,
+        item_id: str,
+        db: AsyncSession,
+        active: Optional[ActiveSession] = None,
+    ) -> EquipmentActionResult:
+        char = await self._load_character(character_id, db)
+        equipment = list(char.equipment or [])
+        idx, item = self._find_item(equipment, item_id)
+        equipment[idx] = {**item, "attuned": False}
+        char.equipment = equipment
+        await db.commit()
+        await db.refresh(char)
+        self._sync_equipment(active, character_id, equipment)
+        name = self._item_name(item, item_id)
+        return EquipmentActionResult(
+            character=char,
+            character_id=character_id,
+            item_id=item_id,
+            item_name=name,
+            equipment=equipment,
+            narration=f"{char.name} rompt l'harmonisation avec {name}.",
+        )
+
+    async def identify_item(
+        self,
+        *,
+        character_id: str,
+        item_id: str,
+        db: AsyncSession,
+        active: Optional[ActiveSession] = None,
+    ) -> EquipmentActionResult:
+        char = await self._load_character(character_id, db)
+        equipment = list(char.equipment or [])
+        idx, item = self._find_item(equipment, item_id)
+        hidden = dict(item.get("hidden_properties") or {})
+        identified = {**item, **{k: v for k, v in hidden.items() if k != "true_name"}}
+        if hidden.get("true_name"):
+            identified["name_fr"] = hidden["true_name"]
+        identified["identified"] = True
+        identified["hidden_properties"] = {}
+        equipment[idx] = identified
+        char.equipment = equipment
+        await db.commit()
+        await db.refresh(char)
+        self._sync_equipment(active, character_id, equipment)
+        name = self._item_name(identified, item_id)
+        return EquipmentActionResult(
+            character=char,
+            character_id=character_id,
+            item_id=item_id,
+            item_name=name,
+            equipment=equipment,
+            narration=f"{char.name} identifie {name}.",
+        )
+
+    def get_encumbrance_info(self, *, strength_score: int, equipment: list[dict[str, Any]]) -> dict[str, Any]:
+        from app.engine.inventory import carrying_capacity
+
+        weight = total_weight(equipment)
+        capacity = carrying_capacity(strength_score)
+        return {
+            "weight_lb": weight,
+            "capacity_lb": capacity,
+            "level": encumbrance_level(weight, capacity),
+        }
 
     async def _load_character(self, character_id: str, db: AsyncSession) -> Character:
         result = await db.execute(select(Character).where(Character.id == character_id))

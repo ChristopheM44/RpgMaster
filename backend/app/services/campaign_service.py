@@ -150,6 +150,10 @@ async def advance_to_next_session(
                 hp_current=old_char.hp_max,  # Full heal at session start
                 hp_max=old_char.hp_max,
                 hp_temp=0,
+                xp=int(getattr(old_char, "xp", 0) or 0),
+                gp=int(getattr(old_char, "gp", 0) or 0),
+                sp=int(getattr(old_char, "sp", 0) or 0),
+                cp=int(getattr(old_char, "cp", 0) or 0),
                 equipment=list(old_char.equipment),
                 spell_slots=dict(old_char.spell_slots),
                 hit_dice=dict(old_char.hit_dice or {}),

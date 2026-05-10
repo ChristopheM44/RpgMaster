@@ -9,15 +9,24 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
+import uuid
+from decimal import Decimal
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 
 from app.agents.schemas import AgentResponse, GMResponse
+from app.engine.srd_data import find_equipment
 from app.game.event_bus import EventType, event_bus
 from app.game.session_manager import ActiveSession
 from app.game.state_sync import sync_character_state
+from app.models.character import Character
+from app.schemas.equipment import EquipmentItem
 from app.services import campaign_dossier_service, map_service
+from app.services.currency_service import currency_service
+from app.services.equipment_service import EquipmentService
+from app.services.xp_service import xp_service
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +170,16 @@ class GMResponseExecutor:
             await self._apply_city_map_update(session_id, params, active, db)
         elif action_type == "node_status_update":
             await self._apply_node_status_update(session_id, params, active, db)
+        elif action_type == "xp_grant":
+            await self._apply_xp_grant(session_id, params, active, db)
+        elif action_type == "currency_grant":
+            await self._apply_currency_grant(session_id, params, active, db)
+        elif action_type == "currency_spend":
+            await self._apply_currency_spend(session_id, params, active, db)
+        elif action_type == "loot_grant":
+            await self._apply_loot_grant(session_id, params, active, db)
+        elif action_type == "item_remove":
+            await self._apply_item_remove(session_id, params, active, db)
         else:
             logger.warning("GMResponseExecutor : type d'action GM inconnu '%s'.", action_type)
 
@@ -719,6 +738,215 @@ class GMResponseExecutor:
             return
 
         logger.warning("node_status_update ignore : scope invalide - params=%s", params)
+
+    async def _apply_xp_grant(
+        self,
+        session_id: str,
+        params: dict[str, Any],
+        active: ActiveSession,
+        db: Optional[Any],
+    ) -> None:
+        if db is None:
+            logger.warning("xp_grant ignore : db requis.")
+            return
+        amount = self._safe_non_negative_int(params.get("amount"))
+        if amount <= 0:
+            logger.warning("xp_grant ignore : amount invalide - params=%s", params)
+            return
+        target = str(params.get("target") or "").strip()
+        targets = self._xp_targets(target, active)
+        if not targets:
+            logger.warning("xp_grant ignore : cible invalide '%s'.", target)
+            return
+        for character_id in targets:
+            await xp_service.grant_xp(
+                session_id=session_id,
+                character_id=character_id,
+                amount=amount,
+                db=db,
+                active=active,
+            )
+
+    async def _apply_currency_grant(
+        self,
+        session_id: str,
+        params: dict[str, Any],
+        active: ActiveSession,
+        db: Optional[Any],
+    ) -> None:
+        if db is None:
+            logger.warning("currency_grant ignore : db requis.")
+            return
+        target = str(params.get("target") or "").strip()
+        if not target or target == "party":
+            logger.warning("currency_grant ignore : cible personnage concrete requise.")
+            return
+        gp, sp, cp = self._coin_params(params)
+        if min(gp, sp, cp) < 0:
+            logger.warning("currency_grant ignore : valeurs negatives interdites.")
+            return
+        await currency_service.grant_currency(
+            session_id=session_id,
+            character_id=target,
+            gp=gp,
+            sp=sp,
+            cp=cp,
+            db=db,
+            active=active,
+        )
+
+    async def _apply_currency_spend(
+        self,
+        session_id: str,
+        params: dict[str, Any],
+        active: ActiveSession,
+        db: Optional[Any],
+    ) -> None:
+        if db is None:
+            logger.warning("currency_spend ignore : db requis.")
+            return
+        target = str(params.get("target") or "").strip()
+        if not target or target == "party":
+            logger.warning("currency_spend ignore : cible personnage concrete requise.")
+            return
+        if params.get("cost_gp") is not None:
+            cost_gp: Any = params.get("cost_gp")
+        else:
+            gp, sp, cp = self._coin_params(params)
+            cost_gp = Decimal(gp) + Decimal(sp) / Decimal(10) + Decimal(cp) / Decimal(100)
+        await currency_service.spend_currency(
+            session_id=session_id,
+            character_id=target,
+            cost_gp=cost_gp,
+            db=db,
+            active=active,
+        )
+
+    async def _apply_loot_grant(
+        self,
+        session_id: str,
+        params: dict[str, Any],
+        active: ActiveSession,
+        db: Optional[Any],
+    ) -> None:
+        if db is None:
+            logger.warning("loot_grant ignore : db requis.")
+            return
+        target = str(params.get("target") or "").strip()
+        if not target or target == "party":
+            logger.warning("loot_grant ignore : cible personnage concrete requise.")
+            return
+        result = await db.execute(select(Character).where(Character.id == target))
+        char = result.scalar_one_or_none()
+        if char is None:
+            logger.warning("loot_grant ignore : personnage '%s' introuvable.", target)
+            return
+        equipment = list(char.equipment or [])
+        raw_items = params.get("items") or []
+        if isinstance(raw_items, dict):
+            raw_items = [raw_items]
+        added: list[dict[str, Any]] = []
+        for raw in raw_items:
+            if not isinstance(raw, dict):
+                continue
+            template_id = str(raw.get("template_id") or raw.get("id") or "").strip()
+            if not template_id:
+                continue
+            try:
+                item = self._instantiate_loot_item(template_id, raw)
+            except KeyError:
+                logger.warning("loot_grant ignore : template inconnu '%s'.", template_id)
+                continue
+            equipment.append(item)
+            added.append(item)
+        if not added:
+            return
+        char.equipment = equipment
+        await db.commit()
+        await db.refresh(char)
+        sync_character_state(active, target, equipment=equipment)
+        await self._event_bus.publish_to_session(
+            session_id,
+            EventType.EQUIPMENT_UPDATED,
+            {"character_id": target, "equipment": equipment, "added": added, "source": "gm"},
+            source=self._source,
+        )
+
+    async def _apply_item_remove(
+        self,
+        session_id: str,
+        params: dict[str, Any],
+        active: ActiveSession,
+        db: Optional[Any],
+    ) -> None:
+        if db is None:
+            logger.warning("item_remove ignore : db requis.")
+            return
+        target = str(params.get("target") or "").strip()
+        item_id = str(params.get("item_id") or params.get("id") or "").strip()
+        if not target or not item_id:
+            logger.warning("item_remove ignore : target/item_id requis.")
+            return
+        try:
+            result = await EquipmentService().remove_item(
+                character_id=target,
+                item_id=item_id,
+                db=db,
+                active=active,
+            )
+        except Exception as exc:
+            logger.warning("item_remove ignore : %s", exc)
+            return
+        await self._event_bus.publish_to_session(
+            session_id,
+            EventType.EQUIPMENT_UPDATED,
+            {"character_id": target, "equipment": result.equipment, "removed": item_id, "source": "gm"},
+            source=self._source,
+        )
+
+    @staticmethod
+    def _xp_targets(target: str, active: ActiveSession) -> list[str]:
+        if target == "party":
+            characters = active.state_data.get("characters", {})
+            if isinstance(characters, dict):
+                return [str(char_id) for char_id in characters.keys()]
+            return []
+        return [target] if target else []
+
+    @staticmethod
+    def _coin_params(params: dict[str, Any]) -> tuple[int, int, int]:
+        return (
+            GMResponseExecutor._safe_int_value(params.get("gp")),
+            GMResponseExecutor._safe_int_value(params.get("sp")),
+            GMResponseExecutor._safe_int_value(params.get("cp")),
+        )
+
+    @staticmethod
+    def _safe_int_value(value: Any) -> int:
+        try:
+            return int(value or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    @staticmethod
+    def _safe_non_negative_int(value: Any) -> int:
+        return max(0, GMResponseExecutor._safe_int_value(value))
+
+    @staticmethod
+    def _instantiate_loot_item(template_id: str, raw: dict[str, Any]) -> dict[str, Any]:
+        template = dict(find_equipment(template_id))
+        template.setdefault("template_id", template_id)
+        template.setdefault("id", template_id)
+        template["id"] = f"{template_id}_{uuid.uuid4().hex[:8]}"
+        template["template_id"] = template_id
+        template["quantity"] = max(1, int(raw.get("quantity", 1) or 1))
+        if "identified" in raw:
+            template["identified"] = bool(raw["identified"])
+        if isinstance(raw.get("hidden_properties"), dict):
+            template["hidden_properties"] = dict(raw["hidden_properties"])
+        if "weight_lb" not in template and "weight" in template:
+            template["weight_lb"] = template.get("weight", 0.0)
+        return EquipmentItem.model_validate(template).model_dump(mode="json")
 
     @staticmethod
     def _state_world_maps(active: ActiveSession) -> dict[str, Any]:

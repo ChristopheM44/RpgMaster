@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
+
+from app.engine.xp import xp_to_next_level
 
 # ---------------------------------------------------------------------------
 # Sous-schémas réutilisables
@@ -61,6 +63,10 @@ class CharacterCreate(BaseModel):
     hp_current: int = Field(0, ge=0)
     hp_max: int = Field(0, ge=0)
     hp_temp: int = Field(0, ge=0)
+    xp: int = Field(0, ge=0)
+    gp: int = Field(0, ge=0)
+    sp: int = Field(0, ge=0)
+    cp: int = Field(0, ge=0)
 
     equipment: list[dict[str, Any]] = Field(default_factory=list)
     spell_slots: dict[str, SpellSlotLevel] = Field(default_factory=dict)
@@ -86,6 +92,10 @@ class CharacterUpdate(BaseModel):
     hp_current: Optional[int] = Field(None, ge=0)
     hp_max: Optional[int] = Field(None, ge=0)
     hp_temp: Optional[int] = Field(None, ge=0)
+    xp: Optional[int] = Field(None, ge=0)
+    gp: Optional[int] = Field(None, ge=0)
+    sp: Optional[int] = Field(None, ge=0)
+    cp: Optional[int] = Field(None, ge=0)
 
     equipment: Optional[list[dict[str, Any]]] = None
     spell_slots: Optional[dict[str, SpellSlotLevel]] = None
@@ -115,6 +125,10 @@ class CharacterResponse(BaseModel):
     hp_current: int
     hp_max: int
     hp_temp: int
+    xp: int = 0
+    gp: int = 0
+    sp: int = 0
+    cp: int = 0
 
     equipment: list[dict[str, Any]]
     spell_slots: dict[str, Any]
@@ -129,6 +143,16 @@ class CharacterResponse(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @computed_field
+    @property
+    def xp_to_next_level(self) -> int:
+        return xp_to_next_level(self.xp, self.level)
+
+    @computed_field
+    @property
+    def pending_asi(self) -> bool:
+        return bool((self.personality or {}).get("pending_asi", False))
 
 
 class CharacterListResponse(BaseModel):

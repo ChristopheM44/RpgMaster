@@ -15,7 +15,8 @@ class GMAction(BaseModel):
             "condition_add | condition_remove | combatant_status | "
             "state_transition | encounter_setup | scene_layout | "
             "journal_update | quest_add | chronicle_add | social_outcome | "
-            "region_map_update | city_map_update | node_status_update"
+            "region_map_update | city_map_update | node_status_update | "
+            "xp_grant | currency_grant | currency_spend | loot_grant | item_remove"
         ),
     )
     target: Optional[str] = Field(None, description="ID du personnage cible, ou null")

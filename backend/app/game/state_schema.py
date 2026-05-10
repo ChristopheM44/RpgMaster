@@ -16,6 +16,12 @@ class CharacterState(BaseModel):
     name: Optional[str] = None
     hp: Optional[int] = Field(default=None, ge=0)
     hp_max: Optional[int] = Field(default=None, ge=0)
+    level: Optional[int] = Field(default=None, ge=1, le=20)
+    xp: Optional[int] = Field(default=None, ge=0)
+    gp: Optional[int] = Field(default=None, ge=0)
+    sp: Optional[int] = Field(default=None, ge=0)
+    cp: Optional[int] = Field(default=None, ge=0)
+    pending_asi: Optional[bool] = None
     is_ai: Optional[bool] = None
 
 

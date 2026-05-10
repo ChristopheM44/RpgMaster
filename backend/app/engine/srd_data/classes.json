@@ -607,7 +607,7 @@
       ],
       "num_skill_choices": 2,
       "spellcasting_ability": "charisma",
-      "caster_type": "half",
+      "caster_type": "warlock",
       "level_1_features": [
         {
           "name": "Otherworldly Patron",

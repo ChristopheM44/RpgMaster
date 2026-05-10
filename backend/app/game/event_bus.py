@@ -78,6 +78,10 @@ class EventType(str):
     EQUIPMENT_UPDATED = "equipment_updated"
     HIT_DICE_UPDATED = "hit_dice_updated"
     DEATH_SAVE_UPDATED = "death_save_updated"
+    XP_UPDATED = "xp_updated"
+    CURRENCY_UPDATED = "currency_updated"
+    LEVEL_UP_AVAILABLE = "level_up_available"
+    CHARACTER_LEVELED_UP = "character_leveled_up"
 
     # World state (journal, quests, chronicle)
     JOURNAL_UPDATED = "journal_updated"

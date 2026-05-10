@@ -1072,6 +1072,10 @@ async def create_save(
             "hp_current": c.hp_current,
             "hp_max": c.hp_max,
             "hp_temp": c.hp_temp,
+            "xp": int(getattr(c, "xp", 0) or 0),
+            "gp": int(getattr(c, "gp", 0) or 0),
+            "sp": int(getattr(c, "sp", 0) or 0),
+            "cp": int(getattr(c, "cp", 0) or 0),
             "equipment": c.equipment,
             "spell_slots": c.spell_slots,
             "hit_dice": c.hit_dice,
@@ -1210,6 +1214,10 @@ async def load_save(session_id: str, save_id: str, db: AsyncSession = Depends(ge
         char.hp_max = snap["hp_max"]
         char.hp_temp = snap["hp_temp"]
         char.level = snap["level"]
+        char.xp = int(snap.get("xp", getattr(char, "xp", 0)) or 0)
+        char.gp = int(snap.get("gp", getattr(char, "gp", 0)) or 0)
+        char.sp = int(snap.get("sp", getattr(char, "sp", 0)) or 0)
+        char.cp = int(snap.get("cp", getattr(char, "cp", 0)) or 0)
         char.ability_scores = snap["ability_scores"]
         char.equipment = snap["equipment"]
         char.spell_slots = snap["spell_slots"]

@@ -100,7 +100,11 @@ export interface CharacterCreate {
   hp_current: number
   hp_max: number
   hp_temp: number
-  equipment?: Record<string, unknown>[]
+  xp?: number
+  gp?: number
+  sp?: number
+  cp?: number
+  equipment?: Array<Record<string, unknown> | EquipmentItem>
   hit_dice?: HitDiceState
   proficiencies?: Record<string, unknown>
   known_spells?: string[]
@@ -120,7 +124,13 @@ export interface Character {
   hp_current: number
   hp_max: number
   hp_temp: number
-  equipment: Record<string, unknown>[]
+  xp: number
+  gp: number
+  sp: number
+  cp: number
+  xp_to_next_level: number
+  pending_asi?: boolean
+  equipment: EquipmentItem[]
   hit_dice: HitDiceState
   spell_slots: Record<string, unknown>
   known_spells: string[]
@@ -142,7 +152,11 @@ export interface CharacterUpdate {
   hp_current?: number
   hp_max?: number
   hp_temp?: number
-  equipment?: Record<string, unknown>[]
+  xp?: number
+  gp?: number
+  sp?: number
+  cp?: number
+  equipment?: EquipmentItem[]
   hit_dice?: HitDiceState
   spell_slots?: Record<string, unknown>
   known_spells?: string[]
@@ -161,6 +175,50 @@ export interface HitDiceState {
   die: number
   total: number
   used: number
+}
+
+export type EquipmentSlot =
+  | 'main_hand'
+  | 'off_hand'
+  | 'body'
+  | 'head'
+  | 'hands'
+  | 'feet'
+  | 'neck'
+  | 'ring_1'
+  | 'ring_2'
+  | 'back'
+  | 'waist'
+
+export type ItemType = 'weapon' | 'armor' | 'shield' | 'gear' | 'consumable' | 'magic'
+
+export interface EquipmentItem {
+  [key: string]: unknown
+  id: string
+  template_id?: string
+  name?: string
+  name_fr?: string
+  category?: string
+  item_type?: ItemType
+  quantity?: number
+  equipped?: boolean
+  slot?: EquipmentSlot | string | null
+  occupied_slots?: string[]
+  weight_lb?: number
+  cost_gp?: number
+  rarity?: string
+  attunement_required?: boolean
+  attuned?: boolean
+  identified?: boolean
+  hidden_properties?: Record<string, unknown>
+  properties?: string[]
+  damage_dice?: string
+  damage_type?: string
+  base_ac?: number
+  dex_cap?: number | null
+  effect?: Record<string, unknown>
+  detail?: string
+  damage?: number
 }
 
 // ─── Pregen ───────────────────────────────────────────────────────────────────
@@ -353,6 +411,10 @@ export const WS_EVENT_TYPES_LIST = [
   'spell_slot_updated',
   'equipment_updated',
   'hit_dice_updated',
+  'xp_updated',
+  'currency_updated',
+  'level_up_available',
+  'character_leveled_up',
   'player_joined',
   'player_left',
   'ai_thinking',
@@ -376,6 +438,7 @@ export interface WsEvent<T = unknown> {
   session_id?: string
   payload: T
   timestamp?: string
+  source?: string
 }
 
 export type TimeOfDay = 'dawn' | 'morning' | 'noon' | 'afternoon' | 'dusk' | 'night'
@@ -533,7 +596,49 @@ export interface PhaseChangePayload {
 
 export interface EquipmentUpdatedPayload {
   character_id: string
-  equipment: Record<string, unknown>[]
+  equipment: EquipmentItem[]
+  added?: EquipmentItem[]
+  removed?: string
+  source?: string
+}
+
+export interface XpUpdatedPayload {
+  character_id: string
+  old_xp?: number
+  new_xp: number
+  xp?: number
+  level: number
+  target_level?: number
+  xp_to_next_level: number
+}
+
+export interface CurrencyUpdatedPayload {
+  character_id: string
+  gp: number
+  sp: number
+  cp: number
+}
+
+export interface LevelUpAvailablePayload {
+  character_id: string
+  current_level: number
+  target_level: number
+  xp: number
+}
+
+export interface CharacterLeveledUpPayload {
+  character_id: string
+  old_level: number
+  new_level: number
+  level?: number
+  hp_delta: number
+  hp: number
+  hp_max: number
+  spell_slots: Record<string, { total: number; used: number }>
+  hit_dice: HitDiceState
+  asi_levels_granted?: number[]
+  requires_asi?: boolean
+  xp_to_next_level?: number
 }
 
 export interface TurnStartPayload {

@@ -5,6 +5,7 @@ import re
 from typing import Any
 
 from app.game.constants import ARMOR_CATEGORIES, MONSTER_TYPE_COLORS
+from app.engine.xp import xp_to_next_level
 from app.models.character import Character
 from app.services.encounter_service import encounter_service
 from app.services.rest_service import normalize_character_hit_dice
@@ -165,6 +166,14 @@ def character_snapshot(char: Character) -> dict[str, Any]:
         "name": char.name,
         "hp": char.hp_current,
         "hp_max": char.hp_max,
+        "xp": int(getattr(char, "xp", 0)),
+        "gp": int(getattr(char, "gp", 0)),
+        "sp": int(getattr(char, "sp", 0)),
+        "cp": int(getattr(char, "cp", 0)),
+        "xp_to_next_level": xp_to_next_level(
+            int(getattr(char, "xp", 0)),
+            int(getattr(char, "level", 1)),
+        ),
         "is_ai": char.is_ai,
         "level": char.level,
         "ability_scores": dict(char.ability_scores),
@@ -177,6 +186,7 @@ def character_snapshot(char: Character) -> dict[str, Any]:
         "equipment": list(char.equipment or []),
         "hit_dice": dict(hit_dice),
         "personality": dict(char.personality or {}),
+        "pending_asi": bool((char.personality or {}).get("pending_asi", False)),
     }
 
 

@@ -779,5 +779,157 @@
         }
       ]
     }
+  ],
+  "adventuring_gear": [
+    {
+      "id": "torch",
+      "name": "Torch",
+      "name_fr": "Torche",
+      "category": "gear",
+      "item_type": "gear",
+      "weight_lb": 1.0,
+      "cost_gp": 0.01
+    },
+    {
+      "id": "rope_50ft",
+      "name": "Hempen Rope (50 ft)",
+      "name_fr": "Corde de chanvre (15 m)",
+      "category": "gear",
+      "item_type": "gear",
+      "weight_lb": 10.0,
+      "cost_gp": 1.0
+    },
+    {
+      "id": "rations_1day",
+      "name": "Rations (1 day)",
+      "name_fr": "Rations (1 jour)",
+      "category": "gear",
+      "item_type": "gear",
+      "weight_lb": 2.0,
+      "cost_gp": 0.5
+    },
+    {
+      "id": "waterskin",
+      "name": "Waterskin",
+      "name_fr": "Outre",
+      "category": "gear",
+      "item_type": "gear",
+      "weight_lb": 5.0,
+      "cost_gp": 0.2
+    },
+    {
+      "id": "backpack",
+      "name": "Backpack",
+      "name_fr": "Sac à dos",
+      "category": "gear",
+      "item_type": "gear",
+      "weight_lb": 5.0,
+      "cost_gp": 2.0
+    },
+    {
+      "id": "blanket",
+      "name": "Blanket",
+      "name_fr": "Couverture",
+      "category": "gear",
+      "item_type": "gear",
+      "weight_lb": 3.0,
+      "cost_gp": 0.5
+    },
+    {
+      "id": "tinderbox",
+      "name": "Tinderbox",
+      "name_fr": "Boîte à amadou",
+      "category": "gear",
+      "item_type": "gear",
+      "weight_lb": 1.0,
+      "cost_gp": 0.5
+    },
+    {
+      "id": "crowbar",
+      "name": "Crowbar",
+      "name_fr": "Pied-de-biche",
+      "category": "gear",
+      "item_type": "gear",
+      "weight_lb": 5.0,
+      "cost_gp": 2.0
+    },
+    {
+      "id": "lantern_hooded",
+      "name": "Hooded Lantern",
+      "name_fr": "Lanterne à capote",
+      "category": "gear",
+      "item_type": "gear",
+      "weight_lb": 2.0,
+      "cost_gp": 5.0
+    },
+    {
+      "id": "oil_flask",
+      "name": "Oil Flask",
+      "name_fr": "Flasque d'huile",
+      "category": "gear",
+      "item_type": "gear",
+      "weight_lb": 1.0,
+      "cost_gp": 0.1
+    },
+    {
+      "id": "grappling_hook",
+      "name": "Grappling Hook",
+      "name_fr": "Grappin",
+      "category": "gear",
+      "item_type": "gear",
+      "weight_lb": 4.0,
+      "cost_gp": 2.0
+    },
+    {
+      "id": "hammer",
+      "name": "Hammer",
+      "name_fr": "Marteau",
+      "category": "gear",
+      "item_type": "gear",
+      "weight_lb": 3.0,
+      "cost_gp": 1.0
+    },
+    {
+      "id": "piton",
+      "name": "Piton",
+      "name_fr": "Piton",
+      "category": "gear",
+      "item_type": "gear",
+      "weight_lb": 0.25,
+      "cost_gp": 0.05
+    },
+    {
+      "id": "mess_kit",
+      "name": "Mess Kit",
+      "name_fr": "Gamelle",
+      "category": "gear",
+      "item_type": "gear",
+      "weight_lb": 1.0,
+      "cost_gp": 0.2
+    },
+    {
+      "id": "bedroll",
+      "name": "Bedroll",
+      "name_fr": "Sac de couchage",
+      "category": "gear",
+      "item_type": "gear",
+      "weight_lb": 7.0,
+      "cost_gp": 1.0
+    }
+  ],
+  "consumables": [
+    {
+      "id": "healing_potion",
+      "name": "Potion of Healing",
+      "name_fr": "Potion de soins",
+      "category": "consumable",
+      "item_type": "consumable",
+      "weight_lb": 0.5,
+      "cost_gp": 50.0,
+      "effect": {
+        "kind": "heal",
+        "dice": "2d4+2"
+      }
+    }
   ]
 }

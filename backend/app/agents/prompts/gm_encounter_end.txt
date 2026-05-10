@@ -7,6 +7,12 @@ RESUME STRUCTURE DU COMBAT :
 SCENE PRECEDENTE :
 {{ previous_scene }}
 
+XP SUGGEREE :
+{{ suggested_xp }}
+
+BUTIN SUGGERE :
+{{ suggested_loot }}
+
 MESSAGES RECENTS :
 {{ recent_messages }}
 
@@ -18,6 +24,8 @@ Objectif :
 - Donner un sort narratif clair a chaque ennemi non joueur : vaincu, en fuite, rendu, disparu dans la confusion ou autrement neutralise.
 - Si un ennemi est "unresolved", choisis une resolution narrative prudente et non mecanique : fuite, retraite, disparition, reddition ou menace qui s'eloigne. Ne le tue pas par defaut.
 - Produire au plus UNE action scene_layout pour afficher le champ de bataille apres le combat.
+- Si le combat est une victoire ou un objectif accompli, tu peux octroyer l'XP suggeree avec xp_grant. Pour une cible "party", amount est par personnage.
+- Si le butin suggere est coherent avec la scene, octroie-le avec loot_grant et/ou currency_grant a un personnage concret du groupe. Ne donne pas de loot sans cible personnage.
 - Dans scene_layout, conserve les dimensions, le terrain, les sorties, les positions du groupe et les POIs non hostiles de la scene precedente autant que possible.
 - Remplace les POIs hostiles ou ennemis visibles par des traces coherentes : corps, armes tombees, butin, indice, sang, debris ou piste de fuite.
 - Utilise des categories/icones coherentes : butin/objet = kind "loot", icon "chest"; indice/trace = kind "clue", icon "clue"; debris/corps = kind "corpse" ou "cover", icon "ruins"; PNJ non hostile = kind "npc", icon "npc"; danger = kind "hazard", icon "trap-danger".
@@ -26,7 +34,7 @@ Objectif :
 
 Interdictions absolues :
 - Ne demande aucun jet.
-- Ne modifie aucun PV, aucune statistique, aucune condition et aucune ressource.
+- Ne modifie aucun PV, aucune statistique ou condition.
 - N'emets pas damage_apply, condition_add, condition_remove, combatant_status, encounter_setup, roll_request ou state_transition.
 - Ne lance pas un nouveau combat.
 - Ne change pas la phase.
@@ -34,6 +42,10 @@ Interdictions absolues :
 
 Format attendu :
 - Reponds avec UN SEUL objet JSON conforme au system prompt.
-- "actions" doit contenir uniquement scene_layout, journal_update, quest_add ou chronicle_add.
+- "actions" doit contenir uniquement scene_layout, journal_update, quest_add, chronicle_add, xp_grant, currency_grant, currency_spend, loot_grant ou item_remove.
+- Exemples valides :
+  {"type":"xp_grant","target":"party","params":{"amount":250}}
+  {"type":"currency_grant","target":"character_id","params":{"gp":12,"sp":4,"cp":0}}
+  {"type":"loot_grant","target":"character_id","params":{"items":[{"template_id":"healing_potion","quantity":1}]}}
 - "mood" doit refleter le retour de tension apres l'affrontement.
 - Aucun texte hors JSON.

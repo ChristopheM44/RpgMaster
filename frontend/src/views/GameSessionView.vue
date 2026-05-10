@@ -16,6 +16,8 @@ import SaveLoadPanel from '../components/ui/SaveLoadPanel.vue'
 import AdventureStartModal from '../components/ui/AdventureStartModal.vue'
 import ConfirmDialog from '../components/common/ConfirmDialog.vue'
 import RestDialog from '../components/ui/RestDialog.vue'
+import LevelUpModal from '../components/character/LevelUpModal.vue'
+import LootNotification from '../components/combat/LootNotification.vue'
 import { buildScenePoiInteractionPrompt } from '../utils/scenePoiInteractions'
 import type { ScenePoiInteraction } from '../types'
 
@@ -164,6 +166,13 @@ function endCombat() {
 
 function handleTriggerAi() {
   triggerAiReactions()
+}
+
+function handleAsiChoice(payload: { characterId: string; mode: 'plus_two'; ability: string }) {
+  sendAction('asi_choice', undefined, payload.characterId, undefined, {
+    mode: payload.mode,
+    ability: payload.ability,
+  })
 }
 
 function handleSceneExit(_exitId: string, label: string) {
@@ -389,6 +398,14 @@ onUnmounted(() => { disconnect() })
       @action="handleAction"
       @start-combat="startCombat"
       @open-sheet="openSheet"
+    />
+
+    <LootNotification />
+
+    <LevelUpModal
+      :visible="gameStore.phase === 'level_up'"
+      :characters="charStore.sessionCharacters"
+      @asi-choice="handleAsiChoice"
     />
 
     <!-- ─── Mobile layout ────────────────────────────────────────────────── -->

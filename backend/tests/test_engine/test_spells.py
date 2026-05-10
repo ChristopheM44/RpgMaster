@@ -84,9 +84,13 @@ class TestStartingSlots:
         slots_a[1] = 0
         assert slots_b[1] == 2  # unaffected
 
+    def test_warlock_pact_slots(self):
+        slots = starting_slots("warlock", 5)
+        assert slots == {3: 2}
+
     def test_invalid_caster_type(self):
         with pytest.raises(ValueError, match="caster_type"):
-            starting_slots("warlock", 5)
+            starting_slots("unknown", 5)
 
     def test_invalid_level(self):
         with pytest.raises(ValueError, match="level"):

@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 import re
 from copy import deepcopy
 from typing import Any, Optional
@@ -92,7 +93,9 @@ from app.api.ws_schemas import (
 from app.config import settings
 from app.db.database import async_session
 from app.engine.combat import roll_attack, roll_damage
+from app.engine.loot import loot_for_encounter
 from app.engine.tactical_grid import GridPosition, initialize_positions, validate_move
+from app.engine.xp import level_from_xp
 from app.game.action_resolver import ActionResolver
 from app.game.async_tasks import create_logged_task
 from app.game.combat_triggers import prime_combat_from_aggressive_action
@@ -111,8 +114,10 @@ from app.services.equipment_service import (
     EquipmentService,
     ItemNotFoundError,
 )
+from app.services.level_up_service import level_up_service
 from app.services.message_service import load_recent_messages, persist_narration
 from app.services.rest_service import RestServiceError, normalize_character_hit_dice
+from app.services.trade_service import trade_service
 
 logger = logging.getLogger(__name__)
 
@@ -291,6 +296,11 @@ _ENCOUNTER_END_ACTION_TYPES = {
     "journal_update",
     "quest_add",
     "chronicle_add",
+    "xp_grant",
+    "currency_grant",
+    "currency_spend",
+    "loot_grant",
+    "item_remove",
 }
 
 _HOSTILE_POI_MARKERS = {
@@ -404,7 +414,7 @@ def _build_combat_summary(
                 or _summary_position(grid_positions.get(combatant_id))
             ),
         }
-        for key in ("monster_id", "species", "cr"):
+        for key in ("monster_id", "species", "cr", "xp"):
             if info.get(key) is not None:
                 entry[key] = info.get(key)
 
@@ -433,6 +443,17 @@ def _build_combat_summary(
         + len(enemies_unresolved)
     )
 
+    total_monster_xp = sum(
+        _safe_int(enemy.get("xp"), 0)
+        for group in (enemies_defeated, enemies_fled, enemies_surrendered)
+        for enemy in group
+    )
+    total_cr = sum(
+        float(enemy.get("cr") or 0)
+        for group in (enemies_defeated, enemies_fled, enemies_surrendered)
+        for enemy in group
+    )
+
     return {
         "outcome": "partial" if enemies_unresolved else "victory",
         "party": party,
@@ -441,6 +462,8 @@ def _build_combat_summary(
         "enemies_surrendered": enemies_surrendered,
         "enemies_unresolved": enemies_unresolved,
         "total_enemies": total_enemies,
+        "total_monster_xp": total_monster_xp,
+        "total_cr": total_cr,
         "battlefield_location": battlefield_location,
         "round_number": getattr(active, "round_number", 0),
         "grid_config": deepcopy(state_data.get("grid_config") or {}),
@@ -615,6 +638,7 @@ async def _apply_fallback_aftermath_scene(
 async def _execute_encounter_end_actions(
     session_id: str,
     active: Any,
+    db: AsyncSession,
     response: Any,
 ) -> bool:
     from app.agents.schemas import GMResponse
@@ -645,6 +669,7 @@ async def _execute_encounter_end_actions(
     await GMResponseExecutor(event_bus, source="ws_game").execute_gm_response(
         safe_response,
         active,
+        db=db,
         session_id=session_id,
     )
     return scene_action_seen and active.state_data.get("current_scene") != before_scene
@@ -663,6 +688,8 @@ async def _generate_encounter_end(
         return None, False
 
     response: Any = None
+    suggested_xp = _suggested_xp(combat_summary)
+    suggested_loot = _suggested_loot(combat_summary)
     await event_bus.publish_to_session(
         session_id,
         EventType.AI_THINKING,
@@ -674,6 +701,8 @@ async def _generate_encounter_end(
         response = await run_end(
             game_state={**active.state_data, "phase": SessionStatus.ENCOUNTER_END.value},
             combat_summary=combat_summary,
+            suggested_loot=suggested_loot,
+            suggested_xp=suggested_xp,
             messages=recent_messages,
         )
     except Exception as exc:
@@ -687,11 +716,39 @@ async def _generate_encounter_end(
             source="ws_game",
         )
 
-    scene_applied = await _execute_encounter_end_actions(session_id, active, response)
+    scene_applied = await _execute_encounter_end_actions(session_id, active, db, response)
     narration = getattr(response, "narration", "")
     if _is_unhelpful_intro(narration):
         return None, scene_applied
     return str(narration).strip(), scene_applied
+
+
+def _suggested_xp(combat_summary: dict[str, Any]) -> dict[str, Any]:
+    party_size = max(1, len(combat_summary.get("party") or []))
+    total_xp = int(combat_summary.get("total_monster_xp") or 0)
+    per_character = total_xp // party_size if total_xp > 0 else 0
+    return {
+        "target": "party",
+        "amount_per_character": per_character,
+        "total_monster_xp": total_xp,
+        "party_size": party_size,
+    }
+
+
+def _suggested_loot(combat_summary: dict[str, Any]) -> dict[str, Any]:
+    rng_seed = repr((
+        combat_summary.get("battlefield_location"),
+        combat_summary.get("round_number"),
+        combat_summary.get("total_monster_xp"),
+        combat_summary.get("total_cr"),
+    ))
+    loot = loot_for_encounter(
+        total_cr=float(combat_summary.get("total_cr") or 0),
+        monster_xp=int(combat_summary.get("total_monster_xp") or 0),
+        difficulty="medium",
+        rng=random.Random(rng_seed),
+    )
+    return loot.as_dict()
 
 
 async def _pause_at_encounter_start(
@@ -915,6 +972,66 @@ async def _transition_active_phase(
     await session_manager.save_state(session_id, db)
 
 
+async def _handle_level_up_phase_if_needed(
+    session_id: str,
+    active: Any,
+    db: AsyncSession,
+) -> bool:
+    query = db.execute(select(Character).where(Character.session_id == session_id))
+    if not hasattr(query, "__await__"):
+        return False
+    result = await query
+    characters = list(result.scalars().all())
+    eligible = [
+        char
+        for char in characters
+        if level_from_xp(int(getattr(char, "xp", 0) or 0)) > int(char.level or 1)
+    ]
+    if not eligible:
+        return False
+
+    await _transition_active_phase(session_id, active, db, SessionStatus.LEVEL_UP)
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.PHASE_CHANGE,
+        {"phase": SessionStatus.LEVEL_UP.value},
+        source="ws_game",
+    )
+
+    leveled_names: list[str] = []
+    for char in eligible:
+        applied = await level_up_service.level_up_character(
+            session_id=session_id,
+            character_id=char.id,
+            db=db,
+            active=active,
+        )
+        if applied.applied:
+            leveled_names.append(
+                f"{applied.character.name} niveau {applied.result.new_level}"
+            )
+
+    if leveled_names:
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.NARRATION,
+            {
+                "text": "Montée de niveau : " + ", ".join(leveled_names) + ".",
+                "speaker": "Maître du Jeu",
+            },
+            source="ws_game",
+        )
+
+    await _transition_active_phase(session_id, active, db, SessionStatus.EXPLORATION)
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.PHASE_CHANGE,
+        {"phase": SessionStatus.EXPLORATION.value},
+        source="ws_game",
+    )
+    return True
+
+
 async def _handle_combat_end(
     session_id: str,
     active: Any,
@@ -959,13 +1076,15 @@ async def _handle_combat_end(
     if not scene_applied:
         await _apply_fallback_aftermath_scene(session_id, active, combat_summary)
 
-    await _transition_active_phase(session_id, active, db, SessionStatus.EXPLORATION)
-    await event_bus.publish_to_session(
-        session_id,
-        EventType.PHASE_CHANGE,
-        {"phase": SessionStatus.EXPLORATION.value},
-        source="ws_game",
-    )
+    leveled_up = await _handle_level_up_phase_if_needed(session_id, active, db)
+    if not leveled_up:
+        await _transition_active_phase(session_id, active, db, SessionStatus.EXPLORATION)
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.PHASE_CHANGE,
+            {"phase": SessionStatus.EXPLORATION.value},
+            source="ws_game",
+        )
 
     victory_text = aftermath_text or _combat_end_text(reason)
     await event_bus.publish_to_session(
@@ -1133,6 +1252,7 @@ async def _handle_start_combat(
             "damage_notation": npc["damage_notation"],
             "species": monster_data.get("type"),
             "cr": monster_data.get("cr"),
+            "xp": monster_data.get("xp", npc.get("xp", 0)),
             "ability_scores": monster_data.get("ability_scores", {}),
             "actions": _format_monster_actions(monster_data.get("actions", [])),
             "color": _monster_color(monster_data.get("type")),
@@ -1522,6 +1642,199 @@ async def _handle_drop_item(
     await event_bus.publish_to_session(
         session_id, EventType.NARRATION,
         {"text": result.narration, "speaker": "Maître du Jeu"},
+        source="ws_game",
+    )
+
+
+async def _handle_give_item(
+    session_id: str,
+    action: PlayerActionMessage,
+    active: Any,
+    db: AsyncSession,
+) -> None:
+    item_id = action.item_id
+    from_id = action.character_id
+    to_id = action.target_id
+    if not item_id or not from_id or not to_id:
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.ERROR,
+            {"message": "character_id, target_id et item_id requis pour donner un objet."},
+            source="ws_game",
+        )
+        return
+    try:
+        sender_result, _ = await trade_service.give_item(
+            session_id=session_id,
+            from_character_id=from_id,
+            to_character_id=to_id,
+            item_id=item_id,
+            db=db,
+            active=active,
+        )
+    except Exception as exc:
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.ERROR,
+            {"message": str(exc) or "Transfert impossible."},
+            source="ws_game",
+        )
+        return
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.NARRATION,
+        {"text": sender_result.narration, "speaker": "Maître du Jeu"},
+        source="ws_game",
+    )
+
+
+async def _handle_give_currency(
+    session_id: str,
+    action: PlayerActionMessage,
+    active: Any,
+    db: AsyncSession,
+) -> None:
+    from_id = action.character_id
+    to_id = action.target_id
+    if not from_id or not to_id:
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.ERROR,
+            {"message": "character_id et target_id requis pour donner des pièces."},
+            source="ws_game",
+        )
+        return
+    try:
+        await trade_service.give_currency(
+            session_id=session_id,
+            from_character_id=from_id,
+            to_character_id=to_id,
+            gp=action.gp or 0,
+            sp=action.sp or 0,
+            cp=action.cp or 0,
+            db=db,
+            active=active,
+        )
+    except Exception as exc:
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.ERROR,
+            {"message": str(exc) or "Transfert de pièces impossible."},
+            source="ws_game",
+        )
+        return
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.NARRATION,
+        {"text": "Les pièces changent de mains.", "speaker": "Maître du Jeu"},
+        source="ws_game",
+    )
+
+
+async def _handle_identify_item(
+    session_id: str,
+    action: PlayerActionMessage,
+    active: Any,
+    db: AsyncSession,
+) -> None:
+    item_id = action.item_id
+    character_id = action.character_id
+    if not item_id or not character_id:
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.ERROR,
+            {"message": "item_id et character_id requis pour identifier un objet."},
+            source="ws_game",
+        )
+        return
+    try:
+        result = await trade_service.identify_item(
+            session_id=session_id,
+            character_id=character_id,
+            item_id=item_id,
+            db=db,
+            active=active,
+        )
+    except Exception as exc:
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.ERROR,
+            {"message": str(exc) or "Identification impossible."},
+            source="ws_game",
+        )
+        return
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.NARRATION,
+        {"text": result.narration, "speaker": "Maître du Jeu"},
+        source="ws_game",
+    )
+
+
+async def _handle_asi_choice(
+    session_id: str,
+    action: PlayerActionMessage,
+    active: Any,
+    db: AsyncSession,
+) -> None:
+    character_id = action.character_id
+    if not character_id:
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.ERROR,
+            {"message": "character_id requis pour appliquer l'ASI."},
+            source="ws_game",
+        )
+        return
+    result = await db.execute(select(Character).where(Character.id == character_id))
+    char = result.scalar_one_or_none()
+    if char is None:
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.ERROR,
+            {"message": "Personnage introuvable."},
+            source="ws_game",
+        )
+        return
+    scores = dict(char.ability_scores or {})
+    mode = str(action.mode or "")
+    if mode == "plus_two" and action.ability:
+        ability = action.ability
+        scores[ability] = min(20, int(scores.get(ability, 10)) + 2)
+    elif mode == "plus_one_two" and action.abilities:
+        for ability in list(action.abilities)[:2]:
+            scores[ability] = min(20, int(scores.get(ability, 10)) + 1)
+    else:
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.ERROR,
+            {"message": "Choix ASI invalide."},
+            source="ws_game",
+        )
+        return
+    char.ability_scores = scores
+    personality = dict(char.personality or {})
+    personality["pending_asi"] = False
+    personality["pending_asi_levels"] = []
+    char.personality = personality
+    await db.commit()
+    await db.refresh(char)
+    sync_character_state(
+        active,
+        character_id,
+        ability_scores=dict(char.ability_scores or {}),
+        pending_asi=False,
+    )
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.NARRATION,
+        {"text": f"{char.name} affine ses aptitudes.", "speaker": "Maître du Jeu"},
+        source="ws_game",
+    )
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.SESSION_STATE,
+        _build_session_state_payload(session_id),
         source="ws_game",
     )
 
@@ -2171,6 +2484,22 @@ async def _dispatch_action(
 
     if action.action_type == "drop_item":
         await _handle_drop_item(session_id, action, active, db)
+        return
+
+    if action.action_type == "give_item":
+        await _handle_give_item(session_id, action, active, db)
+        return
+
+    if action.action_type == "give_currency":
+        await _handle_give_currency(session_id, action, active, db)
+        return
+
+    if action.action_type == "identify_item":
+        await _handle_identify_item(session_id, action, active, db)
+        return
+
+    if action.action_type == "asi_choice":
+        await _handle_asi_choice(session_id, action, active, db)
         return
 
     # ----------------------------------------------------------------

@@ -17,6 +17,10 @@ import type {
   DeathSaveUpdatedPayload,
   SpellSlotUpdatedPayload,
   EquipmentUpdatedPayload,
+  XpUpdatedPayload,
+  CurrencyUpdatedPayload,
+  LevelUpAvailablePayload,
+  CharacterLeveledUpPayload,
   HitDiceUpdatedPayload,
   AudioPayload,
   CombatActionPayload,
@@ -214,6 +218,32 @@ export function useWebSocket(sessionId: string) {
         if (isHitDiceUpdatedPayload(msg.payload)) {
           const p = msg.payload
           charStore.updateHitDice(p.character_id, p.hit_dice)
+        }
+        break
+      }
+      case 'xp_updated': {
+        if (isXpUpdatedPayload(msg.payload)) {
+          const p = msg.payload
+          charStore.updateXp(p.character_id, p.xp ?? p.new_xp, p.level, p.xp_to_next_level)
+        }
+        break
+      }
+      case 'currency_updated': {
+        if (isCurrencyUpdatedPayload(msg.payload)) {
+          const p = msg.payload
+          charStore.updateCurrency(p.character_id, p.gp, p.sp, p.cp)
+        }
+        break
+      }
+      case 'level_up_available': {
+        if (isLevelUpAvailablePayload(msg.payload)) {
+          gameStore.addSystemEntry(`Montée disponible : niveau ${msg.payload.target_level}`)
+        }
+        break
+      }
+      case 'character_leveled_up': {
+        if (isCharacterLeveledUpPayload(msg.payload)) {
+          charStore.applyLevelUp(msg.payload)
         }
         break
       }
@@ -464,6 +494,48 @@ function isEquipmentUpdatedPayload(value: unknown): value is EquipmentUpdatedPay
 
 function isHitDiceUpdatedPayload(value: unknown): value is HitDiceUpdatedPayload {
   return isRecord(value) && typeof value.character_id === 'string' && isRecord(value.hit_dice)
+}
+
+function isXpUpdatedPayload(value: unknown): value is XpUpdatedPayload {
+  return (
+    isRecord(value)
+    && typeof value.character_id === 'string'
+    && typeof value.new_xp === 'number'
+    && typeof value.level === 'number'
+    && typeof value.xp_to_next_level === 'number'
+  )
+}
+
+function isCurrencyUpdatedPayload(value: unknown): value is CurrencyUpdatedPayload {
+  return (
+    isRecord(value)
+    && typeof value.character_id === 'string'
+    && typeof value.gp === 'number'
+    && typeof value.sp === 'number'
+    && typeof value.cp === 'number'
+  )
+}
+
+function isLevelUpAvailablePayload(value: unknown): value is LevelUpAvailablePayload {
+  return (
+    isRecord(value)
+    && typeof value.character_id === 'string'
+    && typeof value.current_level === 'number'
+    && typeof value.target_level === 'number'
+  )
+}
+
+function isCharacterLeveledUpPayload(value: unknown): value is CharacterLeveledUpPayload {
+  return (
+    isRecord(value)
+    && typeof value.character_id === 'string'
+    && typeof value.old_level === 'number'
+    && typeof value.new_level === 'number'
+    && typeof value.hp === 'number'
+    && typeof value.hp_max === 'number'
+    && isRecord(value.spell_slots)
+    && isRecord(value.hit_dice)
+  )
 }
 
 function isGridPosition(value: unknown): value is GridPosition {

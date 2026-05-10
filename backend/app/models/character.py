@@ -37,6 +37,12 @@ class Character(Base):
     hp_max: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     hp_temp: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
+    # Progression et monnaie
+    xp: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    gp: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sp: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cp: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
     # Equipement, sorts, conditions (JSON blobs)
     # equipment: [{"id": "longsword", "equipped": true}, ...]
     equipment: Mapped[list] = mapped_column(JSON, nullable=False, default=list)

@@ -69,6 +69,11 @@ Instructions :
   Le schéma peut être sommaire mais doit rester cohérent avec le texte. Ne répète pas scene_layout si le lieu n'a pas changé.
 - Si la narration introduit une quête ou rumeur (donnée par un PNJ, découverte, mystère) : émets quest_add avec un id court en snake_case.
 - Si la narration nomme un nouveau PNJ ou lieu important : émets chronicle_add (kind="npc" ou "location"). Pas les monstres de combat, pas les personnages joueurs.
+- Si la narration décrit la découverte ou remise d'un trésor, n'ajoute pas seulement un POI narratif : émets aussi les actions structurées utiles.
+  * Objet : loot_grant vers un personnage concret, ex. {"type":"loot_grant","target":"id_personnage","params":{"items":[{"template_id":"healing_potion","quantity":1}]}}
+  * Pièces : currency_grant vers un personnage concret, ex. {"type":"currency_grant","target":"id_personnage","params":{"gp":12,"sp":4,"cp":0}}
+  * Achat : currency_spend puis loot_grant. Vente : item_remove puis currency_grant.
+  * XP : xp_grant uniquement après victoire, objectif accompli ou jalon clair ; target peut être "party".
 - Si la narration introduit un voyage entre lieux, un nouveau lieu d'intérêt régional, ou une ville/quartier important : mets à jour game_state.world_maps par patch incrémental.
   Utilise region_map_update pour la géographie entre lieux, city_map_update pour les districts/bâtiments/rues d'une ville, node_status_update pour marquer un lieu current/visited/known/rumored.
   Ne remplace jamais toute une carte si un patch suffit : réutilise les ids visibles dans game_state.world_maps et n'envoie que nodes_upsert/edges_upsert/nodes_remove/edges_remove nécessaires.

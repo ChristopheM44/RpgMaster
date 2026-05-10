@@ -44,8 +44,10 @@ def _flatten_equipment(data: dict) -> list[dict]:
     elif isinstance(armor, list):
         result.extend(armor)
 
-    kits = data.get("adventurer_kits", [])
-    result.extend(kits)
+    for section in ("adventuring_gear", "consumables", "adventurer_kits"):
+        items = data.get(section, [])
+        if isinstance(items, list):
+            result.extend(items)
     return result
 
 

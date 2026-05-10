@@ -101,12 +101,36 @@ THIRD_CASTER_SLOTS: Dict[int, Dict[int, int]] = {
     20: {1: 4, 2: 3, 3: 3, 4: 1},
 }
 
+# Warlock Pact Magic slots: slot level is represented by the key, count by value.
+WARLOCK_PACT_SLOTS: Dict[int, Dict[int, int]] = {
+    1: {1: 1},
+    2: {1: 2},
+    3: {2: 2},
+    4: {2: 2},
+    5: {3: 2},
+    6: {3: 2},
+    7: {4: 2},
+    8: {4: 2},
+    9: {5: 2},
+    10: {5: 2},
+    11: {5: 3},
+    12: {5: 3},
+    13: {5: 3},
+    14: {5: 3},
+    15: {5: 3},
+    16: {5: 3},
+    17: {5: 4},
+    18: {5: 4},
+    19: {5: 4},
+    20: {5: 4},
+}
+
 
 def starting_slots(caster_type: str, class_level: int) -> Dict[int, int]:
     """Return the spell slot counts for a caster at the given class level.
 
     Args:
-        caster_type: One of "full", "half", "third".
+        caster_type: One of "full", "half", "third", "warlock".
         class_level: Character's class level (1–20).
 
     Returns:
@@ -122,9 +146,12 @@ def starting_slots(caster_type: str, class_level: int) -> Dict[int, int]:
         "full": FULL_CASTER_SLOTS,
         "half": HALF_CASTER_SLOTS,
         "third": THIRD_CASTER_SLOTS,
+        "warlock": WARLOCK_PACT_SLOTS,
     }
     if caster_type not in tables:
-        raise ValueError(f"Unknown caster_type '{caster_type}'. Use 'full', 'half', or 'third'.")
+        raise ValueError(
+            f"Unknown caster_type '{caster_type}'. Use 'full', 'half', 'third', or 'warlock'."
+        )
 
     return dict(tables[caster_type][class_level])  # copy to avoid mutation
 

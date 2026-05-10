@@ -41,6 +41,12 @@ class PlayerActionMessage(WsBaseMessage):
     spell_id: Optional[str] = None
     slot_level: Optional[int] = Field(default=None, ge=0, le=9)
     item_id: Optional[str] = None
+    gp: Optional[int] = Field(default=None, ge=0)
+    sp: Optional[int] = Field(default=None, ge=0)
+    cp: Optional[int] = Field(default=None, ge=0)
+    mode: Optional[str] = None
+    ability: Optional[str] = None
+    abilities: Optional[list[str]] = None
     hit_dice_spend: Optional[dict[str, int]] = None
     area_template: Optional[dict[str, Any]] = None
     addressed_to: Optional[str] = None
@@ -98,6 +104,36 @@ class PlayerActionMessage(WsBaseMessage):
             _validate_identifier(character_id, "hit_dice_spend key")
             if not isinstance(amount, int) or amount < 0 or amount > 20:
                 raise ValueError("Chaque dépense de dé de vie doit être entre 0 et 20.")
+        return value
+
+    @field_validator("mode")
+    @classmethod
+    def validate_mode(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        if value not in {"plus_two", "plus_one_two"}:
+            raise ValueError("mode ASI invalide.")
+        return value
+
+    @field_validator("ability")
+    @classmethod
+    def validate_ability(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        if value not in {"str", "dex", "con", "int", "wis", "cha"}:
+            raise ValueError("ability invalide.")
+        return value
+
+    @field_validator("abilities")
+    @classmethod
+    def validate_abilities(cls, value: Optional[list[str]]) -> Optional[list[str]]:
+        if value is None:
+            return None
+        if len(value) > 2:
+            raise ValueError("abilities ne peut pas contenir plus de 2 valeurs.")
+        allowed = {"str", "dex", "con", "int", "wis", "cha"}
+        if any(item not in allowed for item in value):
+            raise ValueError("abilities invalide.")
         return value
 
 

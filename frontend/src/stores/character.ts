@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { characterApi } from '../services/api'
-import type { Character, HitDiceState } from '../types'
+import type { Character, CharacterLeveledUpPayload, EquipmentItem, HitDiceState } from '../types'
 
 export const useCharacterStore = defineStore('character', () => {
   const myCharacter = ref<Character | null>(null)
@@ -48,52 +48,64 @@ export const useCharacterStore = defineStore('character', () => {
   }
 
   function updateHp(characterId: string, hpCurrent: number) {
-    if (myCharacter.value?.id === characterId) {
-      myCharacter.value = { ...myCharacter.value, hp_current: hpCurrent }
-    }
-    const idx = sessionCharacters.value.findIndex((c) => c.id === characterId)
-    if (idx !== -1) {
-      const existing = sessionCharacters.value[idx]
-      sessionCharacters.value[idx] = { ...existing, hp_current: hpCurrent } as Character
-    }
+    patchCharacter(characterId, { hp_current: hpCurrent })
   }
 
-  function updateEquipment(characterId: string, equipment: Record<string, unknown>[]) {
-    if (myCharacter.value?.id === characterId) {
-      myCharacter.value = { ...myCharacter.value, equipment }
-    }
-    const idx = sessionCharacters.value.findIndex((c) => c.id === characterId)
-    if (idx !== -1) {
-      sessionCharacters.value[idx] = { ...sessionCharacters.value[idx], equipment } as Character
-    }
+  function updateEquipment(characterId: string, equipment: EquipmentItem[]) {
+    patchCharacter(characterId, { equipment })
   }
 
   function updateSpellSlots(
     characterId: string,
     spellSlots: Record<string, { total: number; used: number }>,
   ) {
-    if (myCharacter.value?.id === characterId) {
-      myCharacter.value = { ...myCharacter.value, spell_slots: spellSlots }
-    }
-    const idx = sessionCharacters.value.findIndex((c) => c.id === characterId)
-    if (idx !== -1) {
-      sessionCharacters.value[idx] = {
-        ...sessionCharacters.value[idx],
-        spell_slots: spellSlots,
-      } as Character
-    }
+    patchCharacter(characterId, { spell_slots: spellSlots })
   }
 
   function updateHitDice(characterId: string, hitDice: HitDiceState) {
+    patchCharacter(characterId, { hit_dice: hitDice })
+  }
+
+  function updateXp(characterId: string, xp: number, level?: number, xpToNext?: number) {
+    patchCharacter(characterId, {
+      xp,
+      ...(level !== undefined ? { level } : {}),
+      ...(xpToNext !== undefined ? { xp_to_next_level: xpToNext } : {}),
+    })
+  }
+
+  function updateCurrency(characterId: string, gp: number, sp: number, cp: number) {
+    patchCharacter(characterId, { gp, sp, cp })
+  }
+
+  function applyLevelUp(payload: CharacterLeveledUpPayload) {
+    patchCharacter(payload.character_id, {
+      level: payload.new_level,
+      hp_current: payload.hp,
+      hp_max: payload.hp_max,
+      spell_slots: payload.spell_slots,
+      hit_dice: payload.hit_dice,
+      pending_asi: Boolean(payload.requires_asi),
+      ...(payload.xp_to_next_level !== undefined
+        ? { xp_to_next_level: payload.xp_to_next_level }
+        : {}),
+    })
+  }
+
+  function setPendingAsi(characterId: string, value: boolean) {
+    patchCharacter(characterId, { pending_asi: value })
+  }
+
+  function patchCharacter(characterId: string, patch: Partial<Character>) {
     if (myCharacter.value?.id === characterId) {
-      myCharacter.value = { ...myCharacter.value, hit_dice: hitDice }
+      myCharacter.value = { ...myCharacter.value, ...patch }
+    }
+    if (selectedCharacter.value?.id === characterId) {
+      selectedCharacter.value = { ...selectedCharacter.value, ...patch }
     }
     const idx = sessionCharacters.value.findIndex((c) => c.id === characterId)
     if (idx !== -1) {
-      sessionCharacters.value[idx] = {
-        ...sessionCharacters.value[idx],
-        hit_dice: hitDice,
-      } as Character
+      sessionCharacters.value[idx] = { ...sessionCharacters.value[idx], ...patch } as Character
     }
   }
 
@@ -134,6 +146,10 @@ export const useCharacterStore = defineStore('character', () => {
     updateEquipment,
     updateSpellSlots,
     updateHitDice,
+    updateXp,
+    updateCurrency,
+    applyLevelUp,
+    setPendingAsi,
     setMyCharacter,
     setSelectedCharacter,
     toggleAiControl,

@@ -2,8 +2,10 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { characterApi, srdApi } from '../services/api'
-import type { Character, SrdClass, SrdSpell } from '../types'
+import type { Character, EquipmentItem, SrdClass, SrdSpell } from '../types'
 import ConfirmDialog from '../components/common/ConfirmDialog.vue'
+import CurrencyDisplay from '../components/character/CurrencyDisplay.vue'
+import XpBar from '../components/character/XpBar.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -199,6 +201,55 @@ const classLabel = computed(() =>
     : ''),
 )
 
+const equipmentWeightLb = computed((): number => {
+  const items = character.value?.equipment ?? []
+  return items.reduce((sum, item) => {
+    const qty = Number(item.quantity ?? 1)
+    const weight = Number(item.weight_lb ?? item.weight ?? 0)
+    return sum + (Number.isFinite(weight) ? weight * qty : 0)
+  }, 0)
+})
+
+const equipmentWeightKg = computed((): number => Math.round(equipmentWeightLb.value * 0.453592 * 10) / 10)
+
+function itemName(item: EquipmentItem | Record<string, unknown>): string {
+  return String(item.name_fr ?? item.name ?? item.id ?? 'Objet')
+}
+
+function itemKind(item: EquipmentItem | Record<string, unknown>): string {
+  const type = String(item.item_type ?? '')
+  const category = String(item.category ?? '')
+  const labels: Record<string, string> = {
+    weapon: 'Arme',
+    armor: 'Armure',
+    shield: 'Bouclier',
+    gear: 'Matériel',
+    consumable: 'Consommable',
+    magic: 'Magique',
+    simple: 'Arme courante',
+    martial: 'Arme de guerre',
+    light: 'Armure légère',
+    medium: 'Armure intermédiaire',
+    heavy: 'Armure lourde',
+  }
+  return labels[type] ?? labels[category] ?? category ?? type ?? 'Objet'
+}
+
+function itemDetails(item: EquipmentItem | Record<string, unknown>): string {
+  const parts: string[] = []
+  if (item.damage_dice) parts.push(`${item.damage_dice} ${item.damage_type ?? ''}`.trim())
+  if (item.base_ac) parts.push(`CA ${item.base_ac}`)
+  if (item.slot) parts.push(`slot ${item.slot}`)
+  if (Array.isArray(item.occupied_slots) && item.occupied_slots.length) {
+    parts.push(`slots ${item.occupied_slots.join(', ')}`)
+  }
+  if (item.weight_lb) parts.push(`${item.weight_lb} lb / ${Math.round(Number(item.weight_lb) * 0.453592 * 10) / 10} kg`)
+  if (item.cost_gp) parts.push(`${item.cost_gp} po`)
+  if (item.identified === false) parts.push('non identifié')
+  if (item.attunement_required) parts.push(item.attuned ? 'harmonisé' : 'harmonisation requise')
+  return parts.join(' · ')
+}
+
 // ─── Load data ─────────────────────────────────────────────────────────────────
 
 onMounted(async () => {
@@ -237,11 +288,14 @@ const inventoryError = ref<string | null>(null)
 
 const EQUIPPABLE_CATEGORIES = new Set([
   'simple_melee', 'simple_ranged', 'martial_melee', 'martial_ranged',
-  'light', 'medium', 'heavy', 'shield',
+  'simple', 'martial', 'light', 'medium', 'heavy', 'shield',
 ])
 
 function isEquippable(item: Record<string, unknown>): boolean {
-  return EQUIPPABLE_CATEGORIES.has(item.category as string)
+  return (
+    EQUIPPABLE_CATEGORIES.has(item.category as string)
+    || ['weapon', 'armor', 'shield'].includes(String(item.item_type ?? ''))
+  )
 }
 
 function isConsumable(item: Record<string, unknown>): boolean {
@@ -429,6 +483,15 @@ void personalityTraits
                 boxShadow: `0 0 8px ${hpGlowColor}`,
               }"
             />
+          </div>
+        </div>
+
+        <div class="relative mt-4 grid max-w-[700px] grid-cols-1 gap-3 md:grid-cols-[1fr_220px]">
+          <div class="rpg-stat-slab rounded-lg border px-4 py-3">
+            <XpBar :character="character" />
+          </div>
+          <div class="rpg-stat-slab rounded-lg border px-4 py-3">
+            <CurrencyDisplay :character="character" />
           </div>
         </div>
       </div>
@@ -653,6 +716,9 @@ void personalityTraits
               <div class="rpg-sheet-section-header">
                 <span class="rpg-sheet-section-star">✦</span>
                 <h3 class="rpg-sheet-section-title font-display font-bold uppercase">Équipement</h3>
+                <span class="rpg-text-dim ml-auto text-[10px]">
+                  {{ equipmentWeightLb.toFixed(1) }} lb · {{ equipmentWeightKg }} kg
+                </span>
               </div>
 
               <p
@@ -662,8 +728,8 @@ void personalityTraits
 
               <div v-if="character.equipment?.length" class="rpg-equipment-list">
                 <div
-                  v-for="(item, idx) in (character.equipment as Record<string, unknown>[])"
-                  :key="idx"
+                  v-for="item in (character.equipment as EquipmentItem[])"
+                  :key="item.id"
                   class="rpg-equipment-item rounded-lg border"
                   :class="{ 'is-equipped': item.equipped }"
                 >
@@ -674,7 +740,7 @@ void personalityTraits
                     <span
                       class="flex-1 font-display text-[13px] font-bold capitalize"
                       :class="item.equipped ? 'rpg-text-main' : 'rpg-text-secondary'"
-                    >{{ String(item.name_fr ?? item.id ?? 'Objet') }}</span>
+                    >{{ itemName(item) }}</span>
                     <span
                       v-if="item.quantity && Number(item.quantity) > 1"
                       class="rpg-text-muted font-mono text-[10px]"
@@ -682,9 +748,12 @@ void personalityTraits
                   </div>
 
                   <div
-                    v-if="item.detail || item.damage_dice"
+                    v-if="itemKind(item) || itemDetails(item)"
                     class="rpg-text-muted mt-0.5 pl-[17px] text-[10px]"
-                  >{{ item.detail ?? (item.damage_dice ? `${item.damage_dice} ${item.damage_type ?? ''}` : '') }}</div>
+                  >
+                    <span class="rpg-text-gold">{{ itemKind(item) }}</span>
+                    <span v-if="itemDetails(item)"> · {{ itemDetails(item) }}</span>
+                  </div>
 
                   <div class="rpg-equipment-actions flex gap-1.5 mt-1.5">
                     <button
