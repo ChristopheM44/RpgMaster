@@ -486,6 +486,10 @@ class PlayerAgent(BaseAgent):
                     '  "inner_reasoning": "raison brève"\n'
                     "}\n\n"
                     "Si l'action n'est pas claire, utilise action_type='wait'.\n\n"
+                    "Règle table stricte : le personnage peut décrire ses paroles, intentions, "
+                    "postures et gestes volontaires, mais pas les conséquences du monde ni les "
+                    "réactions d'autrui. Ne mets pas dans roleplay_text un objet qui casse, du bois "
+                    "qui craque, un PNJ convaincu, une foule qui réagit ou un indice découvert.\n\n"
                     f"Réponse brute :\n{stripped[:1200]}"
                 ),
             },

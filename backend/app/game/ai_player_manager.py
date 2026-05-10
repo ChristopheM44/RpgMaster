@@ -24,6 +24,10 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from app.agents.player_agent import _NON_JSON_LLM_ERROR
 from app.agents.schemas import PlayerActionChoice
+from app.game.companion_visibility import (
+    companion_visible_game_state,
+    sanitize_companion_visible_text,
+)
 from app.game.constants import INACTIVE_STATUSES
 from app.game.event_bus import EventType, event_bus
 from app.llm.budget import (
@@ -373,6 +377,7 @@ class AIPlayerManager:
             recent_messages = await load_recent_messages(session_id, db)
             scene_context = _build_scene_context(recent_messages)
 
+        visible_game_state = companion_visible_game_state(active.state_data)
         order = list(active.turn_manager._order)
         reacted = 0
         companion_responses: list[dict[str, str]] = []
@@ -395,7 +400,7 @@ class AIPlayerManager:
             )
             try:
                 action = await agent.roleplay(
-                    game_state=active.state_data,
+                    game_state=visible_game_state,
                     scene_context=scene_context,
                     messages=recent_messages,
                 )
@@ -571,6 +576,7 @@ class AIPlayerManager:
             speaker = str(candidate.get("speaker") or companion["name"])
             if not text:
                 text = f"{speaker} acquiesce et garde son attention sur la suite."
+            text = sanitize_companion_visible_text(text, character_name=speaker)
 
             await event_bus.publish_to_session(
                 session_id,
@@ -728,7 +734,9 @@ class AIPlayerManager:
                     available_actions=available_actions,
                 )
             else:
-                return await agent.roleplay(game_state=active.state_data)
+                return await agent.roleplay(
+                    game_state=companion_visible_game_state(active.state_data)
+                )
         except Exception as exc:
             logger.error(
                 "AIPlayerManager: agent '%s' raised exception: %s",
@@ -1006,7 +1014,10 @@ class AIPlayerManager:
     @classmethod
     def _visible_action_text(cls, action: PlayerActionChoice, character_name: str) -> str:
         if action.action_type not in _MECHANICAL_ACTION_TYPES:
-            return action.roleplay_text
+            return sanitize_companion_visible_text(
+                action.roleplay_text,
+                character_name=character_name,
+            )
 
         description = str(action.action_description or "").strip()
         if not description:
@@ -1018,7 +1029,7 @@ class AIPlayerManager:
             text = f"{character_name} {cls._lowercase_initial(description)}"
         if text[-1] not in ".!?…":
             text += "."
-        return text
+        return sanitize_companion_visible_text(text, character_name=character_name)
 
     @staticmethod
     def _lowercase_initial(text: str) -> str:

@@ -18,6 +18,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.player_agent import _NON_JSON_LLM_ERROR
 from app.agents.schemas import PlayerActionChoice
+from app.game.companion_visibility import (
+    companion_visible_game_state,
+    sanitize_companion_visible_text,
+)
 from app.game.event_bus import EventType, event_bus
 from app.game.session_manager import ActiveSession
 from app.services.message_service import load_recent_messages, persist_narration
@@ -323,6 +327,7 @@ class NarrativeFlowService:
             return []
 
         recent_messages = await load_recent_messages(session_id, db) if db is not None else []
+        visible_game_state = companion_visible_game_state(active.state_data)
         responses: list[dict[str, str]] = []
         for char_id in target_ids:
             if char_id == trigger_character_id:
@@ -336,13 +341,13 @@ class NarrativeFlowService:
             try:
                 if hasattr(agent, "respond_to_player"):
                     choice = await agent.respond_to_player(
-                        game_state=active.state_data,
+                        game_state=visible_game_state,
                         player_message=player_text,
                         messages=recent_messages,
                     )
                 else:
                     choice = await agent.roleplay(
-                        game_state=active.state_data,
+                        game_state=visible_game_state,
                         scene_context=player_text,
                         messages=recent_messages,
                     )
@@ -533,10 +538,13 @@ class NarrativeFlowService:
     def _visible_companion_text(choice: PlayerActionChoice, character_name: str) -> str:
         roleplay = str(choice.roleplay_text or "").strip()
         if roleplay:
-            return roleplay
+            return sanitize_companion_visible_text(roleplay, character_name=character_name)
         if choice.action_type not in _COMPANION_ARBITRAGE_ACTIONS:
             return roleplay
-        return NarrativeFlowService._companion_action_prompt(choice, character_name)
+        return sanitize_companion_visible_text(
+            NarrativeFlowService._companion_action_prompt(choice, character_name),
+            character_name=character_name,
+        )
 
     @staticmethod
     def _companion_action_prompt(choice: PlayerActionChoice, character_name: str) -> str:

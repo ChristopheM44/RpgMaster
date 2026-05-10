@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.agents.player_agent import PlayerAgent
-from app.agents.schemas import PlayerPersonality
+from app.agents.schemas import PlayerActionChoice, PlayerPersonality
 from app.game.ai_player_manager import AIPlayerManager, rebuild_ai_players
 from app.game.session_manager import ActiveSession
 from app.game.turn_manager import TurnEntry
@@ -135,6 +135,57 @@ async def test_exploration_reactions_calls_roleplay_for_ai() -> None:
     assert responses == [
         {"speaker": "Thorin", "text": "Thorin regarde autour de lui, méfiant."}
     ]
+
+
+@pytest.mark.asyncio
+async def test_exploration_reactions_hide_unplayed_campaign_context_from_ai() -> None:
+    active = _make_exploration_session()
+    active.state_data["campaign_context"] = {
+        "player_contract": {
+            "hook": "Une amie se meurt d'une malédiction liée à Omu.",
+            "known_objectives": ["Trouver Omu."],
+        },
+        "active_chapter": {
+            "clues": ["La piste mène à Omu."],
+            "complications": ["La malédiction empire."],
+        },
+        "played_canon": {
+            "established_facts": [],
+            "player_decisions": [],
+            "revealed_secrets": [],
+            "rolling_summary": "",
+        },
+    }
+    captured_state: dict[str, Any] = {}
+    ai_agent = MagicMock()
+    ai_agent.character_name = "Thorin"
+
+    async def capture_roleplay(**kwargs):
+        captured_state.update(kwargs["game_state"])
+        return PlayerActionChoice(
+            action_type="talk",
+            action_description="Réagit.",
+            roleplay_text="Thorin reste prudent.",
+        )
+
+    ai_agent.roleplay = AsyncMock(side_effect=capture_roleplay)
+    active.ai_players["ai_1"] = ai_agent
+    resolver = MagicMock()
+    resolver.resolve = AsyncMock()
+
+    with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=AsyncMock()):
+        reacted, _ = await AIPlayerManager().run_exploration_reactions(
+            "expl_session",
+            active,
+            resolver,
+            trigger_character_id="human_1",
+        )
+
+    assert reacted == 1
+    serialized = str(captured_state)
+    assert "player_contract" not in serialized
+    assert "active_chapter" not in serialized
+    assert "Omu" not in serialized
 
 
 @pytest.mark.asyncio

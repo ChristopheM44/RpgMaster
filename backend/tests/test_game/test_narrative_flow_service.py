@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -116,6 +117,149 @@ async def test_direct_companion_dialogue_does_not_call_gm() -> None:
     active.ai_players["elara_1"].respond_to_player.assert_not_called()
     assert exchange.audience == "companion"
     assert any(p.get("speaker_id") == "thorin_1" for _, p in published)
+
+
+@pytest.mark.asyncio
+async def test_companion_dialogue_strips_gm_owned_world_result() -> None:
+    active = _active_with_companions()
+    active.ai_players["thorin_1"].character_name = "Oaken"
+    active.ai_players["thorin_1"].respond_to_player = AsyncMock(
+        return_value=PlayerActionChoice(
+            action_type="talk",
+            action_description="Appuie son propos.",
+            roleplay_text=(
+                "Je pose une main sur la table, le bois craque sous mes doigts. "
+                "« Nous ne sommes pas des touristes, Azaka. »"
+            ),
+        )
+    )
+    resolver = MagicMock()
+    resolver.resolve = AsyncMock()
+    resolver.social_conclude = AsyncMock()
+    published: list[tuple[str, dict]] = []
+
+    async def capture(_session_id, event_type, payload, source=None):
+        published.append((event_type, payload))
+
+    with patch("app.services.narrative_flow_service.event_bus.publish_to_session", new=capture):
+        await NarrativeFlowService().handle_exploration_action(
+            session_id="scene-1",
+            action=_action("@Oaken que dis-tu ?", addressed_to="thorin_1"),
+            active=active,
+            action_resolver=resolver,
+            db=None,
+        )
+
+    dialogue_payload = next(
+        payload for event_type, payload in published
+        if event_type == "narration" and payload.get("speaker") == "Oaken"
+    )
+    assert "bois craque" not in dialogue_payload["text"]
+    assert "pose une main sur la table" in dialogue_payload["text"]
+    assert "Nous ne sommes pas des touristes" in dialogue_payload["text"]
+
+
+@pytest.mark.asyncio
+async def test_companion_state_hides_unplayed_campaign_hook() -> None:
+    active = _active_with_companions()
+    active.state_data["campaign_context"] = {
+        "player_contract": {
+            "hook": "Une amie se meurt d'une malédiction liée à Omu.",
+            "known_objectives": ["Trouver Omu."],
+        },
+        "active_chapter": {
+            "clues": ["La piste mène à Omu."],
+            "complications": ["La malédiction empire."],
+            "possible_exits": ["Partir vers la jungle."],
+        },
+        "known_quests": [
+            {
+                "id": "omu",
+                "title": "Sauver l'amie mourante",
+                "summary": "Omu est la source du mal.",
+            }
+        ],
+        "played_canon": {
+            "established_facts": [],
+            "player_decisions": [],
+            "revealed_secrets": [],
+            "rolling_summary": "",
+        },
+    }
+    captured_state: dict = {}
+
+    async def capture_state(**kwargs):
+        captured_state.update(kwargs["game_state"])
+        return PlayerActionChoice(
+            action_type="talk",
+            action_description="Répond prudemment.",
+            roleplay_text="Je ne sais que ce que nous avons vu.",
+        )
+
+    active.ai_players["thorin_1"].respond_to_player = AsyncMock(side_effect=capture_state)
+    resolver = MagicMock()
+    resolver.resolve = AsyncMock()
+    resolver.social_conclude = AsyncMock()
+
+    with patch("app.services.narrative_flow_service.event_bus.publish_to_session", new=AsyncMock()):
+        await NarrativeFlowService().handle_exploration_action(
+            session_id="scene-1",
+            action=_action("@Thorin que sais-tu d'Omu ?"),
+            active=active,
+            action_resolver=resolver,
+            db=None,
+        )
+
+    serialized = json.dumps(captured_state, ensure_ascii=False)
+    assert "player_contract" not in serialized
+    assert "active_chapter" not in serialized
+    assert "known_quests" not in serialized
+    assert "Omu" not in serialized
+    assert "amie se meurt" not in serialized
+
+
+@pytest.mark.asyncio
+async def test_companion_state_keeps_played_campaign_facts() -> None:
+    active = _active_with_companions()
+    active.state_data["campaign_context"] = {
+        "player_contract": {
+            "hook": "Une amie se meurt d'une malédiction liée à Omu.",
+        },
+        "played_canon": {
+            "established_facts": ["Le MJ a révélé qu'une amie se meurt près d'Omu."],
+            "player_decisions": [],
+            "revealed_secrets": [],
+            "rolling_summary": "Le groupe a accepté d'enquêter sur Omu.",
+        },
+    }
+    captured_state: dict = {}
+
+    async def capture_state(**kwargs):
+        captured_state.update(kwargs["game_state"])
+        return PlayerActionChoice(
+            action_type="talk",
+            action_description="Répond.",
+            roleplay_text="Ce point a été établi devant nous.",
+        )
+
+    active.ai_players["thorin_1"].respond_to_player = AsyncMock(side_effect=capture_state)
+    resolver = MagicMock()
+    resolver.resolve = AsyncMock()
+    resolver.social_conclude = AsyncMock()
+
+    with patch("app.services.narrative_flow_service.event_bus.publish_to_session", new=AsyncMock()):
+        await NarrativeFlowService().handle_exploration_action(
+            session_id="scene-1",
+            action=_action("@Thorin que sais-tu d'Omu ?"),
+            active=active,
+            action_resolver=resolver,
+            db=None,
+        )
+
+    serialized = json.dumps(captured_state, ensure_ascii=False)
+    assert "player_contract" not in serialized
+    assert "Le MJ a révélé" in serialized
+    assert "enquêter sur Omu" in serialized
 
 
 @pytest.mark.asyncio

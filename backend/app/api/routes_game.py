@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel
@@ -34,6 +34,110 @@ class SaveSlotCreate(BaseModel):
 
 def _build_session_state_payload(session_id: str) -> dict:
     return build_session_state_payload(session_id, session_manager.get_session(session_id))
+
+
+def _campaign_opening_text(campaign_context: dict[str, Any]) -> str:
+    contract = campaign_context.get("player_contract", {})
+    if not isinstance(contract, dict):
+        contract = {}
+    chapter = campaign_context.get("active_chapter", {})
+    if not isinstance(chapter, dict):
+        chapter = {}
+
+    title = str(contract.get("title") or "l'aventure").strip()
+    hook = str(
+        contract.get("hook")
+        or contract.get("pitch_public")
+        or chapter.get("initial_state")
+        or ""
+    ).strip()
+    objectives = contract.get("known_objectives")
+    objective = ""
+    if isinstance(objectives, list) and objectives:
+        objective = str(objectives[0]).strip()
+    stakes = str(chapter.get("stakes") or "").strip()
+
+    parts = [f"Le rideau se lève sur {title}."]
+    if hook:
+        parts.append(hook)
+    if stakes and stakes not in hook:
+        parts.append(stakes)
+    if objective:
+        parts.append(f"Votre premier cap est clair : {objective}")
+    parts.append("La scène est à vous : que faites-vous ?")
+    return " ".join(part for part in parts if part)
+
+
+def _seed_campaign_opening_quest(
+    active: Any,
+    campaign_context: dict[str, Any],
+) -> bool:
+    contract = campaign_context.get("player_contract", {})
+    if not isinstance(contract, dict):
+        contract = {}
+    objectives = contract.get("known_objectives")
+    objective = ""
+    if isinstance(objectives, list) and objectives:
+        objective = str(objectives[0]).strip()
+    summary = str(contract.get("hook") or contract.get("pitch_public") or objective).strip()
+    if not summary and not objective:
+        return False
+
+    quests = active.state_data.setdefault("quests", [])
+    if not isinstance(quests, list):
+        quests = []
+        active.state_data["quests"] = quests
+
+    quest_id = "campaign_opening"
+    quest_entry = {
+        "id": quest_id,
+        "category": "principale",
+        "title": objective or str(contract.get("title") or "Suivre l'accroche"),
+        "summary": summary or objective,
+        "urgency": None,
+        "status": "active",
+    }
+    idx = next((i for i, quest in enumerate(quests) if quest.get("id") == quest_id), -1)
+    if idx >= 0:
+        quests[idx] = {**quests[idx], **quest_entry}
+    else:
+        quests.append(quest_entry)
+    return True
+
+
+async def _send_campaign_opening_narration(
+    session_id: str,
+    active: Any,
+    campaign_context: dict[str, Any],
+    db: AsyncSession,
+) -> None:
+    from app.services.message_service import persist_narration
+
+    welcome_text = _campaign_opening_text(campaign_context)
+    quest_changed = _seed_campaign_opening_quest(active, campaign_context)
+    active.state_data["welcome_narration_sent"] = True
+    active.mark_dirty()
+    await session_manager.save_state(session_id, db)
+
+    if quest_changed:
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.QUEST_UPDATED,
+            {"quests": list(active.state_data.get("quests", []))},
+            source="routes_game",
+        )
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.NARRATION,
+        {
+            "text": welcome_text,
+            "speaker": "Maître du Jeu",
+            "speaker_kind": "gm",
+            "entry_kind": "narration",
+        },
+        source="routes_game",
+    )
+    await persist_narration(session_id, welcome_text, "Maître du Jeu", db)
 
 
 @router.get("/{session_id}/state")
@@ -166,6 +270,13 @@ async def start_game(
             source="routes_game",
         )
         await persist_narration(session_id, welcome_text, "Maître du Jeu", db)
+    elif campaign_context is not None:
+        await _send_campaign_opening_narration(
+            session_id,
+            active,
+            campaign_context,
+            db,
+        )
     elif body.auto_generate:
         # Le MJ génère une accroche d'aventure adapée au groupe (fire-and-forget)
         from app.api.ws_game import _send_welcome_narration

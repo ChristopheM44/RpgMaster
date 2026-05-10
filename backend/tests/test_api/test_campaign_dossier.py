@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import select
 
 from app.models.game_state import GameState
+from app.models.message import Message
 from app.security_url import UnsafeUrlError, validate_public_http_url
 from app.services import campaign_dossier_service
 
@@ -400,6 +401,18 @@ async def test_start_game_injects_minimal_campaign_context(async_client, db_sess
     assert "import_sources" not in serialized
     assert f"{SECRET}_FUTURE" not in serialized
     assert SECRET not in serialized
+    assert game_state.state_data["quests"][0]["id"] == "campaign_opening"
+    assert "Une lueur bleue" in game_state.state_data["quests"][0]["summary"]
+
+    messages = await db_session.execute(
+        select(Message)
+        .where(Message.session_id == session_id)
+        .order_by(Message.created_at.desc())
+    )
+    opening = messages.scalars().first()
+    assert opening is not None
+    assert "La partie commence" not in opening.content
+    assert "Une lueur bleue attire les voyageurs" in opening.content
 
 
 @pytest.mark.asyncio
