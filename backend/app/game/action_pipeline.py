@@ -270,6 +270,7 @@ class ActionRequest(BaseModel):
     slot_level: Optional[int] = None
     display_text: Optional[str] = None
     persist_actor_action: bool = True
+    suppress_gm_narration: bool = False
 
 
 class ResolvedAction(BaseModel):
@@ -479,10 +480,13 @@ class ActionPipeline:
             content=request.content,
             roll_results=roll_results,
         )
+        if request.suppress_gm_narration:
+            use_gm = False
         if (
             is_sober_mode()
             and phase_value != "COMBAT"
             and is_pure_companion_social_prompt(request.action_type, request.content)
+            and not request.suppress_gm_narration
             and not active.ai_players
         ):
             use_gm = True
@@ -570,7 +574,9 @@ class ActionPipeline:
                 source=self._source,
             )
 
-        if gm_response:
+        if request.suppress_gm_narration:
+            narration_text = ""
+        elif gm_response:
             narration_text = gm_response.content
         elif use_gm:
             narration_text = _FALLBACK_NARRATION

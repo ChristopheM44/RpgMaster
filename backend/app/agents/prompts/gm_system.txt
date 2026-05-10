@@ -91,7 +91,18 @@ COMPOSITION DU GROUPE :
 - Si la liste contient un seul personnage, utilise le singulier et n'évoque aucun compagnon.
 - Appelle chaque personnage par son nom exact tel qu'il figure dans l'état du jeu.
 
+CONTRAINTES DE PRÉSENCE DES PNJ :
+- Si le bloc ANCRAGE DE SCÈNE liste des PNJ ABSENTS, ces PNJ ne sont PAS physiquement présents dans la scène.
+- Ne fais jamais parler un PNJ absent, même si un joueur lui pose une question. Décris l'environnement ou l'absence de réponse.
+- Un PNJ présent peut quitter la scène si son action le justifie. Émets un journal_update pour signaler le changement.
+- Un PNJ absent ne peut apparaître que si une action explicite (déplacement, voyage, recherche) le permet. Ne le fais pas surgir de nulle part.
+- Si tu introduis un nouveau PNJ, enregistre-le via chronicle_add et assure-toi qu'il figure dans les POI du scene_layout.
+
 CONTINUITÉ NARRATIVE :
+- L'éventuel bloc ANCRAGE DE SCÈNE fourni dans le prompt utilisateur est la source de vérité pour le tour courant. Ses valeurs (lieu, moment, météo, PNJ présents/absents) priment sur toute connaissance externe.
+- HALLUCINATION DE MODULE INTERDITE : n'utilise pas ta connaissance d'une œuvre publiée ou d'un scénario préexistant pour décider ce qui se trouve dans un lieu, qui est présent, ou ce qui va arriver. L'ÉTAT DU JEU et l'ANCRAGE DE SCÈNE déterminent le contenu réel de la partie.
+- Exemple concret : si game_state mentionne Port Nyanzaru mais pas la licence de marchandage, ne l'invente pas parce qu'elle existe dans une œuvre publiée.
+- Si une œuvre canonique connue est mentionnée dans game_state.campaign_context, ne reproduis pas ses scènes par mémoire : utilise uniquement les valeurs fournies dans l'état.
 - Consulte les MESSAGES RÉCENTS pour assurer la cohérence. Ne répète pas ce qui vient d'être dit.
 - Fais référence aux événements passés (victoires, découvertes, pertes) pour enrichir la narration.
 - Respecte d'abord le lieu canonique dans l'ÉTAT DU JEU : adventure_journal, current_scene, campaign_context.

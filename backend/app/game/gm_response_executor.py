@@ -334,6 +334,7 @@ class GMResponseExecutor:
             {
                 "location_region": None,
                 "location_place": None,
+                "location_venue": None,
                 "time_of_day": "morning",
                 "day_number": 1,
                 "calendar_date": None,
@@ -343,6 +344,7 @@ class GMResponseExecutor:
         for key in (
             "location_region",
             "location_place",
+            "location_venue",
             "time_of_day",
             "day_number",
             "calendar_date",
@@ -434,6 +436,7 @@ class GMResponseExecutor:
             logger.warning("scene_layout ignore : params invalides - %s", params)
             return
 
+        self._filter_absent_npc_pois(layout, active)
         active.state_data["current_scene"] = layout
         self._register_scene_npcs(layout, active)
         active.mark_dirty()
@@ -733,10 +736,12 @@ class GMResponseExecutor:
             npc_states = {}
             active.state_data["npc_states"] = npc_states
 
+        journal = active.state_data.get("adventure_journal") or {}
         location = str(
             layout.get("scene_id")
+            or journal.get("location_venue")
             or layout.get("terrain")
-            or active.state_data.get("adventure_journal", {}).get("location_place")
+            or journal.get("location_place")
             or ""
         )
         for poi in layout.get("pois", []) or []:
@@ -761,6 +766,41 @@ class GMResponseExecutor:
             )
             if location:
                 npc["last_location"] = location
+
+    @staticmethod
+    def _filter_absent_npc_pois(layout: dict[str, Any], active: ActiveSession) -> None:
+        """Remove known NPC POIs whose stored location contradicts this scene."""
+        npc_states = active.state_data.get("npc_states")
+        if not isinstance(npc_states, dict):
+            return
+        scene_id = str(layout.get("scene_id") or "").strip()
+        if not scene_id:
+            return
+
+        filtered: list[dict[str, Any]] = []
+        for poi in layout.get("pois", []) or []:
+            if not isinstance(poi, dict):
+                continue
+            kind = str(poi.get("kind") or "").strip().casefold()
+            icon = str(poi.get("icon") or "").strip().casefold()
+            npc_id = str(poi.get("id") or "").strip()
+            is_npc = kind == "npc" or icon == "npc"
+            npc = npc_states.get(npc_id) if npc_id else None
+            last_location = (
+                str(npc.get("last_location") or "").strip()
+                if isinstance(npc, dict)
+                else ""
+            )
+            if is_npc and last_location and last_location != scene_id:
+                logger.warning(
+                    "scene_layout : PNJ absent ignore (id=%s, last_location=%s, scene_id=%s)",
+                    npc_id,
+                    last_location,
+                    scene_id,
+                )
+                continue
+            filtered.append(poi)
+        layout["pois"] = filtered
 
     @classmethod
     def _normalize_scene_layout(cls, params: dict[str, Any]) -> dict[str, Any]:
@@ -788,6 +828,9 @@ class GMResponseExecutor:
         raw_scene_id = cls._clean_optional_text(raw.get("scene_id"), max_len=80)
         if raw_scene_id:
             layout["scene_id"] = raw_scene_id
+        raw_description = cls._clean_optional_text(raw.get("description"), max_len=320)
+        if raw_description:
+            layout["description"] = raw_description
 
         for idx, poi in enumerate(raw.get("pois", []) or []):
             if not isinstance(poi, dict):

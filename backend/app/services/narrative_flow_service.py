@@ -220,39 +220,39 @@ class NarrativeFlowService:
             return exchange
 
         if should_arbitrate_world:
+            npc_target_id = None
+            if hasattr(action_resolver, "resolve_npc_dialogue"):
+                npc_target_id = self._present_npc_target_id(
+                    text,
+                    active,
+                    getattr(action, "target_id", None),
+                )
             resolved = await action_resolver.resolve(
                 session_id=session_id,
                 action_type=getattr(action, "action_type", "free_text"),
                 content=getattr(action, "content", None),
                 character_id=getattr(action, "character_id", None),
-                target_id=getattr(action, "target_id", None),
+                target_id=npc_target_id or getattr(action, "target_id", None),
                 active=active,
                 db=db,
                 spell_id=getattr(action, "spell_id", None),
                 slot_level=getattr(action, "slot_level", None),
                 persist_actor_action=detection.audience != "mixed",
+                suppress_gm_narration=bool(npc_target_id),
             )
-            if hasattr(action_resolver, "resolve_npc_dialogue"):
-                from app.game.action_pipeline import resolve_npc_target_id
-
-                npc_target_id = resolve_npc_target_id(
-                    text,
-                    active.state_data,
-                    getattr(action, "target_id", None),
-                )
+            if npc_target_id:
                 roll_results = getattr(resolved, "mechanics", None)
                 if not isinstance(roll_results, dict):
                     roll_results = None
-                if npc_target_id:
-                    await action_resolver.resolve_npc_dialogue(
-                        session_id=session_id,
-                        content=text,
-                        character_id=getattr(action, "character_id", None),
-                        target_id=npc_target_id,
-                        active=active,
-                        db=db,
-                        roll_results=roll_results,
-                    )
+                await action_resolver.resolve_npc_dialogue(
+                    session_id=session_id,
+                    content=text,
+                    character_id=getattr(action, "character_id", None),
+                    target_id=npc_target_id,
+                    active=active,
+                    db=db,
+                    roll_results=roll_results,
+                )
             exchange.gm_arbitrated = True
             return exchange
 
@@ -455,6 +455,21 @@ class NarrativeFlowService:
             return bool(resolve_npc_target_id(text, active.state_data, explicit_target_id))
         except Exception:
             return False
+
+    @staticmethod
+    def _present_npc_target_id(
+        text: str,
+        active: ActiveSession,
+        explicit_target_id: Optional[str],
+    ) -> Optional[str]:
+        try:
+            from app.game.action_pipeline import _is_npc_poi, _poi_by_id, resolve_npc_target_id
+
+            npc_target_id = resolve_npc_target_id(text, active.state_data, explicit_target_id)
+            poi = _poi_by_id(active.state_data, npc_target_id)
+            return npc_target_id if _is_npc_poi(poi) else None
+        except Exception:
+            return None
 
     async def _persist_player_message(
         self,

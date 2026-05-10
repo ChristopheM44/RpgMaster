@@ -67,7 +67,10 @@ async def _build_session_state_payload_with_maps(session_id: str, db: AsyncSessi
     )
 
 
-def _campaign_opening_text(campaign_context: dict[str, Any]) -> str:
+def _hook_context_text(campaign_context: dict[str, Any]) -> str:
+    """Pourquoi le groupe est ici — contexte de mission, hook, objectif."""
+    if not isinstance(campaign_context, dict):
+        return ""
     contract = campaign_context.get("player_contract", {})
     if not isinstance(contract, dict):
         contract = {}
@@ -75,11 +78,9 @@ def _campaign_opening_text(campaign_context: dict[str, Any]) -> str:
     if not isinstance(chapter, dict):
         chapter = {}
 
-    title = str(contract.get("title") or "l'aventure").strip()
     hook = str(
         contract.get("hook")
         or contract.get("pitch_public")
-        or chapter.get("initial_state")
         or ""
     ).strip()
     objectives = contract.get("known_objectives")
@@ -88,20 +89,54 @@ def _campaign_opening_text(campaign_context: dict[str, Any]) -> str:
         objective = str(objectives[0]).strip()
     stakes = str(chapter.get("stakes") or "").strip()
 
-    location = _opening_location_name(campaign_context)
-    parts = [
-        f"La première scène jouable de {title} s'ouvre à {location}.",
-        "Le groupe est présent, libre de questionner la situation avant de s'engager.",
-    ]
+    parts = []
     if hook:
         parts.append(hook)
     if stakes and stakes not in hook:
         parts.append(stakes)
     if objective:
         parts.append(f"Un cap possible se dessine : {objective}.")
+    return " ".join(part for part in parts if part)
+
+
+def _scene_context_text(campaign_context: dict[str, Any]) -> str:
+    """Où le groupe se trouve physiquement — lieu, moment, personnes présentes."""
+    if not isinstance(campaign_context, dict):
+        return "un lieu de départ"
+    contract = campaign_context.get("player_contract", {})
+    if not isinstance(contract, dict):
+        contract = {}
+    title = str(contract.get("title") or "l'aventure").strip()
+    opening_scene = _opening_scene(campaign_context)
+    location = _opening_scene_location_label(opening_scene)
+    return f"La première scène jouable de {title} s'ouvre à {location}."
+
+
+def _campaign_opening_text(campaign_context: dict[str, Any]) -> str:
+    hook_text = _hook_context_text(campaign_context)
+    scene_text = _scene_context_text(campaign_context)
+    opening_scene = _opening_scene(campaign_context)
+    scene_description = str(opening_scene.get("description") or "").strip()
+    affordances = ["examiner les détails du lieu"]
+    if opening_scene.get("present_npcs"):
+        affordances.insert(0, "parler aux personnes présentes")
+    if opening_scene.get("visible_clues"):
+        affordances.append("suivre un indice visible")
+    if opening_scene.get("exits"):
+        affordances.append("prendre une sortie visible")
+    else:
+        affordances.append("explorer les environs")
+
+    parts = [
+        scene_text,
+        "Le groupe est présent, libre de questionner la situation avant de s'engager.",
+    ]
+    if scene_description:
+        parts.append(scene_description)
+    if hook_text:
+        parts.append(hook_text)
     parts.append(
-        "Vous pouvez parler aux personnes présentes, examiner les indices du lieu, "
-        "chercher une autre source d'information ou prendre la route. Que faites-vous ?"
+        f"Vous pouvez {', '.join(affordances[:-1])} ou {affordances[-1]}. Que faites-vous ?"
     )
     return " ".join(part for part in parts if part)
 
@@ -135,24 +170,24 @@ def _free_opening_text(
     )
 
 
-def _opening_location_name(campaign_context: Optional[dict[str, Any]]) -> str:
+def _first_key_location(campaign_context: Optional[dict[str, Any]]) -> str:
     if not isinstance(campaign_context, dict):
-        return "un lieu de départ"
+        return ""
     chapter = campaign_context.get("active_chapter", {})
     if not isinstance(chapter, dict):
-        chapter = {}
+        return ""
     key_locations = chapter.get("key_locations")
     if isinstance(key_locations, list):
         for location in key_locations:
             text = str(location).strip()
             if text:
                 return text
-    initial_state = str(chapter.get("initial_state") or "").strip()
-    if initial_state:
-        sentence = initial_state.split(".")[0].strip()
-        if 0 < len(sentence) <= 80:
-            return sentence
-    return "un lieu de départ"
+    return ""
+
+
+def _opening_location_name(campaign_context: Optional[dict[str, Any]]) -> str:
+    opening_scene = _opening_scene(campaign_context)
+    return _opening_scene_location_label(opening_scene)
 
 
 def _opening_objective(campaign_context: Optional[dict[str, Any]]) -> str:
@@ -167,16 +202,274 @@ def _opening_objective(campaign_context: Optional[dict[str, Any]]) -> str:
     return ""
 
 
-def _opening_npcs(campaign_context: Optional[dict[str, Any]]) -> list[str]:
+def _opening_scene_entity(value: Any, *, fallback_id: str) -> Optional[dict[str, str]]:
+    if isinstance(value, dict):
+        entity_id = str(value.get("id") or "").strip()
+        name = str(value.get("name") or value.get("label") or entity_id).strip()
+        description = str(value.get("description") or value.get("action_hint") or "").strip()
+    else:
+        entity_id = ""
+        name = str(value or "").strip()
+        description = ""
+    if not name and not entity_id:
+        return None
+    return {
+        "id": entity_id or _safe_id(name, fallback_id),
+        "name": name or entity_id,
+        "description": description,
+    }
+
+
+def _opening_scene_entities(value: Any, *, fallback_prefix: str, limit: int) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        return []
+    out: list[dict[str, str]] = []
+    for index, item in enumerate(value):
+        entity = _opening_scene_entity(item, fallback_id=f"{fallback_prefix}_{index + 1}")
+        if entity is not None:
+            out.append(entity)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _opening_scene_exits(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for index, item in enumerate(value):
+        if isinstance(item, dict):
+            label = str(item.get("label") or item.get("name") or item.get("leads_to") or "").strip()
+            exit_id = str(item.get("id") or "").strip()
+            leads_to = str(item.get("leads_to") or item.get("destination") or "").strip()
+            description = str(item.get("description") or "").strip()
+        else:
+            label = str(item or "").strip()
+            exit_id = ""
+            leads_to = ""
+            description = ""
+        if not label and not leads_to:
+            continue
+        out.append({
+            "id": exit_id or _safe_id(label or leads_to, f"sortie_{index + 1}"),
+            "label": label or leads_to,
+            "position": {"col": 7, "row": 3 + min(index, 4)},
+            "leads_to": leads_to or _safe_id(label, f"sortie_{index + 1}"),
+            "description": description or f"Quitter la scène vers : {label or leads_to}.",
+        })
+        if len(out) >= 3:
+            break
+    return out
+
+
+def _opening_scene_has_content(scene: dict[str, Any]) -> bool:
+    return bool(
+        str(scene.get("description") or "").strip()
+        or str(scene.get("venue") or scene.get("location_venue") or "").strip()
+        or scene.get("present_npcs")
+        or scene.get("visible_clues")
+        or scene.get("exits")
+    )
+
+
+def _legacy_opening_present_npcs(campaign_context: Optional[dict[str, Any]]) -> list[dict[str, str]]:
     if not isinstance(campaign_context, dict):
         return []
-    chapter = campaign_context.get("active_chapter", {})
+    contract = campaign_context.get("player_contract") or {}
+    if not isinstance(contract, dict):
+        contract = {}
+    chapter = campaign_context.get("active_chapter") or {}
     if not isinstance(chapter, dict):
         return []
+    hook = str(contract.get("hook") or contract.get("pitch_public") or "").casefold()
     involved = chapter.get("involved_npcs")
     if not isinstance(involved, list):
         return []
-    return [str(name).strip() for name in involved if str(name).strip()][:2]
+
+    present: list[dict[str, str]] = []
+    for index, raw_name in enumerate(involved):
+        name = str(raw_name or "").strip()
+        if not name or name.casefold() not in hook:
+            continue
+        present.append({
+            "id": _safe_id(name, f"npc_{index + 1}"),
+            "name": name,
+            "description": "Personne présente pour exposer l'accroche et répondre aux questions.",
+        })
+        if len(present) >= 2:
+            break
+    host = _legacy_opening_host(campaign_context, present)
+    if host is not None:
+        present_ids = {npc["id"] for npc in present}
+        if host["id"] not in present_ids:
+            present.append({
+                "id": host["id"],
+                "name": host["name"],
+                "description": "Hôte du lieu, présent pour accueillir le groupe et soutenir la scène.",
+            })
+    return present
+
+
+def _legacy_opening_host(
+    campaign_context: Optional[dict[str, Any]],
+    present_npcs: list[dict[str, str]],
+) -> Optional[dict[str, str]]:
+    if not isinstance(campaign_context, dict):
+        return None
+    chapter = campaign_context.get("active_chapter") or {}
+    if not isinstance(chapter, dict):
+        return None
+    involved = chapter.get("involved_npcs")
+    if not isinstance(involved, list):
+        return None
+    initial_state = str(chapter.get("initial_state") or "")
+    if not present_npcs or not initial_state.strip():
+        return None
+    normalized_initial = _normalize_for_match(initial_state)
+    for index, raw_name in enumerate(involved):
+        name = str(raw_name or "").strip()
+        if not name:
+            continue
+        normalized_name = _normalize_for_match(name)
+        if (
+            f"chez {normalized_name}" in normalized_initial
+            or f"chez le {normalized_name}" in normalized_initial
+            or f"chez la {normalized_name}" in normalized_initial
+        ):
+            return {"id": _safe_id(name, f"host_{index + 1}"), "name": name}
+    return None
+
+
+def _normalize_for_match(value: str) -> str:
+    ascii_text = unicodedata.normalize("NFKD", value.casefold().replace("’", "'"))
+    ascii_text = "".join(ch for ch in ascii_text if not unicodedata.combining(ch))
+    return re.sub(r"\s+", " ", ascii_text).strip()
+
+
+def _legacy_opening_description(
+    campaign_context: Optional[dict[str, Any]],
+    present_npcs: list[dict[str, str]],
+) -> str:
+    if present_npcs:
+        host = _legacy_opening_host(campaign_context, present_npcs)
+        if host is not None:
+            primary_names = [npc["name"] for npc in present_npcs if npc["id"] != host["id"]]
+            primary = ", ".join(primary_names) or "La personne qui a convoqué le groupe"
+            return (
+                f"Chez {host['name']}, {primary} se tient face au groupe pour exposer "
+                "l'urgence de la mission et répondre aux premières questions. "
+                f"{host['name']} reste présent comme hôte et soutien logistique."
+            )
+        names = ", ".join(npc["name"] for npc in present_npcs)
+        return (
+            f"{names} se tient face au groupe pour exposer l'urgence de la mission et répondre "
+            "aux premières questions. Aucun détail de décor plus précis n'est encore établi."
+        )
+    if not isinstance(campaign_context, dict):
+        return ""
+    chapter = campaign_context.get("active_chapter") or {}
+    if not isinstance(chapter, dict):
+        return ""
+    initial_state = str(chapter.get("initial_state") or "").strip()
+    first_sentence = initial_state.split(".")[0].strip()
+    return (first_sentence + ".")[:300] if first_sentence else ""
+
+
+def _legacy_opening_scene(
+    campaign_context: Optional[dict[str, Any]],
+    fallback_place: str,
+) -> dict[str, Any]:
+    present_npcs = _legacy_opening_present_npcs(campaign_context)
+    host = _legacy_opening_host(campaign_context, present_npcs)
+    return {
+        "region": "",
+        "place": fallback_place,
+        "venue": f"Chez {host['name']}" if host is not None else None,
+        "description": _legacy_opening_description(campaign_context, present_npcs),
+        "present_npcs": present_npcs,
+        "visible_clues": [],
+        "exits": [],
+        "time_of_day": "morning",
+        "weather": None,
+    }
+
+
+def _opening_scene(campaign_context: Optional[dict[str, Any]]) -> dict[str, Any]:
+    fallback_place = _first_key_location(campaign_context) or "un lieu de départ"
+    if not isinstance(campaign_context, dict):
+        chapter = {}
+    else:
+        chapter = campaign_context.get("active_chapter") or {}
+        if not isinstance(chapter, dict):
+            chapter = {}
+    raw = chapter.get("opening_scene")
+    scene = raw if isinstance(raw, dict) else {}
+    if not _opening_scene_has_content(scene):
+        legacy_scene = _legacy_opening_scene(campaign_context, fallback_place)
+        scene = {
+            **legacy_scene,
+            **{
+                key: value
+                for key, value in scene.items()
+                if value not in (None, "", [], {})
+            },
+        }
+
+    place = str(scene.get("place") or scene.get("location_place") or fallback_place).strip()
+    region = str(scene.get("region") or scene.get("location_region") or "").strip()
+    venue = str(scene.get("venue") or scene.get("location_venue") or "").strip() or None
+    time_of_day = str(scene.get("time_of_day") or "morning").strip() or "morning"
+    weather = str(scene.get("weather") or "").strip() or None
+    return {
+        "region": region,
+        "place": place or "un lieu de départ",
+        "venue": venue,
+        "description": str(scene.get("description") or "").strip(),
+        "present_npcs": _opening_scene_entities(
+            scene.get("present_npcs"),
+            fallback_prefix="npc",
+            limit=8,
+        ),
+        "visible_clues": _opening_scene_entities(
+            scene.get("visible_clues"),
+            fallback_prefix="indice",
+            limit=8,
+        ),
+        "exits": _opening_scene_exits(scene.get("exits")),
+        "time_of_day": time_of_day,
+        "weather": weather,
+    }
+
+
+def _opening_scene_location_label(opening_scene: dict[str, Any]) -> str:
+    venue = str(opening_scene.get("venue") or "").strip()
+    place = str(opening_scene.get("place") or "").strip() or "un lieu de départ"
+    if venue and venue != place:
+        return f"{venue} ({place})"
+    return venue or place
+
+
+def _opening_time_of_day(campaign_context: Optional[dict[str, Any]]) -> str:
+    return str(_opening_scene(campaign_context).get("time_of_day") or "morning")
+
+
+def _opening_weather(campaign_context: Optional[dict[str, Any]]) -> Optional[str]:
+    weather = _opening_scene(campaign_context).get("weather")
+    return str(weather).strip() if weather else None
+
+
+def _opening_scene_brief(campaign_context: Optional[dict[str, Any]]) -> str:
+    if not isinstance(campaign_context, dict):
+        return ""
+    chapter = campaign_context.get("active_chapter") or {}
+    if not isinstance(chapter, dict):
+        return ""
+    opening_scene = _opening_scene(campaign_context)
+    return str(opening_scene.get("description") or "").strip()[:300]
+
+
+def _opening_clues(campaign_context: Optional[dict[str, Any]]) -> list[str]:
+    return [clue["name"] for clue in _opening_scene(campaign_context).get("visible_clues", [])]
 
 
 def _party_names(active: Any) -> str:
@@ -231,62 +524,77 @@ def _opening_response(
     script: Optional[str] = None,
     auto_generate: bool = False,
 ) -> GMResponse:
-    location = _opening_location_name(campaign_context)
+    opening_scene = _opening_scene(campaign_context)
+    location = _opening_scene_location_label(opening_scene)
+    physical_place = str(opening_scene.get("place") or "un lieu de départ").strip()
+    physical_region = str(opening_scene.get("region") or "").strip() or None
+    physical_venue = opening_scene.get("venue")
     objective = _opening_objective(campaign_context)
-    location_id = _safe_id(location, "lieu_depart")
+    location_id = _safe_id(str(physical_venue or physical_place), "lieu_depart")
     objective_id = _safe_id(objective, "objectif_rumeur") if objective else ""
     if objective_id == location_id:
         objective_id = ""
-    region_kind = _region_kind_for_location(location)
+    region_kind = _region_kind_for_location(physical_place)
+    scene_brief = str(opening_scene.get("description") or "").strip()
+    clues = list(opening_scene.get("visible_clues") or [])[:2]
+    present_npcs = list(opening_scene.get("present_npcs") or [])[:2]
+    time_of_day = str(opening_scene.get("time_of_day") or "morning")
+    weather = opening_scene.get("weather")
     narration = (
         _campaign_opening_text(campaign_context)
         if campaign_context is not None
         else _free_opening_text(active, script, auto_generate)
     )
 
-    pois: list[dict[str, Any]] = [
-        {
-            "id": "situation_initiale",
-            "name": "Situation immédiate",
-            "kind": "clue",
-            "position": {"col": 3, "row": 3},
-            "icon": "clue",
-            "description": "Les premiers détails concrets de la scène.",
-            "action_hint": "Observer avant de décider.",
-            "interactions": [
-                {
-                    "label": "Examiner",
-                    "intent": "examine",
-                    "prompt": "J'examine la situation immédiate et les détails du lieu.",
-                }
-            ],
-        },
-        {
-            "id": "source_information",
-            "name": "Source d'information",
-            "kind": "clue",
-            "position": {"col": 5, "row": 3},
-            "icon": "poi",
-            "description": "Une piste sociale ou matérielle à interroger.",
-            "action_hint": "Chercher une autre version des faits.",
-            "interactions": [
-                {
-                    "label": "Se renseigner",
-                    "intent": "search",
-                    "prompt": "Je cherche une autre source d'information dans les environs.",
-                }
-            ],
-        },
-    ]
-    for index, npc_name in enumerate(_opening_npcs(campaign_context)):
-        npc_id = _safe_id(npc_name, f"npc_{index + 1}")
+    pois: list[dict[str, Any]] = []
+    main_description = scene_brief or "Les premiers détails concrets de la scène."
+    pois.append({
+        "id": "ambiance_initiale",
+        "name": location if location and location != "un lieu de départ" else "Situation immédiate",
+        "kind": "clue",
+        "position": {"col": 3, "row": 3},
+        "icon": "clue",
+        "description": main_description[:200],
+        "action_hint": "Observer avant de décider.",
+        "interactions": [
+            {
+                "label": "Examiner",
+                "intent": "examine",
+                "prompt": "J'examine la scène et les détails immédiats du lieu.",
+            }
+        ],
+    })
+    if clues:
+        for index, clue in enumerate(clues):
+            clue_name = str(clue.get("name") or clue.get("id") or f"Indice {index + 1}").strip()
+            clue_text = str(clue.get("description") or clue_name).strip()
+            clue_id = str(clue.get("id") or "").strip() or _safe_id(clue_name, f"indice_{index + 1}")
+            pois.append({
+                "id": clue_id,
+                "name": (clue_name[:48].rstrip() + "…") if len(clue_name) > 48 else clue_name,
+                "kind": "clue",
+                "position": {"col": 5 + index, "row": 3},
+                "icon": "clue",
+                "description": clue_text[:200],
+                "action_hint": "Chercher cette piste avant d'agir.",
+                "interactions": [
+                    {
+                        "label": "Se renseigner",
+                        "intent": "search",
+                        "prompt": f"Je cherche à en savoir plus sur : {clue_text[:120]}",
+                    }
+                ],
+            })
+    for index, npc in enumerate(present_npcs):
+        npc_name = str(npc.get("name") or npc.get("id") or f"PNJ {index + 1}").strip()
+        npc_id = str(npc.get("id") or "").strip() or _safe_id(npc_name, f"npc_{index + 1}")
         pois.append({
             "id": npc_id,
             "name": npc_name,
             "kind": "npc",
             "position": {"col": 4 + index, "row": 5},
             "icon": "npc",
-            "description": "Personne présente dans la scène d'ouverture.",
+            "description": str(npc.get("description") or "Personne présente dans la scène d'ouverture."),
             "action_hint": "Lui parler ou négocier avant d'agir.",
             "interactions": [
                 {
@@ -297,22 +605,17 @@ def _opening_response(
             ],
         })
 
-    exits = [
-        {
-            "id": "explorer_environs",
-            "label": "Explorer les environs",
-            "position": {"col": 7, "row": 4},
-            "leads_to": "environs",
-            "description": "Quitter le point de départ pour observer le terrain proche.",
-        },
-        {
-            "id": "chercher_contacts",
-            "label": "Chercher d'autres contacts",
-            "position": {"col": 0, "row": 3},
-            "leads_to": "contacts",
-            "description": "Trouver une autre source d'information ou une aide différente.",
-        },
-    ]
+    exits = list(opening_scene.get("exits") or [])
+    if not exits:
+        exits = [
+            {
+                "id": "explorer_environs",
+                "label": "Explorer les environs",
+                "position": {"col": 7, "row": 4},
+                "leads_to": "environs",
+                "description": "Quitter le point de départ pour observer le terrain proche.",
+            }
+        ]
     if objective:
         exits.append({
             "id": "prendre_route_objectif",
@@ -322,29 +625,32 @@ def _opening_response(
             "description": f"Se diriger vers : {objective}",
         })
 
+    journal_params: dict[str, Any] = {
+        "location_region": physical_region,
+        "location_place": physical_place,
+        "location_venue": physical_venue,
+        "time_of_day": time_of_day,
+        "day_number": 1,
+    }
+    if weather:
+        journal_params["weather"] = weather
+
+    scene_params: dict[str, Any] = {
+        "scene_id": f"scene_{location_id}",
+        "cols": 8,
+        "rows": 8,
+        "cell_size_m": 1.5,
+        "terrain": region_kind,
+        "pois": pois[:5],
+        "exits": exits[:3],
+        "party_positions": _party_positions(active),
+    }
+    if scene_brief:
+        scene_params["description"] = scene_brief
+
     actions = [
-        GMAction(
-            type="journal_update",
-            params={
-                "location_region": location,
-                "location_place": location,
-                "time_of_day": "morning",
-                "day_number": 1,
-            },
-        ),
-        GMAction(
-            type="scene_layout",
-            params={
-                "scene_id": f"scene_{location_id}",
-                "cols": 8,
-                "rows": 8,
-                "cell_size_m": 1.5,
-                "terrain": region_kind,
-                "pois": pois[:5],
-                "exits": exits[:3],
-                "party_positions": _party_positions(active),
-            },
-        ),
+        GMAction(type="journal_update", params=journal_params),
+        GMAction(type="scene_layout", params=scene_params),
         GMAction(
             type="region_map_update",
             params={
@@ -625,6 +931,7 @@ async def start_game(
     active.state_data.setdefault("adventure_journal", {
         "location_region": None,
         "location_place": None,
+        "location_venue": None,
         "time_of_day": "morning",
         "day_number": 1,
         "calendar_date": None,

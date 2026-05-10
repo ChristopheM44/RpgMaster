@@ -134,6 +134,18 @@ class SessionManager:
             "world_maps",
             {"region_map": None, "city_maps": {}, "active_city_id": None},
         )
+        state_data.setdefault(
+            "adventure_journal",
+            {
+                "location_region": None,
+                "location_place": None,
+                "location_venue": None,
+                "time_of_day": "morning",
+                "day_number": 1,
+                "calendar_date": None,
+                "weather": None,
+            },
+        )
 
         active = ActiveSession(
             session_id=session_id,

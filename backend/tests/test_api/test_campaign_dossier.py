@@ -64,6 +64,25 @@ class DummyForgeAgent:
                         "objective": "Laisser le groupe choisir ses premiers alliés.",
                         "stakes": "Les disparitions continuent.",
                         "initial_state": "Une route noyée de brume.",
+                        "opening_scene": {
+                            "region": "Hinterland",
+                            "place": "Vieille route",
+                            "venue": None,
+                            "description": "La vieille route disparaît dans une brume basse.",
+                            "present_npcs": [
+                                {"id": "bram", "name": "Bram", "description": "Témoin nerveux."}
+                            ],
+                            "visible_clues": [
+                                {
+                                    "id": "lanterne_bleue",
+                                    "name": "Une lanterne bleue",
+                                    "description": "Une lueur bleue pulse au bord de la route.",
+                                }
+                            ],
+                            "exits": [],
+                            "time_of_day": "morning",
+                            "weather": "Brume",
+                        },
                         "key_locations": ["Vieille route"],
                         "involved_npcs": ["Bram"],
                         "clues": ["Une lanterne bleue"],
@@ -424,6 +443,52 @@ async def test_start_game_injects_minimal_campaign_context(async_client, db_sess
     payload = state_response.json()
     assert payload["region_map"]["current_node_id"] == "vieille_route"
     assert payload["current_scene"]["scene_id"] == "scene_vieille_route"
+
+
+@pytest.mark.asyncio
+async def test_initial_campaign_session_ignores_stale_played_canon(async_client, db_session):
+    forged = await _forge_and_validate(async_client)
+    campaign_id = forged["campaign_id"]
+
+    synth = await async_client.post(
+        f"/api/campaigns/{campaign_id}/synthesize-canon",
+        json={
+            "game_state": {
+                "canon_event": {
+                    "rolling_summary": "Une ancienne session place déjà le groupe ailleurs.",
+                    "established_fact": "Ancien fait contaminant.",
+                }
+            },
+            "recent_messages": [],
+        },
+    )
+    assert synth.status_code == 200
+
+    session_resp = await async_client.post("/api/sessions/", json={"name": "Session neuve"})
+    assert session_resp.status_code == 201
+    session_id = session_resp.json()["id"]
+    attach = await async_client.post(
+        f"/api/campaigns/{campaign_id}/sessions",
+        json={"session_id": session_id},
+    )
+    assert attach.status_code == 200
+    char_resp = await async_client.post(
+        "/api/characters/",
+        json={**BASE_CHARACTER, "session_id": session_id},
+    )
+    assert char_resp.status_code == 201
+
+    start = await async_client.post(f"/api/game/{session_id}/start", json={})
+    assert start.status_code == 200
+
+    result = await db_session.execute(select(GameState).where(GameState.session_id == session_id))
+    game_state = result.scalar_one()
+    context = game_state.state_data["campaign_context"]
+
+    assert context["played_canon"]["rolling_summary"] == ""
+    assert context["continuity"]["played_summary"] == ""
+    assert context["player_contract"]["played_summary"] == ""
+    assert "ancienne session" not in json.dumps(context, ensure_ascii=False).lower()
 
 
 @pytest.mark.asyncio

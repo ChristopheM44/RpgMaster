@@ -6,7 +6,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.agents.schemas import PlayerActionChoice
+from app.agents.schemas import GMResponse, PlayerActionChoice
+from app.game.action_resolver import ActionResolver
+from app.game.event_bus import EventType
 from app.game.session_manager import ActiveSession
 from app.models.session import SessionStatus
 from app.services.narrative_flow_service import NarrativeFlowService
@@ -439,6 +441,123 @@ async def test_world_social_action_calls_npc_dialogue_for_npc_poi_only() -> None
         "type": "skill_check",
         "success": True,
     }
+
+
+@pytest.mark.asyncio
+async def test_direct_npc_dialogue_skips_redundant_gm_narration() -> None:
+    active = ActiveSession(
+        session_id="scene-1",
+        phase=SessionStatus.EXPLORATION,
+        state_data={
+            "characters": {"human_1": {"name": "Thorvald", "is_ai": False}},
+            "current_scene": {
+                "scene_id": "scene_goldenthrone",
+                "pois": [
+                    {
+                        "id": "syndra_silvane",
+                        "name": "Syndra Silvane",
+                        "kind": "npc",
+                        "icon": "npc",
+                    }
+                ],
+            },
+            "npc_states": {
+                "syndra_silvane": {
+                    "name": "Syndra Silvane",
+                    "attitude": "indifferent",
+                }
+            },
+        },
+    )
+    gm = MagicMock()
+    gm.think = AsyncMock(return_value=GMResponse(narration="Narration redondante.", actions=[]))
+    gm.run_npc_dialogue = AsyncMock(
+        return_value=GMResponse(narration="« Que souhaitez-vous savoir ? »", actions=[])
+    )
+    resolver = ActionResolver(gm_agent=gm)
+    published: list[tuple[str, dict]] = []
+
+    async def capture(_session_id, event_type, payload, source=None):
+        published.append((event_type, payload))
+
+    with patch("app.game.action_resolver.event_bus.publish_to_session", new=capture):
+        await NarrativeFlowService().handle_exploration_action(
+            session_id="scene-1",
+            action=_action("Je m'approche de Syndra Silvane et lui adresse la parole."),
+            active=active,
+            action_resolver=resolver,
+            db=None,
+        )
+
+    gm.think.assert_not_called()
+    gm.run_npc_dialogue.assert_awaited_once()
+    assert [payload for event, payload in published if event == EventType.NARRATION] == []
+    dialogues = [payload for event, payload in published if event == EventType.DIALOGUE]
+    assert len(dialogues) == 1
+    assert dialogues[0]["speaker"] == "Syndra Silvane"
+
+
+@pytest.mark.asyncio
+async def test_direct_npc_social_check_keeps_roll_then_dialogue_only() -> None:
+    active = ActiveSession(
+        session_id="scene-1",
+        phase=SessionStatus.EXPLORATION,
+        state_data={
+            "characters": {
+                "human_1": {
+                    "name": "Thorvald",
+                    "is_ai": False,
+                    "level": 1,
+                    "ability_scores": {"cha": 12},
+                    "skill_proficiencies": ["persuasion"],
+                }
+            },
+            "current_scene": {
+                "scene_id": "scene_goldenthrone",
+                "pois": [
+                    {
+                        "id": "syndra_silvane",
+                        "name": "Syndra Silvane",
+                        "kind": "npc",
+                        "icon": "npc",
+                    }
+                ],
+            },
+            "npc_states": {
+                "syndra_silvane": {
+                    "name": "Syndra Silvane",
+                    "attitude": "indifferent",
+                }
+            },
+        },
+    )
+    gm = MagicMock()
+    gm.think = AsyncMock(return_value=GMResponse(narration="Narration redondante.", actions=[]))
+    gm.run_npc_dialogue = AsyncMock(
+        return_value=GMResponse(narration="« Je peux vous fournir un appui limité. »", actions=[])
+    )
+    resolver = ActionResolver(gm_agent=gm)
+    published: list[tuple[str, dict]] = []
+
+    async def capture(_session_id, event_type, payload, source=None):
+        published.append((event_type, payload))
+
+    with patch("app.game.action_resolver.event_bus.publish_to_session", new=capture):
+        await NarrativeFlowService().handle_exploration_action(
+            session_id="scene-1",
+            action=_action("Je persuade Syndra Silvane de financer l'expédition."),
+            active=active,
+            action_resolver=resolver,
+            db=None,
+        )
+
+    gm.think.assert_not_called()
+    roll_results = gm.run_npc_dialogue.await_args.kwargs["roll_results"]
+    assert roll_results["type"] == "skill_check"
+    assert roll_results["social_target_id"] == "syndra_silvane"
+    assert [payload for event, payload in published if event == EventType.NARRATION] == []
+    assert len([payload for event, payload in published if event == EventType.ROLL_RESULT]) == 1
+    assert len([payload for event, payload in published if event == EventType.DIALOGUE]) == 1
 
 
 @pytest.mark.asyncio

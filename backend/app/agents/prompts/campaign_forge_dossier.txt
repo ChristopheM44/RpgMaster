@@ -12,6 +12,11 @@ OPTIONS :
 SOURCES IMPORTÉES PRIVÉES :
 {{ import_sources }}
 
+Contraintes importantes :
+- "hook" explique pourquoi les PJ sont concernés.
+- "initial_state" résume le contexte narratif du chapitre.
+- "opening_scene" décrit uniquement ce que les PJ voient physiquement au début : lieu précis, PNJ réellement présents, indices visibles et sorties immédiates.
+
 Réponds avec ce JSON exact :
 {
   "player_contract": {
@@ -19,7 +24,7 @@ Réponds avec ce JSON exact :
     "pitch_public": "Pitch public sans spoiler",
     "tones": ["Mystère"],
     "duration": "3-5 sessions",
-    "hook": "Accroche publique",
+    "hook": "Pourquoi les PJ sont concernés par l'aventure, sans décrire ce qu'ils voient physiquement",
     "visible_chapters": [
       {
         "id": "chapter_1",
@@ -42,7 +47,18 @@ Réponds avec ce JSON exact :
         "state": "active",
         "objective": "Objectif ouvert",
         "stakes": "Enjeux",
-        "initial_state": "Situation initiale",
+        "initial_state": "Contexte narratif du chapitre, pas forcément visible dans la première scène",
+        "opening_scene": {
+          "region": "Région ou zone large",
+          "place": "Ville, quartier, route ou site où les PJ commencent physiquement",
+          "venue": "Lieu précis visible au début, ou null",
+          "description": "Ce que les PJ voient physiquement au tout début",
+          "present_npcs": [{"id": "pnj_id", "name": "PNJ physiquement présent", "description": "Rôle visible"}],
+          "visible_clues": [{"id": "indice_id", "name": "Indice visible", "description": "Détail examinable"}],
+          "exits": [{"id": "sortie_id", "label": "Sortie visible", "leads_to": "destination", "description": "Où cela mène"}],
+          "time_of_day": "morning",
+          "weather": null
+        },
         "key_locations": ["Lieu"],
         "involved_npcs": ["PNJ"],
         "clues": ["Indice"],

@@ -392,6 +392,57 @@ class TestPipelineExecutorUnits:
         assert bus.published[-1][0] == EventType.SCENE_LAYOUT_CHANGED
         assert bus.published[-1][1]["scene"] == scene
 
+    async def test_executor_scene_layout_filters_known_absent_npcs(self) -> None:
+        active = _make_combat_active()
+        active.state_data["npc_states"] = {
+            "wakanga": {"name": "Wakanga O'tamu", "last_location": "scene_palais"}
+        }
+        bus = _FakeBus()
+        executor = GMResponseExecutor(bus)
+
+        response = AgentResponse(
+            content="La salle commune s'anime.",
+            actions=[
+                GMAction(
+                    type="scene_layout",
+                    params={
+                        "scene_id": "scene_auberge",
+                        "cols": 8,
+                        "rows": 8,
+                        "terrain": "tavern",
+                        "pois": [
+                            {
+                                "id": "wakanga",
+                                "name": "Wakanga O'tamu",
+                                "kind": "npc",
+                                "position": {"col": 3, "row": 3},
+                            },
+                            {
+                                "id": "azaka",
+                                "name": "Azaka",
+                                "kind": "npc",
+                                "position": {"col": 4, "row": 3},
+                            },
+                        ],
+                    },
+                )
+            ],
+        )
+
+        await executor.execute_gm_response(
+            response,
+            active,
+            session_id=SESSION_ID,
+            fallback_actor_id="hero_1",
+        )
+
+        scene = active.state_data["current_scene"]
+        poi_ids = [poi["id"] for poi in scene["pois"]]
+        assert "wakanga" not in poi_ids
+        assert "azaka" in poi_ids
+        assert active.state_data["npc_states"]["wakanga"]["last_location"] == "scene_palais"
+        assert active.state_data["npc_states"]["azaka"]["last_location"] == "scene_auberge"
+
     async def test_executor_scene_layout_sanitizes_poi_interactions(self) -> None:
         layout = GMResponseExecutor._normalize_scene_layout({
             "cols": 8,

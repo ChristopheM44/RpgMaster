@@ -463,6 +463,9 @@ async def compile_campaign_context_for_session(
 
     contract = sanitize_player_contract(dossier.player_contract or {}, campaign, brief={})
     canon = sanitize_played_canon(dossier.played_canon or {})
+    if _is_initial_campaign_session(campaign, session_id):
+        canon = empty_played_canon()
+        contract["played_summary"] = ""
     active_chapter = _active_chapter_for_context(
         dossier.gm_dossier or {},
         contract,
@@ -493,6 +496,15 @@ async def compile_campaign_context_for_session(
             for c in characters
         ],
     }
+
+
+def _is_initial_campaign_session(campaign: Campaign, session_id: str) -> bool:
+    session_ids = list(campaign.session_ids or [])
+    return bool(
+        session_ids
+        and session_ids[0] == session_id
+        and int(campaign.current_session_index or 0) == 0
+    )
 
 
 def response_for_draft(dossier: CampaignDossier) -> dict[str, Any]:
@@ -560,6 +572,17 @@ def sanitize_gm_dossier(
                 "objective": "Faire émerger la situation par les choix des joueurs.",
                 "stakes": contract.get("hook", ""),
                 "initial_state": ch.get("summary", ""),
+                "opening_scene": {
+                    "region": "",
+                    "place": "un lieu de départ",
+                    "venue": None,
+                    "description": "",
+                    "present_npcs": [],
+                    "visible_clues": [],
+                    "exits": [],
+                    "time_of_day": "morning",
+                    "weather": None,
+                },
                 "key_locations": [],
                 "involved_npcs": [],
                 "clues": [],
@@ -707,6 +730,17 @@ def _fallback_dossier(
                     "objective": "Présenter une situation ouverte et laisser le groupe choisir.",
                     "stakes": public_hook,
                     "initial_state": ch["summary"],
+                    "opening_scene": {
+                        "region": "",
+                        "place": "un lieu de départ",
+                        "venue": None,
+                        "description": "",
+                        "present_npcs": [],
+                        "visible_clues": [],
+                        "exits": [],
+                        "time_of_day": "morning",
+                        "weather": None,
+                    },
                     "key_locations": [],
                     "involved_npcs": [],
                     "clues": [],
@@ -861,6 +895,7 @@ def _active_chapter_for_context(
         "objective",
         "stakes",
         "initial_state",
+        "opening_scene",
         "key_locations",
         "involved_npcs",
         "clues",
@@ -957,6 +992,106 @@ def _sanitize_visible_chapters(value: Any, title: str) -> list[dict[str, Any]]:
     return chapters or _sanitize_visible_chapters([], title)
 
 
+def _first_text_item(value: Any) -> str:
+    if not isinstance(value, list):
+        return ""
+    for item in value:
+        text = _text(item, 160)
+        if text:
+            return text
+    return ""
+
+
+def _sanitize_opening_scene_entity(value: Any, max_name: int) -> Optional[dict[str, str]]:
+    if isinstance(value, dict):
+        entity_id = _text(value.get("id") or "", 80)
+        name = _text(value.get("name") or value.get("label") or entity_id, max_name)
+        description = _text(value.get("description") or value.get("action_hint") or "", 260)
+    else:
+        entity_id = ""
+        name = _text(value, max_name)
+        description = ""
+    if not name and not entity_id:
+        return None
+    out = {"id": entity_id, "name": name or entity_id, "description": description}
+    return out
+
+
+def _sanitize_opening_scene_entities(value: Any, *, max_items: int, max_name: int) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        return []
+    out: list[dict[str, str]] = []
+    for item in value:
+        entity = _sanitize_opening_scene_entity(item, max_name)
+        if entity is not None:
+            out.append(entity)
+        if len(out) >= max_items:
+            break
+    return out
+
+
+def _sanitize_opening_scene_exits(value: Any) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        return []
+    out: list[dict[str, str]] = []
+    for item in value:
+        if isinstance(item, dict):
+            label = _text(item.get("label") or item.get("name") or item.get("id") or "", 80)
+            exit_id = _text(item.get("id") or "", 80)
+            leads_to = _text(item.get("leads_to") or item.get("destination") or "", 120)
+            description = _text(item.get("description") or "", 240)
+        else:
+            label = _text(item, 80)
+            exit_id = ""
+            leads_to = ""
+            description = ""
+        if not label and not leads_to:
+            continue
+        out.append({
+            "id": exit_id,
+            "label": label or leads_to,
+            "leads_to": leads_to,
+            "description": description,
+        })
+        if len(out) >= 6:
+            break
+    return out
+
+
+def _sanitize_opening_scene(chapter: dict[str, Any]) -> dict[str, Any]:
+    raw = chapter.get("opening_scene")
+    scene = raw if isinstance(raw, dict) else {}
+    fallback_place = _first_text_item(chapter.get("key_locations")) or "un lieu de départ"
+    region = _text(scene.get("region") or scene.get("location_region") or "", 160)
+    place = _text(
+        scene.get("place") or scene.get("location_place") or fallback_place,
+        160,
+    )
+    venue = _text(scene.get("venue") or scene.get("location_venue") or "", 160) or None
+    weather = _text(scene.get("weather") or "", 80) or None
+    time_of_day = _text(scene.get("time_of_day") or "morning", 40) or "morning"
+
+    return {
+        "region": region,
+        "place": place,
+        "venue": venue,
+        "description": _text(scene.get("description") or "", 700),
+        "present_npcs": _sanitize_opening_scene_entities(
+            scene.get("present_npcs"),
+            max_items=8,
+            max_name=120,
+        ),
+        "visible_clues": _sanitize_opening_scene_entities(
+            scene.get("visible_clues"),
+            max_items=8,
+            max_name=140,
+        ),
+        "exits": _sanitize_opening_scene_exits(scene.get("exits")),
+        "time_of_day": time_of_day,
+        "weather": weather,
+    }
+
+
 def _sanitize_private_chapter(chapter: Any, index: int) -> dict[str, Any]:
     data = chapter if isinstance(chapter, dict) else {}
     state = str(data.get("state") or ("active" if index == 0 else "planned")).lower()
@@ -969,6 +1104,7 @@ def _sanitize_private_chapter(chapter: Any, index: int) -> dict[str, Any]:
         "objective": _text(data.get("objective") or "", 700),
         "stakes": _text(data.get("stakes") or "", 700),
         "initial_state": _text(data.get("initial_state") or "", 900),
+        "opening_scene": _sanitize_opening_scene(data),
         "key_locations": _generic_list(data.get("key_locations")),
         "involved_npcs": _generic_list(data.get("involved_npcs")),
         "clues": _generic_list(data.get("clues")),

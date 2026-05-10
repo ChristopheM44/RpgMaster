@@ -22,6 +22,141 @@ _FALLBACK_NARRATION = (
 )
 
 
+def _first_key_location(chapter: dict[str, Any]) -> str:
+    locations = chapter.get("key_locations")
+    if isinstance(locations, list):
+        for entry in locations:
+            text = str(entry).strip()
+            if text:
+                return text
+    return ""
+
+
+def _scene_brief_for_anchor(chapter: dict[str, Any], scene: dict[str, Any]) -> str:
+    description = str(scene.get("description") or "").strip()
+    if description:
+        return description[:280]
+    return ""
+
+
+def _compute_npc_attendance(
+    npc_states: dict,
+    current_scene: dict,
+    journal: dict,
+) -> tuple[list[dict[str, str]], list[dict[str, str]], list[dict[str, str]]]:
+    """Détermine quels PNJ sont présents, absents ou non localisés dans la scène."""
+    if not isinstance(npc_states, dict) or not npc_states:
+        return [], [], []
+
+    scene_id = str(current_scene.get("scene_id") or "").strip()
+    if not scene_id:
+        terrain = str(current_scene.get("terrain") or "").strip()
+        location_place = str(journal.get("location_place") or "").strip()
+        venue = str(journal.get("location_venue") or "").strip()
+        scene_id = venue or terrain or location_place or ""
+
+    scene_npc_ids: set[str] = set()
+    for poi in current_scene.get("pois", []) or []:
+        if not isinstance(poi, dict):
+            continue
+        kind = str(poi.get("kind") or "").strip().casefold()
+        icon = str(poi.get("icon") or "").strip().casefold()
+        if kind == "npc" or icon == "npc":
+            npc_id = str(poi.get("id") or "").strip()
+            if npc_id:
+                scene_npc_ids.add(npc_id)
+
+    present: list[dict[str, str]] = []
+    absent: list[dict[str, str]] = []
+    unknown: list[dict[str, str]] = []
+
+    for npc_id, npc in npc_states.items():
+        if not isinstance(npc, dict):
+            continue
+        name = str(npc.get("name") or npc_id)
+        last_location = str(npc.get("last_location") or "").strip()
+
+        if npc_id in scene_npc_ids:
+            present.append({"id": npc_id, "name": name})
+        elif not scene_npc_ids and last_location and scene_id and last_location == scene_id:
+            present.append({"id": npc_id, "name": name})
+        elif last_location:
+            absent.append({"id": npc_id, "name": name})
+        else:
+            unknown.append({"id": npc_id, "name": name})
+
+    return present, absent, unknown
+
+
+def _extract_scene_anchor(game_state: dict[str, Any]) -> dict[str, Any]:
+    """Extrait les invariants de scène pour ancrer le prompt MJ.
+
+    Renvoie un dict toujours rempli (même si le state est vide) afin que le
+    template Jinja puisse l'afficher sans branche conditionnelle. Le bloc
+    sert de garde-fou contre l'hallucination de décor par le LLM.
+    """
+    journal = game_state.get("adventure_journal") or {}
+    if not isinstance(journal, dict):
+        journal = {}
+    scene = game_state.get("current_scene") or {}
+    if not isinstance(scene, dict):
+        scene = {}
+    campaign = game_state.get("campaign_context") or {}
+    if not isinstance(campaign, dict):
+        campaign = {}
+    chapter = campaign.get("active_chapter") or {}
+    if not isinstance(chapter, dict):
+        chapter = {}
+    opening_scene = chapter.get("opening_scene") or {}
+    if not isinstance(opening_scene, dict):
+        opening_scene = {}
+
+    location_place = (
+        str(journal.get("location_place") or "").strip()
+        or str(opening_scene.get("place") or opening_scene.get("location_place") or "").strip()
+        or _first_key_location(chapter)
+        or "lieu non précisé"
+    )
+    location_venue = (
+        str(journal.get("location_venue") or "").strip()
+        or str(opening_scene.get("venue") or opening_scene.get("location_venue") or "").strip()
+        or None
+    )
+    location_region = (
+        str(journal.get("location_region") or "").strip()
+        or str(opening_scene.get("region") or opening_scene.get("location_region") or "").strip()
+    )
+    time_of_day = (
+        str(journal.get("time_of_day") or opening_scene.get("time_of_day") or "morning").strip()
+        or "morning"
+    )
+    day_number = journal.get("day_number") or 1
+    weather = str(journal.get("weather") or opening_scene.get("weather") or "").strip() or None
+    terrain = str(scene.get("terrain") or "").strip() or None
+    scene_brief = _scene_brief_for_anchor(chapter, scene)
+
+    npc_states = game_state.get("npc_states") or {}
+    if not isinstance(npc_states, dict):
+        npc_states = {}
+    present_npcs, absent_npcs, unknown_npcs = _compute_npc_attendance(
+        npc_states, scene, journal
+    )
+
+    return {
+        "location_place": location_place,
+        "location_venue": location_venue,
+        "location_region": location_region,
+        "time_of_day": time_of_day,
+        "day_number": day_number,
+        "weather": weather,
+        "terrain": terrain,
+        "scene_brief": scene_brief,
+        "present_npcs": present_npcs,
+        "absent_npcs": absent_npcs,
+        "unknown_location_npcs": unknown_npcs,
+    }
+
+
 class GMAgent(BaseAgent):
     """Agent Maître du Jeu : narration, gestion des scènes et des PNJ.
 
@@ -81,6 +216,7 @@ class GMAgent(BaseAgent):
         user_prompt = self._render_prompt(
             "gm_narrate.txt",
             {
+                "scene_anchor": _extract_scene_anchor(game_state),
                 "game_state": json.dumps(game_state, ensure_ascii=False, indent=2),
                 "player_action": delimit_user_input(player_action),
                 "roll_results": json.dumps(roll_results or {}, ensure_ascii=False, indent=2),
@@ -177,14 +313,18 @@ class GMAgent(BaseAgent):
         npc_name: str,
         npc_personality: str,
         player_message: str,
+        game_state: Optional[dict[str, Any]] = None,
         context_manager: Optional[ContextManager] = None,
         messages: Optional[list] = None,
         roll_results: Optional[dict[str, Any]] = None,
     ) -> GMResponse:
         """Génère une réplique de PNJ avec sa personnalité."""
+        state = game_state or {}
         user_prompt = self._render_prompt(
             "gm_npc_dialogue.txt",
             {
+                "scene_anchor": _extract_scene_anchor(state),
+                "game_state": json.dumps(state, ensure_ascii=False, indent=2),
                 "npc_name": npc_name,
                 "npc_personality": npc_personality,
                 "player_message": delimit_user_input(player_message),

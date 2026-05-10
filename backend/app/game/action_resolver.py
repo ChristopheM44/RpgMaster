@@ -86,6 +86,7 @@ class ActionResolver:
         actor_name: Optional[str] = None,
         display_text: Optional[str] = None,
         persist_actor_action: bool = True,
+        suppress_gm_narration: bool = False,
     ) -> Any:
         """Exécute le pipeline complet pour une action.
 
@@ -113,6 +114,7 @@ class ActionResolver:
                 slot_level=slot_level,
                 display_text=display_text,
                 persist_actor_action=persist_actor_action,
+                suppress_gm_narration=suppress_gm_narration,
             ),
             active,
             db,
@@ -200,12 +202,23 @@ class ActionResolver:
         if db is not None:
             from app.services.message_service import load_recent_messages
             recent_messages = await load_recent_messages(session_id, db)
+        game_state = dict(active.state_data)
+        if db is not None:
+            try:
+                game_state["world_maps"] = await campaign_dossier_service.map_context_for_session(
+                    session_id,
+                    db,
+                    active.state_data,
+                )
+            except Exception as map_exc:
+                logger.debug("resolve_npc_dialogue : contexte cartes indisponible : %s", map_exc)
 
         try:
             gm_resp = await self._gm.run_npc_dialogue(
                 npc_name=npc_name,
                 npc_personality=npc_personality,
                 player_message=content or "",
+                game_state=game_state,
                 messages=recent_messages,
                 roll_results=roll_results,
             )

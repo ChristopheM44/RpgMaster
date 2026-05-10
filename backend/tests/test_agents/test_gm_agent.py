@@ -91,6 +91,231 @@ async def test_narrate_without_player_action(gm_agent: GMAgent) -> None:
     assert response.narration != ""
 
 
+async def test_narrate_injects_scene_anchor_in_prompt(gm_agent: GMAgent) -> None:
+    """L'ancrage de scène apparaît textuellement dans le prompt envoyé au LLM."""
+    captured: dict[str, Any] = {}
+
+    async def _capture(**kwargs):
+        captured["messages"] = kwargs.get("messages", [])
+        return _valid_gm_json()
+
+    with patch.object(gm_agent._client, "chat", new=_capture):
+        await gm_agent.narrate(
+            game_state={
+                "adventure_journal": {
+                    "location_place": "Goldenthrone",
+                    "location_region": "Chult",
+                    "time_of_day": "morning",
+                    "day_number": 1,
+                    "weather": "Chaleur humide",
+                },
+                "current_scene": {"terrain": "settlement"},
+            },
+            player_action="Je m'approche de Syndra Silvane.",
+        )
+
+    user_prompt = captured["messages"][-1]["content"]
+    assert "ANCRAGE DE SCÈNE" in user_prompt
+    assert "Goldenthrone" in user_prompt
+    assert "morning" in user_prompt
+    assert "Chaleur humide" in user_prompt
+    assert user_prompt.index("ANCRAGE DE SCÈNE") < user_prompt.index("ÉTAT DU JEU")
+
+
+async def test_narrate_anchor_handles_empty_state(gm_agent: GMAgent) -> None:
+    """L'ancrage est tolérant à un game_state vide (campagne free)."""
+    captured: dict[str, Any] = {}
+
+    async def _capture(**kwargs):
+        captured["messages"] = kwargs.get("messages", [])
+        return _valid_gm_json()
+
+    with patch.object(gm_agent._client, "chat", new=_capture):
+        await gm_agent.narrate(game_state={}, player_action="Je regarde.")
+
+    prompt = captured["messages"][-1]["content"]
+    assert "lieu non précisé" in prompt
+    assert "morning" in prompt
+
+
+def test_extract_scene_anchor_uses_chapter_location_fallback_only() -> None:
+    """Le chapitre peut fournir le lieu, mais pas l'ambiance de scène."""
+    from app.agents.gm_agent import _extract_scene_anchor
+
+    anchor = _extract_scene_anchor({
+        "campaign_context": {
+            "active_chapter": {
+                "key_locations": ["Goldenthrone"],
+                "initial_state": "L'archmage Syndra Silvane se consume lentement.",
+            }
+        }
+    })
+    assert anchor["location_place"] == "Goldenthrone"
+    assert anchor["scene_brief"] == ""
+    assert anchor["time_of_day"] == "morning"
+    assert anchor["location_venue"] is None
+
+
+def test_extract_scene_anchor_uses_current_scene_description() -> None:
+    """L'ambiance établie vient de current_scene.description."""
+    from app.agents.gm_agent import _extract_scene_anchor
+
+    anchor = _extract_scene_anchor({
+        "adventure_journal": {"location_place": "Port Nyanzaru"},
+        "campaign_context": {
+            "active_chapter": {
+                "initial_state": "Wakanga engage le groupe ailleurs.",
+            }
+        },
+        "current_scene": {
+            "description": "Azaka observe la salle commune depuis le comptoir.",
+        },
+    })
+
+    assert anchor["scene_brief"] == "Azaka observe la salle commune depuis le comptoir."
+
+
+def test_extract_scene_anchor_uses_opening_scene_location_fallback() -> None:
+    """opening_scene peut fournir le lieu physique avant le premier journal_update."""
+    from app.agents.gm_agent import _extract_scene_anchor
+
+    anchor = _extract_scene_anchor({
+        "campaign_context": {
+            "active_chapter": {
+                "key_locations": ["Goldenthrone"],
+                "opening_scene": {
+                    "region": "Chult",
+                    "place": "Port Nyanzaru",
+                    "venue": "Auberge du Poisson Grillé",
+                    "time_of_day": "dusk",
+                    "weather": "Chaleur humide",
+                },
+            }
+        }
+    })
+
+    assert anchor["location_region"] == "Chult"
+    assert anchor["location_place"] == "Port Nyanzaru"
+    assert anchor["location_venue"] == "Auberge du Poisson Grillé"
+    assert anchor["time_of_day"] == "dusk"
+    assert anchor["weather"] == "Chaleur humide"
+
+
+def test_extract_scene_anchor_uses_location_venue() -> None:
+    """location_venue est extrait du journal et ajouté à l'ancre."""
+    from app.agents.gm_agent import _extract_scene_anchor
+
+    anchor = _extract_scene_anchor({
+        "adventure_journal": {
+            "location_place": "Port Nyanzaru",
+            "location_venue": "Auberge du Poisson Grillé",
+            "time_of_day": "morning",
+            "day_number": 1,
+        },
+    })
+
+    assert anchor["location_venue"] == "Auberge du Poisson Grillé"
+    assert anchor["location_place"] == "Port Nyanzaru"
+
+
+def test_extract_scene_anchor_computes_npc_presence() -> None:
+    """L'ancre catégorise les PNJs en présents/absents selon leur last_location."""
+    from app.agents.gm_agent import _extract_scene_anchor
+
+    anchor = _extract_scene_anchor({
+        "adventure_journal": {
+            "location_place": "Port Nyanzaru",
+            "location_venue": "Auberge du Poisson Grillé",
+        },
+        "current_scene": {
+            "scene_id": "scene_auberge",
+            "terrain": "tavern",
+            "pois": [
+                {
+                    "id": "azaka",
+                    "name": "Azaka",
+                    "kind": "npc",
+                    "icon": "npc",
+                    "position": {"col": 3, "row": 3},
+                    "description": "La tenancière.",
+                }
+            ],
+        },
+        "npc_states": {
+            "azaka": {
+                "name": "Azaka",
+                "attitude": "indifferent",
+                "last_location": "scene_auberge",
+            },
+            "wakanga": {
+                "name": "Wakanga O'tamu",
+                "attitude": "friendly",
+                "last_location": "scene_palais",
+            },
+        },
+    })
+
+    present_names = [n["name"] for n in anchor["present_npcs"]]
+    absent_names = [n["name"] for n in anchor["absent_npcs"]]
+
+    assert "Azaka" in present_names
+    assert "Wakanga O'tamu" in absent_names
+
+
+async def test_narrate_injects_npc_presence_in_anchor(gm_agent: GMAgent) -> None:
+    """Le bloc PRÉSENCE DES PNJ apparaît dans le prompt avec les PNJs catégorisés."""
+    captured: dict[str, Any] = {}
+
+    async def _capture(**kwargs):
+        captured["messages"] = kwargs.get("messages", [])
+        return _valid_gm_json()
+
+    with patch.object(gm_agent._client, "chat", new=_capture):
+        await gm_agent.narrate(
+            game_state={
+                "adventure_journal": {
+                    "location_place": "Port Nyanzaru",
+                    "location_venue": "Auberge du Poisson Grillé",
+                    "time_of_day": "morning",
+                    "day_number": 1,
+                },
+                "current_scene": {
+                    "scene_id": "scene_auberge",
+                    "terrain": "tavern",
+                    "pois": [
+                        {
+                            "id": "azaka",
+                            "name": "Azaka",
+                            "kind": "npc",
+                            "icon": "npc",
+                            "position": {"col": 3, "row": 3},
+                            "description": "La tenancière.",
+                        }
+                    ],
+                },
+                "npc_states": {
+                    "azaka": {
+                        "name": "Azaka",
+                        "attitude": "indifferent",
+                        "last_location": "scene_auberge",
+                    },
+                    "wakanga": {
+                        "name": "Wakanga O'tamu",
+                        "attitude": "friendly",
+                        "last_location": "scene_palais",
+                    },
+                },
+            },
+            player_action="Je m'approche de Wakanga.",
+        )
+
+    user_prompt = captured["messages"][-1]["content"]
+    assert "PRÉSENCE DES PNJ" in user_prompt
+    assert "Azaka" in user_prompt
+    assert "Wakanga O'tamu" in user_prompt
+    assert "ABSENTS" in user_prompt
+
+
 # ---------------------------------------------------------------------------
 # run_combat_turn()
 # ---------------------------------------------------------------------------
@@ -224,6 +449,61 @@ async def test_run_npc_dialogue(gm_agent: GMAgent) -> None:
         )
 
     assert "aubergiste" in response.narration.lower()
+
+
+async def test_run_npc_dialogue_injects_scene_anchor(gm_agent: GMAgent) -> None:
+    """Le prompt PNJ reçoit le même ancrage de scène que la narration MJ."""
+    captured: dict[str, object] = {}
+
+    async def _capture(**kwargs):
+        captured["messages"] = kwargs.get("messages", [])
+        return _valid_gm_json(narration="Syndra acquiesce. « Posez vos questions. »")
+
+    with patch.object(gm_agent._client, "chat", new=_capture):
+        await gm_agent.run_npc_dialogue(
+            npc_name="Syndra Silvane",
+            npc_personality="Patronne malade, pressée mais courtoise",
+            player_message="Je m'approche de Syndra Silvane.",
+            game_state={
+                "adventure_journal": {
+                    "location_place": "Port Nyanzaru",
+                    "location_venue": "Résidence de Wakanga O'tamu, Goldenthrone",
+                    "time_of_day": "morning",
+                    "day_number": 1,
+                },
+                "current_scene": {
+                    "scene_id": "scene_wakanga",
+                    "description": "Syndra et Wakanga reçoivent le groupe dans une salle privée.",
+                    "pois": [
+                        {
+                            "id": "syndra_silvane",
+                            "name": "Syndra Silvane",
+                            "kind": "npc",
+                            "icon": "npc",
+                        }
+                    ],
+                },
+                "npc_states": {
+                    "syndra_silvane": {
+                        "name": "Syndra Silvane",
+                        "last_location": "scene_wakanga",
+                    },
+                    "azaka": {
+                        "name": "Azaka Stormfang",
+                        "last_location": "scene_auberge",
+                    },
+                },
+            },
+        )
+
+    prompt = captured["messages"][-1]["content"]
+    assert "ANCRAGE DE SCÈNE" in prompt
+    assert "Résidence de Wakanga O'tamu" in prompt
+    assert "PNJ présents" in prompt
+    assert "Syndra Silvane" in prompt
+    assert "PNJ absents" in prompt
+    assert "Azaka Stormfang" in prompt
+    assert "Ne répète pas tout le briefing" in prompt
 
 
 # ---------------------------------------------------------------------------
