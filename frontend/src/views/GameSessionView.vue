@@ -10,6 +10,7 @@ import NarrativeLog from '../components/narrative/NarrativeLog.vue'
 import ExplorationLayout from '../components/character/ExplorationLayout.vue'
 import CombatLayout from '../components/combat/CombatLayout.vue'
 import Battlemap from '../components/combat/Battlemap.vue'
+import MapTabs from '../components/map/MapTabs.vue'
 import ActionBar from '../components/common/ActionBar.vue'
 import SaveLoadPanel from '../components/ui/SaveLoadPanel.vue'
 import AdventureStartModal from '../components/ui/AdventureStartModal.vue'
@@ -176,11 +177,11 @@ function handleScenePoi(_poiId: string, name: string, interaction?: ScenePoiInte
 const mobileIsMyTurn = computed(() => gameStore.currentTurnId === charStore.myCharacter?.id)
 const mobileSpeedM = computed(() => {
   const movement = gameStore.combatants.find((c) => c.id === charStore.myCharacter?.id)?.action_economy?.movement
-  return movement ? movement * 0.3048 : 9
+  return movement ?? 9
 })
 
 function handleMobileMapMove(col: number, row: number) {
-  handleAction('move', undefined, undefined, { col, row })
+  handleAction('move', `${col},${row}`)
   mobileMapMode.value = 'inspect'
 }
 
@@ -370,6 +371,12 @@ onUnmounted(() => { disconnect() })
       <div class="rpg-eyebrow mb-3">✦ Sauvegardes</div>
       <SaveLoadPanel :session-id="sessionId" @load-complete="handleLoadComplete" />
     </div>
+
+    <MapTabs
+      v-if="gameStore.regionMap || Object.keys(gameStore.cityMaps).length > 0"
+      :session-id="sessionId"
+      @action="handleAction"
+    />
 
     <CombatLayout
       v-if="gameStore.isInCombat"

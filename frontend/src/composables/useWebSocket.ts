@@ -25,6 +25,10 @@ import type {
   CombatantRemovedPayload,
   SceneLayoutChangedPayload,
   GridPosition,
+  RegionMapUpdatedPayload,
+  CityMapUpdatedPayload,
+  ActionEconomyChangedPayload,
+  OpportunityAttackTriggeredPayload,
 } from '../types'
 
 const WS_BASE = 'ws://localhost:8000'
@@ -219,6 +223,29 @@ export function useWebSocket(sessionId: string) {
       case 'combatant_moved':
         if (isCombatantMovedPayload(msg.payload)) gameStore.moveCombatant(msg.payload)
         break
+      case 'action_economy_changed':
+        if (isActionEconomyChangedPayload(msg.payload)) gameStore.applyActionEconomyChanged(msg.payload)
+        break
+      case 'opportunity_attack_triggered':
+        if (isOpportunityAttackTriggeredPayload(msg.payload)) {
+          gameStore.addCombatAction({
+            attacker_id: msg.payload.attacker_id,
+            attacker_name: msg.payload.attacker_id,
+            target_id: msg.payload.target_id,
+            target_name: msg.payload.target_id,
+            action_type: 'attack',
+            action_name: "Attaque d'opportunité",
+            d20: 0,
+            attack_roll: 0,
+            attack_bonus: 0,
+            target_ac: 0,
+            hit: msg.payload.hit,
+            critical: false,
+            damage: msg.payload.damage,
+            damage_notation: '',
+          })
+        }
+        break
       case 'combatant_status_changed':
         if (isCombatantStatusChangedPayload(msg.payload)) gameStore.applyCombatantStatusChanged(msg.payload)
         break
@@ -245,6 +272,12 @@ export function useWebSocket(sessionId: string) {
         break
       case 'scene_layout_changed':
         if (isSceneLayoutChangedPayload(msg.payload)) gameStore.applySceneLayout(msg.payload)
+        break
+      case 'region_map_updated':
+        if (isRegionMapUpdatedPayload(msg.payload)) gameStore.applyRegionMap(msg.payload)
+        break
+      case 'city_map_updated':
+        if (isCityMapUpdatedPayload(msg.payload)) gameStore.applyCityMap(msg.payload)
         break
       case 'social_outcome':
         gameStore.setProcessing(false)
@@ -466,6 +499,24 @@ function isCombatantMovedPayload(value: unknown): value is CombatantMovedPayload
   )
 }
 
+function isActionEconomyChangedPayload(value: unknown): value is ActionEconomyChangedPayload {
+  return (
+    isRecord(value)
+    && typeof value.combatant_id === 'string'
+    && isRecord(value.action_economy)
+  )
+}
+
+function isOpportunityAttackTriggeredPayload(value: unknown): value is OpportunityAttackTriggeredPayload {
+  return (
+    isRecord(value)
+    && typeof value.attacker_id === 'string'
+    && typeof value.target_id === 'string'
+    && typeof value.hit === 'boolean'
+    && typeof value.damage === 'number'
+  )
+}
+
 function isCombatantStatusChangedPayload(value: unknown): value is CombatantStatusChangedPayload {
   return (
     isRecord(value)
@@ -486,6 +537,22 @@ function isSceneLayoutChangedPayload(value: unknown): value is SceneLayoutChange
     && isRecord(value.scene)
     && typeof value.scene.cols === 'number'
     && typeof value.scene.rows === 'number'
+  )
+}
+
+function isRegionMapUpdatedPayload(value: unknown): value is RegionMapUpdatedPayload {
+  return (
+    isRecord(value)
+    && ('region_map' in value)
+    && (value.region_map === null || isRecord(value.region_map))
+  )
+}
+
+function isCityMapUpdatedPayload(value: unknown): value is CityMapUpdatedPayload {
+  return (
+    isRecord(value)
+    && ('city_map' in value)
+    && (value.city_map === null || isRecord(value.city_map))
   )
 }
 

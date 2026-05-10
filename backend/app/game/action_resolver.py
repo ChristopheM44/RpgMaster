@@ -20,6 +20,7 @@ from app.game.async_tasks import create_logged_task
 from app.game.event_bus import EventType, event_bus
 from app.game.session_manager import ActiveSession
 from app.llm.voxtral_client import tts_router
+from app.services import campaign_dossier_service
 
 logger = logging.getLogger(__name__)
 
@@ -323,8 +324,17 @@ class ActionResolver:
                 {"agent_kind": "gm", "thinking": True},
                 source="action_resolver",
             )
+            game_state = dict(active.state_data)
+            if db is not None:
+                try:
+                    game_state["world_maps"] = await campaign_dossier_service.map_context_for_session(
+                        session_id,
+                        db,
+                    )
+                except Exception as map_exc:
+                    logger.debug("ActionResolver.social_conclude : cartes indisponibles : %s", map_exc)
             gm_resp = await self._gm.narrate_social_conclude(
-                game_state=active.state_data,
+                game_state=game_state,
                 player_action=player_action,
                 companion_responses=companion_responses,
             )

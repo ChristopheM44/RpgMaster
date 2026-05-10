@@ -69,7 +69,9 @@ const combatActions: Array<{ label: string; type: string; iconId: RpgMapIconId; 
   { label: 'Attaquer', type: 'attack', iconId: 'c-atk-target', tone: 'tone-blood' },
   { label: 'Sort', type: 'cast_spell', iconId: 'c-spell-target', tone: 'tone-arcane' },
   { label: 'Objet', type: 'use_item', iconId: 'chest', tone: 'tone-gold' },
-  { label: 'Foncer', type: 'move', iconId: 'c-move-dest', tone: 'tone-teal' },
+  { label: 'Déplacer', type: 'move', iconId: 'c-move-dest', tone: 'tone-teal' },
+  { label: 'Dash', type: 'dash', iconId: 'c-move-tile', tone: 'tone-gold' },
+  { label: 'Désengager', type: 'disengage', iconId: 'c-selection', tone: 'tone-arcane' },
   { label: 'Fin du tour', type: 'end_turn', iconId: 'c-active-turn', tone: 'tone-gold' },
 ]
 

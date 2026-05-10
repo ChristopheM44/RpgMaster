@@ -262,6 +262,71 @@ export interface GameStateResponse {
   phase: string
 }
 
+// ─── Campaign Maps ───────────────────────────────────────────────────────────
+
+export type NodeStatus = 'visited' | 'known' | 'current' | 'rumored'
+export type RegionNodeKind = 'settlement' | 'landmark' | 'wilderness' | 'dungeon' | 'crossroads' | 'ruin'
+export type CityNodeKind = 'district' | 'building' | 'square' | 'gate' | 'docks' | 'temple' | 'tavern' | 'shop' | 'palace'
+export type EdgeKind = 'road' | 'path' | 'river' | 'sea_route' | 'secret' | 'street' | 'alley'
+
+export interface MapNodePosition {
+  x: number
+  y: number
+}
+
+export interface MapNode {
+  id: string
+  name: string
+  kind: RegionNodeKind | CityNodeKind
+  position: MapNodePosition
+  status: NodeStatus
+  icon?: string
+  description?: string
+  short_label?: string
+  city_id?: string
+  scene_ids?: string[]
+}
+
+export interface MapEdge {
+  id: string
+  from: string
+  to: string
+  kind: EdgeKind
+  travel_hint?: string
+  hidden?: boolean
+}
+
+export interface RegionMap {
+  id: string
+  name: string
+  current_node_id?: string
+  nodes: MapNode[]
+  edges: MapEdge[]
+  background_seed?: string
+  updated_at: string
+}
+
+export interface CityMap {
+  id: string
+  region_node_id: string
+  name: string
+  current_node_id?: string
+  nodes: MapNode[]
+  edges: MapEdge[]
+  background_seed?: string
+  updated_at: string
+}
+
+export interface RegionMapUpdatedPayload {
+  region_map: RegionMap | null
+  active_city_id?: string | null
+}
+
+export interface CityMapUpdatedPayload {
+  city_map: CityMap | null
+  active_city_id?: string | null
+}
+
 // ─── WebSocket Protocol ───────────────────────────────────────────────────────
 
 export const WS_EVENT_TYPES_LIST = [
@@ -280,6 +345,8 @@ export const WS_EVENT_TYPES_LIST = [
   'combatant_moved',
   'combatant_status_changed',
   'combatant_removed',
+  'action_economy_changed',
+  'opportunity_attack_triggered',
   'hp_changed',
   'condition_changed',
   'death_save_updated',
@@ -297,6 +364,8 @@ export const WS_EVENT_TYPES_LIST = [
   'chronicle_updated',
   'scene_layout_changed',
   'social_outcome',
+  'region_map_updated',
+  'city_map_updated',
 ] as const
 
 export type WsEventType = typeof WS_EVENT_TYPES_LIST[number]
@@ -389,6 +458,9 @@ export interface SceneLayout {
   pois: PointOfInterest[]
   exits: SceneExit[]
   party_positions: Record<string, GridPosition>
+  scene_id?: string
+  region_node_id?: string
+  city_node_id?: string
 }
 
 export interface SceneLayoutChangedPayload {
@@ -410,6 +482,9 @@ export interface SessionStatePayload {
   quests?: Quest[]
   chronicle?: ChronicleEntry[]
   current_scene?: SceneLayout | null
+  region_map?: RegionMap | null
+  city_maps?: Record<string, CityMap>
+  active_city_id?: string | null
 }
 
 export interface TurnEntry {
@@ -513,6 +588,18 @@ export interface CombatantMovedPayload {
   movement_used_m: number
 }
 
+export interface ActionEconomyChangedPayload {
+  combatant_id: string
+  action_economy: NonNullable<CombatantState['action_economy']>
+}
+
+export interface OpportunityAttackTriggeredPayload {
+  attacker_id: string
+  target_id: string
+  hit: boolean
+  damage: number
+}
+
 export interface CombatantStatusChangedPayload {
   combatant_id: string
   combatant_name?: string
@@ -566,7 +653,11 @@ export interface CombatantState {
     bonus_action: boolean
     reaction: boolean
     movement: number
+    movement_max?: number
+    has_dashed?: boolean
+    has_disengaged?: boolean
   }
+  avatar_url?: string
 }
 
 export interface HpChangedPayload {

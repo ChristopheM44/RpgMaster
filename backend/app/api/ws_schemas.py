@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -42,6 +42,7 @@ class PlayerActionMessage(WsBaseMessage):
     slot_level: Optional[int] = Field(default=None, ge=0, le=9)
     item_id: Optional[str] = None
     hit_dice_spend: Optional[dict[str, int]] = None
+    area_template: Optional[dict[str, Any]] = None
     addressed_to: Optional[str] = None
     audience: Optional[str] = Field(default=None, max_length=32)
     scene_id: Optional[str] = None

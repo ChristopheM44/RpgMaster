@@ -20,14 +20,14 @@ const charStore = useCharacterStore()
 const isMyTurn = computed(() => gameStore.currentTurnId === charStore.myCharacter?.id)
 const speedM = computed(() => {
   const movement = gameStore.combatants.find((c) => c.id === charStore.myCharacter?.id)?.action_economy?.movement
-  return movement ? movement * 0.3048 : 9
+  return movement ?? 9
 })
 
 type MapInteractionMode = 'inspect' | 'move' | 'attack' | 'spell'
 const mapMode = ref<MapInteractionMode>('inspect')
 
 function handleMapMove(col: number, row: number) {
-  emit('action', 'move', undefined, undefined, { col, row })
+  emit('action', 'move', `${col},${row}`)
   mapMode.value = 'inspect'
 }
 

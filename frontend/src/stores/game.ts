@@ -20,6 +20,11 @@ import type {
   SceneLayout,
   SceneLayoutChangedPayload,
   GridDecoration,
+  RegionMap,
+  CityMap,
+  RegionMapUpdatedPayload,
+  CityMapUpdatedPayload,
+  NodeStatus,
 } from '../types'
 
 export const useGameStore = defineStore('game', () => {
@@ -39,6 +44,9 @@ export const useGameStore = defineStore('game', () => {
   const quests = ref<Quest[]>([])
   const chronicle = ref<ChronicleEntry[]>([])
   const currentScene = ref<SceneLayout | null>(null)
+  const regionMap = ref<RegionMap | null>(null)
+  const cityMaps = ref<Record<string, CityMap>>({})
+  const activeCityId = ref<string | null>(null)
 
   // ─── Combat ─────────────────────────────────────────────────────────────────
   const combatants = ref<CombatantState[]>([])
@@ -78,6 +86,55 @@ export const useGameStore = defineStore('game', () => {
     currentScene.value = 'scene' in payload ? payload.scene : payload
   }
 
+  function applyRegionMap(payload: RegionMapUpdatedPayload | RegionMap | null) {
+    if (payload && 'region_map' in payload) {
+      regionMap.value = payload.region_map
+      if ('active_city_id' in payload) activeCityId.value = payload.active_city_id ?? null
+      return
+    }
+    regionMap.value = payload
+  }
+
+  function applyCityMap(payload: CityMapUpdatedPayload | CityMap | null) {
+    const cityMap = payload && 'city_map' in payload ? payload.city_map : payload
+    if (payload && 'active_city_id' in payload) {
+      activeCityId.value = payload.active_city_id ?? cityMap?.id ?? null
+    } else if (cityMap) {
+      activeCityId.value = cityMap.id
+    }
+    if (!cityMap) return
+    cityMaps.value = { ...cityMaps.value, [cityMap.id]: cityMap }
+  }
+
+  function applyNodeStatus(
+    scope: 'region' | 'city',
+    nodeId: string,
+    status: NodeStatus,
+    cityId?: string | null,
+  ) {
+    if (scope === 'region' && regionMap.value) {
+      regionMap.value = {
+        ...regionMap.value,
+        nodes: regionMap.value.nodes.map((node) =>
+          node.id === nodeId ? { ...node, status } : node,
+        ),
+      }
+      return
+    }
+    if (scope === 'city' && cityId && cityMaps.value[cityId]) {
+      const cityMap = cityMaps.value[cityId]!
+      cityMaps.value = {
+        ...cityMaps.value,
+        [cityId]: {
+          ...cityMap,
+          nodes: cityMap.nodes.map((node) =>
+            node.id === nodeId ? { ...node, status } : node,
+          ),
+        },
+      }
+    }
+  }
+
   function applySessionState(payload: SessionStatePayload) {
     const prevPhase = phase.value
     phase.value = payload.phase
@@ -88,6 +145,9 @@ export const useGameStore = defineStore('game', () => {
     if (payload.quests) quests.value = payload.quests
     if (payload.chronicle) chronicle.value = payload.chronicle
     if ('current_scene' in payload) currentScene.value = payload.current_scene ?? null
+    if ('region_map' in payload) regionMap.value = payload.region_map ?? null
+    if ('city_maps' in payload) cityMaps.value = payload.city_maps ?? {}
+    if ('active_city_id' in payload) activeCityId.value = payload.active_city_id ?? null
     if (payload.combatants) setCombatants(payload.combatants)
     if (payload.grid_config) gridConfig.value = payload.grid_config
     if ('grid_decoration' in payload) gridDecoration.value = payload.grid_decoration ?? null
@@ -229,6 +289,10 @@ export const useGameStore = defineStore('game', () => {
     if (idx !== -1) {
       combatants.value[idx] = { ...combatants.value[idx]!, position: payload.position } as CombatantState
     }
+  }
+
+  function applyActionEconomyChanged(payload: { combatant_id: string; action_economy: NonNullable<CombatantState['action_economy']> }) {
+    updateCombatant(payload.combatant_id, { action_economy: payload.action_economy })
   }
 
   function applyCombatantStatusChanged(payload: CombatantStatusChangedPayload) {
@@ -404,6 +468,9 @@ export const useGameStore = defineStore('game', () => {
     quests.value = []
     chronicle.value = []
     currentScene.value = null
+    regionMap.value = null
+    cityMaps.value = {}
+    activeCityId.value = null
   }
 
   return {
@@ -422,6 +489,9 @@ export const useGameStore = defineStore('game', () => {
     quests,
     chronicle,
     currentScene,
+    regionMap,
+    cityMaps,
+    activeCityId,
     connected,
     error,
     isProcessing,
@@ -433,6 +503,9 @@ export const useGameStore = defineStore('game', () => {
     applyQuestUpdated,
     applyChronicleUpdated,
     applySceneLayout,
+    applyRegionMap,
+    applyCityMap,
+    applyNodeStatus,
     applySessionState,
     addNarration,
     addRollResult,
@@ -447,6 +520,7 @@ export const useGameStore = defineStore('game', () => {
     setGridConfig,
     setGridDecoration,
     moveCombatant,
+    applyActionEconomyChanged,
     applyCombatantStatusChanged,
     removeCombatant,
     applyHpChanged,

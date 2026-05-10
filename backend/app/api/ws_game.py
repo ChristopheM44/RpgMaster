@@ -72,6 +72,7 @@ from app.api.ws_handlers.lifecycle import (
 from app.api.ws_payloads import (
     build_combat_start_payload,
     build_session_state_payload,
+    build_session_state_payload_enriched,
     character_snapshot,
     compute_ac_from_equipment,
     format_monster_actions,
@@ -90,6 +91,7 @@ from app.api.ws_schemas import (
 )
 from app.config import settings
 from app.db.database import async_session
+from app.engine.combat import roll_attack, roll_damage
 from app.engine.tactical_grid import GridPosition, initialize_positions, validate_move
 from app.game.action_resolver import ActionResolver
 from app.game.async_tasks import create_logged_task
@@ -97,6 +99,7 @@ from app.game.combat_triggers import prime_combat_from_aggressive_action
 from app.game.constants import INACTIVE_STATUSES
 from app.game.event_bus import BACKPRESSURE_ERROR_CODE, EventType, GameEvent, event_bus
 from app.game.runtime import rest_service, session_manager
+from app.game.state_sync import sync_character_state
 from app.game.turn_manager import CombatantInfo
 from app.llm.budget import is_sober_mode
 from app.models.character import Character
@@ -159,6 +162,17 @@ def _db_session_factory(websocket: WebSocket) -> Any:
 
 def _build_session_state_payload(session_id: str) -> dict[str, Any]:
     return build_session_state_payload(session_id, session_manager.get_session(session_id))
+
+
+async def _build_session_state_payload_with_maps(
+    session_id: str,
+    db: AsyncSession,
+) -> dict[str, Any]:
+    return await build_session_state_payload_enriched(
+        session_id,
+        session_manager.get_session(session_id),
+        db,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1546,6 +1560,148 @@ async def _handle_short_rest(
         )
 
 
+async def _publish_action_economy(
+    session_id: str,
+    combatant_id: str,
+    action_economy: Any,
+) -> None:
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.ACTION_ECONOMY_CHANGED,
+        {
+            "combatant_id": combatant_id,
+            "action_economy": getattr(action_economy, "__dict__", action_economy),
+        },
+        source="ws_game",
+    )
+
+
+async def _handle_dash(
+    session_id: str,
+    action: PlayerActionMessage,
+    active: Any,
+    db: AsyncSession,
+) -> None:
+    del db
+    current = active.turn_manager.current_turn
+    if current is None or current.combatant_id != action.character_id:
+        return
+    economy = current.action_economy
+    if not economy.use_action():
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.ERROR,
+            {"message": "Action déjà utilisée ce tour."},
+            source="ws_game",
+        )
+        return
+    economy.movement += economy.movement_max
+    economy.has_dashed = True
+    active.mark_dirty()
+    await _publish_action_economy(session_id, current.combatant_id, economy)
+
+
+async def _handle_disengage(
+    session_id: str,
+    action: PlayerActionMessage,
+    active: Any,
+    db: AsyncSession,
+) -> None:
+    del db
+    current = active.turn_manager.current_turn
+    if current is None or current.combatant_id != action.character_id:
+        return
+    economy = current.action_economy
+    if not economy.use_action():
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.ERROR,
+            {"message": "Action déjà utilisée ce tour."},
+            source="ws_game",
+        )
+        return
+    economy.has_disengaged = True
+    active.mark_dirty()
+    await _publish_action_economy(session_id, current.combatant_id, economy)
+
+
+async def _maybe_trigger_opportunity_attack(
+    session_id: str,
+    active: Any,
+    mover_id: str,
+    from_pos: GridPosition,
+    to_pos: GridPosition,
+) -> None:
+    current = active.turn_manager.current_turn
+    if current is not None and current.combatant_id == mover_id:
+        if getattr(current.action_economy, "has_disengaged", False):
+            return
+
+    combatants_info: dict[str, Any] = active.state_data.get("combatants", {})
+    grid_positions: dict[str, Any] = active.state_data.get("grid_positions", {})
+    mover = combatants_info.get(mover_id, {})
+    mover_is_player = bool(mover.get("is_player", True))
+
+    for entry in active.turn_manager._order:
+        attacker_id = entry.combatant_id
+        if attacker_id == mover_id or not entry.action_economy.reaction:
+            continue
+        attacker = combatants_info.get(attacker_id, {})
+        if bool(attacker.get("is_player", True)) == mover_is_player:
+            continue
+        attacker_pos_data = grid_positions.get(attacker_id)
+        if not attacker_pos_data:
+            continue
+        attacker_pos = GridPosition.from_dict(attacker_pos_data)
+        was_adjacent = (
+            max(abs(attacker_pos.col - from_pos.col), abs(attacker_pos.row - from_pos.row))
+            <= 1
+        )
+        remains_adjacent = (
+            max(abs(attacker_pos.col - to_pos.col), abs(attacker_pos.row - to_pos.row))
+            <= 1
+        )
+        if not was_adjacent or remains_adjacent:
+            continue
+
+        entry.action_economy.use_reaction()
+        attack = roll_attack(
+            int(attacker.get("attack_bonus", 3) or 3),
+            int(mover.get("ac", 10) or 10),
+        )
+        damage_amount = 0
+        if attack.hit:
+            damage = roll_damage(
+                str(attacker.get("damage_notation") or "1d6+1"),
+                critical=attack.critical,
+            )
+            damage_amount = int(damage.total)
+            old_hp = int(mover.get("hp", 0))
+            new_hp = max(0, old_hp - damage_amount)
+            mover["hp"] = new_hp
+            sync_character_state(active, mover_id, hp=new_hp)
+            await event_bus.publish_to_session(
+                session_id,
+                EventType.HP_CHANGED,
+                {"combatant_id": mover_id, "delta": -damage_amount, "hp": new_hp},
+                source="ws_game",
+            )
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.OPPORTUNITY_ATTACK_TRIGGERED,
+            {
+                "attacker_id": attacker_id,
+                "target_id": mover_id,
+                "hit": bool(attack.hit),
+                "damage": damage_amount,
+            },
+            source="ws_game",
+        )
+        await _publish_action_economy(session_id, attacker_id, entry.action_economy)
+        active.mark_dirty()
+        return
+
+
 async def _handle_move(
     session_id: str,
     action: PlayerActionMessage,
@@ -1597,10 +1753,19 @@ async def _handle_move(
     from_pos = GridPosition.from_dict(from_data)
     to_pos = GridPosition(col=target_col, row=target_row)
 
-    # Get mover's speed from characters data
     combatants_info: dict[str, Any] = active.state_data.get("combatants", {})
     mover_data = combatants_info.get(mover_id, {})
-    speed_m = float(mover_data.get("speed_m", 9.0))
+    current = active.turn_manager.current_turn
+    turn_economy = (
+        current.action_economy
+        if current is not None and current.combatant_id == mover_id
+        else None
+    )
+    speed_m = float(
+        turn_economy.movement
+        if turn_economy is not None
+        else mover_data.get("speed_m", 9.0)
+    )
 
     # Occupied positions (excluding mover)
     occupied = [
@@ -1621,6 +1786,16 @@ async def _handle_move(
 
     from app.engine.tactical_grid import distance_m as grid_distance_m
     dist = grid_distance_m(from_pos, to_pos)
+    if turn_economy is not None and not turn_economy.spend_movement(dist):
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.ERROR,
+            {"message": "Mouvement insuffisant pour ce déplacement."},
+            source="ws_game",
+        )
+        return
+
+    await _maybe_trigger_opportunity_attack(session_id, active, mover_id, from_pos, to_pos)
 
     # Update position in state
     grid_positions[mover_id] = to_pos.to_dict()
@@ -1636,6 +1811,8 @@ async def _handle_move(
         },
         source="ws_game",
     )
+    if turn_economy is not None:
+        await _publish_action_economy(session_id, mover_id, turn_economy)
 
 
 # ---------------------------------------------------------------------------
@@ -1948,6 +2125,14 @@ async def _dispatch_action(
         await _handle_move(session_id, action, active, db)
         return
 
+    if action.action_type == "dash":
+        await _handle_dash(session_id, action, active, db)
+        return
+
+    if action.action_type == "disengage":
+        await _handle_disengage(session_id, action, active, db)
+        return
+
     if action.action_type == "end_turn":
         await _handle_end_turn(session_id, active, db)
         return
@@ -2129,10 +2314,12 @@ async def game_websocket(
     # ------------------------------------------------------------------
     # 3. Send initial session state
     # ------------------------------------------------------------------
+    async with db_session_factory() as db:
+        initial_payload = await _build_session_state_payload_with_maps(session_id, db)
     await websocket.send_json({
         "event_type": EventType.SESSION_STATE,
         "session_id": session_id,
-        "payload": _build_session_state_payload(session_id),
+        "payload": initial_payload,
     })
 
     character_id: Optional[str] = None

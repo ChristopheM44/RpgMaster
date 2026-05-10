@@ -58,6 +58,8 @@ class EventType(str):
     COMBATANT_MOVED = "combatant_moved"
     COMBATANT_STATUS_CHANGED = "combatant_status_changed"
     COMBATANT_REMOVED = "combatant_removed"
+    ACTION_ECONOMY_CHANGED = "action_economy_changed"
+    OPPORTUNITY_ATTACK_TRIGGERED = "opportunity_attack_triggered"
 
     # Session lifecycle
     PHASE_CHANGE = "phase_change"
@@ -83,6 +85,8 @@ class EventType(str):
     CHRONICLE_UPDATED = "chronicle_updated"
     SCENE_LAYOUT_CHANGED = "scene_layout_changed"
     SOCIAL_OUTCOME = "social_outcome"
+    REGION_MAP_UPDATED = "region_map_updated"
+    CITY_MAP_UPDATED = "city_map_updated"
 
     # Errors
     ERROR = "error"

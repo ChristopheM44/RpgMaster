@@ -59,6 +59,24 @@ def build_session_state_payload(
     return payload
 
 
+async def build_session_state_payload_enriched(
+    session_id: str,
+    active: Any | None,
+    db: Any,
+) -> dict[str, Any]:
+    """Build session state plus campaign-level map data when a DB session is available."""
+    payload = build_session_state_payload(session_id, active)
+    try:
+        from app.services import campaign_dossier_service
+
+        payload.update(await campaign_dossier_service.campaign_maps_for_session(session_id, db))
+    except Exception:
+        payload.setdefault("region_map", None)
+        payload.setdefault("city_maps", {})
+        payload.setdefault("active_city_id", None)
+    return payload
+
+
 def compute_ac_from_equipment(equipment: list, dex_mod: int) -> int:
     """Calcule l'AC à partir de l'équipement équipé."""
     armor = next(

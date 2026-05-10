@@ -28,6 +28,7 @@ from app.llm.budget import (
     should_use_gm_for_action,
 )
 from app.llm.voxtral_client import tts_router
+from app.services import campaign_dossier_service
 from app.services.spellcasting_service import SpellcastingService, SpellcastingServiceError
 
 logger = logging.getLogger(__name__)
@@ -495,10 +496,15 @@ class ActionPipeline:
 
                 recent_messages = await load_recent_messages(request.session_id, actual_db)
 
+            game_state_for_gm = await self._game_state_for_gm(
+                request.session_id,
+                active,
+                actual_db,
+            )
             context = AgentContext(
                 session_id=request.session_id,
                 game_phase=phase_value,
-                game_state=active.state_data,
+                game_state=game_state_for_gm,
                 player_action=prompt_action_text,
                 roll_results=roll_results or {},
                 messages=recent_messages,
@@ -612,7 +618,11 @@ class ActionPipeline:
                 context = AgentContext(
                     session_id=request.session_id,
                     game_phase=phase_value,
-                    game_state=active.state_data,
+                    game_state=await self._game_state_for_gm(
+                        request.session_id,
+                        active,
+                        actual_db,
+                    ),
                     player_action=prompt_action_text,
                     roll_results=roll_results or {},
                     messages=[],
@@ -687,6 +697,23 @@ class ActionPipeline:
 
     def _gm_for_phase(self, phase_value: str) -> Any:
         return self._combat_gm if phase_value.upper() == "COMBAT" else self._gm
+
+    async def _game_state_for_gm(
+        self,
+        session_id: str,
+        active: ActiveSession,
+        db: Optional[Any],
+    ) -> dict[str, Any]:
+        game_state = dict(active.state_data)
+        if db is not None:
+            try:
+                game_state["world_maps"] = await campaign_dossier_service.map_context_for_session(
+                    session_id,
+                    db,
+                )
+            except Exception as exc:
+                logger.debug("ActionPipeline : contexte cartes indisponible : %s", exc)
+        return game_state
 
     @staticmethod
     def _deterministic_narration(

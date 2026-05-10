@@ -59,11 +59,15 @@ class TurnEntry:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> TurnEntry:
         ae_data = data.get("action_economy", {})
+        movement_max = ae_data.get("movement_max", ae_data.get("movement", 9.0))
         ae = ActionEconomy(
             action=ae_data.get("action", True),
             bonus_action=ae_data.get("bonus_action", True),
             reaction=ae_data.get("reaction", True),
-            movement=ae_data.get("movement", 30),
+            movement=ae_data.get("movement", movement_max),
+            movement_max=movement_max,
+            has_dashed=ae_data.get("has_dashed", False),
+            has_disengaged=ae_data.get("has_disengaged", False),
         )
         return cls(
             combatant_id=data["combatant_id"],
@@ -226,7 +230,7 @@ class TurnManager:
 
         # Reset action economy for the new active combatant
         entry = self._order[self._index]
-        entry.action_economy = new_turn_economy(entry.action_economy.movement)
+        entry.action_economy = new_turn_economy(entry.action_economy.movement_max)
         return entry
 
     def remove_combatant(self, combatant_id: str) -> bool:

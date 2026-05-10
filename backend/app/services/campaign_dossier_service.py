@@ -16,6 +16,7 @@ from app.agents.campaign_forge_agent import CampaignForgeAgent
 from app.models.campaign import Campaign
 from app.models.campaign_dossier import CampaignDossier
 from app.models.character import Character
+from app.services import map_service
 from app.security_url import validate_public_http_url
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ VALID_STATUSES = {"empty", "drafting", "draft", "validated", "failed"}
 SOURCE_MAX_CHARS = 120_000
 URL_MAX_BYTES = 2_000_000
 _SYNTHESIS_IN_FLIGHT: set[str] = set()
+_MISSING = object()
 
 
 def empty_played_canon() -> dict[str, Any]:
@@ -324,6 +326,96 @@ async def campaign_for_session(session_id: str, db: AsyncSession) -> Optional[Ca
     return None
 
 
+async def campaign_maps_for_session(
+    session_id: str,
+    db: AsyncSession,
+) -> dict[str, Any]:
+    campaign = await campaign_for_session(session_id, db)
+    if campaign is None:
+        return {"region_map": None, "city_maps": {}, "active_city_id": None}
+    dossier = await get_dossier(campaign.id, db)
+    gm_dossier = dossier.gm_dossier if dossier and isinstance(dossier.gm_dossier, dict) else {}
+    return public_campaign_maps(gm_dossier)
+
+
+def public_campaign_maps(gm_dossier: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "region_map": map_service.public_region_map(gm_dossier.get("region_map")),
+        "city_maps": map_service.public_city_maps(gm_dossier.get("city_maps")),
+        "active_city_id": gm_dossier.get("active_city_id"),
+    }
+
+
+async def map_context_for_session(
+    session_id: str,
+    db: AsyncSession,
+) -> dict[str, Any]:
+    campaign = await campaign_for_session(session_id, db)
+    if campaign is None:
+        return {"region_map": None, "city_maps": {}, "active_city_id": None}
+    dossier = await get_dossier(campaign.id, db)
+    gm_dossier = dossier.gm_dossier if dossier and isinstance(dossier.gm_dossier, dict) else {}
+    return map_service.compact_map_context(
+        gm_dossier.get("region_map"),
+        gm_dossier.get("city_maps"),
+        gm_dossier.get("active_city_id"),
+    )
+
+
+async def update_campaign_maps(
+    campaign_id: str,
+    db: AsyncSession,
+    *,
+    region_map: Any = _MISSING,
+    city_maps: Any = _MISSING,
+    active_city_id: Any = _MISSING,
+) -> CampaignDossier:
+    dossier = await get_or_create_dossier(campaign_id, db)
+    current = dossier.gm_dossier if isinstance(dossier.gm_dossier, dict) else {}
+    next_gm_dossier = sanitize_gm_dossier_map_defaults(dict(current))
+
+    if region_map is not _MISSING:
+        next_gm_dossier["region_map"] = region_map
+    if city_maps is not _MISSING:
+        next_gm_dossier["city_maps"] = city_maps or {}
+    if active_city_id is not _MISSING:
+        next_gm_dossier["active_city_id"] = active_city_id
+
+    dossier.gm_dossier = next_gm_dossier
+    await db.commit()
+    await db.refresh(dossier)
+    return dossier
+
+
+async def update_campaign_maps_for_session(
+    session_id: str,
+    db: AsyncSession,
+    *,
+    region_map: Any = _MISSING,
+    city_maps: Any = _MISSING,
+    active_city_id: Any = _MISSING,
+) -> Optional[CampaignDossier]:
+    campaign = await campaign_for_session(session_id, db)
+    if campaign is None:
+        return None
+    return await update_campaign_maps(
+        campaign.id,
+        db,
+        region_map=region_map,
+        city_maps=city_maps,
+        active_city_id=active_city_id,
+    )
+
+
+def sanitize_gm_dossier_map_defaults(data: dict[str, Any]) -> dict[str, Any]:
+    sanitized = dict(data) if isinstance(data, dict) else {}
+    sanitized.setdefault("region_map", None)
+    city_maps = sanitized.get("city_maps")
+    sanitized["city_maps"] = city_maps if isinstance(city_maps, dict) else {}
+    sanitized.setdefault("active_city_id", None)
+    return sanitized
+
+
 async def compile_campaign_context_for_session(
     session_id: str,
     db: AsyncSession,
@@ -445,7 +537,7 @@ def sanitize_gm_dossier(
             }
             for i, ch in enumerate(contract.get("visible_chapters", []))
         ]
-    return {
+    return sanitize_gm_dossier_map_defaults({
         "narrative_arc": _text(data.get("narrative_arc") or campaign.description, 2000),
         "chapters": [_sanitize_private_chapter(ch, i) for i, ch in enumerate(chapters)],
         "important_npcs": _generic_list(data.get("important_npcs")),
@@ -458,7 +550,10 @@ def sanitize_gm_dossier(
         "complications": _generic_list(data.get("complications")),
         "clues": _generic_list(data.get("clues")),
         "light_mechanics": _generic_list(data.get("light_mechanics")),
-    }
+        "region_map": data.get("region_map"),
+        "city_maps": data.get("city_maps"),
+        "active_city_id": data.get("active_city_id"),
+    })
 
 
 def sanitize_played_canon(data: dict[str, Any]) -> dict[str, Any]:

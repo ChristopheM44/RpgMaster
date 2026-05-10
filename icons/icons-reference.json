@@ -128,6 +128,62 @@
     "file_mono": "icons/mono/unknown-zone.svg"
   },
   {
+    "id": "region-settlement",
+    "name": "Village / cité",
+    "category": "exploration",
+    "color": "#f0c764",
+    "file_color": "icons/color/region-settlement.svg",
+    "file_mono": "icons/mono/region-settlement.svg"
+  },
+  {
+    "id": "region-landmark",
+    "name": "Repère majeur",
+    "category": "exploration",
+    "color": "#4fd8c0",
+    "file_color": "icons/color/region-landmark.svg",
+    "file_mono": "icons/mono/region-landmark.svg"
+  },
+  {
+    "id": "region-dungeon",
+    "name": "Donjon / antre",
+    "category": "exploration",
+    "color": "#c090ff",
+    "file_color": "icons/color/region-dungeon.svg",
+    "file_mono": "icons/mono/region-dungeon.svg"
+  },
+  {
+    "id": "region-crossroads",
+    "name": "Carrefour",
+    "category": "exploration",
+    "color": "#4fd8c0",
+    "file_color": "icons/color/region-crossroads.svg",
+    "file_mono": "icons/mono/region-crossroads.svg"
+  },
+  {
+    "id": "marker-current",
+    "name": "Lieu actuel",
+    "category": "exploration",
+    "color": "#f0c764",
+    "file_color": "icons/color/marker-current.svg",
+    "file_mono": "icons/mono/marker-current.svg"
+  },
+  {
+    "id": "marker-visited",
+    "name": "Lieu visité",
+    "category": "exploration",
+    "color": "#6fd96f",
+    "file_color": "icons/color/marker-visited.svg",
+    "file_mono": "icons/mono/marker-visited.svg"
+  },
+  {
+    "id": "marker-known",
+    "name": "Lieu connu",
+    "category": "exploration",
+    "color": "#f0c764",
+    "file_color": "icons/color/marker-known.svg",
+    "file_mono": "icons/mono/marker-known.svg"
+  },
+  {
     "id": "c-ally",
     "name": "Personnage allié",
     "category": "combat-ally",

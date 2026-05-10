@@ -8,7 +8,11 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.ws_payloads import build_session_state_payload, character_snapshot
+from app.api.ws_payloads import (
+    build_session_state_payload,
+    build_session_state_payload_enriched,
+    character_snapshot,
+)
 from app.db.database import get_db
 from app.game.async_tasks import create_logged_task
 from app.game.event_bus import EventType, event_bus
@@ -34,6 +38,14 @@ class SaveSlotCreate(BaseModel):
 
 def _build_session_state_payload(session_id: str) -> dict:
     return build_session_state_payload(session_id, session_manager.get_session(session_id))
+
+
+async def _build_session_state_payload_with_maps(session_id: str, db: AsyncSession) -> dict:
+    return await build_session_state_payload_enriched(
+        session_id,
+        session_manager.get_session(session_id),
+        db,
+    )
 
 
 def _campaign_opening_text(campaign_context: dict[str, Any]) -> str:
@@ -145,18 +157,15 @@ async def get_game_state(session_id: str, db: AsyncSession = Depends(get_db)):
     """Get current game state."""
     active = session_manager.get_session(session_id)
     if active:
-        return {
-            "session_id": session_id,
-            "phase": active.phase.value,
-            "turn_number": active.turn_number,
-            "round_number": active.round_number,
-        }
+        return await _build_session_state_payload_with_maps(session_id, db)
 
     result = await db.execute(select(Session).where(Session.id == session_id))
     session = result.scalar_one_or_none()
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found.")
-    return {"session_id": session_id, "phase": session.status.value}
+    payload = await build_session_state_payload_enriched(session_id, None, db)
+    payload["phase"] = session.status.value
+    return payload
 
 
 @router.post("/{session_id}/start")
@@ -254,7 +263,7 @@ async def start_game(
     await event_bus.publish_to_session(
         session_id,
         EventType.SESSION_STATE,
-        _build_session_state_payload(session_id),
+        await _build_session_state_payload_with_maps(session_id, db),
         source="routes_game",
     )
 
@@ -528,7 +537,7 @@ async def load_save(session_id: str, save_id: str, db: AsyncSession = Depends(ge
     await event_bus.publish_to_session(
         session_id,
         EventType.SESSION_STATE,
-        _build_session_state_payload(session_id),
+        await _build_session_state_payload_with_maps(session_id, db),
         source="routes_game",
     )
 

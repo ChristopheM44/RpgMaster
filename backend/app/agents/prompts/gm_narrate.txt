@@ -41,6 +41,11 @@ Instructions :
   Le schéma peut être sommaire mais doit rester cohérent avec le texte. Ne répète pas scene_layout si le lieu n'a pas changé.
 - Si la narration introduit une quête ou rumeur (donnée par un PNJ, découverte, mystère) : émets quest_add avec un id court en snake_case.
 - Si la narration nomme un nouveau PNJ ou lieu important : émets chronicle_add (kind="npc" ou "location"). Pas les monstres de combat, pas les personnages joueurs.
+- Si la narration introduit un voyage entre lieux, un nouveau lieu d'intérêt régional, ou une ville/quartier important : mets à jour game_state.world_maps par patch incrémental.
+  Utilise region_map_update pour la géographie entre lieux, city_map_update pour les districts/bâtiments/rues d'une ville, node_status_update pour marquer un lieu current/visited/known/rumored.
+  Ne remplace jamais toute une carte si un patch suffit : réutilise les ids visibles dans game_state.world_maps et n'envoie que nodes_upsert/edges_upsert/nodes_remove/edges_remove nécessaires.
+  Positions de carte : x/y normalisés entre 0 et 100.
+  Exemple court : {"type":"region_map_update","target":null,"params":{"name":"Vallée de l'Épine","current_node_id":"auberge_du_pont","nodes_upsert":[{"id":"auberge_du_pont","name":"Auberge du Pont","kind":"settlement","position":{"x":48,"y":62},"status":"current"},{"id":"bois_creux","name":"Bois Creux","kind":"wilderness","position":{"x":61,"y":45},"status":"known"}],"nodes_remove":[],"edges_upsert":[{"id":"route_pont_bois","from":"auberge_du_pont","to":"bois_creux","kind":"path","travel_hint":"Une demi-journée par les sentiers."}],"edges_remove":[]}}
 - N'émets journal_update, quest_add, chronicle_add QUE quand l'état change. Pas à chaque tour.
 - Si la narration décrit l'apparition d'ennemis hostiles qui veulent attaquer le groupe, inclus OBLIGATOIREMENT ces deux actions dans cet ordre exact :
     1. encounter_setup avec la liste précise des monster_ids correspondant aux ennemis décrits.

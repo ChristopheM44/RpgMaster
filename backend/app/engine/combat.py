@@ -86,6 +86,9 @@ class ActionEconomy:
     bonus_action: bool = True
     reaction: bool = True
     movement: float = 9.0  # mètres restants
+    movement_max: float = 9.0
+    has_dashed: bool = False
+    has_disengaged: bool = False
 
     def use_action(self) -> bool:
         """Consume the action. Returns False if already spent."""
@@ -294,4 +297,12 @@ def new_turn_economy(speed: float = 9.0) -> ActionEconomy:
     Args:
         speed: The combatant's base walking speed in metres (default 9 m = 30 ft).
     """
-    return ActionEconomy(action=True, bonus_action=True, reaction=True, movement=speed)
+    return ActionEconomy(
+        action=True,
+        bonus_action=True,
+        reaction=True,
+        movement=speed,
+        movement_max=speed,
+        has_dashed=False,
+        has_disengaged=False,
+    )

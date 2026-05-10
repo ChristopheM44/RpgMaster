@@ -74,6 +74,15 @@ src/
 Backend WS event -> useWebSocket -> store.game / store.character -> composant reactif
 ```
 
+### Recette pour ajouter un event serveur -> client
+
+Chaque nouveau `event_type` doit traverser ces 4 couches, sinon il peut etre ignore silencieusement :
+
+1. `backend/app/game/event_bus.py` : constante `EventType`.
+2. `frontend/src/types/index.ts` : `WS_EVENT_TYPES_LIST` + interface payload.
+3. `frontend/src/composables/useWebSocket.ts` : `case` de dispatch + type guard.
+4. `frontend/src/stores/game.ts` ou `character.ts` : action store dediee.
+
 ## Service API (api.ts)
 
 Toutes les requetes HTTP passent par `src/services/api.ts`.

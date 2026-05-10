@@ -15,7 +15,7 @@ SCHÉMA DE RÉPONSE JSON (obligatoire) :
   "narration": "Le texte narratif vu par les joueurs (2 à 4 paragraphes, en français).",
   "actions": [
     {
-      "type": "roll_request | damage_apply | condition_add | condition_remove | combatant_status | state_transition | encounter_setup | scene_layout | journal_update | quest_add | chronicle_add | social_outcome",
+      "type": "roll_request | damage_apply | condition_add | condition_remove | combatant_status | state_transition | encounter_setup | scene_layout | journal_update | quest_add | chronicle_add | social_outcome | region_map_update | city_map_update | node_status_update",
       "target": "id_du_personnage ou null",
       "params": {}
     }
@@ -64,6 +64,17 @@ TYPES D'ACTIONS :
                     (params: {"npc_id":"azaka","attitude_shift":"friendly|helpful|indifferent|unfriendly|hostile",
                     "note":"Azaka accepte de guider le groupe si...", "new_quest": null})
                     Utilise seulement après une vraie interaction sociale avec ce PNJ.
+- region_map_update : patch incrémental de la carte régionale partagée par la campagne.
+                    (params: {"name":"Côte des Brumes","current_node_id":"port_neuf",
+                    "nodes_upsert":[{"id":"port_neuf","name":"Port-Neuf","kind":"settlement","position":{"x":42,"y":64},"status":"current"}],
+                    "nodes_remove":[],"edges_upsert":[],"edges_remove":[]})
+                    Réutilise les ids existants de world_maps. N'envoie que les ajouts/modifications.
+- city_map_update : patch incrémental d'une carte de ville.
+                    (params: {"city_id":"port_neuf","region_node_id":"port_neuf","name":"Port-Neuf",
+                    "current_node_id":"quai_nord","nodes_upsert":[{"id":"quai_nord","name":"Quai nord","kind":"docks","position":{"x":35,"y":70},"status":"current"}],
+                    "nodes_remove":[],"edges_upsert":[],"edges_remove":[]})
+- node_status_update : change seulement le statut d'un noeud connu.
+                    (params: {"scope":"region|city","city_id":"port_neuf","node_id":"quai_nord","status":"visited|known|current|rumored"})
 
 ACTION_INTENT :
 - "social"        : le joueur s'adresse directement à ses compagnons (question, proposition, demande d'avis)

@@ -6,6 +6,7 @@ retourne les jets en attente pour une narration d'outcome.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 from typing import Any, Optional
@@ -16,6 +17,7 @@ from app.agents.schemas import AgentResponse, GMResponse
 from app.game.event_bus import EventType, event_bus
 from app.game.session_manager import ActiveSession
 from app.game.state_sync import sync_character_state
+from app.services import campaign_dossier_service, map_service
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +27,9 @@ CANON_DIRTY_ACTIONS = {
     "chronicle_add",
     "state_transition",
     "social_outcome",
+    "region_map_update",
+    "city_map_update",
+    "node_status_update",
 }
 
 SCENE_POI_INTERACTION_INTENTS = {
@@ -69,10 +74,9 @@ class GMResponseExecutor:
     ) -> GMExecutionResult:
         """Execute toutes les actions d'une reponse GM.
 
-        ``db`` est garde dans la signature publique pour les appels futurs et
-        pour matcher le contrat du pipeline ; l'executor ne l'utilise pas.
+        ``db`` est requis pour les actions persistantes au niveau campagne
+        (cartes region/ville). Les actions qui n'en ont pas besoin l'ignorent.
         """
-        del db
         result = GMExecutionResult()
         actual_session_id = session_id or active.session_id
 
@@ -96,7 +100,13 @@ class GMResponseExecutor:
                 )
                 continue
 
-            await self.execute_action(actual_session_id, gm_action.type, params, active)
+            await self.execute_action(
+                actual_session_id,
+                gm_action.type,
+                params,
+                active,
+                db=db,
+            )
             result.executed_actions.append(
                 {"type": gm_action.type, "target": gm_action.target, "params": params}
             )
@@ -122,6 +132,7 @@ class GMResponseExecutor:
         action_type: str,
         params: dict[str, Any],
         active: ActiveSession,
+        db: Optional[Any] = None,
     ) -> None:
         """Applique une action mecanique GM et publie les evenements associes."""
         if action_type == "damage_apply":
@@ -144,6 +155,12 @@ class GMResponseExecutor:
             await self._apply_scene_layout(session_id, params, active)
         elif action_type == "social_outcome":
             await self._apply_social_outcome(session_id, params, active)
+        elif action_type == "region_map_update":
+            await self._apply_region_map_update(session_id, params, active, db)
+        elif action_type == "city_map_update":
+            await self._apply_city_map_update(session_id, params, active, db)
+        elif action_type == "node_status_update":
+            await self._apply_node_status_update(session_id, params, active, db)
         else:
             logger.warning("GMResponseExecutor : type d'action GM inconnu '%s'.", action_type)
 
@@ -493,6 +510,181 @@ class GMResponseExecutor:
                 source=self._source,
             )
 
+    async def _apply_region_map_update(
+        self,
+        session_id: str,
+        params: dict[str, Any],
+        active: ActiveSession,
+        db: Optional[Any],
+    ) -> None:
+        del active
+        if db is None:
+            logger.warning("region_map_update ignore : db indisponible.")
+            return
+        campaign = await campaign_dossier_service.campaign_for_session(session_id, db)
+        if campaign is None:
+            logger.warning("region_map_update ignore : aucune campagne pour session %s.", session_id)
+            return
+        dossier = await campaign_dossier_service.get_or_create_dossier(campaign.id, db)
+        gm_dossier = campaign_dossier_service.sanitize_gm_dossier_map_defaults(
+            dossier.gm_dossier or {}
+        )
+        try:
+            region_map = map_service.merge_region_map_patch(
+                gm_dossier.get("region_map"),
+                params,
+            )
+        except map_service.MapPatchError as exc:
+            logger.warning("region_map_update ignore : patch invalide - %s", exc)
+            return
+
+        dossier = await campaign_dossier_service.update_campaign_maps(
+            campaign.id,
+            db,
+            region_map=region_map,
+        )
+        public_maps = campaign_dossier_service.public_campaign_maps(dossier.gm_dossier or {})
+        await self._event_bus.publish_to_session(
+            session_id,
+            EventType.REGION_MAP_UPDATED,
+            {
+                "region_map": public_maps["region_map"],
+                "active_city_id": public_maps["active_city_id"],
+            },
+            source=self._source,
+        )
+
+    async def _apply_city_map_update(
+        self,
+        session_id: str,
+        params: dict[str, Any],
+        active: ActiveSession,
+        db: Optional[Any],
+    ) -> None:
+        del active
+        if db is None:
+            logger.warning("city_map_update ignore : db indisponible.")
+            return
+        campaign = await campaign_dossier_service.campaign_for_session(session_id, db)
+        if campaign is None:
+            logger.warning("city_map_update ignore : aucune campagne pour session %s.", session_id)
+            return
+        dossier = await campaign_dossier_service.get_or_create_dossier(campaign.id, db)
+        gm_dossier = campaign_dossier_service.sanitize_gm_dossier_map_defaults(
+            dossier.gm_dossier or {}
+        )
+        city_id = str(params.get("city_id") or "").strip()
+        if not city_id:
+            logger.warning("city_map_update ignore : city_id manquant - params=%s", params)
+            return
+        city_maps = dict(gm_dossier.get("city_maps") or {})
+        try:
+            city_maps[city_id] = map_service.merge_city_map_patch(
+                city_maps.get(city_id),
+                params,
+            )
+        except map_service.MapPatchError as exc:
+            logger.warning("city_map_update ignore : patch invalide - %s", exc)
+            return
+
+        dossier = await campaign_dossier_service.update_campaign_maps(
+            campaign.id,
+            db,
+            city_maps=city_maps,
+            active_city_id=city_id,
+        )
+        public_maps = campaign_dossier_service.public_campaign_maps(dossier.gm_dossier or {})
+        await self._event_bus.publish_to_session(
+            session_id,
+            EventType.CITY_MAP_UPDATED,
+            {
+                "city_map": public_maps["city_maps"].get(city_id),
+                "active_city_id": public_maps["active_city_id"],
+            },
+            source=self._source,
+        )
+
+    async def _apply_node_status_update(
+        self,
+        session_id: str,
+        params: dict[str, Any],
+        active: ActiveSession,
+        db: Optional[Any],
+    ) -> None:
+        del active
+        if db is None:
+            logger.warning("node_status_update ignore : db indisponible.")
+            return
+        campaign = await campaign_dossier_service.campaign_for_session(session_id, db)
+        if campaign is None:
+            logger.warning("node_status_update ignore : aucune campagne pour session %s.", session_id)
+            return
+        dossier = await campaign_dossier_service.get_or_create_dossier(campaign.id, db)
+        gm_dossier = campaign_dossier_service.sanitize_gm_dossier_map_defaults(
+            dossier.gm_dossier or {}
+        )
+        scope = str(params.get("scope") or "").strip().lower()
+
+        try:
+            if scope == "region":
+                region_map = map_service.update_region_node_status(
+                    gm_dossier.get("region_map"),
+                    params,
+                )
+                dossier = await campaign_dossier_service.update_campaign_maps(
+                    campaign.id,
+                    db,
+                    region_map=region_map,
+                )
+                public_maps = campaign_dossier_service.public_campaign_maps(
+                    dossier.gm_dossier or {}
+                )
+                await self._event_bus.publish_to_session(
+                    session_id,
+                    EventType.REGION_MAP_UPDATED,
+                    {
+                        "region_map": public_maps["region_map"],
+                        "active_city_id": public_maps["active_city_id"],
+                    },
+                    source=self._source,
+                )
+                return
+
+            if scope == "city":
+                city_id = str(params.get("city_id") or "").strip()
+                city_maps = dict(gm_dossier.get("city_maps") or {})
+                if not city_id or city_id not in city_maps:
+                    logger.warning("node_status_update city ignore : city_id invalide.")
+                    return
+                city_maps[city_id] = map_service.update_city_node_status(
+                    city_maps.get(city_id),
+                    params,
+                )
+                dossier = await campaign_dossier_service.update_campaign_maps(
+                    campaign.id,
+                    db,
+                    city_maps=city_maps,
+                    active_city_id=city_id,
+                )
+                public_maps = campaign_dossier_service.public_campaign_maps(
+                    dossier.gm_dossier or {}
+                )
+                await self._event_bus.publish_to_session(
+                    session_id,
+                    EventType.CITY_MAP_UPDATED,
+                    {
+                        "city_map": public_maps["city_maps"].get(city_id),
+                        "active_city_id": public_maps["active_city_id"],
+                    },
+                    source=self._source,
+                )
+                return
+        except map_service.MapPatchError as exc:
+            logger.warning("node_status_update ignore : patch invalide - %s", exc)
+            return
+
+        logger.warning("node_status_update ignore : scope invalide - params=%s", params)
+
     @classmethod
     def _normalize_scene_layout(cls, params: dict[str, Any]) -> dict[str, Any]:
         raw = params.get("scene") or params.get("layout") or params
@@ -516,6 +708,9 @@ class GMResponseExecutor:
             "exits": [],
             "party_positions": {},
         }
+        raw_scene_id = cls._clean_optional_text(raw.get("scene_id"), max_len=80)
+        if raw_scene_id:
+            layout["scene_id"] = raw_scene_id
 
         for idx, poi in enumerate(raw.get("pois", []) or []):
             if not isinstance(poi, dict):
@@ -572,6 +767,18 @@ class GMResponseExecutor:
             for poi in layout["pois"]
             if not cls._is_duplicate_exit_poi(poi, layout["exits"])
         ]
+
+        if "scene_id" not in layout:
+            stable_basis = repr((
+                layout["cols"],
+                layout["rows"],
+                layout["terrain"],
+                [(poi["id"], poi["position"]) for poi in layout["pois"]],
+                [(exit_data["id"], exit_data["position"]) for exit_data in layout["exits"]],
+            ))
+            layout["scene_id"] = "scene_" + hashlib.sha1(
+                stable_basis.encode("utf-8")
+            ).hexdigest()[:12]
 
         return layout
 
