@@ -33,6 +33,60 @@ describe('useGameStore map decoration state', () => {
     expect(store.gridDecoration).toBeNull()
   })
 
+  it('hydrates campaign maps from session_state payloads', () => {
+    const store = useGameStore()
+
+    store.applySessionState({
+      session_id: 'session-1',
+      phase: 'exploration',
+      turn_number: 1,
+      round_number: 0,
+      turn_order: [],
+      current_turn_index: 0,
+      valid_transitions: [],
+      region_map: {
+        id: 'region',
+        name: 'Route des Brumes',
+        current_node_id: 'camp',
+        nodes: [
+          {
+            id: 'camp',
+            name: 'Camp',
+            kind: 'landmark',
+            position: { x: 40, y: 60 },
+            status: 'current',
+          },
+        ],
+        edges: [],
+        updated_at: '2026-05-10T00:00:00Z',
+      },
+      city_maps: {
+        camp: {
+          id: 'camp',
+          region_node_id: 'camp',
+          name: 'Camp',
+          current_node_id: 'feu',
+          nodes: [
+            {
+              id: 'feu',
+              name: 'Feu de camp',
+              kind: 'square',
+              position: { x: 50, y: 50 },
+              status: 'current',
+            },
+          ],
+          edges: [],
+          updated_at: '2026-05-10T00:00:00Z',
+        },
+      },
+      active_city_id: 'camp',
+    })
+
+    expect(store.regionMap?.current_node_id).toBe('camp')
+    expect(store.cityMaps.camp?.current_node_id).toBe('feu')
+    expect(store.activeCityId).toBe('camp')
+  })
+
   it('restores dialogue history as dialogue entries', () => {
     const store = useGameStore()
 

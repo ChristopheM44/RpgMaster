@@ -435,6 +435,7 @@ class GMResponseExecutor:
             return
 
         active.state_data["current_scene"] = layout
+        self._register_scene_npcs(layout, active)
         active.mark_dirty()
         await self._event_bus.publish_to_session(
             session_id,
@@ -517,18 +518,19 @@ class GMResponseExecutor:
         active: ActiveSession,
         db: Optional[Any],
     ) -> None:
-        del active
-        if db is None:
-            logger.warning("region_map_update ignore : db indisponible.")
-            return
-        campaign = await campaign_dossier_service.campaign_for_session(session_id, db)
-        if campaign is None:
-            logger.warning("region_map_update ignore : aucune campagne pour session %s.", session_id)
-            return
-        dossier = await campaign_dossier_service.get_or_create_dossier(campaign.id, db)
-        gm_dossier = campaign_dossier_service.sanitize_gm_dossier_map_defaults(
-            dossier.gm_dossier or {}
+        campaign = (
+            await campaign_dossier_service.campaign_for_session(session_id, db)
+            if db is not None
+            else None
         )
+        if campaign is not None:
+            dossier = await campaign_dossier_service.get_or_create_dossier(campaign.id, db)
+            gm_dossier = campaign_dossier_service.sanitize_gm_dossier_map_defaults(
+                dossier.gm_dossier or {}
+            )
+        else:
+            gm_dossier = self._state_world_maps(active)
+
         try:
             region_map = map_service.merge_region_map_patch(
                 gm_dossier.get("region_map"),
@@ -538,12 +540,19 @@ class GMResponseExecutor:
             logger.warning("region_map_update ignore : patch invalide - %s", exc)
             return
 
-        dossier = await campaign_dossier_service.update_campaign_maps(
-            campaign.id,
-            db,
-            region_map=region_map,
-        )
-        public_maps = campaign_dossier_service.public_campaign_maps(dossier.gm_dossier or {})
+        if campaign is not None:
+            dossier = await campaign_dossier_service.update_campaign_maps(
+                campaign.id,
+                db,
+                region_map=region_map,
+            )
+            public_maps = campaign_dossier_service.public_campaign_maps(dossier.gm_dossier or {})
+        else:
+            gm_dossier["region_map"] = region_map
+            active.state_data["world_maps"] = gm_dossier
+            active.mark_dirty()
+            public_maps = campaign_dossier_service.public_campaign_maps(gm_dossier)
+
         await self._event_bus.publish_to_session(
             session_id,
             EventType.REGION_MAP_UPDATED,
@@ -561,18 +570,19 @@ class GMResponseExecutor:
         active: ActiveSession,
         db: Optional[Any],
     ) -> None:
-        del active
-        if db is None:
-            logger.warning("city_map_update ignore : db indisponible.")
-            return
-        campaign = await campaign_dossier_service.campaign_for_session(session_id, db)
-        if campaign is None:
-            logger.warning("city_map_update ignore : aucune campagne pour session %s.", session_id)
-            return
-        dossier = await campaign_dossier_service.get_or_create_dossier(campaign.id, db)
-        gm_dossier = campaign_dossier_service.sanitize_gm_dossier_map_defaults(
-            dossier.gm_dossier or {}
+        campaign = (
+            await campaign_dossier_service.campaign_for_session(session_id, db)
+            if db is not None
+            else None
         )
+        if campaign is not None:
+            dossier = await campaign_dossier_service.get_or_create_dossier(campaign.id, db)
+            gm_dossier = campaign_dossier_service.sanitize_gm_dossier_map_defaults(
+                dossier.gm_dossier or {}
+            )
+        else:
+            gm_dossier = self._state_world_maps(active)
+
         city_id = str(params.get("city_id") or "").strip()
         if not city_id:
             logger.warning("city_map_update ignore : city_id manquant - params=%s", params)
@@ -587,13 +597,21 @@ class GMResponseExecutor:
             logger.warning("city_map_update ignore : patch invalide - %s", exc)
             return
 
-        dossier = await campaign_dossier_service.update_campaign_maps(
-            campaign.id,
-            db,
-            city_maps=city_maps,
-            active_city_id=city_id,
-        )
-        public_maps = campaign_dossier_service.public_campaign_maps(dossier.gm_dossier or {})
+        if campaign is not None:
+            dossier = await campaign_dossier_service.update_campaign_maps(
+                campaign.id,
+                db,
+                city_maps=city_maps,
+                active_city_id=city_id,
+            )
+            public_maps = campaign_dossier_service.public_campaign_maps(dossier.gm_dossier or {})
+        else:
+            gm_dossier["city_maps"] = city_maps
+            gm_dossier["active_city_id"] = city_id
+            active.state_data["world_maps"] = gm_dossier
+            active.mark_dirty()
+            public_maps = campaign_dossier_service.public_campaign_maps(gm_dossier)
+
         await self._event_bus.publish_to_session(
             session_id,
             EventType.CITY_MAP_UPDATED,
@@ -611,18 +629,19 @@ class GMResponseExecutor:
         active: ActiveSession,
         db: Optional[Any],
     ) -> None:
-        del active
-        if db is None:
-            logger.warning("node_status_update ignore : db indisponible.")
-            return
-        campaign = await campaign_dossier_service.campaign_for_session(session_id, db)
-        if campaign is None:
-            logger.warning("node_status_update ignore : aucune campagne pour session %s.", session_id)
-            return
-        dossier = await campaign_dossier_service.get_or_create_dossier(campaign.id, db)
-        gm_dossier = campaign_dossier_service.sanitize_gm_dossier_map_defaults(
-            dossier.gm_dossier or {}
+        campaign = (
+            await campaign_dossier_service.campaign_for_session(session_id, db)
+            if db is not None
+            else None
         )
+        if campaign is not None:
+            dossier = await campaign_dossier_service.get_or_create_dossier(campaign.id, db)
+            gm_dossier = campaign_dossier_service.sanitize_gm_dossier_map_defaults(
+                dossier.gm_dossier or {}
+            )
+        else:
+            gm_dossier = self._state_world_maps(active)
+
         scope = str(params.get("scope") or "").strip().lower()
 
         try:
@@ -631,14 +650,20 @@ class GMResponseExecutor:
                     gm_dossier.get("region_map"),
                     params,
                 )
-                dossier = await campaign_dossier_service.update_campaign_maps(
-                    campaign.id,
-                    db,
-                    region_map=region_map,
-                )
-                public_maps = campaign_dossier_service.public_campaign_maps(
-                    dossier.gm_dossier or {}
-                )
+                if campaign is not None:
+                    dossier = await campaign_dossier_service.update_campaign_maps(
+                        campaign.id,
+                        db,
+                        region_map=region_map,
+                    )
+                    public_maps = campaign_dossier_service.public_campaign_maps(
+                        dossier.gm_dossier or {}
+                    )
+                else:
+                    gm_dossier["region_map"] = region_map
+                    active.state_data["world_maps"] = gm_dossier
+                    active.mark_dirty()
+                    public_maps = campaign_dossier_service.public_campaign_maps(gm_dossier)
                 await self._event_bus.publish_to_session(
                     session_id,
                     EventType.REGION_MAP_UPDATED,
@@ -660,15 +685,22 @@ class GMResponseExecutor:
                     city_maps.get(city_id),
                     params,
                 )
-                dossier = await campaign_dossier_service.update_campaign_maps(
-                    campaign.id,
-                    db,
-                    city_maps=city_maps,
-                    active_city_id=city_id,
-                )
-                public_maps = campaign_dossier_service.public_campaign_maps(
-                    dossier.gm_dossier or {}
-                )
+                if campaign is not None:
+                    dossier = await campaign_dossier_service.update_campaign_maps(
+                        campaign.id,
+                        db,
+                        city_maps=city_maps,
+                        active_city_id=city_id,
+                    )
+                    public_maps = campaign_dossier_service.public_campaign_maps(
+                        dossier.gm_dossier or {}
+                    )
+                else:
+                    gm_dossier["city_maps"] = city_maps
+                    gm_dossier["active_city_id"] = city_id
+                    active.state_data["world_maps"] = gm_dossier
+                    active.mark_dirty()
+                    public_maps = campaign_dossier_service.public_campaign_maps(gm_dossier)
                 await self._event_bus.publish_to_session(
                     session_id,
                     EventType.CITY_MAP_UPDATED,
@@ -684,6 +716,51 @@ class GMResponseExecutor:
             return
 
         logger.warning("node_status_update ignore : scope invalide - params=%s", params)
+
+    @staticmethod
+    def _state_world_maps(active: ActiveSession) -> dict[str, Any]:
+        world_maps = active.state_data.get("world_maps")
+        if not isinstance(world_maps, dict):
+            world_maps = campaign_dossier_service.empty_world_maps()
+        world_maps = campaign_dossier_service.sanitize_gm_dossier_map_defaults(world_maps)
+        active.state_data["world_maps"] = world_maps
+        return world_maps
+
+    @staticmethod
+    def _register_scene_npcs(layout: dict[str, Any], active: ActiveSession) -> None:
+        npc_states = active.state_data.setdefault("npc_states", {})
+        if not isinstance(npc_states, dict):
+            npc_states = {}
+            active.state_data["npc_states"] = npc_states
+
+        location = str(
+            layout.get("scene_id")
+            or layout.get("terrain")
+            or active.state_data.get("adventure_journal", {}).get("location_place")
+            or ""
+        )
+        for poi in layout.get("pois", []) or []:
+            if not isinstance(poi, dict):
+                continue
+            kind = str(poi.get("kind") or "").strip().casefold()
+            icon = str(poi.get("icon") or "").strip().casefold()
+            if kind != "npc" and icon != "npc":
+                continue
+            npc_id = str(poi.get("id") or "").strip()
+            if not npc_id:
+                continue
+            npc = npc_states.setdefault(npc_id, {})
+            if not isinstance(npc, dict):
+                npc = {}
+                npc_states[npc_id] = npc
+            npc.setdefault("name", str(poi.get("name") or npc_id))
+            npc.setdefault("attitude", "indifferent")
+            npc.setdefault(
+                "personality_hint",
+                str(poi.get("description") or poi.get("action_hint") or "présence locale"),
+            )
+            if location:
+                npc["last_location"] = location
 
     @classmethod
     def _normalize_scene_layout(cls, params: dict[str, Any]) -> dict[str, Any]:

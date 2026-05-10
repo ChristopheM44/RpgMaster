@@ -69,7 +69,13 @@ async def build_session_state_payload_enriched(
     try:
         from app.services import campaign_dossier_service
 
-        payload.update(await campaign_dossier_service.campaign_maps_for_session(session_id, db))
+        payload.update(
+            await campaign_dossier_service.campaign_maps_for_session(
+                session_id,
+                db,
+                active.state_data if active is not None else None,
+            )
+        )
     except Exception:
         payload.setdefault("region_map", None)
         payload.setdefault("city_maps", {})

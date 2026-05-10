@@ -46,6 +46,7 @@ _DIRECT_ACTION_TYPES = {
     "stabilize",
 }
 _COMPANION_ARBITRAGE_ACTIONS = {"examine", "move", "use_item", "help"}
+_MAX_GROUP_COMPANION_RESPONSES = 2
 _SOCIAL_MARKERS = (
     "compagnon",
     "compagnons",
@@ -162,11 +163,25 @@ class NarrativeFlowService:
             addressed_to=getattr(action, "addressed_to", None),
             explicit_audience=getattr(action, "audience", None),
         )
+        if detection.audience in {"gm", "mixed"} and self._targets_npc(
+            text,
+            active,
+            getattr(action, "target_id", None),
+        ):
+            detection = AudienceDetection(
+                audience="world",
+                target_ids=[],
+                addressed_to=None,
+                reason="npc_target",
+            )
+        target_ids = list(detection.target_ids)
+        if detection.audience in {"party", "mixed"}:
+            target_ids = target_ids[:_MAX_GROUP_COMPANION_RESPONSES]
         exchange = SceneExchange(
             scene_id=scene_id,
             audience=detection.audience,
             player_text=text,
-            target_ids=list(detection.target_ids),
+            target_ids=target_ids,
         )
 
         should_ask_companions = detection.audience in {"companion", "party", "mixed"}
@@ -182,7 +197,7 @@ class NarrativeFlowService:
                 active=active,
                 action_resolver=action_resolver,
                 player_text=text,
-                target_ids=detection.target_ids,
+                target_ids=target_ids,
                 trigger_character_id=getattr(action, "character_id", None),
                 db=db,
                 scene_id=scene_id,
@@ -427,6 +442,19 @@ class NarrativeFlowService:
                 )
 
         return responses
+
+    @staticmethod
+    def _targets_npc(
+        text: str,
+        active: ActiveSession,
+        explicit_target_id: Optional[str],
+    ) -> bool:
+        try:
+            from app.game.action_pipeline import resolve_npc_target_id
+
+            return bool(resolve_npc_target_id(text, active.state_data, explicit_target_id))
+        except Exception:
+            return False
 
     async def _persist_player_message(
         self,

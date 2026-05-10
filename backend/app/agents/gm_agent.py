@@ -127,6 +127,24 @@ class GMAgent(BaseAgent):
         )
         return await self._call_and_parse(user_prompt, context_manager)
 
+    async def open_scene(
+        self,
+        game_state: dict[str, Any],
+        context_manager: Optional[ContextManager] = None,
+        opening_brief: Optional[str] = None,
+        messages: Optional[list] = None,
+    ) -> GMResponse:
+        """Cadre la toute première scène jouable d'une session."""
+        user_prompt = self._render_prompt(
+            "gm_open_scene.txt",
+            {
+                "game_state": json.dumps(game_state, ensure_ascii=False, indent=2),
+                "opening_brief": delimit_user_input(opening_brief),
+                "recent_messages": self._format_messages(messages),
+            },
+        )
+        return await self._call_and_parse(user_prompt, context_manager)
+
     async def run_encounter_end(
         self,
         game_state: dict[str, Any],

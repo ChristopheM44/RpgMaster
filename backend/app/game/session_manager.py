@@ -130,6 +130,10 @@ class SessionManager:
 
         state_data = migrate_state_data(dict(game_state.state_data or {}))
         state_data.setdefault("npc_states", {})
+        state_data.setdefault(
+            "world_maps",
+            {"region_map": None, "city_maps": {}, "active_city_id": None},
+        )
 
         active = ActiveSession(
             session_id=session_id,

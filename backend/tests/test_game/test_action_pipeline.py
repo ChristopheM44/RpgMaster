@@ -458,6 +458,69 @@ class TestPipelineExecutorUnits:
 
         assert [poi["id"] for poi in layout["pois"]] == ["bandit_2"]
 
+    async def test_executor_map_updates_fallback_to_session_world_maps(self) -> None:
+        active = ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.EXPLORATION,
+            state_data={},
+        )
+        bus = _FakeBus()
+        executor = GMResponseExecutor(bus)
+
+        await executor.execute_gm_response(
+            GMResponse(
+                narration="La carte se dessine.",
+                actions=[
+                    GMAction(
+                        type="region_map_update",
+                        params={
+                            "name": "Route des Brumes",
+                            "current_node_id": "camp",
+                            "nodes_upsert": [
+                                {
+                                    "id": "camp",
+                                    "name": "Camp",
+                                    "kind": "landmark",
+                                    "position": {"x": 40, "y": 60},
+                                    "status": "current",
+                                }
+                            ],
+                            "edges_upsert": [],
+                        },
+                    ),
+                    GMAction(
+                        type="city_map_update",
+                        params={
+                            "city_id": "camp",
+                            "region_node_id": "camp",
+                            "name": "Camp",
+                            "current_node_id": "feu",
+                            "nodes_upsert": [
+                                {
+                                    "id": "feu",
+                                    "name": "Feu de camp",
+                                    "kind": "square",
+                                    "position": {"x": 50, "y": 50},
+                                    "status": "current",
+                                }
+                            ],
+                            "edges_upsert": [],
+                        },
+                    ),
+                ],
+            ),
+            active,
+            db=None,
+            session_id=SESSION_ID,
+        )
+
+        world_maps = active.state_data["world_maps"]
+        assert world_maps["region_map"]["current_node_id"] == "camp"
+        assert world_maps["city_maps"]["camp"]["current_node_id"] == "feu"
+        event_types = [event_type for event_type, _ in bus.published]
+        assert EventType.REGION_MAP_UPDATED in event_types
+        assert EventType.CITY_MAP_UPDATED in event_types
+
     async def test_pipeline_ignores_gm_damage_apply_in_combat(self) -> None:
         active = _make_combat_active()
         bus = _FakeBus()

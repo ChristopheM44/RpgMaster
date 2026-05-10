@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -32,6 +33,19 @@ def _valid_gm_json(**overrides) -> str:
     }
     data.update(overrides)
     return json.dumps(data, ensure_ascii=False)
+
+
+def test_outcome_prompt_requires_fail_forward() -> None:
+    prompt = (
+        Path(__file__).parents[2]
+        / "app"
+        / "agents"
+        / "prompts"
+        / "gm_narrate_outcome.txt"
+    ).read_text(encoding="utf-8")
+
+    assert "ÉCHEC fait quand même avancer la scène" in prompt
+    assert "tu n'entends rien" in prompt
 
 
 # ---------------------------------------------------------------------------

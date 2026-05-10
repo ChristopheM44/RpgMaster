@@ -330,6 +330,7 @@ class ActionResolver:
                     game_state["world_maps"] = await campaign_dossier_service.map_context_for_session(
                         session_id,
                         db,
+                        active.state_data,
                     )
                 except Exception as map_exc:
                     logger.debug("ActionResolver.social_conclude : cartes indisponibles : %s", map_exc)

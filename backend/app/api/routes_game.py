@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+import unicodedata
 import uuid
 from typing import Any, Optional
 
@@ -8,14 +10,15 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.schemas import GMAction, GMResponse
 from app.api.ws_payloads import (
     build_session_state_payload,
     build_session_state_payload_enriched,
     character_snapshot,
 )
 from app.db.database import get_db
-from app.game.async_tasks import create_logged_task
 from app.game.event_bus import EventType, event_bus
+from app.game.gm_response_executor import GMResponseExecutor
 from app.game.runtime import session_manager
 from app.game.turn_manager import CombatantInfo
 from app.models.character import Character
@@ -34,6 +37,22 @@ class StartGameBody(BaseModel):
 
 class SaveSlotCreate(BaseModel):
     name: str
+
+
+_STOPWORDS = {
+    "le",
+    "la",
+    "les",
+    "de",
+    "du",
+    "des",
+    "un",
+    "une",
+    "et",
+    "a",
+    "au",
+    "aux",
+}
 
 
 def _build_session_state_payload(session_id: str) -> dict:
@@ -69,15 +88,358 @@ def _campaign_opening_text(campaign_context: dict[str, Any]) -> str:
         objective = str(objectives[0]).strip()
     stakes = str(chapter.get("stakes") or "").strip()
 
-    parts = [f"Le rideau se lève sur {title}."]
+    location = _opening_location_name(campaign_context)
+    parts = [
+        f"La première scène jouable de {title} s'ouvre à {location}.",
+        "Le groupe est présent, libre de questionner la situation avant de s'engager.",
+    ]
     if hook:
         parts.append(hook)
     if stakes and stakes not in hook:
         parts.append(stakes)
     if objective:
-        parts.append(f"Votre premier cap est clair : {objective}")
-    parts.append("La scène est à vous : que faites-vous ?")
+        parts.append(f"Un cap possible se dessine : {objective}.")
+    parts.append(
+        "Vous pouvez parler aux personnes présentes, examiner les indices du lieu, "
+        "chercher une autre source d'information ou prendre la route. Que faites-vous ?"
+    )
     return " ".join(part for part in parts if part)
+
+
+def _free_opening_text(
+    active: Any,
+    script: Optional[str] = None,
+    auto_generate: bool = False,
+) -> str:
+    party = _party_names(active)
+    if script:
+        return (
+            f"{party} prend place dans la première scène du scénario proposé. "
+            f"{script.strip()} "
+            "Avant que quoi que ce soit soit décidé à votre place, le lieu offre "
+            "plusieurs prises : "
+            "observer, discuter, chercher une autre piste ou partir explorer. Que faites-vous ?"
+        )
+    if auto_generate:
+        return (
+            f"{party} se retrouve au cœur d'une situation encore ouverte : une rumeur pressante, "
+            "un lieu à inspecter et plusieurs interlocuteurs possibles attendent vos choix. "
+            "Rien n'est encore joué ; par où commencez-vous ?"
+        )
+    return (
+        f"{party} se tient dans un lieu de départ encore calme, juste avant que "
+        "l'aventure ne prenne forme. "
+        "Autour de vous, un repère à examiner, des environs à parcourir et la "
+        "possibilité de chercher des informations. "
+        "Que faites-vous ?"
+    )
+
+
+def _opening_location_name(campaign_context: Optional[dict[str, Any]]) -> str:
+    if not isinstance(campaign_context, dict):
+        return "un lieu de départ"
+    chapter = campaign_context.get("active_chapter", {})
+    if not isinstance(chapter, dict):
+        chapter = {}
+    key_locations = chapter.get("key_locations")
+    if isinstance(key_locations, list):
+        for location in key_locations:
+            text = str(location).strip()
+            if text:
+                return text
+    initial_state = str(chapter.get("initial_state") or "").strip()
+    if initial_state:
+        sentence = initial_state.split(".")[0].strip()
+        if 0 < len(sentence) <= 80:
+            return sentence
+    return "un lieu de départ"
+
+
+def _opening_objective(campaign_context: Optional[dict[str, Any]]) -> str:
+    if not isinstance(campaign_context, dict):
+        return ""
+    contract = campaign_context.get("player_contract", {})
+    if not isinstance(contract, dict):
+        return ""
+    objectives = contract.get("known_objectives")
+    if isinstance(objectives, list) and objectives:
+        return str(objectives[0]).strip()
+    return ""
+
+
+def _opening_npcs(campaign_context: Optional[dict[str, Any]]) -> list[str]:
+    if not isinstance(campaign_context, dict):
+        return []
+    chapter = campaign_context.get("active_chapter", {})
+    if not isinstance(chapter, dict):
+        return []
+    involved = chapter.get("involved_npcs")
+    if not isinstance(involved, list):
+        return []
+    return [str(name).strip() for name in involved if str(name).strip()][:2]
+
+
+def _party_names(active: Any) -> str:
+    characters = active.state_data.get("characters", {})
+    if not isinstance(characters, dict) or not characters:
+        return "Le groupe"
+    names = [
+        str(data.get("name") or char_id)
+        for char_id, data in characters.items()
+        if isinstance(data, dict)
+    ]
+    if not names:
+        return "Le groupe"
+    if len(names) == 1:
+        return names[0]
+    return ", ".join(names[:-1]) + f" et {names[-1]}"
+
+
+def _safe_id(value: str, fallback: str) -> str:
+    ascii_text = unicodedata.normalize("NFKD", value.casefold())
+    ascii_text = "".join(ch for ch in ascii_text if not unicodedata.combining(ch))
+    normalized = re.sub(r"[^a-z0-9_]+", "_", ascii_text).strip("_")
+    parts = [part for part in normalized.split("_") if part and part not in _STOPWORDS]
+    return "_".join(parts[:4]) or fallback
+
+
+def _region_kind_for_location(location: str) -> str:
+    normalized = location.casefold()
+    if any(word in normalized for word in ("ville", "cité", "cite", "port", "village")):
+        return "settlement"
+    if any(word in normalized for word in ("route", "carrefour", "croisée", "croisee")):
+        return "crossroads"
+    if any(word in normalized for word in ("ruine", "mine", "temple", "tombe", "donjon")):
+        return "ruin"
+    return "landmark"
+
+
+def _party_positions(active: Any) -> dict[str, dict[str, int]]:
+    characters = active.state_data.get("characters", {})
+    if not isinstance(characters, dict):
+        return {}
+    positions: dict[str, dict[str, int]] = {}
+    for index, char_id in enumerate(characters):
+        positions[str(char_id)] = {"col": 1 + index % 3, "row": 4 + index // 3}
+    return positions
+
+
+def _opening_response(
+    active: Any,
+    *,
+    campaign_context: Optional[dict[str, Any]] = None,
+    script: Optional[str] = None,
+    auto_generate: bool = False,
+) -> GMResponse:
+    location = _opening_location_name(campaign_context)
+    objective = _opening_objective(campaign_context)
+    location_id = _safe_id(location, "lieu_depart")
+    objective_id = _safe_id(objective, "objectif_rumeur") if objective else ""
+    if objective_id == location_id:
+        objective_id = ""
+    region_kind = _region_kind_for_location(location)
+    narration = (
+        _campaign_opening_text(campaign_context)
+        if campaign_context is not None
+        else _free_opening_text(active, script, auto_generate)
+    )
+
+    pois: list[dict[str, Any]] = [
+        {
+            "id": "situation_initiale",
+            "name": "Situation immédiate",
+            "kind": "clue",
+            "position": {"col": 3, "row": 3},
+            "icon": "clue",
+            "description": "Les premiers détails concrets de la scène.",
+            "action_hint": "Observer avant de décider.",
+            "interactions": [
+                {
+                    "label": "Examiner",
+                    "intent": "examine",
+                    "prompt": "J'examine la situation immédiate et les détails du lieu.",
+                }
+            ],
+        },
+        {
+            "id": "source_information",
+            "name": "Source d'information",
+            "kind": "clue",
+            "position": {"col": 5, "row": 3},
+            "icon": "poi",
+            "description": "Une piste sociale ou matérielle à interroger.",
+            "action_hint": "Chercher une autre version des faits.",
+            "interactions": [
+                {
+                    "label": "Se renseigner",
+                    "intent": "search",
+                    "prompt": "Je cherche une autre source d'information dans les environs.",
+                }
+            ],
+        },
+    ]
+    for index, npc_name in enumerate(_opening_npcs(campaign_context)):
+        npc_id = _safe_id(npc_name, f"npc_{index + 1}")
+        pois.append({
+            "id": npc_id,
+            "name": npc_name,
+            "kind": "npc",
+            "position": {"col": 4 + index, "row": 5},
+            "icon": "npc",
+            "description": "Personne présente dans la scène d'ouverture.",
+            "action_hint": "Lui parler ou négocier avant d'agir.",
+            "interactions": [
+                {
+                    "label": "Parler",
+                    "intent": "talk",
+                    "prompt": f"Je m'approche de {npc_name} et lui adresse la parole.",
+                }
+            ],
+        })
+
+    exits = [
+        {
+            "id": "explorer_environs",
+            "label": "Explorer les environs",
+            "position": {"col": 7, "row": 4},
+            "leads_to": "environs",
+            "description": "Quitter le point de départ pour observer le terrain proche.",
+        },
+        {
+            "id": "chercher_contacts",
+            "label": "Chercher d'autres contacts",
+            "position": {"col": 0, "row": 3},
+            "leads_to": "contacts",
+            "description": "Trouver une autre source d'information ou une aide différente.",
+        },
+    ]
+    if objective:
+        exits.append({
+            "id": "prendre_route_objectif",
+            "label": "Prendre la route",
+            "position": {"col": 7, "row": 6},
+            "leads_to": objective_id or "objectif",
+            "description": f"Se diriger vers : {objective}",
+        })
+
+    actions = [
+        GMAction(
+            type="journal_update",
+            params={
+                "location_region": location,
+                "location_place": location,
+                "time_of_day": "morning",
+                "day_number": 1,
+            },
+        ),
+        GMAction(
+            type="scene_layout",
+            params={
+                "scene_id": f"scene_{location_id}",
+                "cols": 8,
+                "rows": 8,
+                "cell_size_m": 1.5,
+                "terrain": region_kind,
+                "pois": pois[:5],
+                "exits": exits[:3],
+                "party_positions": _party_positions(active),
+            },
+        ),
+        GMAction(
+            type="region_map_update",
+            params={
+                "name": "Carte de campagne",
+                "current_node_id": location_id,
+                "nodes_upsert": [
+                    {
+                        "id": location_id,
+                        "name": location,
+                        "kind": region_kind,
+                        "position": {"x": 45, "y": 58},
+                        "status": "current",
+                        "description": "Point de départ joué en scène.",
+                    },
+                    *(
+                        [{
+                            "id": objective_id,
+                            "name": objective,
+                            "kind": "landmark",
+                            "position": {"x": 62, "y": 42},
+                            "status": "rumored",
+                            "description": "Destination ou piste connue, non encore vérifiée.",
+                        }]
+                        if objective_id
+                        else []
+                    ),
+                ],
+                "nodes_remove": [],
+                "edges_upsert": (
+                    [{
+                        "id": f"route_{location_id}_{objective_id}",
+                        "from": location_id,
+                        "to": objective_id,
+                        "kind": "path",
+                        "travel_hint": "Trajet à confirmer par les choix du groupe.",
+                    }]
+                    if objective_id
+                    else []
+                ),
+                "edges_remove": [],
+            },
+        ),
+    ]
+    if region_kind == "settlement":
+        actions.append(
+            GMAction(
+                type="city_map_update",
+                params={
+                    "city_id": location_id,
+                    "region_node_id": location_id,
+                    "name": location,
+                    "current_node_id": "point_depart",
+                    "nodes_upsert": [
+                        {
+                            "id": "point_depart",
+                            "name": "Point de départ",
+                            "kind": "square",
+                            "position": {"x": 45, "y": 58},
+                            "status": "current",
+                        },
+                        {
+                            "id": "contacts",
+                            "name": "Contacts et rumeurs",
+                            "kind": "district",
+                            "position": {"x": 28, "y": 48},
+                            "status": "known",
+                        },
+                        {
+                            "id": "sortie",
+                            "name": "Route de sortie",
+                            "kind": "gate",
+                            "position": {"x": 70, "y": 60},
+                            "status": "known",
+                        },
+                    ],
+                    "nodes_remove": [],
+                    "edges_upsert": [
+                        {
+                            "id": "rue_depart_contacts",
+                            "from": "point_depart",
+                            "to": "contacts",
+                            "kind": "street",
+                        },
+                        {
+                            "id": "rue_depart_sortie",
+                            "from": "point_depart",
+                            "to": "sortie",
+                            "kind": "street",
+                        },
+                    ],
+                    "edges_remove": [],
+                },
+            )
+        )
+    return GMResponse(narration=narration, actions=actions, mood="neutral")
 
 
 def _seed_campaign_opening_quest(
@@ -123,10 +485,41 @@ async def _send_campaign_opening_narration(
     campaign_context: dict[str, Any],
     db: AsyncSession,
 ) -> None:
+    response = _opening_response(active, campaign_context=campaign_context)
+    await _publish_opening_scene(
+        session_id,
+        active,
+        db,
+        response,
+        quest_changed=_seed_campaign_opening_quest(active, campaign_context),
+    )
+
+
+async def _send_free_opening_narration(
+    session_id: str,
+    active: Any,
+    db: AsyncSession,
+    *,
+    script: Optional[str] = None,
+    auto_generate: bool = False,
+) -> None:
+    response = _opening_response(active, script=script, auto_generate=auto_generate)
+    await _publish_opening_scene(session_id, active, db, response, quest_changed=False)
+
+
+async def _publish_opening_scene(
+    session_id: str,
+    active: Any,
+    db: AsyncSession,
+    response: GMResponse,
+    *,
+    quest_changed: bool,
+) -> None:
     from app.services.message_service import persist_narration
 
-    welcome_text = _campaign_opening_text(campaign_context)
-    quest_changed = _seed_campaign_opening_quest(active, campaign_context)
+    executor = GMResponseExecutor(event_bus, source="routes_game")
+    await executor.execute_gm_response(response, active, db, session_id=session_id)
+
     active.state_data["welcome_narration_sent"] = True
     active.mark_dirty()
     await session_manager.save_state(session_id, db)
@@ -140,16 +533,22 @@ async def _send_campaign_opening_narration(
         )
     await event_bus.publish_to_session(
         session_id,
+        EventType.SESSION_STATE,
+        await _build_session_state_payload_with_maps(session_id, db),
+        source="routes_game",
+    )
+    await event_bus.publish_to_session(
+        session_id,
         EventType.NARRATION,
         {
-            "text": welcome_text,
+            "text": response.narration,
             "speaker": "Maître du Jeu",
             "speaker_kind": "gm",
             "entry_kind": "narration",
         },
         source="routes_game",
     )
-    await persist_narration(session_id, welcome_text, "Maître du Jeu", db)
+    await persist_narration(session_id, response.narration, "Maître du Jeu", db)
 
 
 @router.get("/{session_id}/state")
@@ -233,6 +632,10 @@ async def start_game(
     })
     active.state_data.setdefault("quests", [])
     active.state_data.setdefault("chronicle", [])
+    active.state_data.setdefault(
+        "world_maps",
+        {"region_map": None, "city_maps": {}, "active_city_id": None},
+    )
 
     from app.services import campaign_dossier_service
 
@@ -267,18 +670,13 @@ async def start_game(
         source="routes_game",
     )
 
-    from app.services.message_service import persist_narration
-
     if body.adventure_script:
-        # Le script fourni devient la narration d'introduction
-        welcome_text = body.adventure_script
-        await event_bus.publish_to_session(
+        await _send_free_opening_narration(
             session_id,
-            EventType.NARRATION,
-            {"text": welcome_text, "speaker": "Maître du Jeu"},
-            source="routes_game",
+            active,
+            db,
+            script=body.adventure_script,
         )
-        await persist_narration(session_id, welcome_text, "Maître du Jeu", db)
     elif campaign_context is not None:
         await _send_campaign_opening_narration(
             session_id,
@@ -287,25 +685,18 @@ async def start_game(
             db,
         )
     elif body.auto_generate:
-        # Le MJ génère une accroche d'aventure adapée au groupe (fire-and-forget)
-        from app.api.ws_game import _send_welcome_narration
-        create_logged_task(
-            _send_welcome_narration(session_id, active, db),
-            "routes_game.send_welcome_narration",
+        await _send_free_opening_narration(
+            session_id,
+            active,
+            db,
+            auto_generate=True,
         )
     else:
-        # Mode libre : texte d'accueil neutre
-        welcome_text = (
-            "La partie commence ! Vous vous trouvez au seuil de l'aventure. "
-            "Que souhaitez-vous faire ?"
-        )
-        await event_bus.publish_to_session(
+        await _send_free_opening_narration(
             session_id,
-            EventType.NARRATION,
-            {"text": welcome_text, "speaker": "Maître du Jeu"},
-            source="routes_game",
+            active,
+            db,
         )
-        await persist_narration(session_id, welcome_text, "Maître du Jeu", db)
 
     return {
         "status": "ok",

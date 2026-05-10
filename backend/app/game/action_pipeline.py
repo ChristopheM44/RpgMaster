@@ -710,6 +710,7 @@ class ActionPipeline:
                 game_state["world_maps"] = await campaign_dossier_service.map_context_for_session(
                     session_id,
                     db,
+                    active.state_data,
                 )
             except Exception as exc:
                 logger.debug("ActionPipeline : contexte cartes indisponible : %s", exc)

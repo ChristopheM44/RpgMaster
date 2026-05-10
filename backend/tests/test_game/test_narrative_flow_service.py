@@ -46,6 +46,20 @@ def _active_with_companions() -> ActiveSession:
     return active
 
 
+def _add_third_companion(active: ActiveSession) -> None:
+    solana = MagicMock()
+    solana.character_name = "Solana"
+    solana.respond_to_player = AsyncMock(
+        return_value=PlayerActionChoice(
+            action_type="talk",
+            action_description="Propose une alternative.",
+            roleplay_text="Je chercherais une autre piste avant de décider.",
+        )
+    )
+    active.ai_players["solana_1"] = solana
+    active.state_data["characters"]["solana_1"] = {"name": "Solana", "is_ai": True}
+
+
 def _action(content: str, **extra):
     return SimpleNamespace(
         type="action",
@@ -331,6 +345,28 @@ async def test_party_dialogue_gets_companions_then_gm_conclusion() -> None:
 
 
 @pytest.mark.asyncio
+async def test_party_dialogue_limits_group_companion_responses() -> None:
+    active = _active_with_companions()
+    _add_third_companion(active)
+    resolver = MagicMock()
+    resolver.resolve = AsyncMock()
+    resolver.social_conclude = AsyncMock()
+
+    with patch("app.services.narrative_flow_service.event_bus.publish_to_session", new=AsyncMock()):
+        exchange = await NarrativeFlowService().handle_exploration_action(
+            session_id="scene-1",
+            action=_action("Compagnons, que fait-on ?"),
+            active=active,
+            action_resolver=resolver,
+            db=None,
+        )
+
+    resolver.social_conclude.assert_awaited_once()
+    assert len(exchange.companion_responses) == 2
+    active.ai_players["solana_1"].respond_to_player.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_mixed_scene_gets_companions_then_world_arbitration() -> None:
     active = _active_with_companions()
     resolver = MagicMock()
@@ -403,3 +439,39 @@ async def test_world_social_action_calls_npc_dialogue_for_npc_poi_only() -> None
         "type": "skill_check",
         "success": True,
     }
+
+
+@pytest.mark.asyncio
+async def test_npc_social_action_does_not_trigger_companion_echoes() -> None:
+    active = _active_with_companions()
+    active.state_data["current_scene"] = {
+        "pois": [
+            {
+                "id": "azaka",
+                "name": "Azaka",
+                "kind": "npc",
+                "icon": "npc",
+            }
+        ]
+    }
+    resolver = MagicMock()
+    resolver.resolve = AsyncMock(
+        return_value=SimpleNamespace(mechanics={"type": "skill_check", "success": True})
+    )
+    resolver.social_conclude = AsyncMock()
+    resolver.resolve_npc_dialogue = AsyncMock()
+
+    with patch("app.services.narrative_flow_service.event_bus.publish_to_session", new=AsyncMock()):
+        exchange = await NarrativeFlowService().handle_exploration_action(
+            session_id="scene-1",
+            action=_action("Je demande à Azaka d'être notre guide."),
+            active=active,
+            action_resolver=resolver,
+            db=None,
+        )
+
+    assert exchange.audience == "world"
+    resolver.resolve.assert_awaited_once()
+    resolver.resolve_npc_dialogue.assert_awaited_once()
+    active.ai_players["thorin_1"].respond_to_player.assert_not_called()
+    active.ai_players["elara_1"].respond_to_player.assert_not_called()

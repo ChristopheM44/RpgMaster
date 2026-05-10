@@ -403,6 +403,10 @@ async def test_start_game_injects_minimal_campaign_context(async_client, db_sess
     assert SECRET not in serialized
     assert game_state.state_data["quests"][0]["id"] == "campaign_opening"
     assert "Une lueur bleue" in game_state.state_data["quests"][0]["summary"]
+    assert game_state.state_data["current_scene"]["scene_id"] == "scene_vieille_route"
+    assert len(game_state.state_data["current_scene"]["pois"]) >= 3
+    assert "bram" in game_state.state_data["npc_states"]
+    assert game_state.state_data["world_maps"]["region_map"] is None
 
     messages = await db_session.execute(
         select(Message)
@@ -412,7 +416,41 @@ async def test_start_game_injects_minimal_campaign_context(async_client, db_sess
     opening = messages.scalars().first()
     assert opening is not None
     assert "La partie commence" not in opening.content
+    assert "Le rideau se lève" not in opening.content
     assert "Une lueur bleue attire les voyageurs" in opening.content
+
+    state_response = await async_client.get(f"/api/game/{session_id}/state")
+    assert state_response.status_code == 200
+    payload = state_response.json()
+    assert payload["region_map"]["current_node_id"] == "vieille_route"
+    assert payload["current_scene"]["scene_id"] == "scene_vieille_route"
+
+
+@pytest.mark.asyncio
+async def test_start_game_without_campaign_uses_ephemeral_maps(async_client, db_session):
+    session_resp = await async_client.post("/api/sessions/", json={"name": "Session libre"})
+    assert session_resp.status_code == 201
+    session_id = session_resp.json()["id"]
+
+    char_resp = await async_client.post(
+        "/api/characters/",
+        json={**BASE_CHARACTER, "session_id": session_id},
+    )
+    assert char_resp.status_code == 201
+
+    start = await async_client.post(f"/api/game/{session_id}/start", json={})
+    assert start.status_code == 200
+
+    result = await db_session.execute(select(GameState).where(GameState.session_id == session_id))
+    game_state = result.scalar_one()
+    assert game_state.state_data["current_scene"]["scene_id"] == "scene_lieu_depart"
+    assert game_state.state_data["world_maps"]["region_map"]["current_node_id"] == "lieu_depart"
+
+    state_response = await async_client.get(f"/api/game/{session_id}/state")
+    assert state_response.status_code == 200
+    payload = state_response.json()
+    assert payload["region_map"]["current_node_id"] == "lieu_depart"
+    assert payload["city_maps"] == {}
 
 
 @pytest.mark.asyncio

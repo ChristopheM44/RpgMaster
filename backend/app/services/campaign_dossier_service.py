@@ -16,8 +16,8 @@ from app.agents.campaign_forge_agent import CampaignForgeAgent
 from app.models.campaign import Campaign
 from app.models.campaign_dossier import CampaignDossier
 from app.models.character import Character
-from app.services import map_service
 from app.security_url import validate_public_http_url
+from app.services import map_service
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,14 @@ def empty_played_canon() -> dict[str, Any]:
         "plan_changes": [],
         "rolling_summary": "",
         "chapter_progression": [],
+    }
+
+
+def empty_world_maps() -> dict[str, Any]:
+    return {
+        "region_map": None,
+        "city_maps": {},
+        "active_city_id": None,
     }
 
 
@@ -329,16 +337,21 @@ async def campaign_for_session(session_id: str, db: AsyncSession) -> Optional[Ca
 async def campaign_maps_for_session(
     session_id: str,
     db: AsyncSession,
+    state_data: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     campaign = await campaign_for_session(session_id, db)
     if campaign is None:
-        return {"region_map": None, "city_maps": {}, "active_city_id": None}
+        return public_campaign_maps(_world_maps_from_state_data(state_data))
     dossier = await get_dossier(campaign.id, db)
     gm_dossier = dossier.gm_dossier if dossier and isinstance(dossier.gm_dossier, dict) else {}
-    return public_campaign_maps(gm_dossier)
+    public_maps = public_campaign_maps(gm_dossier)
+    if _has_public_map_data(public_maps):
+        return public_maps
+    return public_campaign_maps(_world_maps_from_state_data(state_data))
 
 
 def public_campaign_maps(gm_dossier: dict[str, Any]) -> dict[str, Any]:
+    gm_dossier = sanitize_gm_dossier_map_defaults(gm_dossier)
     return {
         "region_map": map_service.public_region_map(gm_dossier.get("region_map")),
         "city_maps": map_service.public_city_maps(gm_dossier.get("city_maps")),
@@ -349,17 +362,38 @@ def public_campaign_maps(gm_dossier: dict[str, Any]) -> dict[str, Any]:
 async def map_context_for_session(
     session_id: str,
     db: AsyncSession,
+    state_data: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     campaign = await campaign_for_session(session_id, db)
     if campaign is None:
-        return {"region_map": None, "city_maps": {}, "active_city_id": None}
+        world_maps = _world_maps_from_state_data(state_data)
+        return map_service.compact_map_context(
+            world_maps.get("region_map"),
+            world_maps.get("city_maps"),
+            world_maps.get("active_city_id"),
+        )
     dossier = await get_dossier(campaign.id, db)
     gm_dossier = dossier.gm_dossier if dossier and isinstance(dossier.gm_dossier, dict) else {}
+    if not _has_public_map_data(public_campaign_maps(gm_dossier)):
+        gm_dossier = _world_maps_from_state_data(state_data)
     return map_service.compact_map_context(
         gm_dossier.get("region_map"),
         gm_dossier.get("city_maps"),
         gm_dossier.get("active_city_id"),
     )
+
+
+def _world_maps_from_state_data(state_data: Optional[dict[str, Any]]) -> dict[str, Any]:
+    if not isinstance(state_data, dict):
+        return empty_world_maps()
+    world_maps = state_data.get("world_maps")
+    if not isinstance(world_maps, dict):
+        return empty_world_maps()
+    return sanitize_gm_dossier_map_defaults(world_maps)
+
+
+def _has_public_map_data(public_maps: dict[str, Any]) -> bool:
+    return bool(public_maps.get("region_map") or public_maps.get("city_maps"))
 
 
 async def update_campaign_maps(

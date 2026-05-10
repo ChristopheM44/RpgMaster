@@ -33,6 +33,7 @@ Instructions :
 - Si la narration introduit un nouveau lieu structuré (pièce, salle, clairière, place, carrefour), ou si game_state.current_scene est absent alors que le lieu actuel est structuré, émets UNE action scene_layout :
   grille de 6 à 12 cases de côté, 2 à 5 points d'intérêt, 1 à 3 sorties, positions approximatives du groupe si connues.
   Pour chaque point d'intérêt important, ajoute description et action_hint très courts pour expliquer ce que la sélection peut impliquer.
+  La scène doit offrir au moins trois prises jouables au total entre POI, sorties, PNJ, indices, objets ou rumeurs. Évite les décors à bouton unique.
   Respecte les catégories visuelles : ennemi visible = kind "enemy", icon "c-enemy"; PNJ = kind "npc", icon "npc"; couvert = kind "cover", icon "c-half-cover"; danger/piège = kind "hazard", icon "trap-danger"; butin/objet = kind "loot", icon "chest"; indice = kind "clue", icon "clue".
   Ne duplique jamais une porte, issue ou sortie dans pois si elle existe déjà dans exits : les sorties navigables appartiennent uniquement à exits.
   Pour un PNJ ou objet important, tu peux ajouter interactions: [{"label":"Parler","intent":"talk","prompt":"Je m'approche de Nom et lui adresse la parole."}].
@@ -47,6 +48,8 @@ Instructions :
   Positions de carte : x/y normalisés entre 0 et 100.
   Exemple court : {"type":"region_map_update","target":null,"params":{"name":"Vallée de l'Épine","current_node_id":"auberge_du_pont","nodes_upsert":[{"id":"auberge_du_pont","name":"Auberge du Pont","kind":"settlement","position":{"x":48,"y":62},"status":"current"},{"id":"bois_creux","name":"Bois Creux","kind":"wilderness","position":{"x":61,"y":45},"status":"known"}],"nodes_remove":[],"edges_upsert":[{"id":"route_pont_bois","from":"auberge_du_pont","to":"bois_creux","kind":"path","travel_hint":"Une demi-journée par les sentiers."}],"edges_remove":[]}}
 - N'émets journal_update, quest_add, chronicle_add QUE quand l'état change. Pas à chaque tour.
+- En exploration, ne pousse jamais une seule solution comme obligatoire. Présente une situation avec plusieurs options naturelles : parler, examiner, chercher ailleurs, négocier, attendre, contourner ou voyager selon le contexte.
+- N'introduis pas un PNJ comme déjà connu, déjà engagé ou déjà assis avec le groupe si aucune scène jouée ou entrée de state ne l'a établi.
 - Si la narration décrit l'apparition d'ennemis hostiles qui veulent attaquer le groupe, inclus OBLIGATOIREMENT ces deux actions dans cet ordre exact :
     1. encounter_setup avec la liste précise des monster_ids correspondant aux ennemis décrits.
     2. state_transition vers COMBAT.
