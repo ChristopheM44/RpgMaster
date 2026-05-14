@@ -68,6 +68,15 @@ def test_opening_response_uses_opening_scene_as_physical_scene() -> None:
     assert "azaka" in poi_ids
     assert "wakanga_o_tamu" not in poi_ids
     assert "carte_tachee" in poi_ids
+    assert "Trouver la source de la malédiction" not in response.narration
+    assert "première scène jouable" not in response.narration
+    assert "Un cap possible se dessine" not in response.narration
+    assert "Vous pouvez" not in response.narration
+    assert response.narration.endswith("Que faites-vous ?")
+    assert any(
+        exit_["leads_to"] == "trouver_source_malediction"
+        for exit_ in scene.params["exits"]
+    )
 
 
 def test_opening_response_does_not_derive_weather_and_time_from_initial_state() -> None:
@@ -146,7 +155,9 @@ def test_opening_response_legacy_fallback_keeps_hiring_scene_playable() -> None:
     assert "Grandfather Zitembe" not in response.narration
     assert "Syndra Silvane se tient face au groupe" in response.narration
     assert "Wakanga O'tamu" in response.narration
-    assert "parler aux personnes présentes" in response.narration
+    assert "Trouver la source de la malédiction de mort" not in response.narration
+    assert "Vous pouvez" not in response.narration
+    assert response.narration.endswith("Que faites-vous ?")
 
 
 def test_opening_response_falls_back_for_empty_context() -> None:
@@ -198,12 +209,49 @@ def test_opening_response_separates_hook_from_scene() -> None:
 
     # La scène mentionne le lieu physique
     assert "Auberge du Poisson Grillé" in scene
-    assert "première scène" in scene
+    assert "première scène" not in scene
     assert "Syndra vous engage" not in scene
 
-    # Le hook contient le contexte narratif mais pas "première scène"
-    assert "Port Nyanzaru" in hook or "malédiction" in hook.lower()
+    # Le hook contient le contexte public, sans objectif ni formule de structure.
+    assert "Syndra vous engage" in hook
+    assert "Trouver la source" not in hook
+    assert "Un cap possible se dessine" not in hook
     assert "première scène" not in hook
+
+
+def test_opening_response_hides_private_or_structural_meta_text() -> None:
+    """La narration publique ne révèle ni menus, ni objectifs, ni enjeux privés."""
+    from app.api.routes_game import _opening_response
+
+    active = SimpleNamespace(state_data={"characters": {"shade": {"name": "Shade"}}})
+    campaign_context = {
+        "active_chapter": {
+            "stakes": "Si les PJ échouent, le culte obtient la clé.",
+            "opening_scene": {
+                "place": "Port Nyanzaru",
+                "venue": "Marché aux Épices",
+                "description": "Un homme au chapeau à plumes fait signe près d'une tente bleue.",
+                "present_npcs": [{"id": "contact", "name": "Homme au chapeau"}],
+                "visible_clues": [{"id": "tente_bleue", "name": "Tente bleue"}],
+            },
+        },
+        "player_contract": {
+            "title": "La Tombe de l'annihilation",
+            "hook": "La Guilde des Cartographes vous a donné rendez-vous ici.",
+            "known_objectives": ["Atteindre la Tombe de l'annihilation"],
+        },
+    }
+
+    response = _opening_response(active, campaign_context=campaign_context)
+    narration = response.narration
+
+    assert "première scène jouable" not in narration
+    assert "Un cap possible se dessine" not in narration
+    assert "Si les PJ échouent" not in narration
+    assert "Atteindre la Tombe de l'annihilation" not in narration
+    assert "Vous pouvez" not in narration
+    assert "La Guilde des Cartographes" in narration
+    assert narration.endswith("Que faites-vous ?")
 
 
 @pytest.mark.asyncio

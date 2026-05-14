@@ -111,7 +111,7 @@ Un dialogue direct avec un compagnon ne déclenche pas de narration de conclusio
 - `mixed` : réponses IA puis `ActionResolver.resolve()` pour l'action monde du joueur.
 - `world` / `gm` : `ActionResolver.resolve()` directement.
 
-En mode LLM `sober`, l'optimisation qui évite certains appels MJ ne s'applique qu'aux échanges sociaux purs (`free_text`, `talk`, `wait`) contenant des marqueurs sociaux. Les actions de monde d'un compagnon (`examine`, `move`, `use_item`, `help`) repassent toujours par le MJ, même si le texte mentionne un compagnon. Cela évite qu'une consigne comme `@Shade vérifie le passage` saute la transition d'arbitrage.
+Le mode LLM `sober` ne regroupe plus les réactions de compagnons en un batch social. Les réactions d'exploration passent par les agents joueurs individuels pour garder des intentions concrètes ; les actions de monde d'un compagnon (`examine`, `move`, `use_item`, `help`) repassent toujours par le MJ, même si le texte mentionne un compagnon.
 
 Le pipeline mécanique existant reste la source d'autorité pour :
 
@@ -253,7 +253,7 @@ Note : le `ruff check backend/app ...` global remonte encore des problèmes hist
 
 ## Points d'attention
 
-- `run_party_reaction_batch()` et `run_exploration_reactions()` existent toujours dans `AIPlayerManager` pour le déclenchement manuel, la compatibilité et le mode sobre, mais ils ne sont plus le cœur du flux exploration normal.
+- `run_exploration_reactions()` reste le déclenchement manuel de compatibilité pour les réactions de compagnons hors combat. L'ancien batch sobre de groupe a été retiré pour éviter les réponses trop génériques.
 - Le `TurnManager` reste surtout utile au combat ; l'exploration fonctionne désormais comme scène libre.
 - Le MJ ne doit pas inventer la parole des compagnons dans une scène sociale : les compagnons parlent via leurs propres agents.
 - Les actions mécaniques restent résolues par le moteur, jamais par le LLM.

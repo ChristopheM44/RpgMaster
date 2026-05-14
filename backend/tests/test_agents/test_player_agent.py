@@ -466,7 +466,8 @@ async def test_roleplay_success(brave_agent: PlayerAgent) -> None:
         target="aubergiste",
         roleplay_text="Thorin commande une chope de bière d'un geste brusque.",
     )
-    with patch.object(brave_agent._client, "chat", new=AsyncMock(return_value=payload)):
+    chat = AsyncMock(return_value=payload)
+    with patch.object(brave_agent._client, "chat", new=chat):
         action = await brave_agent.roleplay(
             game_state=_game_state(),
             scene_context="Le groupe arrive dans une taverne animée.",
@@ -474,6 +475,35 @@ async def test_roleplay_success(brave_agent: PlayerAgent) -> None:
 
     assert action.action_type == "talk"
     assert "bière" in action.roleplay_text
+    prompt = chat.await_args.kwargs["messages"][-1]["content"]
+    assert "Ta réaction doit faire avancer la scène" in prompt
+    assert "question utile" in prompt
+    assert "Évite les commentaires purement atmosphériques" in prompt
+
+
+async def test_respond_to_player_prompt_requests_actionable_dialogue(
+    brave_agent: PlayerAgent,
+) -> None:
+    """Le dialogue compagnon demande un angle concret, pas une phrase d'ambiance."""
+    payload = _valid_action_json(
+        action_type="talk",
+        action_description="Propose de questionner le contact",
+        target=None,
+        roleplay_text="Thorin désigne le comptoir. « Je peux parler au tavernier. »",
+    )
+    chat = AsyncMock(return_value=payload)
+    with patch.object(brave_agent._client, "chat", new=chat):
+        action = await brave_agent.respond_to_player(
+            game_state=_game_state(),
+            player_message="Thorin, tu en penses quoi ?",
+        )
+
+    assert action.action_type == "talk"
+    assert "tavernier" in action.roleplay_text
+    prompt = chat.await_args.kwargs["messages"][-1]["content"]
+    assert "Ta réponse doit avoir une prise jouable" in prompt
+    assert "Même avec action_type = \"talk\"" in prompt
+    assert "Évite les simples commentaires d'ambiance" in prompt
 
 
 # ---------------------------------------------------------------------------

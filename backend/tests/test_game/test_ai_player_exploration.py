@@ -32,11 +32,14 @@ def _roleplay_json(character_name: str) -> str:
     import json
     return json.dumps({
         "action_type": "talk",
-        "action_description": f"{character_name} commente la situation.",
+        "action_description": f"{character_name} propose de questionner le contact visible.",
         "target": None,
         "params": {},
-        "roleplay_text": f"{character_name} regarde autour de lui, méfiant.",
-        "inner_reasoning": "Observer l'environnement.",
+        "roleplay_text": (
+            f"{character_name} désigne le contact visible. "
+            "« Commençons par lui poser des questions précises. »"
+        ),
+        "inner_reasoning": "Faire avancer la scène par une prise d'information.",
     }, ensure_ascii=False)
 
 
@@ -131,9 +134,13 @@ async def test_exploration_reactions_calls_roleplay_for_ai() -> None:
     narration_calls = [
         call for call in publish.await_args_list if call.args[1] == "narration"
     ]
-    assert narration_calls[-1].args[2]["text"] == "Thorin regarde autour de lui, méfiant."
+    expected_text = (
+        "Thorin désigne le contact visible. "
+        "« Commençons par lui poser des questions précises. »"
+    )
+    assert narration_calls[-1].args[2]["text"] == expected_text
     assert responses == [
-        {"speaker": "Thorin", "text": "Thorin regarde autour de lui, méfiant."}
+        {"speaker": "Thorin", "text": expected_text}
     ]
 
 
@@ -349,49 +356,44 @@ async def test_exploration_reactions_examine_triggers_gm_arbitrage() -> None:
 
 
 @pytest.mark.asyncio
-async def test_party_reaction_batch_uses_one_llm_call() -> None:
-    """En mode sobre, les reactions sociales de groupe passent par un seul appel."""
-    import json
+async def test_manual_exploration_reactions_use_individual_flow_even_in_sober_mode() -> None:
+    """Le mode sobre ne court-circuite plus les réactions individuelles."""
+    from app.api import ws_game
 
     active = _make_exploration_session()
-    first_agent = PlayerAgent(
+    active.ai_players["ai_1"] = PlayerAgent(
         character_id="ai_1",
         character_name="Thorin",
         personality=PlayerPersonality(traits=["noble"]),
         client=MagicMock(),
     )
-    second_agent = PlayerAgent(
-        character_id="ai_2",
-        character_name="Elara",
-        personality=PlayerPersonality(traits=["curious"]),
-        client=MagicMock(),
-    )
-    active.ai_players["ai_1"] = first_agent
-    active.ai_players["ai_2"] = second_agent
 
-    batch_client = MagicMock()
-    batch_client.chat = AsyncMock(return_value=json.dumps({
-        "responses": [
-            {"character_id": "ai_1", "speaker": "Thorin", "text": "Thorin approuve le plan."},
-            {"character_id": "ai_2", "speaker": "Elara", "text": "Elara veut inspecter les runes."},
-        ]
-    }))
-    publish = AsyncMock()
-
-    with patch("app.llm.model_router.router.get_player_client", return_value=batch_client), \
-         patch("app.game.ai_player_manager.event_bus.publish_to_session", new=publish):
-        reacted, responses = await AIPlayerManager().run_party_reaction_batch(
+    with patch.object(ws_game.session_manager, "get_session", return_value=active), \
+         patch("app.llm.budget.get_llm_budget_mode", return_value="sober"), \
+         patch.object(
+             AIPlayerManager,
+             "run_exploration_reactions",
+             new=AsyncMock(return_value=(1, [])),
+         ) as reactions, \
+         patch.object(
+             ws_game,
+             "_consume_pending_combat_transition",
+             new=AsyncMock(),
+         ) as consume:
+        await ws_game._handle_trigger_ai_reactions(
             "expl_session",
-            active,
-            "Compagnons, que pensez-vous de ce plan ?",
+            db=None,
             trigger_character_id="human_1",
         )
 
-    assert reacted == 2
-    assert len(responses) == 2
-    batch_client.chat.assert_awaited_once()
-    first_agent._client.chat.assert_not_called()
-    second_agent._client.chat.assert_not_called()
+    reactions.assert_awaited_once()
+    assert reactions.await_args.args[:3] == (
+        "expl_session",
+        active,
+        ws_game.action_resolver,
+    )
+    assert reactions.await_args.kwargs["trigger_character_id"] == "human_1"
+    consume.assert_awaited_once()
 
 
 @pytest.mark.asyncio

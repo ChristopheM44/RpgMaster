@@ -16,7 +16,6 @@ Usage::
 """
 from __future__ import annotations
 
-import json
 import logging
 import re
 import unicodedata
@@ -31,10 +30,7 @@ from app.game.companion_visibility import (
 from app.game.constants import INACTIVE_STATUSES
 from app.game.event_bus import EventType, event_bus
 from app.llm.budget import (
-    begin_llm_call_scope,
-    end_llm_call_scope,
     is_sober_mode,
-    record_llm_call,
 )
 
 if TYPE_CHECKING:
@@ -540,159 +536,6 @@ class AIPlayerManager:
                 break
 
         return reacted, companion_responses
-
-    async def run_party_reaction_batch(
-        self,
-        session_id: str,
-        active: "ActiveSession",
-        player_action: str,
-        trigger_character_id: Optional[str] = None,
-        db: Optional["AsyncSession"] = None,
-    ) -> "tuple[int, list[dict[str, str]]]":
-        """Produit les reactions sociales des compagnons en un seul appel LLM."""
-        companions = self._party_reaction_targets(active, trigger_character_id)
-        if not companions:
-            return 0, []
-
-        await self._publish_thinking(session_id, True)
-        try:
-            raw = await self._call_party_reaction_llm(active, player_action, companions)
-            parsed = self._parse_party_reaction(raw)
-        except Exception as exc:
-            logger.warning("run_party_reaction_batch: fallback sobre apres erreur: %s", exc)
-            parsed = []
-        finally:
-            await self._publish_thinking(session_id, False)
-
-        by_id = {
-            str(item.get("character_id") or item.get("id") or ""): item
-            for item in parsed
-            if isinstance(item, dict)
-        }
-        responses: list[dict[str, str]] = []
-        for companion in companions:
-            candidate = by_id.get(companion["id"], {})
-            text = str(candidate.get("text") or candidate.get("roleplay_text") or "").strip()
-            speaker = str(candidate.get("speaker") or companion["name"])
-            if not text:
-                text = f"{speaker} acquiesce et garde son attention sur la suite."
-            text = sanitize_companion_visible_text(text, character_name=speaker)
-
-            await event_bus.publish_to_session(
-                session_id,
-                EventType.NARRATION,
-                {
-                    "text": text,
-                    "speaker": speaker,
-                    "action_type": "talk",
-                    "is_ai_player": True,
-                },
-                source="ai_player_manager",
-            )
-            if db is not None:
-                from app.models.message import MessageRole, MessageType
-                from app.services.message_service import persist_narration
-
-                await persist_narration(
-                    session_id,
-                    text,
-                    speaker,
-                    db,
-                    role=MessageRole.PLAYER,
-                    message_type=MessageType.DIALOGUE,
-                    metadata={
-                        "is_ai_player": True,
-                        "character_id": companion["id"],
-                        "action_type": "talk",
-                        "llm_budget": "batch_party",
-                    },
-                )
-            responses.append({"speaker": speaker, "text": text})
-
-        return len(responses), responses
-
-    @staticmethod
-    def _party_reaction_targets(
-        active: "ActiveSession",
-        trigger_character_id: Optional[str],
-    ) -> list[dict[str, str]]:
-        companions: list[dict[str, str]] = []
-        for char_id, agent in active.ai_players.items():
-            if char_id == trigger_character_id:
-                continue
-            name = str(getattr(agent, "character_name", char_id))
-            personality = getattr(agent, "personality", None)
-            traits = getattr(personality, "traits", None)
-            companions.append(
-                {
-                    "id": str(char_id),
-                    "name": name,
-                    "traits": ", ".join(traits) if isinstance(traits, list) else "",
-                }
-            )
-        return companions
-
-    @staticmethod
-    async def _call_party_reaction_llm(
-        active: "ActiveSession",
-        player_action: str,
-        companions: list[dict[str, str]],
-    ) -> str:
-        from app.llm.model_router import router
-
-        client = router.get_player_client()
-        compact_state = {
-            "phase": active.phase.value if hasattr(active.phase, "value") else str(active.phase),
-            "location": active.state_data.get("adventure_journal", {}),
-            "companions": companions,
-        }
-        messages = [
-            {
-                "role": "system",
-                "content": (
-                    "Tu ecris les reactions breves de compagnons de JDR. "
-                    "Retourne uniquement un JSON valide."
-                ),
-            },
-            {
-                "role": "user",
-                "content": (
-                    "Le joueur sollicite le groupe :\n"
-                    f"{player_action}\n\n"
-                    "Etat compact :\n"
-                    f"{json.dumps(compact_state, ensure_ascii=False)}\n\n"
-                    "Retourne ce schema exact :\n"
-                    '{"responses":[{"character_id":"id","speaker":"nom",'
-                    '"text":"1 phrase en francais"}]}'
-                ),
-            },
-        ]
-        token, scope = begin_llm_call_scope(active.session_id, "party_reaction")
-        try:
-            record_llm_call("party")
-            return await client.chat(messages=messages, temperature=0.65, max_tokens=700)
-        finally:
-            end_llm_call_scope(token, scope)
-
-    @staticmethod
-    def _parse_party_reaction(raw: str) -> list[dict[str, Any]]:
-        stripped = raw.strip()
-        if stripped.startswith("```"):
-            stripped = re.sub(r"^```(?:json)?", "", stripped).strip()
-            stripped = re.sub(r"```$", "", stripped).strip()
-        try:
-            data = json.loads(stripped)
-        except json.JSONDecodeError:
-            start = stripped.find("{")
-            end = stripped.rfind("}")
-            if start == -1 or end == -1 or end <= start:
-                return []
-            try:
-                data = json.loads(stripped[start:end + 1])
-            except json.JSONDecodeError:
-                return []
-        responses = data.get("responses", []) if isinstance(data, dict) else []
-        return [item for item in responses if isinstance(item, dict)]
 
     # ------------------------------------------------------------------
     # Private helpers

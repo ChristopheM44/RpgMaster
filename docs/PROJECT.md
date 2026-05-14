@@ -76,7 +76,7 @@ En exploration :
 7. **Frontend** affiche les locuteurs distincts : MJ, joueur humain, compagnon, PNJ
 8. *(Optionnel)* **TTS** genere l'audio de la narration en arriere-plan
 
-Un dialogue direct avec un compagnon reste conversationnel, mais si ce compagnon choisit une action concrete (`examine`, `move`, `use_item`, `help`), sa parole visible est publiee puis le MJ reprend la main pour arbitrer la transition. En mode `sober`, seuls les echanges sociaux purs evitent cet appel MJ.
+Un dialogue direct avec un compagnon reste conversationnel, mais si ce compagnon choisit une action concrete (`examine`, `move`, `use_item`, `help`), sa parole visible est publiee puis le MJ reprend la main pour arbitrer la transition. Les reactions de compagnons hors combat passent par les agents individuels, y compris en mode `sober`, afin d'eviter les reponses de groupe trop generiques.
 
 En combat :
 

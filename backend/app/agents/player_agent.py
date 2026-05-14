@@ -267,7 +267,7 @@ class PlayerAgent(BaseAgent):
             user_prompt,
             context_manager,
             game_state=game_state,
-            available_actions=("talk", "move", "use_item", "wait", "examine"),
+            available_actions=("talk", "move", "use_item", "wait", "examine", "help"),
             combat_mode=False,
         )
 

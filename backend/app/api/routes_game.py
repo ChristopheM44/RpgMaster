@@ -68,48 +68,28 @@ async def _build_session_state_payload_with_maps(session_id: str, db: AsyncSessi
 
 
 def _hook_context_text(campaign_context: dict[str, Any]) -> str:
-    """Pourquoi le groupe est ici — contexte de mission, hook, objectif."""
+    """Pourquoi le groupe est ici — contexte public connu des personnages."""
     if not isinstance(campaign_context, dict):
         return ""
     contract = campaign_context.get("player_contract", {})
     if not isinstance(contract, dict):
         contract = {}
-    chapter = campaign_context.get("active_chapter", {})
-    if not isinstance(chapter, dict):
-        chapter = {}
 
     hook = str(
         contract.get("hook")
         or contract.get("pitch_public")
         or ""
     ).strip()
-    objectives = contract.get("known_objectives")
-    objective = ""
-    if isinstance(objectives, list) and objectives:
-        objective = str(objectives[0]).strip()
-    stakes = str(chapter.get("stakes") or "").strip()
-
-    parts = []
-    if hook:
-        parts.append(hook)
-    if stakes and stakes not in hook:
-        parts.append(stakes)
-    if objective:
-        parts.append(f"Un cap possible se dessine : {objective}.")
-    return " ".join(part for part in parts if part)
+    return hook
 
 
 def _scene_context_text(campaign_context: dict[str, Any]) -> str:
     """Où le groupe se trouve physiquement — lieu, moment, personnes présentes."""
     if not isinstance(campaign_context, dict):
         return "un lieu de départ"
-    contract = campaign_context.get("player_contract", {})
-    if not isinstance(contract, dict):
-        contract = {}
-    title = str(contract.get("title") or "l'aventure").strip()
     opening_scene = _opening_scene(campaign_context)
     location = _opening_scene_location_label(opening_scene)
-    return f"La première scène jouable de {title} s'ouvre à {location}."
+    return f"Le groupe se trouve à {location}."
 
 
 def _campaign_opening_text(campaign_context: dict[str, Any]) -> str:
@@ -117,27 +97,15 @@ def _campaign_opening_text(campaign_context: dict[str, Any]) -> str:
     scene_text = _scene_context_text(campaign_context)
     opening_scene = _opening_scene(campaign_context)
     scene_description = str(opening_scene.get("description") or "").strip()
-    affordances = ["examiner les détails du lieu"]
-    if opening_scene.get("present_npcs"):
-        affordances.insert(0, "parler aux personnes présentes")
-    if opening_scene.get("visible_clues"):
-        affordances.append("suivre un indice visible")
-    if opening_scene.get("exits"):
-        affordances.append("prendre une sortie visible")
-    else:
-        affordances.append("explorer les environs")
 
     parts = [
         scene_text,
-        "Le groupe est présent, libre de questionner la situation avant de s'engager.",
     ]
     if scene_description:
         parts.append(scene_description)
     if hook_text:
         parts.append(hook_text)
-    parts.append(
-        f"Vous pouvez {', '.join(affordances[:-1])} ou {affordances[-1]}. Que faites-vous ?"
-    )
+    parts.append("Que faites-vous ?")
     return " ".join(part for part in parts if part)
 
 
@@ -149,11 +117,9 @@ def _free_opening_text(
     party = _party_names(active)
     if script:
         return (
-            f"{party} prend place dans la première scène du scénario proposé. "
+            f"{party} prend place dans la situation proposée. "
             f"{script.strip()} "
-            "Avant que quoi que ce soit soit décidé à votre place, le lieu offre "
-            "plusieurs prises : "
-            "observer, discuter, chercher une autre piste ou partir explorer. Que faites-vous ?"
+            "La situation reste ouverte. Que faites-vous ?"
         )
     if auto_generate:
         return (
@@ -164,8 +130,6 @@ def _free_opening_text(
     return (
         f"{party} se tient dans un lieu de départ encore calme, juste avant que "
         "l'aventure ne prenne forme. "
-        "Autour de vous, un repère à examiner, des environs à parcourir et la "
-        "possibilité de chercher des informations. "
         "Que faites-vous ?"
     )
 

@@ -104,7 +104,6 @@ from app.game.event_bus import BACKPRESSURE_ERROR_CODE, EventType, GameEvent, ev
 from app.game.runtime import rest_service, session_manager
 from app.game.state_sync import sync_character_state
 from app.game.turn_manager import CombatantInfo
-from app.llm.budget import is_sober_mode
 from app.models.character import Character
 from app.models.session import SessionStatus
 from app.security import websocket_has_valid_access_token
@@ -2270,18 +2269,9 @@ async def _handle_toggle_ai_control(
         else:
             from app.game.ai_player_manager import AIPlayerManager
             try:
-                if is_sober_mode():
-                    await AIPlayerManager().run_party_reaction_batch(
-                        session_id,
-                        active,
-                        "Le groupe sollicite l'avis des compagnons.",
-                        trigger_character_id=None,
-                        db=db,
-                    )
-                else:
-                    await AIPlayerManager().run_exploration_reactions(
-                        session_id, active, action_resolver, trigger_character_id=None, db=db
-                    )
+                await AIPlayerManager().run_exploration_reactions(
+                    session_id, active, action_resolver, trigger_character_id=None, db=db
+                )
                 await _consume_pending_combat_transition(
                     session_id,
                     active,
@@ -2315,22 +2305,13 @@ async def _handle_trigger_ai_reactions(
 
     # Exploration: let each AI companion react once.
     from app.game.ai_player_manager import AIPlayerManager
-    if is_sober_mode():
-        await AIPlayerManager().run_party_reaction_batch(
-            session_id,
-            active,
-            "Le groupe sollicite l'avis des compagnons.",
-            trigger_character_id=trigger_character_id,
-            db=db,
-        )
-    else:
-        await AIPlayerManager().run_exploration_reactions(
-            session_id,
-            active,
-            action_resolver,
-            trigger_character_id=trigger_character_id,
-            db=db,
-        )
+    await AIPlayerManager().run_exploration_reactions(
+        session_id,
+        active,
+        action_resolver,
+        trigger_character_id=trigger_character_id,
+        db=db,
+    )
     await _consume_pending_combat_transition(
         session_id,
         active,
