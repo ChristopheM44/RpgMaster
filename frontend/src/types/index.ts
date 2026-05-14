@@ -259,8 +259,14 @@ export interface SrdSpell {
 
 export interface SrdMonsterAction {
   name: string
-  description: string
+  name_fr?: string
+  type?: string
+  description?: string
   attack_bonus?: number
+  reach_m?: number
+  range_normal_m?: number
+  range_long_m?: number
+  targets?: number
   damage_dice?: string
   damage_type?: string
 }
@@ -273,9 +279,10 @@ export interface SrdMonster {
   xp: number
   size: string
   type: string
+  subtype?: string | null
   alignment: string
   ac: number
-  ac_source: string
+  ac_source?: string | null
   hp: number
   hit_dice: string
   speed: Record<string, number>
@@ -288,9 +295,11 @@ export interface SrdMonster {
   senses: Record<string, number | string>
   languages: string[]
   proficiency_bonus: number
-  traits: { name: string; description: string }[]
+  traits: { name: string; name_fr?: string; description?: string }[]
   actions: SrdMonsterAction[]
-  description: string
+  reactions?: SrdMonsterAction[]
+  legendary_actions?: SrdMonsterAction[]
+  description?: string
 }
 
 export interface SrdEquipmentItem {
@@ -397,6 +406,7 @@ export const WS_EVENT_TYPES_LIST = [
   'turn_end',
   'round_start',
   'phase_change',
+  'session_reset',
   'combat_start',
   'combat_end',
   'combat_action',
@@ -907,6 +917,7 @@ export interface Campaign {
   id: string
   name: string
   description: string
+  starting_level: number
   session_ids: string[]
   current_session_index: number
   character_ids: string[]
@@ -1048,4 +1059,11 @@ export interface CampaignAdvanceResponse {
   campaign: Campaign
   new_session_id: string
   characters_transferred: number
+}
+
+export interface CampaignResetResponse {
+  campaign: Campaign
+  session_id: string
+  characters_reset: number
+  sessions_removed: number
 }

@@ -64,6 +64,7 @@ class EventType(str):
     # Session lifecycle
     PHASE_CHANGE = "phase_change"
     SESSION_STATE = "session_state"
+    SESSION_RESET = "session_reset"
     PLAYER_JOINED = "player_joined"
     PLAYER_LEFT = "player_left"
 

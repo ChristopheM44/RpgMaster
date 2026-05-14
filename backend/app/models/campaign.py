@@ -24,6 +24,14 @@ class Campaign(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str] = mapped_column(String(500), nullable=False, default="")
 
+    # Mechanical starting level used when resetting a campaign for tests/replays.
+    starting_level: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
+    )
+
     # Ordered list of session IDs  [session_id_1, session_id_2, ...]
     session_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
 

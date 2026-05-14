@@ -4,12 +4,20 @@ from __future__ import annotations
 import uuid
 from typing import Any, Optional
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.engine.character_creation import hp_at_level
+from app.engine.level_up import caster_type_for_class
+from app.engine.spells import starting_slots
+from app.game.event_bus import EventType, event_bus
 from app.models.campaign import Campaign
 from app.models.character import Character
+from app.models.game_state import GameState
+from app.models.message import Message
+from app.models.save_slot import SaveSlot
 from app.models.session import Session, SessionStatus
+from app.services.rest_service import build_hit_dice
 
 
 async def create_campaign(name: str, description: str, db: AsyncSession) -> Campaign:
@@ -204,6 +212,63 @@ async def award_xp(
     return campaign
 
 
+async def reset_campaign(campaign_id: str, db: AsyncSession) -> dict[str, Any]:
+    """Reset a campaign to a clean replayable state.
+
+    Keeps the campaign and its current session ID, removes the other sessions,
+    clears played state, and resets current-session characters mechanically.
+    """
+    campaign = await get_campaign(campaign_id, db)
+    if campaign is None:
+        raise KeyError(f"Campaign {campaign_id} not found")
+
+    current_session = await _current_or_new_session(campaign, db)
+    current_session_id = current_session.id
+    removed_session_ids = [
+        session_id
+        for session_id in list(campaign.session_ids or [])
+        if session_id != current_session_id
+    ]
+
+    from app.game.runtime import session_manager
+
+    was_current_active = session_manager.is_active(current_session_id)
+    for session_id in [current_session_id, *removed_session_ids]:
+        if session_manager.is_active(session_id):
+            async with session_manager.session_lock(session_id):
+                await session_manager.close_session(session_id, db)
+
+    sessions_removed = await _delete_campaign_sessions(removed_session_ids, db)
+    characters = await _reset_current_session(
+        campaign,
+        current_session,
+        db,
+    )
+
+    from app.services import campaign_dossier_service
+
+    await campaign_dossier_service.reset_played_state(campaign, db)
+
+    campaign.session_ids = [current_session_id]
+    campaign.current_session_index = 0
+    campaign.character_ids = [character.id for character in characters]
+    campaign.xp_pool = {}
+
+    await db.commit()
+    await db.refresh(campaign)
+
+    if was_current_active:
+        await session_manager.open_session(current_session_id, db)
+        await _publish_session_reset(current_session_id, db)
+
+    return {
+        "campaign": campaign,
+        "session_id": current_session_id,
+        "characters_reset": len(characters),
+        "sessions_removed": sessions_removed,
+    }
+
+
 async def remove_session_references(session_id: str, db: AsyncSession) -> int:
     """Retire une session supprimée de toutes les campagnes qui la référencent."""
     result = await db.execute(select(Campaign))
@@ -259,3 +324,121 @@ def _reconcile_campaign_sessions(campaign: Campaign, valid_session_ids: set[str]
         campaign.current_session_index = normalized_index
 
     return changed
+
+
+async def _current_or_new_session(campaign: Campaign, db: AsyncSession) -> Session:
+    ids = list(campaign.session_ids or [])
+    if ids:
+        index = max(0, min(int(campaign.current_session_index or 0), len(ids) - 1))
+        result = await db.execute(select(Session).where(Session.id == ids[index]))
+        session = result.scalar_one_or_none()
+        if session is not None:
+            return session
+
+    session = Session(
+        id=str(uuid.uuid4()),
+        name=f"Session 1 - {campaign.name}",
+        status=SessionStatus.LOBBY,
+    )
+    db.add(session)
+    await db.flush()
+    return session
+
+
+async def _delete_campaign_sessions(session_ids: list[str], db: AsyncSession) -> int:
+    if not session_ids:
+        return 0
+    result = await db.execute(select(Session).where(Session.id.in_(session_ids)))
+    sessions = list(result.scalars().all())
+    for session in sessions:
+        await db.delete(session)
+    await db.flush()
+    return len(sessions)
+
+
+async def _reset_current_session(
+    campaign: Campaign,
+    session: Session,
+    db: AsyncSession,
+) -> list[Character]:
+    session.status = SessionStatus.LOBBY
+
+    await db.execute(delete(Message).where(Message.session_id == session.id))
+    await db.execute(delete(SaveSlot).where(SaveSlot.session_id == session.id))
+    await db.execute(delete(GameState).where(GameState.session_id == session.id))
+
+    result = await db.execute(select(Character).where(Character.session_id == session.id))
+    characters = list(result.scalars().all())
+    starting_level = _campaign_starting_level(campaign)
+    for character in characters:
+        _reset_character(character, starting_level)
+    await db.flush()
+    return characters
+
+
+def _reset_character(character: Character, starting_level: int) -> None:
+    level = max(1, min(20, int(starting_level or 1)))
+    con_score = int((character.ability_scores or {}).get("con", 10))
+    try:
+        hp_max = hp_at_level(character.char_class, con_score, level)
+    except ValueError:
+        hp_max = max(1, int(character.hp_max or character.hp_current or 1))
+
+    character.level = level
+    character.xp = 0
+    character.gp = 0
+    character.sp = 0
+    character.cp = 0
+    character.hp_max = hp_max
+    character.hp_current = hp_max
+    character.hp_temp = 0
+    character.spell_slots = _initial_spell_slots(character.char_class, level)
+    character.hit_dice = build_hit_dice(character.char_class, level)
+    character.conditions = []
+    personality = dict(character.personality or {})
+    personality.pop("pending_asi", None)
+    personality.pop("pending_asi_levels", None)
+    character.personality = personality
+
+
+def _campaign_starting_level(campaign: Campaign) -> int:
+    try:
+        return max(1, min(20, int(getattr(campaign, "starting_level", 1) or 1)))
+    except (TypeError, ValueError):
+        return 1
+
+
+def _initial_spell_slots(char_class: str, level: int) -> dict[str, dict[str, int]]:
+    try:
+        caster_type = caster_type_for_class(char_class)
+        if not caster_type:
+            return {}
+        slots = starting_slots(caster_type, level)
+    except ValueError:
+        return {}
+    return {
+        str(slot_level): {"total": int(total), "used": 0}
+        for slot_level, total in slots.items()
+    }
+
+
+async def _publish_session_reset(session_id: str, db: AsyncSession) -> None:
+    from app.api.ws_payloads import build_session_state_payload_enriched
+    from app.game.runtime import session_manager
+
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.SESSION_RESET,
+        {"session_id": session_id},
+        source="campaign_service",
+    )
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.SESSION_STATE,
+        await build_session_state_payload_enriched(
+            session_id,
+            session_manager.get_session(session_id),
+            db,
+        ),
+        source="campaign_service",
+    )

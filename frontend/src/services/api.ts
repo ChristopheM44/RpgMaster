@@ -31,6 +31,7 @@ import type {
   CampaignImportSourceBody,
   CampaignImportSourceResponse,
   CampaignPlayerContract,
+  CampaignResetResponse,
   CampaignScenario,
 } from '../types'
 
@@ -252,6 +253,11 @@ export const campaignApi = {
     request<CampaignAdvanceResponse>(`/campaigns/${campaignId}/advance`, {
       method: 'POST',
       body: JSON.stringify(body),
+    }),
+
+  reset: (campaignId: string) =>
+    request<CampaignResetResponse>(`/campaigns/${campaignId}/reset`, {
+      method: 'POST',
     }),
 
   delete: (id: string) => request<void>(`/campaigns/${id}`, { method: 'DELETE' }),

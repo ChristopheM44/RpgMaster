@@ -21,6 +21,10 @@ const crumbs = computed<string[]>(() => {
     out[out.length - 1] = 'Campagnes'
   } else if (route.name === 'admin') {
     out[out.length - 1] = 'Admin'
+  } else if (route.name === 'grimoire') {
+    out[out.length - 1] = 'Grimoire'
+  } else if (route.name === 'bestiaire') {
+    out[out.length - 1] = 'Bestiaire'
   }
   return out
 })
@@ -74,6 +78,18 @@ function isActive(name: string): boolean {
         class="rpg-nav-pill rounded-full border px-3.5 py-1.5 text-xs font-semibold tracking-wide transition"
         :class="{ 'is-active': isActive('campaigns') }"
       >Campagnes</router-link>
+
+      <router-link
+        to="/grimoire"
+        class="rpg-nav-pill rounded-full border px-3.5 py-1.5 text-xs font-semibold tracking-wide transition"
+        :class="{ 'is-active': isActive('grimoire') }"
+      >✦ Grimoire</router-link>
+
+      <router-link
+        to="/bestiaire"
+        class="rpg-nav-pill rounded-full border px-3.5 py-1.5 text-xs font-semibold tracking-wide transition"
+        :class="{ 'is-active': isActive('bestiaire') }"
+      >◆ Bestiaire</router-link>
 
       <router-link
         to="/admin"

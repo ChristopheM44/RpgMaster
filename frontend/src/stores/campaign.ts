@@ -11,6 +11,7 @@ import type {
   CampaignImportSourceBody,
   CampaignImportSourceResponse,
   CampaignPlayerContract,
+  CampaignResetResponse,
   CampaignScenario,
 } from '../types'
 
@@ -145,6 +146,22 @@ export const useCampaignStore = defineStore('campaign', () => {
     }
   }
 
+  async function resetCampaign(campaignId: string): Promise<CampaignResetResponse | null> {
+    error.value = null
+    try {
+      const data = await campaignApi.reset(campaignId)
+      const idx = campaigns.value.findIndex((c) => c.id === campaignId)
+      if (idx !== -1) campaigns.value[idx] = data.campaign
+      currentCampaign.value = data.campaign
+      delete scenarios.value[campaignId]
+      delete gmDossiers.value[campaignId]
+      return data
+    } catch {
+      error.value = 'Erreur lors de la réinitialisation de la campagne'
+      return null
+    }
+  }
+
   async function deleteCampaign(id: string) {
     await campaignApi.delete(id)
     campaigns.value = campaigns.value.filter((c) => c.id !== id)
@@ -168,6 +185,7 @@ export const useCampaignStore = defineStore('campaign', () => {
     validateContract,
     attachSession,
     advance,
+    resetCampaign,
     deleteCampaign,
   }
 })

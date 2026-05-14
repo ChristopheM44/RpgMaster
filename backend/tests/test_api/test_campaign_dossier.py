@@ -369,6 +369,23 @@ async def test_campaign_scenario_returns_player_timeline(async_client):
 
 
 @pytest.mark.asyncio
+async def test_forge_draft_persists_campaign_starting_level(async_client):
+    campaign = await _create_campaign(async_client)
+    response = await async_client.post(
+        f"/api/campaigns/{campaign['id']}/forge-draft",
+        json={
+            "brief": {"title": "Les Brumes du Hinterland"},
+            "options": {"starting_level": 3},
+        },
+    )
+    assert response.status_code == 200
+
+    detail = await async_client.get(f"/api/campaigns/{campaign['id']}")
+    assert detail.status_code == 200
+    assert detail.json()["starting_level"] == 3
+
+
+@pytest.mark.asyncio
 async def test_campaign_gm_dossier_endpoint_exposes_author_notes_only(async_client):
     forged = await _forge_and_validate(async_client)
     response = await async_client.get(f"/api/campaigns/{forged['campaign_id']}/gm-dossier")

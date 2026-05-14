@@ -11,6 +11,7 @@ from app.schemas.campaign import (
     AttachSessionBody,
     AwardXpBody,
     CampaignCreate,
+    CampaignResetResponse,
     CampaignResponse,
     ForgeDraftBody,
     ImportSourceBody,
@@ -60,6 +61,21 @@ async def delete_campaign(campaign_id: str, db: AsyncSession = Depends(get_db)):
     from app.models.campaign import Campaign
     await db.execute(delete(Campaign).where(Campaign.id == campaign_id))
     await db.commit()
+
+
+@router.post("/{campaign_id}/reset", response_model=CampaignResetResponse)
+async def reset_campaign(campaign_id: str, db: AsyncSession = Depends(get_db)):
+    try:
+        result = await campaign_service.reset_campaign(campaign_id, db)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    summary = await campaign_dossier_service.public_summary(result["campaign"], db)
+    return CampaignResetResponse(
+        campaign=CampaignResponse.from_orm(result["campaign"], summary),
+        session_id=result["session_id"],
+        characters_reset=result["characters_reset"],
+        sessions_removed=result["sessions_removed"],
+    )
 
 
 @router.post("/{campaign_id}/import-source")

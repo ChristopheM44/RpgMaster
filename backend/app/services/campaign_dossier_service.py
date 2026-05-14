@@ -130,6 +130,10 @@ async def forge_draft(
     campaign = await _get_campaign_or_raise(campaign_id, db)
     dossier = await get_or_create_dossier(campaign.id, db)
     dossier.generation_status = "drafting"
+    campaign.starting_level = _starting_level_from_options(
+        options,
+        int(getattr(campaign, "starting_level", 1) or 1),
+    )
     await db.flush()
 
     campaign_data = {"id": campaign.id, "name": campaign.name, "description": campaign.description}
@@ -200,6 +204,36 @@ async def validate_contract(
     dossier.generation_status = "validated"
     await db.commit()
     await db.refresh(dossier)
+    return dossier
+
+
+async def reset_played_state(campaign: Campaign, db: AsyncSession) -> Optional[CampaignDossier]:
+    """Clear played campaign state while preserving the authored dossier."""
+    dossier = await get_dossier(campaign.id, db)
+    if dossier is None:
+        return None
+
+    contract = sanitize_player_contract(dossier.player_contract or {}, campaign, brief={})
+    chapters = []
+    for index, chapter in enumerate(contract.get("visible_chapters", [])):
+        chapters.append({
+            **chapter,
+            "state": "active" if index == 0 else "planned",
+            "sessions": 0,
+        })
+    contract["visible_chapters"] = chapters
+    contract["played_summary"] = ""
+
+    gm_dossier = sanitize_gm_dossier(dossier.gm_dossier or {}, campaign, contract)
+    gm_dossier["region_map"] = None
+    gm_dossier["city_maps"] = {}
+    gm_dossier["active_city_id"] = None
+
+    dossier.player_contract = contract
+    dossier.gm_dossier = gm_dossier
+    dossier.played_canon = empty_played_canon()
+    dossier.active_chapter_id = _first_chapter_id(contract, gm_dossier)
+    await db.flush()
     return dossier
 
 
@@ -639,6 +673,14 @@ async def _get_campaign_or_raise(campaign_id: str, db: AsyncSession) -> Campaign
     return campaign
 
 
+def _starting_level_from_options(options: dict[str, Any], fallback: int = 1) -> int:
+    raw = options.get("starting_level") if isinstance(options, dict) else fallback
+    try:
+        return max(1, min(20, int(raw or fallback or 1)))
+    except (TypeError, ValueError):
+        return max(1, min(20, int(fallback or 1)))
+
+
 async def _session_characters(session_id: str, db: AsyncSession) -> list[Character]:
     result = await db.execute(select(Character).where(Character.session_id == session_id))
     return list(result.scalars().all())
@@ -1017,7 +1059,12 @@ def _sanitize_opening_scene_entity(value: Any, max_name: int) -> Optional[dict[s
     return out
 
 
-def _sanitize_opening_scene_entities(value: Any, *, max_items: int, max_name: int) -> list[dict[str, str]]:
+def _sanitize_opening_scene_entities(
+    value: Any,
+    *,
+    max_items: int,
+    max_name: int,
+) -> list[dict[str, str]]:
     if not isinstance(value, list):
         return []
     out: list[dict[str, str]] = []

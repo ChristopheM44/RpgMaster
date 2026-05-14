@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCampaignStore } from '../stores/campaign'
+import { gameApi } from '../services/api'
 import type {
   Campaign,
   CampaignGmDossier,
@@ -48,6 +49,7 @@ const activeTab = ref<DetailTab>('sessions')
 const showForge = ref(false)
 const showAdvance = ref(false)
 const confirmDeleteId = ref<string | null>(null)
+const confirmResetId = ref<string | null>(null)
 const newSessionName = ref('')
 const forgeStep = ref<ForgeStep>(1)
 const forgeCampaignId = ref<string | null>(null)
@@ -56,8 +58,10 @@ const sourceCount = ref(0)
 const isForging = ref(false)
 const isImporting = ref(false)
 const isValidating = ref(false)
+const isResetting = ref(false)
 const authorMode = ref(false)
 const isLoadingGmDossier = ref(false)
+const actionError = ref<string | null>(null)
 const modalError = ref<string | null>(null)
 const notesError = ref<string | null>(null)
 
@@ -113,7 +117,12 @@ const campaignToDelete = computed(
   () => campaignStore.campaigns.find((c) => c.id === confirmDeleteId.value) ?? null,
 )
 
+const campaignToReset = computed(
+  () => campaignStore.campaigns.find((c) => c.id === confirmResetId.value) ?? null,
+)
+
 async function selectCampaign(campaign: Campaign) {
+  actionError.value = null
   const fresh = await campaignStore.fetchCampaign(campaign.id)
   selectedCampaign.value = fresh ?? campaign
   if (activeTab.value === 'scenario') await campaignStore.fetchScenario(campaign.id)
@@ -350,7 +359,20 @@ async function playCurrent() {
   if (!selectedCampaign.value) return
   const sid = currentSessionId(selectedCampaign.value)
   if (!sid) return
-  router.push({ name: 'game-session', params: { id: sid } })
+  actionError.value = null
+  await startAndOpenSession(sid)
+}
+
+async function startAndOpenSession(sessionId: string): Promise<boolean> {
+  try {
+    await gameApi.start(sessionId)
+    await router.push({ name: 'game-session', params: { id: sessionId } })
+    return true
+  } catch {
+    actionError.value = 'Impossible de lancer la session. Vérifiez que la campagne possède au moins un personnage.'
+    activeTab.value = 'sessions'
+    return false
+  }
 }
 
 async function handleAdvance() {
@@ -374,6 +396,22 @@ async function handleDelete(id: string) {
     selectedCampaign.value = campaignStore.campaigns[0] ?? null
   }
   confirmDeleteId.value = null
+}
+
+async function handleReset(id: string) {
+  actionError.value = null
+  isResetting.value = true
+  try {
+    const result = await campaignStore.resetCampaign(id)
+    if (!result) return
+    selectedCampaign.value = result.campaign
+    if (activeTab.value === 'scenario') await campaignStore.fetchScenario(id)
+    if (activeTab.value === 'notes' && authorMode.value) await loadGmDossier(true)
+    confirmResetId.value = null
+    await startAndOpenSession(result.session_id)
+  } finally {
+    isResetting.value = false
+  }
 }
 
 function displayChapter(campaign: Campaign): CampaignVisibleChapter {
@@ -508,12 +546,26 @@ function cloneContract(contract: CampaignPlayerContract): CampaignPlayerContract
                   ✦ Chapitre {{ displayChapter(campaign).num }} — {{ displayChapter(campaign).title }}
                 </p>
               </div>
-              <button
-                class="h-6 w-6 shrink-0 rounded text-text-dim transition hover:text-blood"
-                @click.stop="confirmDeleteId = campaign.id"
-              >
-                ×
-              </button>
+              <div class="flex shrink-0 items-center gap-1">
+                <button
+                  class="h-6 w-6 rounded text-text-dim transition hover:text-gold"
+                  type="button"
+                  title="Réinitialiser la campagne"
+                  aria-label="Réinitialiser la campagne"
+                  @click.stop="confirmResetId = campaign.id"
+                >
+                  ↺
+                </button>
+                <button
+                  class="h-6 w-6 rounded text-text-dim transition hover:text-blood"
+                  type="button"
+                  title="Supprimer la campagne"
+                  aria-label="Supprimer la campagne"
+                  @click.stop="confirmDeleteId = campaign.id"
+                >
+                  ×
+                </button>
+              </div>
             </div>
 
             <div class="mt-3">
@@ -590,6 +642,9 @@ function cloneContract(contract: CampaignPlayerContract): CampaignPlayerContract
 
       <div class="min-h-0 flex-1 overflow-y-auto px-7 py-5">
         <div v-if="activeTab === 'sessions'" class="space-y-2">
+          <p v-if="actionError" class="rounded border border-blood/30 bg-blood/10 px-3 py-2 text-sm text-blood-light">
+            {{ actionError }}
+          </p>
           <p v-if="!selectedCampaign.session_ids.length" class="py-8 font-serif italic text-text-muted">
             Aucune session.
           </p>
@@ -628,6 +683,13 @@ function cloneContract(contract: CampaignPlayerContract): CampaignPlayerContract
               @click="showAdvance = true"
             >
               → {{ selectedCampaign.session_ids.length === 0 ? 'Démarrer une session' : 'Session suivante (transférer personnages)' }}
+            </button>
+            <button
+              class="mt-2 w-full rounded-lg border border-gold/30 bg-gold/10 px-4 py-2.5 font-display text-[11px] font-bold uppercase tracking-[0.12em] text-gold transition hover:border-gold/50"
+              type="button"
+              @click="confirmResetId = selectedCampaign.id"
+            >
+              ↺ Réinitialiser la campagne
             </button>
           </div>
         </div>
@@ -1058,6 +1120,19 @@ function cloneContract(contract: CampaignPlayerContract): CampaignPlayerContract
       tone="danger"
       @confirm="handleDelete(campaignToDelete.id)"
       @cancel="confirmDeleteId = null"
+    />
+
+    <ConfirmDialog
+      v-if="campaignToReset"
+      title="Réinitialiser cette campagne ?"
+      :message="`« ${campaignToReset.name} » sera conservée, mais l'historique, les sauvegardes, la progression jouée et les sessions secondaires seront effacés. La session courante et les personnages repartiront du niveau de départ.`"
+      confirm-label="Réinitialiser"
+      tone="warning"
+      icon="↺"
+      :loading="isResetting"
+      :persistent="isResetting"
+      @confirm="handleReset(campaignToReset.id)"
+      @cancel="confirmResetId = null"
     />
   </div>
 </template>

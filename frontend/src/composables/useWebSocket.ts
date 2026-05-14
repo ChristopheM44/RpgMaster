@@ -169,6 +169,11 @@ export function useWebSocket(sessionId: string) {
         gameStore.setProcessing(false)
         if (isPhaseChangePayload(msg.payload)) gameStore.applyPhaseChange(msg.payload.phase)
         break
+      case 'session_reset':
+        gameStore.reset()
+        gameStore.setConnected(true)
+        void charStore.loadSessionCharacters(sessionId)
+        break
       case 'combat_start': {
         if (isCombatStartPayload(msg.payload)) {
           const p = msg.payload

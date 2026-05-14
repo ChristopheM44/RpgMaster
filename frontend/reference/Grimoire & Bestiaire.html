@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<title>RPGMaster — Grimoire & Bestiaire</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --color-bg: #0e0d14;
+    --color-bg-elev: #181623;
+    --color-surface: #1f1c2e;
+    --color-surface-raised: #2a2640;
+    --color-border: rgba(255,235,180,0.07);
+    --color-border-strong: rgba(255,235,180,0.18);
+    --color-parchment: #f7ecd0;
+    --color-parchment-dark: rgba(247,236,208,0.75);
+    --color-text-muted: rgba(247,236,208,0.50);
+    --color-text-dim: rgba(247,236,208,0.32);
+    --color-ember: #ff8247;
+    --color-gold: #f0c764;
+    --color-gold-deep: #b88a2a;
+    --color-blood: #e84545;
+    --color-arcane: #c090ff;
+    --color-teal: #4fd8c0;
+    --color-green: #6fd96f;
+    --color-dim: #6b6580;
+    --grad-primary: linear-gradient(135deg, #ff8247, #f0c764);
+    --font-display: 'Cinzel', serif;
+    --font-serif: 'Fraunces', serif;
+    --font-body: 'Inter', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 10px;
+    --radius-xl: 14px;
+    --shadow-card-active: 0 0 24px rgba(255,130,71,0.15);
+  }
+
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--color-bg);
+    height: 100%; overflow: hidden;
+  }
+  body { font-family: var(--font-body); }
+  * { box-sizing: border-box; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }
+
+  /* Select dark styling */
+  select option {
+    background: #1f1c2e;
+    color: #f7ecd0;
+  }
+
+  /* Focus styles */
+  input:focus, select:focus {
+    border-color: var(--color-ember) !important;
+    box-shadow: 0 0 0 2px rgba(255,130,71,0.15) !important;
+  }
+
+  /* Button hover */
+  button:hover {
+    filter: brightness(1.08);
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script>
+  // Tweaks defaults — persisted via edit mode protocol
+  window.__GRIMOIRE_TWEAKS = /*EDITMODE-BEGIN*/{"view":"spells"}/*EDITMODE-END*/;
+</script>
+
+<script src="grimoire/data.js"></script>
+<script type="text/babel" src="grimoire/tweaks-panel.jsx"></script>
+<script type="text/babel" src="grimoire/spells-view.jsx"></script>
+<script type="text/babel" src="grimoire/monsters-view.jsx"></script>
+<script type="text/babel" src="grimoire/app.jsx"></script>
+
+<script type="text/babel">
+  ReactDOM.createRoot(document.getElementById('root')).render(<GrimoireApp />);
+</script>
+</body>
+</html>

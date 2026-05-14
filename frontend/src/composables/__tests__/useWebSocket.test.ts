@@ -1,6 +1,7 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { useCharacterStore } from '../../stores/character'
 import { useGameStore } from '../../stores/game'
 import { useWebSocket } from '../useWebSocket'
 
@@ -173,6 +174,34 @@ describe('useWebSocket', () => {
     expect(gameStore.isProcessing).toBe(false)
     expect(gameStore.narrativeLog).toHaveLength(0)
 
+    socket.disconnect()
+    vi.unstubAllGlobals()
+  })
+
+  it('resets local state when the campaign reset event arrives', () => {
+    const socket = useWebSocket('session-1')
+    const gameStore = useGameStore()
+    const charStore = useCharacterStore()
+    const loadCharacters = vi.spyOn(charStore, 'loadSessionCharacters').mockResolvedValue()
+
+    socket.connect('hero-1')
+    WebSocketMock.instances[0]!.open()
+    gameStore.applyPhaseChange('combat')
+    gameStore.addNarration({ text: 'Ancien journal.' })
+
+    WebSocketMock.instances[0]!.onmessage?.({
+      data: JSON.stringify({
+        event_type: 'session_reset',
+        payload: { session_id: 'session-1' },
+      }),
+    })
+
+    expect(gameStore.phase).toBe('lobby')
+    expect(gameStore.narrativeLog).toHaveLength(0)
+    expect(gameStore.connected).toBe(true)
+    expect(loadCharacters).toHaveBeenCalledWith('session-1')
+
+    loadCharacters.mockRestore()
     socket.disconnect()
     vi.unstubAllGlobals()
   })

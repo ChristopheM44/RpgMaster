@@ -14,6 +14,7 @@ class CampaignResponse(BaseModel):
     id: str
     name: str
     description: str
+    starting_level: int = 1
     session_ids: list[str]
     current_session_index: int
     character_ids: list[str]
@@ -33,6 +34,7 @@ class CampaignResponse(BaseModel):
             id=c.id,
             name=c.name,
             description=c.description,
+            starting_level=int(getattr(c, "starting_level", 1) or 1),
             session_ids=c.session_ids or [],
             current_session_index=c.current_session_index,
             character_ids=c.character_ids or [],
@@ -53,6 +55,13 @@ class AttachSessionBody(BaseModel):
 
 class AdvanceSessionBody(BaseModel):
     new_session_name: str
+
+
+class CampaignResetResponse(BaseModel):
+    campaign: CampaignResponse
+    session_id: str
+    characters_reset: int
+    sessions_removed: int
 
 
 class AwardXpBody(BaseModel):

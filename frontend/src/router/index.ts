@@ -44,6 +44,18 @@ const router = createRouter({
       name: 'campaigns',
       component: () => import('../views/CampaignView.vue'),
     },
+    {
+      path: '/grimoire',
+      name: 'grimoire',
+      component: () => import('../views/SpellsView.vue'),
+      meta: { title: 'Grimoire' },
+    },
+    {
+      path: '/bestiaire',
+      name: 'bestiaire',
+      component: () => import('../views/MonstersView.vue'),
+      meta: { title: 'Bestiaire' },
+    },
   ],
 })
 
