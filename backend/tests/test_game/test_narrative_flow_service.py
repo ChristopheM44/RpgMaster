@@ -561,7 +561,15 @@ async def test_direct_npc_social_check_keeps_roll_then_dialogue_only() -> None:
 
 
 @pytest.mark.asyncio
-async def test_npc_social_action_does_not_trigger_companion_echoes() -> None:
+async def test_npc_social_action_does_not_trigger_party_dialogue_path() -> None:
+    """Une adresse à un PNJ ne déclenche pas le chemin 'party' (cascade).
+
+    Le pipeline `respond_to_player` est réservé aux adresses au groupe ou à
+    un compagnon précis. Quand le joueur parle à un PNJ, on passe par
+    `resolve_npc_dialogue` (PNJ répond) puis `run_exploration_reactions`
+    (un seul compagnon réagit, voir Phase 3) — jamais le multi-réponse
+    `respond_to_player` du chemin party.
+    """
     active = _active_with_companions()
     active.state_data["current_scene"] = {
         "pois": [
@@ -580,7 +588,12 @@ async def test_npc_social_action_does_not_trigger_companion_echoes() -> None:
     resolver.social_conclude = AsyncMock()
     resolver.resolve_npc_dialogue = AsyncMock()
 
-    with patch("app.services.narrative_flow_service.event_bus.publish_to_session", new=AsyncMock()):
+    with patch(
+        "app.services.narrative_flow_service.event_bus.publish_to_session", new=AsyncMock()
+    ), patch(
+        "app.game.ai_player_manager.AIPlayerManager.run_exploration_reactions",
+        new=AsyncMock(return_value=(0, [])),
+    ):
         exchange = await NarrativeFlowService().handle_exploration_action(
             session_id="scene-1",
             action=_action("Je demande à Azaka d'être notre guide."),
@@ -594,3 +607,99 @@ async def test_npc_social_action_does_not_trigger_companion_echoes() -> None:
     resolver.resolve_npc_dialogue.assert_awaited_once()
     active.ai_players["thorin_1"].respond_to_player.assert_not_called()
     active.ai_players["elara_1"].respond_to_player.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_npc_dialogue_triggers_one_companion_reaction() -> None:
+    """Après la réplique du PNJ, un compagnon prend la parole (cap 1).
+
+    Reproduit le comportement d'une vraie table : quand un PJ parle à un PNJ,
+    les autres PJ écoutent et l'un d'eux peut commenter ou enchaîner. La cap à
+    1 réaction évite les cascades synchronisées.
+    """
+    active = _active_with_companions()
+    active.state_data["current_scene"] = {
+        "pois": [
+            {
+                "id": "azaka",
+                "name": "Azaka",
+                "kind": "npc",
+                "icon": "npc",
+                "description": "guide halfling",
+            }
+        ]
+    }
+    resolver = MagicMock()
+    resolver.resolve = AsyncMock(return_value=SimpleNamespace(mechanics=None))
+    resolver.resolve_npc_dialogue = AsyncMock()
+    resolver.social_conclude = AsyncMock()
+
+    reaction_mock = AsyncMock(return_value=(1, [{"speaker": "Thorin", "text": "Méfions-nous."}]))
+
+    with patch(
+        "app.services.narrative_flow_service.event_bus.publish_to_session", new=AsyncMock()
+    ), patch(
+        "app.game.ai_player_manager.AIPlayerManager.run_exploration_reactions",
+        new=reaction_mock,
+    ):
+        await NarrativeFlowService().handle_exploration_action(
+            session_id="scene-1",
+            action=_action("Je m'approche d'Azaka et lui demande conseil."),
+            active=active,
+            action_resolver=resolver,
+            db=None,
+        )
+
+    resolver.resolve_npc_dialogue.assert_awaited_once()
+    reaction_mock.assert_awaited_once()
+    assert reaction_mock.await_args.kwargs["max_reactors"] == 1
+
+
+@pytest.mark.asyncio
+async def test_npc_dialogue_reaction_skipped_when_no_ai_players() -> None:
+    """Sans compagnons IA, aucune réaction n'est déclenchée après le dialogue.
+
+    Garde-fou : on ne paie pas de LLM call inutile quand le solo player est
+    le seul humain et qu'aucun compagnon IA n'est enregistré.
+    """
+    active = ActiveSession(
+        session_id="scene-solo",
+        phase=SessionStatus.EXPLORATION,
+        state_data={
+            "characters": {"human_1": {"name": "Aria", "is_ai": False}},
+            "current_scene": {
+                "pois": [
+                    {
+                        "id": "azaka",
+                        "name": "Azaka",
+                        "kind": "npc",
+                        "icon": "npc",
+                    }
+                ]
+            },
+        },
+    )
+    # Pas d'ai_players enregistrés.
+    resolver = MagicMock()
+    resolver.resolve = AsyncMock(return_value=SimpleNamespace(mechanics=None))
+    resolver.resolve_npc_dialogue = AsyncMock()
+    resolver.social_conclude = AsyncMock()
+
+    reaction_mock = AsyncMock(return_value=(0, []))
+
+    with patch(
+        "app.services.narrative_flow_service.event_bus.publish_to_session", new=AsyncMock()
+    ), patch(
+        "app.game.ai_player_manager.AIPlayerManager.run_exploration_reactions",
+        new=reaction_mock,
+    ):
+        await NarrativeFlowService().handle_exploration_action(
+            session_id="scene-solo",
+            action=_action("Je parle à Azaka."),
+            active=active,
+            action_resolver=resolver,
+            db=None,
+        )
+
+    resolver.resolve_npc_dialogue.assert_awaited_once()
+    reaction_mock.assert_not_called()

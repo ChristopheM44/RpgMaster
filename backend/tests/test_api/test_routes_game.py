@@ -68,7 +68,10 @@ def test_opening_response_uses_opening_scene_as_physical_scene() -> None:
     assert "azaka" in poi_ids
     assert "wakanga_o_tamu" not in poi_ids
     assert "carte_tachee" in poi_ids
-    assert "Trouver la source de la malédiction" not in response.narration
+    # Le briefing public (known_objectives) doit être visible : le joueur sait
+    # pourquoi son personnage est là dès l'ouverture.
+    assert "Mission confiée" in response.narration
+    assert "Trouver la source de la malédiction" in response.narration
     assert "première scène jouable" not in response.narration
     assert "Un cap possible se dessine" not in response.narration
     assert "Vous pouvez" not in response.narration
@@ -155,7 +158,10 @@ def test_opening_response_legacy_fallback_keeps_hiring_scene_playable() -> None:
     assert "Grandfather Zitembe" not in response.narration
     assert "Syndra Silvane se tient face au groupe" in response.narration
     assert "Wakanga O'tamu" in response.narration
-    assert "Trouver la source de la malédiction de mort" not in response.narration
+    # Le briefing public (known_objectives) apparaît bien — c'est l'objectif
+    # officiel connu du groupe.
+    assert "Mission confiée" in response.narration
+    assert "Trouver la source de la malédiction de mort" in response.narration
     assert "Vous pouvez" not in response.narration
     assert response.narration.endswith("Que faites-vous ?")
 
@@ -248,10 +254,129 @@ def test_opening_response_hides_private_or_structural_meta_text() -> None:
     assert "première scène jouable" not in narration
     assert "Un cap possible se dessine" not in narration
     assert "Si les PJ échouent" not in narration
-    assert "Atteindre la Tombe de l'annihilation" not in narration
+    # known_objectives est PUBLIC (la mission officielle du groupe) et doit
+    # apparaître dans le briefing d'ouverture.
+    assert "Mission confiée" in narration
+    assert "Atteindre la Tombe de l'annihilation" in narration
     assert "Vous pouvez" not in narration
-    assert "La Guilde des Cartographes" in narration
+    # Le hook (twist secret du MJ) ne doit JAMAIS apparaître en narration
+    # visible. Il alimente le briefing privé du MJ, pas le texte lu aux
+    # joueurs.
+    assert "La Guilde des Cartographes" not in narration
     assert narration.endswith("Que faites-vous ?")
+
+
+def test_campaign_opening_text_excludes_hook_secret() -> None:
+    """La narration d'ouverture ne révèle pas le hook de campagne (secret du MJ).
+
+    Le hook contient le twist central ("le fléau est libéré", "la tombe est
+    réelle") ; il doit alimenter le briefing privé MJ, pas le texte lu aux
+    joueurs. La narration visible = briefing public + lieu + scène + PNJ.
+    """
+    from app.api.routes_game import _campaign_opening_text
+
+    campaign_context = {
+        "active_chapter": {
+            "key_locations": ["Port Nyanzaru"],
+            "opening_scene": {
+                "place": "Port Nyanzaru",
+                "venue": "Marché aux Épices",
+                "description": "Le marché bourdonne d'activité sous la chaleur tropicale.",
+                "present_npcs": [
+                    {
+                        "id": "contact",
+                        "name": "Volothamp Geddarm",
+                        "description": "un homme au chapeau à plumes",
+                    }
+                ],
+            },
+        },
+        "player_contract": {
+            "hook": (
+                "La tombe légendaire est bien réelle, "
+                "et quelqu'un cherche à en libérer le fléau."
+            ),
+            "known_objectives": [
+                "Cartographier les ruines oubliées de la jungle de Chult"
+            ],
+        },
+    }
+
+    text = _campaign_opening_text(campaign_context)
+
+    # Le secret de campagne ne doit pas apparaître.
+    assert "fléau" not in text.lower()
+    assert "tombe" not in text.lower()
+    assert "réelle" not in text.lower()
+    # La scène et l'affordance NPC restent présentes.
+    assert "Port Nyanzaru" in text or "Marché" in text
+    assert "chapeau à plumes" in text
+    assert text.endswith("Que faites-vous ?")
+
+
+def test_campaign_opening_text_surfaces_known_objective_briefing() -> None:
+    """L'ouverture inclut le briefing public (known_objectives) sans le hook.
+
+    Le joueur doit savoir POURQUOI son groupe est sur place dès l'ouverture,
+    via ``known_objectives``. Le ``hook`` (twist privé MJ) reste invisible.
+    """
+    from app.api.routes_game import _campaign_opening_text
+
+    campaign_context = {
+        "active_chapter": {
+            "opening_scene": {
+                "place": "Port Nyanzaru",
+                "venue": "Marché aux Épices",
+                "description": "Le marché grouille.",
+                "present_npcs": [
+                    {
+                        "id": "contact",
+                        "name": "Volothamp",
+                        "description": "un homme au chapeau à plumes",
+                    }
+                ],
+            },
+        },
+        "player_contract": {
+            "hook": "Le fléau de la tombe est sur le point d'être libéré.",
+            "known_objectives": [
+                "Cartographier les ruines oubliées de la jungle de Chult"
+            ],
+        },
+    }
+
+    text = _campaign_opening_text(campaign_context)
+
+    assert "Mission confiée au groupe" in text
+    assert "Cartographier les ruines oubliées" in text
+    # Le hook reste exclu.
+    assert "fléau" not in text.lower()
+    assert "tombe" not in text.lower()
+
+
+def test_campaign_opening_text_without_known_objective_skips_briefing() -> None:
+    """Sans known_objectives, l'ouverture n'inclut pas de ligne de briefing.
+
+    Le système doit dégrader proprement quand le contrat joueur ne porte pas
+    d'objectif explicite (campagne libre, partie d'amorce, etc.).
+    """
+    from app.api.routes_game import _campaign_opening_text
+
+    campaign_context = {
+        "active_chapter": {
+            "opening_scene": {
+                "place": "Port Nyanzaru",
+                "venue": "Marché aux Épices",
+                "description": "Le marché grouille.",
+                "present_npcs": [],
+            },
+        },
+        "player_contract": {},
+    }
+
+    text = _campaign_opening_text(campaign_context)
+    assert "Mission confiée" not in text
+    assert text.endswith("Que faites-vous ?")
 
 
 @pytest.mark.asyncio

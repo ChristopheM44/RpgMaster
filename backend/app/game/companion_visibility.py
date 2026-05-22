@@ -97,16 +97,63 @@ _FIRST_PERSON_MARKERS = (
 )
 
 
+def anonymize_npc(npc: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of npc with name/id redacted if not yet known to the party.
+
+    A PNJ is considered unknown when ``known_to_party`` is explicitly ``False``.
+    Absence of the field (older saves) is treated as ``True`` for backward compat.
+    """
+    if npc.get("known_to_party", True):
+        return npc
+    anon = deepcopy(npc)
+    description = str(anon.get("description") or "").strip()
+    display = description[:60] if description else "un inconnu"
+    anon["name"] = display
+    anon.pop("id", None)
+    return anon
+
+
 def companion_visible_game_state(state_data: dict[str, Any]) -> dict[str, Any]:
     """Return a game-state view safe for AI player companions.
 
     The GM may see the full campaign context. Companions only see table-visible
-    state plus facts already played or revealed.
+    state plus facts already played or revealed. PNJ not yet introduced to the
+    party (known_to_party=False) are anonymized: their name and id are replaced
+    by their visible description.
     """
     visible: dict[str, Any] = {}
     for key in _VISIBLE_STATE_KEYS:
         if key in state_data:
             visible[key] = deepcopy(state_data[key])
+
+    # Anonymize NPCs in current_scene.scene_layout.pois
+    current_scene = visible.get("current_scene")
+    if isinstance(current_scene, dict):
+        scene_layout = current_scene.get("scene_layout")
+        if isinstance(scene_layout, dict):
+            pois = scene_layout.get("pois")
+            if isinstance(pois, list):
+                scene_layout["pois"] = [
+                    anonymize_npc(poi) if poi.get("kind") == "npc" else poi
+                    for poi in pois
+                ]
+
+    # Anonymize NPCs in npc_states (dict keyed by npc id)
+    npc_states = visible.get("npc_states")
+    if isinstance(npc_states, dict):
+        anon_states: dict[str, Any] = {}
+        for npc_id, npc in npc_states.items():
+            if not isinstance(npc, dict):
+                anon_states[npc_id] = npc
+                continue
+            if npc.get("known_to_party", True):
+                anon_states[npc_id] = npc
+            else:
+                anon_npc = anonymize_npc(npc)
+                # Keep under the same key so structure stays consistent,
+                # but id field inside dict is stripped by anonymize_npc.
+                anon_states[npc_id] = anon_npc
+        visible["npc_states"] = anon_states
 
     campaign_context = state_data.get("campaign_context")
     if isinstance(campaign_context, dict):

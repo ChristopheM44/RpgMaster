@@ -124,8 +124,43 @@ def _detect_social_skill(text: Optional[str]) -> Optional[str]:
     return None
 
 
+_DESCRIPTION_STOP_WORDS = frozenset(
+    {
+        "un", "une", "des", "le", "la", "les", "du", "de", "au", "aux",
+        "et", "ou", "ni", "mais", "donc", "car",
+        "a", "à", "en", "dans", "sur", "sous", "par", "pour", "avec", "vers",
+        "chez", "sans", "entre", "contre",
+        "ce", "cet", "cette", "ces", "son", "sa", "ses", "leur", "leurs",
+        "mon", "ma", "mes", "ton", "ta", "tes", "notre", "nos", "votre", "vos",
+        "qui", "que", "quoi", "dont", "où",
+        "il", "elle", "ils", "elles", "lui", "eux", "moi", "toi", "soi",
+        "est", "sont", "etre", "être", "avoir", "ont", "fait", "faire",
+        "tres", "très", "bien", "plus", "moins", "tout", "tous", "toute",
+        "encore", "deja", "déjà", "aussi", "alors", "ainsi",
+        "homme", "femme", "personne", "gens",
+    }
+)
+
+
+def _description_keywords(description: str) -> set[str]:
+    """Extract salient keywords from an NPC description for fuzzy matching."""
+    normalized = _normalized_text(description)
+    tokens = re.findall(r"[a-zà-ÿ]+", normalized)
+    return {
+        token
+        for token in tokens
+        if len(token) >= 3 and token not in _DESCRIPTION_STOP_WORDS
+    }
+
+
 def _detect_social_target_id(text: Optional[str], state_data: dict[str, Any]) -> Optional[str]:
-    """Extrai l'identifiant d'un PNJ cible depuis le texte du joueur."""
+    """Extrai l'identifiant d'un PNJ cible depuis le texte du joueur.
+
+    Stratégie en deux passes :
+    1. Match par nom exact (substring) dans `npc_states` puis dans les POIs.
+    2. Match par mots-clés saillants de la description (PNJ anonymes, où le
+       joueur ne peut désigner le PNJ que par sa description).
+    """
     if not text:
         return None
     normalized = _normalized_text(text)
@@ -135,7 +170,7 @@ def _detect_social_target_id(text: Optional[str], state_data: dict[str, Any]) ->
     scene = state_data.get("current_scene", {})
     pois = scene.get("pois", []) if isinstance(scene, dict) else []
 
-    # Recherche par nom exact dans npc_states
+    # 1a. Recherche par nom exact dans npc_states.
     for npc_id, npc in npc_states.items():
         if not isinstance(npc, dict):
             continue
@@ -143,7 +178,7 @@ def _detect_social_target_id(text: Optional[str], state_data: dict[str, Any]) ->
         if name and name in normalized:
             return npc_id
 
-    # Recherche dans les POIs de la scene
+    # 1b. Recherche par nom exact dans les POIs de la scène.
     for poi in pois:
         if not isinstance(poi, dict):
             continue
@@ -151,7 +186,67 @@ def _detect_social_target_id(text: Optional[str], state_data: dict[str, Any]) ->
         if name and name in normalized:
             return str(poi.get("id", name))
 
-    return None
+    player_tokens = _description_keywords(normalized)
+    if not player_tokens:
+        return None
+
+    # 1c. Match par token saillant du nom (prénom propre, surnom unique).
+    for npc_id, npc in npc_states.items():
+        if not isinstance(npc, dict):
+            continue
+        name_tokens = _description_keywords(str(npc.get("name", "")))
+        if name_tokens & player_tokens:
+            return npc_id
+
+    for poi in pois:
+        if not isinstance(poi, dict) or not _is_npc_poi(poi):
+            continue
+        name_tokens = _description_keywords(str(poi.get("name", "")))
+        if name_tokens & player_tokens:
+            poi_id = str(poi.get("id") or "").strip()
+            if poi_id:
+                return poi_id
+
+    # 2. Match par mots-clés de description (PNJ anonymes / désignations
+    # descriptives type "l'homme au chapeau").
+
+    candidates: list[tuple[str, int, bool]] = []
+    seen_ids: set[str] = set()
+
+    for poi in pois:
+        if not isinstance(poi, dict) or not _is_npc_poi(poi):
+            continue
+        poi_id = str(poi.get("id") or "").strip()
+        description = str(poi.get("description") or "")
+        if not poi_id or not description:
+            continue
+        common = player_tokens & _description_keywords(description)
+        if common:
+            candidates.append((poi_id, len(common), True))
+            seen_ids.add(poi_id)
+
+    for npc_id, npc in npc_states.items():
+        if not isinstance(npc, dict) or npc_id in seen_ids:
+            continue
+        description = str(npc.get("description") or "")
+        if not description:
+            continue
+        common = player_tokens & _description_keywords(description)
+        if common:
+            candidates.append((str(npc_id), len(common), False))
+
+    if not candidates:
+        return None
+
+    present_count = sum(1 for _, _, is_present in candidates if is_present)
+    threshold = 1 if present_count == 1 else 2
+    valid = [c for c in candidates if c[1] >= threshold]
+    if not valid:
+        return None
+
+    # Score décroissant, puis PNJ présents prioritaires.
+    valid.sort(key=lambda c: (-c[1], not c[2]))
+    return valid[0][0]
 
 
 def _is_npc_poi(poi: Any) -> bool:

@@ -92,19 +92,63 @@ def _scene_context_text(campaign_context: dict[str, Any]) -> str:
     return f"Le groupe se trouve à {location}."
 
 
+def _npc_affordance_text(opening_scene: dict[str, Any]) -> str:
+    """Build a concrete NPC affordance from the first present NPC.
+
+    Uses the NPC's visible description (appearance) so the party can act on it
+    without knowing the NPC's name. The hook/secret is intentionally excluded.
+    """
+    present_npcs = opening_scene.get("present_npcs") or []
+    if not isinstance(present_npcs, list) or not present_npcs:
+        return ""
+    first = present_npcs[0] if isinstance(present_npcs[0], dict) else {}
+    description = str(first.get("description") or "").strip()
+    action_hint = str(first.get("action_hint") or "").strip()
+    if description:
+        affordance = description[0].upper() + description[1:] if description else description
+        if action_hint:
+            return affordance
+        return affordance if affordance.endswith((".", "!", "?")) else affordance + "."
+    return ""
+
+
+def _party_briefing_text(campaign_context: dict[str, Any]) -> str:
+    """Briefing public connu du groupe à l'ouverture.
+
+    Surface ``player_contract.known_objectives`` (objectif officiel que le
+    groupe connaît) pour que les joueurs comprennent immédiatement pourquoi
+    leurs personnages sont sur place. Le ``hook`` (twist secret du MJ) reste
+    exclusivement privé.
+    """
+    objective = _opening_objective(campaign_context)
+    if not objective:
+        return ""
+    cleaned = objective.rstrip(" .!?")
+    return f"Mission confiée au groupe : {cleaned}."
+
+
 def _campaign_opening_text(campaign_context: dict[str, Any]) -> str:
-    hook_text = _hook_context_text(campaign_context)
+    """Build the visible opening narration for a campaign session.
+
+    The hook/secret (``player_contract.hook``) is intentionally excluded from
+    the visible text: it belongs to the GM's private briefing, not to the
+    opening read aloud. The public objective (``known_objectives``) is
+    surfaced so the party knows WHY it is here without spoiling the twist.
+    """
+    briefing = _party_briefing_text(campaign_context)
     scene_text = _scene_context_text(campaign_context)
     opening_scene = _opening_scene(campaign_context)
     scene_description = str(opening_scene.get("description") or "").strip()
+    npc_affordance = _npc_affordance_text(opening_scene)
 
-    parts = [
-        scene_text,
-    ]
+    parts: list[str] = []
+    if briefing:
+        parts.append(briefing)
+    parts.append(scene_text)
     if scene_description:
         parts.append(scene_description)
-    if hook_text:
-        parts.append(hook_text)
+    if npc_affordance:
+        parts.append(npc_affordance)
     parts.append("Que faites-vous ?")
     return " ".join(part for part in parts if part)
 
@@ -258,7 +302,7 @@ def _legacy_opening_present_npcs(campaign_context: Optional[dict[str, Any]]) -> 
         present.append({
             "id": _safe_id(name, f"npc_{index + 1}"),
             "name": name,
-            "description": "Personne présente pour exposer l'accroche et répondre aux questions.",
+            "description": f"Une personne du nom de {name}, présente pour vous accueillir.",
         })
         if len(present) >= 2:
             break
@@ -552,19 +596,30 @@ def _opening_response(
     for index, npc in enumerate(present_npcs):
         npc_name = str(npc.get("name") or npc.get("id") or f"PNJ {index + 1}").strip()
         npc_id = str(npc.get("id") or "").strip() or _safe_id(npc_name, f"npc_{index + 1}")
+        npc_description = str(npc.get("description") or "Personne présente dans la scène d'ouverture.")
+        if npc_name and not any(npc_name.startswith(pfx) for pfx in ("npc_", "npc ", "PNJ ")):
+            prompt_target = npc_name
+        else:
+            prompt_target = npc_description
+            if len(prompt_target) > 60:
+                prompt_target = prompt_target[:60].rsplit(' ', 1)[0] + "..."
+
         pois.append({
             "id": npc_id,
             "name": npc_name,
             "kind": "npc",
             "position": {"col": 4 + index, "row": 5},
             "icon": "npc",
-            "description": str(npc.get("description") or "Personne présente dans la scène d'ouverture."),
+            "description": npc_description,
             "action_hint": "Lui parler ou négocier avant d'agir.",
+            # PNJ non encore présenté : masqué dans la vue compagnons jusqu'à
+            # ce que le MJ le nomme ou qu'un joueur l'interpelle par son nom.
+            "known_to_party": False,
             "interactions": [
                 {
                     "label": "Parler",
                     "intent": "talk",
-                    "prompt": f"Je m'approche de {npc_name} et lui adresse la parole.",
+                    "prompt": f"Je m'approche de {prompt_target} et lui adresse la parole.",
                 }
             ],
         })

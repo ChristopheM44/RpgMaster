@@ -60,6 +60,26 @@ _MECHANICAL_ACTION_TYPES = (
 )
 
 
+def _detect_reaction_mode(recent_messages: list) -> str:
+    """Détecte si on est en ouverture de scène (open_scene) ou après une action joueur (follow_up).
+
+    Remonte l'historique en ignorant les messages des compagnons IA.
+    - Dernier message non-IA de rôle 'player' → follow_up (joueur humain a agi).
+    - Dernier message non-IA de rôle 'gm' en premier → open_scene (aucune action humaine depuis).
+    """
+    for msg in reversed(recent_messages):
+        role = getattr(msg, "role", None)
+        role_val = role.value if hasattr(role, "value") else str(role)
+        metadata = getattr(msg, "metadata", None) or {}
+        if isinstance(metadata, dict) and metadata.get("is_ai_player"):
+            continue  # Ignorer les répliques des compagnons IA
+        if role_val == "player":
+            return "follow_up"
+        if role_val == "gm":
+            return "open_scene"
+    return "open_scene"
+
+
 def _build_scene_context(messages: list) -> str:
     """Construit un résumé de scène à partir des derniers messages persistés.
 
@@ -338,6 +358,7 @@ class AIPlayerManager:
         action_resolver: "ActionResolver",
         trigger_character_id: Optional[str] = None,
         db: Optional["AsyncSession"] = None,
+        max_reactors: Optional[int] = None,
     ) -> "tuple[int, list[dict[str, str]]]":
         """Fait réagir une fois chaque compagnon IA en exploration.
 
@@ -351,12 +372,22 @@ class AIPlayerManager:
           - attack / cast_spell / shove : transition COMBAT si pending_encounter,
             sinon remplacement par une hésitation prudente.
 
+        Le contexte (recent_messages, scene_context) est **rechargé après chaque
+        réaction** pour que chaque compagnon voit ce que le précédent vient de dire.
+
+        En mode ``open_scene`` (dernière narration = MJ, aucune action joueur
+        humain depuis), un seul compagnon prend spontanément la parole — comme à
+        une vraie table. En mode ``follow_up`` (action joueur présente), le cap
+        est à 2 réactions maximum pour éviter la convergence.
+
         Args:
             session_id: session active.
             active: état mémoire.
             action_resolver: pour faire réagir le MJ après le roleplay IA.
             trigger_character_id: si défini, on saute ce personnage.
             db: session DB async pour charger l'historique et persister les actions.
+            max_reactors: cap explicite sur le nombre de compagnons qui réagissent.
+                Si None, le mode (open_scene / follow_up) fixe le cap automatiquement.
 
         Returns:
             Tuple (nombre de compagnons ayant réagi,
@@ -365,7 +396,7 @@ class AIPlayerManager:
         if not active.ai_players:
             return 0, []
 
-        # Charger l'historique une seule fois pour tous les compagnons
+        # Chargement initial du contexte + détection du mode
         recent_messages: list = []
         scene_context = ""
         if db is not None:
@@ -373,6 +404,12 @@ class AIPlayerManager:
             recent_messages = await load_recent_messages(session_id, db)
             scene_context = _build_scene_context(recent_messages)
 
+        # Déterminer le cap effectif selon le contexte si non fourni explicitement
+        if max_reactors is None:
+            mode = _detect_reaction_mode(recent_messages)
+            max_reactors = 1 if mode == "open_scene" else 2
+
+        # visible_game_state ne dépend pas des messages — calculé une fois.
         visible_game_state = companion_visible_game_state(active.state_data)
         order = list(active.turn_manager._order)
         reacted = 0
@@ -383,6 +420,8 @@ class AIPlayerManager:
             iterable = list(active.ai_players.keys())
 
         for char_id in iterable:
+            if reacted >= max_reactors:
+                break
             if char_id == trigger_character_id or char_id in seen:
                 continue
             seen.add(char_id)
@@ -534,6 +573,13 @@ class AIPlayerManager:
 
             if active.state_data.get("pending_phase_transition") == "COMBAT":
                 break
+
+            # Recharger le contexte pour que le prochain compagnon voie ce qui
+            # vient d'être dit (séquentialité : N+1 voit la réplique de N).
+            if db is not None and reacted < max_reactors:
+                from app.services.message_service import load_recent_messages
+                recent_messages = await load_recent_messages(session_id, db)
+                scene_context = _build_scene_context(recent_messages)
 
         return reacted, companion_responses
 

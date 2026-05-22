@@ -195,6 +195,11 @@ class ActionResolver:
                     ),
                 },
             )
+        # The party is actively engaging with this NPC → reveal identity to companions.
+        if isinstance(npc, dict):
+            npc["known_to_party"] = True
+        if isinstance(poi, dict):
+            poi["known_to_party"] = True
 
         npc_name = str(npc.get("name", npc_id))
         npc_personality = str(npc.get("personality_hint", "indifferent"))
@@ -226,40 +231,43 @@ class ActionResolver:
             logger.error("resolve_npc_dialogue : echec LLM : %s", exc)
             return
 
+        has_roll_request = any(a.type == "roll_request" for a in gm_resp.actions)
         dialogue_text = gm_resp.narration or ""
-        if not dialogue_text:
+
+        if not dialogue_text and not has_roll_request:
             return
 
-        await event_bus.publish_to_session(
-            session_id,
-            EventType.DIALOGUE,
-            {
-                "text": dialogue_text,
-                "speaker": npc_name,
-                "speaker_id": npc_id,
-                "speaker_kind": "npc",
-                "entry_kind": "dialogue",
-                "scene_id": str(uuid.uuid4()),
-            },
-            source="action_resolver",
-        )
-
-        if db is not None:
-            from app.models.message import MessageRole, MessageType
-            from app.services.message_service import persist_narration
-            await persist_narration(
+        if dialogue_text:
+            await event_bus.publish_to_session(
                 session_id,
-                dialogue_text,
-                npc_name,
-                db,
-                role=MessageRole.GM,
-                message_type=MessageType.DIALOGUE,
-                metadata={
+                EventType.DIALOGUE,
+                {
+                    "text": dialogue_text,
+                    "speaker": npc_name,
                     "speaker_id": npc_id,
                     "speaker_kind": "npc",
-                    "character_id": character_id,
+                    "entry_kind": "dialogue",
+                    "scene_id": str(uuid.uuid4()),
                 },
+                source="action_resolver",
             )
+
+            if db is not None:
+                from app.models.message import MessageRole, MessageType
+                from app.services.message_service import persist_narration
+                await persist_narration(
+                    session_id,
+                    dialogue_text,
+                    npc_name,
+                    db,
+                    role=MessageRole.GM,
+                    message_type=MessageType.DIALOGUE,
+                    metadata={
+                        "speaker_id": npc_id,
+                        "speaker_kind": "npc",
+                        "character_id": character_id,
+                    },
+                )
 
         from app.game.gm_response_executor import execute_gm_response
         exec_result = await execute_gm_response(
@@ -269,7 +277,78 @@ class ActionResolver:
             session_id=session_id,
             fallback_actor_id=character_id,
         )
-        if exec_result.canon_dirty and db is not None:
+        canon_dirty = exec_result.canon_dirty
+
+        # Si un jet de dés (roll_request) a été demandé par le PNJ/MJ, on passe à la deuxième étape
+        if has_roll_request and exec_result.pending_rolls:
+            first_roll = exec_result.pending_rolls[0]
+            game_state_2 = dict(active.state_data)
+            if db is not None:
+                try:
+                    game_state_2["world_maps"] = await campaign_dossier_service.map_context_for_session(
+                        session_id,
+                        db,
+                        active.state_data,
+                    )
+                except Exception as map_exc:
+                    logger.debug("resolve_npc_dialogue (step 2) : contexte cartes indisponible : %s", map_exc)
+
+            try:
+                gm_resp_2 = await self._gm.run_npc_dialogue(
+                    npc_name=npc_name,
+                    npc_personality=npc_personality,
+                    player_message=content or "",
+                    game_state=game_state_2,
+                    messages=recent_messages,
+                    roll_results=first_roll,
+                )
+
+                dialogue_text_2 = gm_resp_2.narration or ""
+                if dialogue_text_2:
+                    await event_bus.publish_to_session(
+                        session_id,
+                        EventType.DIALOGUE,
+                        {
+                            "text": dialogue_text_2,
+                            "speaker": npc_name,
+                            "speaker_id": npc_id,
+                            "speaker_kind": "npc",
+                            "entry_kind": "dialogue",
+                            "scene_id": str(uuid.uuid4()),
+                        },
+                        source="action_resolver",
+                    )
+
+                    if db is not None:
+                        from app.models.message import MessageRole, MessageType
+                        from app.services.message_service import persist_narration
+                        await persist_narration(
+                            session_id,
+                            dialogue_text_2,
+                            npc_name,
+                            db,
+                            role=MessageRole.GM,
+                            message_type=MessageType.DIALOGUE,
+                            metadata={
+                                "speaker_id": npc_id,
+                                "speaker_kind": "npc",
+                                "character_id": character_id,
+                            },
+                        )
+
+                exec_result_2 = await execute_gm_response(
+                    gm_resp_2,
+                    active,
+                    db,
+                    session_id=session_id,
+                    fallback_actor_id=character_id,
+                )
+                if exec_result_2.canon_dirty:
+                    canon_dirty = True
+            except Exception as exc:
+                logger.error("resolve_npc_dialogue (step 2) : echec LLM : %s", exc)
+
+        if canon_dirty and db is not None:
             try:
                 from app.services import campaign_dossier_service
 

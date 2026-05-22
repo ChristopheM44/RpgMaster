@@ -718,3 +718,100 @@ class TestNpcDialogueRouting:
         ]
         assert active.state_data["quests"][0]["id"] == "guide_azaka"
         synth.assert_awaited_once()
+
+    async def test_npc_dialogue_triggers_two_step_roll_resolution(
+        self,
+        db_session,
+        session_row,
+    ) -> None:
+        from app.game.event_bus import event_bus
+
+        active = ActiveSession(
+            session_id=session_row,
+            phase=SessionStatus.EXPLORATION,
+            state_data={
+                "characters": {
+                    "hero-1": {
+                        "name": "Thorvald",
+                        "level": 1,
+                        "ability_scores": {"cha": 14},
+                        "skill_proficiencies": ["persuasion"],
+                    }
+                },
+                "npc_states": {
+                    "azaka": {
+                        "name": "Azaka",
+                        "attitude": "indifferent",
+                    }
+                },
+            },
+        )
+
+        mock_gm = MagicMock()
+        mock_gm.run_npc_dialogue = AsyncMock()
+        mock_gm.run_npc_dialogue.side_effect = [
+            GMResponse(
+                narration="Azaka vous dévisage. « Prouvez-moi que je peux vous faire confiance. »",
+                actions=[
+                    GMAction(
+                        type="roll_request",
+                        params={
+                            "skill": "persuasion",
+                            "dc": 12,
+                            "target": "hero-1",
+                        },
+                    )
+                ],
+            ),
+            GMResponse(
+                narration="Azaka sourit. « Très bien, je vous crois. »",
+                actions=[
+                    GMAction(
+                        type="social_outcome",
+                        params={
+                            "npc_id": "azaka",
+                            "attitude_shift": "friendly",
+                            "note": "Azaka est convaincue.",
+                        },
+                    )
+                ],
+            ),
+        ]
+
+        resolver = ActionResolver(gm_agent=mock_gm)
+
+        publish_mock = AsyncMock()
+        with patch.object(event_bus, "publish_to_session", new=publish_mock), patch(
+            "app.services.campaign_dossier_service.synthesize_canon_for_session",
+            new=AsyncMock(),
+        ):
+            await resolver.resolve_npc_dialogue(
+                session_id=session_row,
+                content="Faites-nous confiance, Azaka.",
+                character_id="hero-1",
+                target_id="azaka",
+                active=active,
+                db=db_session,
+            )
+
+        # Vérifie que run_npc_dialogue a été appelé exactement deux fois
+        assert mock_gm.run_npc_dialogue.call_count == 2
+
+        # Premier appel : pas de roll_results
+        first_call_args = mock_gm.run_npc_dialogue.call_args_list[0].kwargs
+        assert first_call_args["roll_results"] is None
+
+        # Deuxième appel : roll_results contient le résultat du jet
+        second_call_args = mock_gm.run_npc_dialogue.call_args_list[1].kwargs
+        second_roll = second_call_args["roll_results"]
+        assert second_roll is not None
+        assert "success" in second_roll
+        assert "total" in second_roll
+        assert second_roll["character_id"] == "hero-1"
+
+        # Vérifie l'application de la conséquence finale (attitude amicale)
+        assert active.state_data["npc_states"]["azaka"]["attitude"] == "friendly"
+        assert active.state_data["npc_states"]["azaka"]["notes"] == [
+            "Azaka est convaincue."
+        ]
+

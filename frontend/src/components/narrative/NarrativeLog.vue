@@ -68,7 +68,7 @@ watch(
               v-if="entry.speaker"
               class="mr-2 text-sm font-display font-semibold"
               :class="entry.speaker_kind === 'companion' ? 'rpg-text-arcane' : 'rpg-text-gold'"
-            >{{ entry.speaker }}</span>
+            >{{ entry.speaker }} </span>
             <span class="rpg-text-main text-sm leading-relaxed">{{ entry.text }}</span>
           </div>
         </div>
@@ -82,7 +82,7 @@ watch(
             <span
               v-if="entry.speaker"
               class="rpg-text-arcane mr-2 text-sm font-display font-semibold"
-            >{{ entry.speaker }}</span>
+            >{{ entry.speaker }} </span>
             <span class="rpg-text-main text-sm">{{ entry.text }}</span>
           </div>
         </div>

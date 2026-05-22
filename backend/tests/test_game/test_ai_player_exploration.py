@@ -645,3 +645,294 @@ async def test_sync_ai_control_from_db_repairs_stale_combat_state(db_session) ->
     assert active.turn_manager.current_turn is not None
     assert active.turn_manager.current_turn.is_ai_controlled is True
     assert "sunwing_1" in active.ai_players
+
+
+# ---------------------------------------------------------------------------
+# Tests Wiggly Moore — visibilité PNJ + cap réactions + séquentialité
+# ---------------------------------------------------------------------------
+
+
+def _make_two_ai_session() -> ActiveSession:
+    """ActiveSession en EXPLORATION avec 1 joueur humain + 2 compagnons IA."""
+    state: Dict[str, Any] = {
+        "phase": "EXPLORATION",
+        "characters": {
+            "human_1": {"name": "Aria", "is_ai": False, "hp": 30, "hp_max": 30},
+            "ai_1": {"name": "Thorin", "is_ai": True, "hp": 28, "hp_max": 28, "personality": ["noble"]},
+            "ai_2": {"name": "Shade", "is_ai": True, "hp": 22, "hp_max": 22, "personality": ["cautious"]},
+        },
+    }
+    active = ActiveSession(
+        session_id="two_ai_session",
+        phase=SessionStatus.EXPLORATION,
+        state_data=state,
+    )
+    active.turn_manager._order = [
+        TurnEntry("human_1", "Aria", 0, True, False),
+        TurnEntry("ai_1", "Thorin", 0, True, True),
+        TurnEntry("ai_2", "Shade", 0, True, True),
+    ]
+    return active
+
+
+def test_anonymize_npc_masks_unknown_npc() -> None:
+    """anonymize_npc() masque nom et id d'un PNJ known_to_party=False."""
+    from app.game.companion_visibility import anonymize_npc
+
+    npc = {
+        "id": "volothamp",
+        "name": "Volothamp Geddarm",
+        "known_to_party": False,
+        "description": "un homme au chapeau à plumes",
+    }
+    result = anonymize_npc(npc)
+    assert result["name"] == "un homme au chapeau à plumes"
+    assert "id" not in result
+    assert result["known_to_party"] is False
+
+
+def test_anonymize_npc_keeps_known_npc() -> None:
+    """anonymize_npc() ne modifie pas un PNJ known_to_party=True."""
+    from app.game.companion_visibility import anonymize_npc
+
+    npc = {
+        "id": "volothamp",
+        "name": "Volothamp Geddarm",
+        "known_to_party": True,
+        "description": "un homme au chapeau à plumes",
+    }
+    result = anonymize_npc(npc)
+    assert result["name"] == "Volothamp Geddarm"
+    assert result["id"] == "volothamp"
+
+
+def test_anonymize_npc_treats_absent_known_to_party_as_true() -> None:
+    """Sans known_to_party, le NPC est traité comme connu (compat sauvegardes anciennes)."""
+    from app.game.companion_visibility import anonymize_npc
+
+    npc = {"id": "azaka", "name": "Azaka Stormfang"}
+    result = anonymize_npc(npc)
+    assert result["name"] == "Azaka Stormfang"
+    assert result["id"] == "azaka"
+
+
+def test_companion_visible_state_anonymizes_unknown_npc_in_scene() -> None:
+    """companion_visible_game_state() filtre les PNJ inconnus dans les POIs de scène."""
+    from app.game.companion_visibility import companion_visible_game_state
+
+    state_data = {
+        "current_scene": {
+            "scene_layout": {
+                "pois": [
+                    {
+                        "id": "volothamp",
+                        "name": "Volothamp Geddarm",
+                        "kind": "npc",
+                        "known_to_party": False,
+                        "description": "un homme au chapeau à plumes",
+                    },
+                    {
+                        "id": "tente_bleue",
+                        "name": "Tente bleue",
+                        "kind": "clue",
+                        "description": "Une tente bleue vive.",
+                    },
+                ]
+            }
+        },
+        "npc_states": {
+            "volothamp": {
+                "name": "Volothamp Geddarm",
+                "attitude": "friendly",
+                "known_to_party": False,
+                "description": "un homme au chapeau à plumes",
+            }
+        },
+    }
+    visible = companion_visible_game_state(state_data)
+
+    # POI NPC anonymisé
+    pois = visible["current_scene"]["scene_layout"]["pois"]
+    npc_poi = next(p for p in pois if p.get("kind") == "npc")
+    assert npc_poi["name"] == "un homme au chapeau à plumes"
+    assert "id" not in npc_poi
+
+    # POI clue inchangé
+    clue_poi = next(p for p in pois if p.get("kind") == "clue")
+    assert clue_poi["id"] == "tente_bleue"
+
+    # npc_states anonymisé
+    npc_state = visible["npc_states"]["volothamp"]
+    assert npc_state["name"] == "un homme au chapeau à plumes"
+    assert "id" not in npc_state
+
+
+def test_companion_visible_state_reveals_known_npc() -> None:
+    """Quand known_to_party=True, le nom propre du PNJ reste visible."""
+    from app.game.companion_visibility import companion_visible_game_state
+
+    state_data = {
+        "current_scene": {
+            "scene_layout": {
+                "pois": [
+                    {
+                        "id": "azaka",
+                        "name": "Azaka Stormfang",
+                        "kind": "npc",
+                        "known_to_party": True,
+                        "description": "guide halfling",
+                    },
+                ]
+            }
+        },
+        "npc_states": {},
+    }
+    visible = companion_visible_game_state(state_data)
+    pois = visible["current_scene"]["scene_layout"]["pois"]
+    npc_poi = next(p for p in pois if p.get("kind") == "npc")
+    assert npc_poi["name"] == "Azaka Stormfang"
+    assert npc_poi["id"] == "azaka"
+
+
+@pytest.mark.asyncio
+async def test_max_reactors_caps_at_one_in_open_scene() -> None:
+    """En mode open_scene (pas d'action joueur récente), un seul compagnon réagit.
+
+    Détection automatique via recent_messages vide → open_scene → max_reactors=1.
+    """
+    active = _make_two_ai_session()
+
+    for char_id, char_name in [("ai_1", "Thorin"), ("ai_2", "Shade")]:
+        agent = PlayerAgent(
+            character_id=char_id,
+            character_name=char_name,
+            personality=PlayerPersonality(traits=["noble"]),
+            client=MagicMock(),
+        )
+        agent._client.chat = AsyncMock(return_value=_roleplay_json(char_name))
+        active.ai_players[char_id] = agent
+
+    with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=AsyncMock()):
+        reacted, _ = await AIPlayerManager().run_exploration_reactions(
+            "two_ai_session", active, MagicMock(), trigger_character_id="human_1"
+        )
+
+    assert reacted == 1, "open_scene doit limiter à 1 compagnon"
+
+
+@pytest.mark.asyncio
+async def test_max_reactors_explicit_override() -> None:
+    """max_reactors explicite prend le dessus sur la détection automatique."""
+    active = _make_two_ai_session()
+
+    for char_id, char_name in [("ai_1", "Thorin"), ("ai_2", "Shade")]:
+        agent = PlayerAgent(
+            character_id=char_id,
+            character_name=char_name,
+            personality=PlayerPersonality(traits=["noble"]),
+            client=MagicMock(),
+        )
+        agent._client.chat = AsyncMock(return_value=_roleplay_json(char_name))
+        active.ai_players[char_id] = agent
+
+    with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=AsyncMock()):
+        reacted, _ = await AIPlayerManager().run_exploration_reactions(
+            "two_ai_session", active, MagicMock(),
+            trigger_character_id="human_1",
+            max_reactors=2,
+        )
+
+    assert reacted == 2, "max_reactors=2 explicite doit permettre les 2 compagnons"
+
+
+@pytest.mark.asyncio
+async def test_follow_up_mode_allows_two_reactors() -> None:
+    """En mode follow_up (action joueur dans recent_messages), cap à 2 compagnons."""
+    from types import SimpleNamespace
+    from app.game.ai_player_manager import _detect_reaction_mode
+
+    # Simuler un message joueur humain dans recent_messages
+    player_msg = SimpleNamespace(role=SimpleNamespace(value="player"), metadata={})
+    gm_msg = SimpleNamespace(role=SimpleNamespace(value="gm"), metadata={})
+
+    # Dernier non-IA est joueur → follow_up
+    assert _detect_reaction_mode([gm_msg, player_msg]) == "follow_up"
+    # Dernier non-IA est MJ → open_scene
+    assert _detect_reaction_mode([player_msg, gm_msg]) == "open_scene"
+    # Vide → open_scene
+    assert _detect_reaction_mode([]) == "open_scene"
+
+
+@pytest.mark.asyncio
+async def test_context_reloaded_between_companions() -> None:
+    """Le contexte (recent_messages) est rechargé entre deux compagnons IA.
+
+    Le compagnon 2 doit voir la réplique du compagnon 1 dans ses recent_messages.
+    """
+    from types import SimpleNamespace
+
+    active = _make_two_ai_session()
+    captured_messages: list = []
+
+    for char_id, char_name in [("ai_1", "Thorin"), ("ai_2", "Shade")]:
+        agent = MagicMock()
+        agent.character_name = char_name
+
+        async def make_roleplay(name=char_name):
+            return PlayerActionChoice(
+                action_type="talk",
+                action_description=f"{name} parle.",
+                roleplay_text=f"{name} s'avance vers l'inconnu.",
+            )
+
+        async def capture_roleplay(name=char_name, **kwargs):
+            captured_messages.append((name, list(kwargs.get("messages", []))))
+            return PlayerActionChoice(
+                action_type="talk",
+                action_description=f"{name} parle.",
+                roleplay_text=f"{name} s'avance vers l'inconnu.",
+            )
+
+        agent.roleplay = AsyncMock(side_effect=capture_roleplay)
+        active.ai_players[char_id] = agent
+
+    # Simuler un DB qui retourne de plus en plus de messages à chaque appel.
+    call_count = 0
+    initial_msg = SimpleNamespace(
+        role=SimpleNamespace(value="gm"), metadata={}, content="La scène s'ouvre."
+    )
+    thorin_msg = SimpleNamespace(
+        role=SimpleNamespace(value="player"),
+        metadata={"is_ai_player": True},
+        content="Thorin s'avance vers l'inconnu.",
+        speaker="Thorin",
+    )
+
+    async def mock_load_recent(session_id, db):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return [initial_msg]
+        return [initial_msg, thorin_msg]
+
+    mock_db = MagicMock()
+    resolver = MagicMock()
+    resolver.resolve = AsyncMock()
+
+    with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=AsyncMock()), \
+         patch("app.services.message_service.persist_narration", new=AsyncMock()), \
+         patch("app.services.message_service.load_recent_messages", new=AsyncMock(side_effect=mock_load_recent)):
+        reacted, _ = await AIPlayerManager().run_exploration_reactions(
+            "two_ai_session", active, resolver,
+            trigger_character_id="human_1",
+            max_reactors=2,
+            db=mock_db,
+        )
+
+    assert reacted == 2
+    # Thorin (premier) a vu le message initial (1 msg)
+    thorin_received = captured_messages[0][1]
+    assert len(thorin_received) == 1
+    # Shade (second) a vu le message de Thorin aussi (2 msgs)
+    shade_received = captured_messages[1][1]
+    assert len(shade_received) == 2

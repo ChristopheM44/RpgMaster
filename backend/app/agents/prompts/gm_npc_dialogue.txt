@@ -11,6 +11,12 @@ PNJ présents : {% for npc in anchor.present_npcs or [] %}{{ npc.name }}{% if no
 {% if anchor.absent_npcs %}PNJ absents : {% for npc in anchor.absent_npcs %}{{ npc.name }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}
 === FIN ANCRAGE ===
 
+{% set quest = active_quest_brief|default({}) %}
+=== QUÊTE ACTIVE (briefing public connu du groupe) ===
+Objectif principal : {{ quest.primary_objective or "(aucun objectif officiel)" }}
+{% if quest.main_quest_title %}Quête en cours : {{ quest.main_quest_title }}{% if quest.urgency %} — urgence : {{ quest.urgency }}{% endif %}{% endif %}
+=== FIN QUÊTE ===
+
 ÉTAT DU JEU :
 {{ game_state }}
 

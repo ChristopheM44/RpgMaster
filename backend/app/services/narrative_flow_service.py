@@ -253,6 +253,16 @@ class NarrativeFlowService:
                     db=db,
                     roll_results=roll_results,
                 )
+                # Spotlight pass : laisse un compagnon réagir à la réplique du
+                # PNJ, comme à une vraie table où les autres PJ écoutent et
+                # commentent l'échange. Cap à 1 pour ne pas saturer la scène.
+                await self._react_after_npc_dialogue(
+                    session_id=session_id,
+                    active=active,
+                    action_resolver=action_resolver,
+                    trigger_character_id=getattr(action, "character_id", None),
+                    db=db,
+                )
             exchange.gm_arbitrated = True
             return exchange
 
@@ -470,6 +480,39 @@ class NarrativeFlowService:
             return npc_target_id if _is_npc_poi(poi) else None
         except Exception:
             return None
+
+    @staticmethod
+    async def _react_after_npc_dialogue(
+        *,
+        session_id: str,
+        active: ActiveSession,
+        action_resolver: Any,
+        trigger_character_id: Optional[str],
+        db: Optional[AsyncSession],
+    ) -> None:
+        """Laisse un compagnon IA réagir à la réplique d'un PNJ.
+
+        Garde-fou : cap explicite à 1 compagnon pour ne pas saturer la scène
+        sociale, et silencieux si aucun compagnon IA n'est présent.
+        """
+        if not active.ai_players:
+            return
+        try:
+            from app.game.ai_player_manager import AIPlayerManager
+
+            await AIPlayerManager().run_exploration_reactions(
+                session_id,
+                active,
+                action_resolver,
+                trigger_character_id=trigger_character_id,
+                db=db,
+                max_reactors=1,
+            )
+        except Exception as exc:
+            logger.error(
+                "NarrativeFlowService: companion reaction after NPC dialogue failed: %s",
+                exc,
+            )
 
     async def _persist_player_message(
         self,

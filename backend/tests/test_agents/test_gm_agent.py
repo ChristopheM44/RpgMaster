@@ -218,6 +218,150 @@ def test_extract_scene_anchor_uses_location_venue() -> None:
     assert anchor["location_place"] == "Port Nyanzaru"
 
 
+def test_extract_active_quest_brief_returns_public_objective_only() -> None:
+    """_extract_active_quest_brief expose known_objectives, jamais le hook."""
+    from app.agents.gm_agent import _extract_active_quest_brief
+
+    brief = _extract_active_quest_brief({
+        "campaign_context": {
+            "player_contract": {
+                "hook": "La tombe est réelle et quelqu'un veut libérer le fléau.",
+                "known_objectives": [
+                    "Cartographier les ruines oubliées de la jungle de Chult"
+                ],
+            }
+        },
+        "quests": [
+            {
+                "id": "campaign_opening",
+                "category": "principale",
+                "title": "Mission Guilde",
+                "status": "active",
+                "urgency": "élevée",
+            }
+        ],
+    })
+
+    assert brief["primary_objective"] == (
+        "Cartographier les ruines oubliées de la jungle de Chult"
+    )
+    assert brief["main_quest_title"] == "Mission Guilde"
+    assert brief["urgency"] == "élevée"
+    # Le hook ne doit jamais fuir dans le brief.
+    flat = " ".join(str(v) for v in brief.values()).lower()
+    assert "fléau" not in flat
+    assert "tombe" not in flat
+
+
+def test_extract_active_quest_brief_handles_empty_state() -> None:
+    """Sans contrat ni quête, le brief est vide mais structuré."""
+    from app.agents.gm_agent import _extract_active_quest_brief
+
+    brief = _extract_active_quest_brief({})
+    assert brief == {
+        "primary_objective": "",
+        "main_quest_title": "",
+        "urgency": "",
+    }
+
+
+def test_select_spotlight_candidate_chooses_silent_companion() -> None:
+    """Le MJ doit pouvoir inviter le compagnon qui n'a pas parlé récemment."""
+    from types import SimpleNamespace
+
+    from app.agents.gm_agent import _select_spotlight_candidate
+
+    game_state = {
+        "characters": {
+            "aria": {"name": "Aria", "is_ai": False},
+            "thorin": {"name": "Thorin", "is_ai": True},
+            "elara": {"name": "Elara", "is_ai": True},
+        }
+    }
+    messages = [
+        SimpleNamespace(speaker="Aria", content="Je parle au cartographe."),
+        SimpleNamespace(speaker="Thorin", content="Méfions-nous."),
+    ]
+    candidate = _select_spotlight_candidate(game_state, messages)
+    assert candidate == {"id": "elara", "name": "Elara"}
+
+
+def test_select_spotlight_candidate_returns_none_when_all_spoke() -> None:
+    """Si tous les compagnons ont parlé récemment, pas d'invitation forcée."""
+    from types import SimpleNamespace
+
+    from app.agents.gm_agent import _select_spotlight_candidate
+
+    game_state = {
+        "characters": {
+            "thorin": {"name": "Thorin", "is_ai": True},
+            "elara": {"name": "Elara", "is_ai": True},
+        }
+    }
+    messages = [
+        SimpleNamespace(speaker="Thorin", content="..."),
+        SimpleNamespace(speaker="Elara", content="..."),
+    ]
+    candidate = _select_spotlight_candidate(game_state, messages)
+    assert candidate is None
+
+
+def test_select_spotlight_candidate_ignores_human_player() -> None:
+    """Seuls les compagnons IA sont candidats — pas le joueur humain."""
+    from app.agents.gm_agent import _select_spotlight_candidate
+
+    game_state = {
+        "characters": {
+            "aria": {"name": "Aria", "is_ai": False},
+        }
+    }
+    assert _select_spotlight_candidate(game_state, []) is None
+
+
+async def test_narrate_injects_quest_brief_in_prompt(gm_agent: GMAgent) -> None:
+    """Le bloc QUÊTE ACTIVE figure dans le prompt envoyé au LLM."""
+    captured: dict[str, Any] = {}
+
+    async def _capture(**kwargs):
+        captured["messages"] = kwargs.get("messages", [])
+        return _valid_gm_json()
+
+    with patch.object(gm_agent._client, "chat", new=_capture):
+        await gm_agent.narrate(
+            game_state={
+                "campaign_context": {
+                    "player_contract": {
+                        "hook": "Le fléau secret de la tombe.",
+                        "known_objectives": [
+                            "Cartographier les ruines oubliées de la jungle de Chult"
+                        ],
+                    }
+                },
+                "quests": [
+                    {
+                        "id": "campaign_opening",
+                        "category": "principale",
+                        "title": "Mission Guilde des Cartographes",
+                        "status": "active",
+                    }
+                ],
+            },
+            player_action="Je regarde autour.",
+        )
+
+    prompt = captured["messages"][-1]["content"]
+    assert "QUÊTE ACTIVE" in prompt
+    assert "Cartographier les ruines oubliées" in prompt
+    assert "Mission Guilde des Cartographes" in prompt
+    # Le bloc QUÊTE ACTIVE lui-même ne doit pas exposer le hook
+    # (le game_state brut peut contenir le hook, mais le briefing public non).
+    quest_block_start = prompt.index("QUÊTE ACTIVE")
+    quest_block_end = prompt.index("FIN QUÊTE")
+    quest_block = prompt[quest_block_start:quest_block_end]
+    assert "fléau" not in quest_block.lower()
+    assert "secret" not in quest_block.lower()
+
+
 def test_extract_scene_anchor_computes_npc_presence() -> None:
     """L'ancre catégorise les PNJs en présents/absents selon leur last_location."""
     from app.agents.gm_agent import _extract_scene_anchor

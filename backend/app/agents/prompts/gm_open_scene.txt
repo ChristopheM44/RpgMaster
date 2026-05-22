@@ -1,3 +1,9 @@
+{% set quest = active_quest_brief|default({}) %}
+=== QUÊTE ACTIVE (briefing public connu du groupe) ===
+Objectif principal : {{ quest.primary_objective or "(aucun objectif officiel)" }}
+{% if quest.main_quest_title %}Quête en cours : {{ quest.main_quest_title }}{% if quest.urgency %} — urgence : {{ quest.urgency }}{% endif %}{% endif %}
+=== FIN QUÊTE ===
+
 ÉTAT DU JEU :
 {{ game_state }}
 
@@ -15,6 +21,7 @@ Instructions :
 - Ne confonds pas information contextuelle et perception immédiate. Si le contexte décrit un PNJ qui engage le groupe pour un voyage, cela ne signifie PAS que ce PNJ est physiquement présent dans la scène.
 - Ne résume pas une scène importante déjà accomplie : fais jouer l'instant où les personnages peuvent encore poser des questions, négocier, refuser, explorer ou choisir une approche.
 - N'impose pas que les personnages aient déjà accepté une quête, déjà voyagé, déjà rencontré un guide ou déjà été téléportés, sauf si l'état joué l'établit explicitement.
+- Le bloc QUÊTE ACTIVE résume le briefing PUBLIC déjà connu du groupe (Mission confiée, objectif officiel). Tu peux y faire référence pour ancrer la scène, mais n'introduis JAMAIS un détail privé absent de ce bloc.
 - Commence par situer clairement le LIEU PHYSIQUE : endroit précis, moment, personnes visibles, état immédiat du groupe. Le contexte narratif vient après.
 - Ne laisse jamais apparaître la structure de scénario dans la narration visible : pas de "première scène jouable", "cap possible", objectif global formulé en balise, ni conséquence privée du type "si les PJ échouent".
 - Garde les affordances dans les actions structurées (`scene_layout`, cartes, journal) plutôt que sous forme de menu dans la prose.

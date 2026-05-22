@@ -1697,3 +1697,94 @@ class TestThreeActorsNarrationFormat:
         assert human_speaker == monster_speaker, (
             f"Speakers divergent : humain={human_speaker!r}, monstre={monster_speaker!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Phase 0 — Détection PNJ anonymisé par mots-clés de description
+# ---------------------------------------------------------------------------
+
+
+class TestDetectNpcTargetByDescription:
+    """Le pipeline doit identifier un PNJ anonyme désigné par sa description."""
+
+    def _state_with_anonymous_npc(self) -> dict:
+        return {
+            "current_scene": {
+                "pois": [
+                    {
+                        "id": "volothamp",
+                        "name": "Volothamp Geddarm",
+                        "kind": "npc",
+                        "known_to_party": False,
+                        "description": (
+                            "Un cartographe excentrique en chapeau à plumes, "
+                            "tenant un carnet."
+                        ),
+                    },
+                    {
+                        "id": "tente_bleue",
+                        "name": "Tente bleue",
+                        "kind": "clue",
+                        "description": "Une tente bleue vive au cœur du marché.",
+                    },
+                ]
+            },
+            "npc_states": {
+                "volothamp": {
+                    "name": "Volothamp Geddarm",
+                    "attitude": "friendly",
+                    "known_to_party": False,
+                    "description": (
+                        "Un cartographe excentrique en chapeau à plumes, "
+                        "tenant un carnet."
+                    ),
+                }
+            },
+        }
+
+    def test_descriptive_approach_matches_anonymous_npc(self) -> None:
+        from app.game.action_pipeline import resolve_npc_target_id
+
+        text = (
+            "Je m'approche de l'homme au chapeau à plumes et le salue d'un geste "
+            "désinvolte."
+        )
+        npc_id = resolve_npc_target_id(text, self._state_with_anonymous_npc())
+        assert npc_id == "volothamp"
+
+    def test_exact_name_still_wins(self) -> None:
+        from app.game.action_pipeline import resolve_npc_target_id
+
+        state = self._state_with_anonymous_npc()
+        # Le joueur l'a déjà engagé : known_to_party=True et nom visible.
+        state["npc_states"]["volothamp"]["known_to_party"] = True
+        text = "Je demande à Volothamp ce qu'il sait de la Tombe."
+        npc_id = resolve_npc_target_id(text, state)
+        assert npc_id == "volothamp"
+
+    def test_unrelated_action_returns_none(self) -> None:
+        from app.game.action_pipeline import resolve_npc_target_id
+
+        text = "Je marche jusqu'à la fontaine pour boire."
+        npc_id = resolve_npc_target_id(text, self._state_with_anonymous_npc())
+        assert npc_id is None
+
+    def test_single_present_npc_accepts_one_keyword_match(self) -> None:
+        from app.game.action_pipeline import resolve_npc_target_id
+
+        text = "J'aborde le cartographe."
+        npc_id = resolve_npc_target_id(text, self._state_with_anonymous_npc())
+        assert npc_id == "volothamp"
+
+    def test_clue_poi_is_never_matched_as_npc(self) -> None:
+        from app.game.action_pipeline import resolve_npc_target_id
+
+        state = self._state_with_anonymous_npc()
+        # On retire le PNJ pour ne laisser que la tente bleue.
+        state["current_scene"]["pois"] = [
+            poi for poi in state["current_scene"]["pois"] if poi.get("kind") != "npc"
+        ]
+        state["npc_states"] = {}
+        text = "J'examine la tente bleue au cœur du marché."
+        npc_id = resolve_npc_target_id(text, state)
+        assert npc_id is None

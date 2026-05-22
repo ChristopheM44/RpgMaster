@@ -88,6 +88,84 @@ def _compute_npc_attendance(
     return present, absent, unknown
 
 
+def _select_spotlight_candidate(
+    game_state: dict[str, Any],
+    messages: Optional[list] = None,
+) -> Optional[dict[str, str]]:
+    """Choisit un PJ qui n'a pas parlé récemment, à inviter en fin de narration.
+
+    Comme à une vraie table, le MJ peut explicitement passer la parole à un
+    joueur silencieux. On retourne le premier PJ ``is_ai=True`` qui n'apparaît
+    pas comme speaker dans les 5 derniers messages. ``None`` si tous ont parlé
+    ou si aucun compagnon IA n'est présent.
+    """
+    characters = game_state.get("characters") or {}
+    if not isinstance(characters, dict):
+        return None
+
+    recent_speakers: set[str] = set()
+    for msg in (messages or [])[-5:]:
+        speaker = ""
+        if isinstance(msg, dict):
+            speaker = str(msg.get("speaker") or msg.get("character_name") or "").strip().lower()
+        else:
+            speaker = str(getattr(msg, "speaker", "") or "").strip().lower()
+        if speaker:
+            recent_speakers.add(speaker)
+
+    for char_id, data in characters.items():
+        if not isinstance(data, dict):
+            continue
+        if not data.get("is_ai"):
+            continue
+        name = str(data.get("name") or char_id).strip()
+        if not name or name.lower() in recent_speakers:
+            continue
+        return {"id": str(char_id), "name": name}
+    return None
+
+
+def _extract_active_quest_brief(game_state: dict[str, Any]) -> dict[str, Any]:
+    """Extrait le briefing public de la quête active pour le MJ.
+
+    Surface uniquement les éléments PUBLICS (``known_objectives`` du contrat
+    joueur, titre et urgence de la quête principale active). Le ``hook``
+    secret du player_contract n'est jamais inclus — il reste exclusivement
+    privé MJ.
+    """
+    campaign = game_state.get("campaign_context") or {}
+    if not isinstance(campaign, dict):
+        campaign = {}
+    contract = campaign.get("player_contract") or {}
+    if not isinstance(contract, dict):
+        contract = {}
+
+    primary_objective = ""
+    known = contract.get("known_objectives")
+    if isinstance(known, list) and known:
+        primary_objective = str(known[0]).strip()
+
+    main_quest_title = ""
+    main_quest_urgency = ""
+    quests = game_state.get("quests") or []
+    if isinstance(quests, list):
+        for quest in quests:
+            if not isinstance(quest, dict):
+                continue
+            status = str(quest.get("status") or "").strip().lower()
+            category = str(quest.get("category") or "").strip().lower()
+            if status == "active" and category in {"principale", "main", "primary"}:
+                main_quest_title = str(quest.get("title") or "").strip()
+                main_quest_urgency = str(quest.get("urgency") or "").strip()
+                break
+
+    return {
+        "primary_objective": primary_objective,
+        "main_quest_title": main_quest_title,
+        "urgency": main_quest_urgency,
+    }
+
+
 def _extract_scene_anchor(game_state: dict[str, Any]) -> dict[str, Any]:
     """Extrait les invariants de scène pour ancrer le prompt MJ.
 
@@ -217,6 +295,8 @@ class GMAgent(BaseAgent):
             "gm_narrate.txt",
             {
                 "scene_anchor": _extract_scene_anchor(game_state),
+                "active_quest_brief": _extract_active_quest_brief(game_state),
+                "next_spotlight_candidate": _select_spotlight_candidate(game_state, messages),
                 "game_state": json.dumps(game_state, ensure_ascii=False, indent=2),
                 "player_action": delimit_user_input(player_action),
                 "roll_results": json.dumps(roll_results or {}, ensure_ascii=False, indent=2),
@@ -274,6 +354,7 @@ class GMAgent(BaseAgent):
         user_prompt = self._render_prompt(
             "gm_open_scene.txt",
             {
+                "active_quest_brief": _extract_active_quest_brief(game_state),
                 "game_state": json.dumps(game_state, ensure_ascii=False, indent=2),
                 "opening_brief": delimit_user_input(opening_brief),
                 "recent_messages": self._format_messages(messages),
@@ -336,6 +417,7 @@ class GMAgent(BaseAgent):
             "gm_npc_dialogue.txt",
             {
                 "scene_anchor": _extract_scene_anchor(state),
+                "active_quest_brief": _extract_active_quest_brief(state),
                 "game_state": json.dumps(state, ensure_ascii=False, indent=2),
                 "npc_name": npc_name,
                 "npc_personality": npc_personality,
