@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { adminApi } from '../../services/api'
 import type { LlmProvider, OllamaHealthResponse, LlmSettingsUpdate } from '../../types'
 
@@ -43,6 +43,12 @@ const clearApiKey = ref(false)
 // Modèles (communs aux deux modes)
 const gmModel = ref('')
 const playerModel = ref('')
+
+const sortedModels = computed(() =>
+  [...(health.value?.models ?? [])].sort((a, b) =>
+    a.localeCompare(b, 'fr', { numeric: true, sensitivity: 'base' }),
+  ),
+)
 
 async function loadSettings() {
   try {
@@ -248,11 +254,11 @@ onMounted(async () => {
         <div class="space-y-1">
           <label class="block text-sm font-medium text-parchment/80">Modèle Maître du Jeu</label>
           <select
-            v-if="health && health.models.length > 0"
+            v-if="sortedModels.length > 0"
             v-model="gmModel"
             class="w-full px-3 py-2 rounded-lg bg-ink/60 border border-parchment/20 text-parchment text-sm focus:outline-none focus:border-arcane/60"
           >
-            <option v-for="m in health.models" :key="m" :value="m">{{ m }}</option>
+            <option v-for="m in sortedModels" :key="m" :value="m">{{ m }}</option>
           </select>
           <input
             v-else
@@ -265,23 +271,23 @@ onMounted(async () => {
             v-if="health"
             :class="[
               'inline-block px-1.5 py-0.5 rounded text-xs',
-              health.models.includes(gmModel)
+              sortedModels.includes(gmModel)
                 ? 'bg-green-900/40 text-green-300'
                 : 'bg-yellow-900/40 text-yellow-300',
             ]"
           >
-            {{ health.models.includes(gmModel) ? 'Installé' : 'Non installé' }}
+            {{ sortedModels.includes(gmModel) ? 'Installé' : 'Non installé' }}
           </span>
         </div>
 
         <div class="space-y-1">
           <label class="block text-sm font-medium text-parchment/80">Modèle Joueurs IA</label>
           <select
-            v-if="health && health.models.length > 0"
+            v-if="sortedModels.length > 0"
             v-model="playerModel"
             class="w-full px-3 py-2 rounded-lg bg-ink/60 border border-parchment/20 text-parchment text-sm focus:outline-none focus:border-arcane/60"
           >
-            <option v-for="m in health.models" :key="m" :value="m">{{ m }}</option>
+            <option v-for="m in sortedModels" :key="m" :value="m">{{ m }}</option>
           </select>
           <input
             v-else
@@ -294,24 +300,24 @@ onMounted(async () => {
             v-if="health"
             :class="[
               'inline-block px-1.5 py-0.5 rounded text-xs',
-              health.models.includes(playerModel)
+              sortedModels.includes(playerModel)
                 ? 'bg-green-900/40 text-green-300'
                 : 'bg-yellow-900/40 text-yellow-300',
             ]"
           >
-            {{ health.models.includes(playerModel) ? 'Installé' : 'Non installé' }}
+            {{ sortedModels.includes(playerModel) ? 'Installé' : 'Non installé' }}
           </span>
         </div>
       </div>
 
       <!-- Liste des modèles disponibles -->
-      <div v-if="health && health.models.length > 0" class="space-y-2">
+      <div v-if="health && sortedModels.length > 0" class="space-y-2">
         <p class="text-sm font-medium text-parchment/70">
-          Modèles disponibles ({{ health.models.length }})
+          Modèles disponibles ({{ sortedModels.length }})
         </p>
-        <ul class="space-y-1">
+        <ul class="max-h-[11.75rem] space-y-1 overflow-y-auto pr-1">
           <li
-            v-for="model in health.models"
+            v-for="model in sortedModels"
             :key="model"
             class="flex items-center gap-2 px-3 py-1.5 rounded bg-ink/20 border border-parchment/5"
           >
