@@ -131,7 +131,8 @@ Repos :
 | Client → Serveur | `trigger_ai_reactions` | Declenchement manuel de reactions IA hors flux normal |
 | Client → Serveur | `ping` | Keepalive |
 | Serveur → Client | `session_state` | Etat courant de session, phase, tour, journal, quetes, chronique |
-| Serveur → Client | `narration` | Narration ou dialogue avec `speaker`, `speaker_kind`, `entry_kind` optionnels |
+| Serveur → Client | `narration` | Narration MJ, action visible ou système avec `speaker`, `speaker_kind`, `entry_kind` |
+| Serveur → Client | `dialogue` | Dialogue canonique compagnon / PNJ ; compat lecture legacy via `narration + entry_kind=dialogue` |
 | Serveur → Client | `roll_result` | Resultat de jet de des avec detail |
 | Serveur → Client | `combat_start` / `combat_end` | Debut / fin de combat |
 | Serveur → Client | `turn_start` / `turn_end` | Debut / fin de tour |

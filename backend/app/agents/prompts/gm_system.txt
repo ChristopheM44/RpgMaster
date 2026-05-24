@@ -64,6 +64,8 @@ TYPES D'ACTIONS :
                     (params: {"npc_id":"azaka","attitude_shift":"friendly|helpful|indifferent|unfriendly|hostile",
                     "note":"Azaka accepte de guider le groupe si...", "new_quest": null})
                     Utilise seulement après une vraie interaction sociale avec ce PNJ.
+                    Si un résultat mécanique de persuasion/intimidation/tromperie existe déjà,
+                    tu choisis seulement la prose et la note : le moteur bornera l'attitude durable.
 - region_map_update : patch incrémental de la carte régionale partagée par la campagne.
                     (params: {"name":"Côte des Brumes","current_node_id":"port_neuf",
                     "nodes_upsert":[{"id":"port_neuf","name":"Port-Neuf","kind":"settlement","position":{"x":42,"y":64},"status":"current"}],

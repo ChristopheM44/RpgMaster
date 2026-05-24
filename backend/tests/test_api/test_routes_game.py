@@ -109,9 +109,9 @@ def test_opening_response_does_not_derive_weather_and_time_from_initial_state() 
     assert "weather" not in journal.params
 
 
-def test_opening_response_legacy_fallback_keeps_hiring_scene_playable() -> None:
-    """Les anciens dossiers sans opening_scene restent une scène d'embauche jouable."""
-    from app.api.routes_game import _opening_response
+def test_opening_response_uses_migrated_legacy_opening_scene() -> None:
+    """Un ancien dossier migré vers opening_scene reste une scène d'embauche jouable."""
+    from app.api.routes_game import _infer_opening_scene_from_context, _opening_response
 
     active = SimpleNamespace(state_data={"characters": {"thorvald": {"name": "Thorvald"}}})
     campaign_context = {
@@ -138,6 +138,10 @@ def test_opening_response_legacy_fallback_keeps_hiring_scene_playable() -> None:
             "known_objectives": ["Trouver la source de la malédiction de mort"],
         },
     }
+    campaign_context["active_chapter"]["opening_scene"] = _infer_opening_scene_from_context(
+        campaign_context,
+        "Goldenthrone",
+    )
 
     response = _opening_response(active, campaign_context=campaign_context)
     journal = _action_by_type(response.actions, "journal_update")
@@ -165,6 +169,39 @@ def test_opening_response_legacy_fallback_keeps_hiring_scene_playable() -> None:
     assert "Trouver la source de la malédiction de mort" in response.narration
     assert "Vous pouvez" not in response.narration
     assert response.narration.endswith("Que faites-vous ?")
+
+
+@pytest.mark.asyncio
+async def test_missing_opening_scene_is_migrated_before_opening(monkeypatch) -> None:
+    from app.api import routes_game
+
+    campaign_context = {
+        "active_chapter": {
+            "id": "chapter_1",
+            "key_locations": ["Goldenthrone"],
+            "initial_state": "Syndra se repose chez Wakanga O'tamu.",
+            "involved_npcs": ["Syndra Silvane", "Wakanga O'tamu"],
+        },
+        "player_contract": {
+            "hook": "Syndra Silvane engage le groupe.",
+            "known_objectives": ["Trouver la source de la malédiction de mort"],
+        },
+    }
+    monkeypatch.setattr(
+        "app.services.campaign_dossier_service.campaign_for_session",
+        AsyncMock(return_value=None),
+    )
+
+    migrated = await routes_game._migrate_missing_opening_scene(
+        "session-1",
+        campaign_context,
+        AsyncMock(),
+    )
+
+    assert migrated is True
+    opening_scene = campaign_context["active_chapter"]["opening_scene"]
+    assert opening_scene["place"] == "Goldenthrone"
+    assert opening_scene["present_npcs"][0]["id"] == "syndra_silvane"
 
 
 def test_opening_response_falls_back_for_empty_context() -> None:

@@ -24,6 +24,7 @@ from app.game.companion_visibility import (
 )
 from app.game.event_bus import EventType, event_bus
 from app.game.session_manager import ActiveSession
+from app.game.visible_events import publish_visible_entry
 from app.services.message_service import load_recent_messages, persist_narration
 
 logger = logging.getLogger(__name__)
@@ -244,7 +245,7 @@ class NarrativeFlowService:
                 roll_results = getattr(resolved, "mechanics", None)
                 if not isinstance(roll_results, dict):
                     roll_results = None
-                await action_resolver.resolve_npc_dialogue(
+                dialogue_published = await action_resolver.resolve_npc_dialogue(
                     session_id=session_id,
                     content=text,
                     character_id=getattr(action, "character_id", None),
@@ -253,6 +254,15 @@ class NarrativeFlowService:
                     db=db,
                     roll_results=roll_results,
                 )
+                if not dialogue_published:
+                    await self._publish_npc_dialogue_fallback(
+                        session_id=session_id,
+                        active=active,
+                        npc_target_id=npc_target_id,
+                        db=db,
+                    )
+                    exchange.gm_arbitrated = True
+                    return exchange
                 # Spotlight pass : laisse un compagnon réagir à la réplique du
                 # PNJ, comme à une vraie table où les autres PJ écoutent et
                 # commentent l'échange. Cap à 1 pour ne pas saturer la scène.
@@ -401,9 +411,9 @@ class NarrativeFlowService:
                 continue
 
             visible_text = self._visible_companion_text(choice, char_name)
-            await event_bus.publish_to_session(
+            await publish_visible_entry(
+                event_bus,
                 session_id,
-                EventType.NARRATION,
                 {
                     "text": visible_text,
                     "speaker": char_name,
@@ -480,6 +490,50 @@ class NarrativeFlowService:
             return npc_target_id if _is_npc_poi(poi) else None
         except Exception:
             return None
+
+    @staticmethod
+    async def _publish_npc_dialogue_fallback(
+        *,
+        session_id: str,
+        active: ActiveSession,
+        npc_target_id: str,
+        db: Optional[AsyncSession],
+    ) -> None:
+        text = "Le Maître du Jeu ne parvient pas à faire répondre ce PNJ pour l'instant."
+        scene = active.state_data.get("current_scene")
+        scene_id = str(scene.get("scene_id") or "") if isinstance(scene, dict) else ""
+        payload = {
+            "text": text,
+            "speaker": "Maître du Jeu",
+            "speaker_kind": "gm",
+            "entry_kind": "system",
+            "target_id": npc_target_id,
+        }
+        if scene_id:
+            payload["scene_id"] = scene_id
+        await publish_visible_entry(
+            event_bus,
+            session_id,
+            payload,
+            source="narrative_flow",
+        )
+        if db is not None:
+            from app.models.message import MessageRole, MessageType
+
+            await persist_narration(
+                session_id,
+                text,
+                "Maître du Jeu",
+                db,
+                role=MessageRole.SYSTEM,
+                message_type=MessageType.SYSTEM,
+                metadata={
+                    "speaker_kind": "gm",
+                    "entry_kind": "system",
+                    "target": npc_target_id,
+                    "scene_id": scene_id or None,
+                },
+            )
 
     @staticmethod
     async def _react_after_npc_dialogue(

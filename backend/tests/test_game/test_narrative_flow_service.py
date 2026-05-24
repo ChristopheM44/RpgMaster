@@ -168,7 +168,7 @@ async def test_companion_dialogue_strips_gm_owned_world_result() -> None:
 
     dialogue_payload = next(
         payload for event_type, payload in published
-        if event_type == "narration" and payload.get("speaker") == "Oaken"
+        if event_type == "dialogue" and payload.get("speaker") == "Oaken"
     )
     assert "bois craque" not in dialogue_payload["text"]
     assert "pose une main sur la table" in dialogue_payload["text"]
@@ -317,7 +317,7 @@ async def test_direct_companion_action_keeps_dialogue_then_calls_gm() -> None:
     )
     assert exchange.audience == "companion"
     dialogue_payloads = [
-        payload for event_type, payload in published if event_type == "narration"
+        payload for event_type, payload in published if event_type == "dialogue"
     ]
     assert dialogue_payloads[-1]["text"] == (
         "Thorin s'accroupit à l'entrée du passage. "
@@ -441,6 +441,49 @@ async def test_world_social_action_calls_npc_dialogue_for_npc_poi_only() -> None
         "type": "skill_check",
         "success": True,
     }
+
+
+@pytest.mark.asyncio
+async def test_npc_dialogue_failure_after_suppressed_gm_narration_is_visible() -> None:
+    active = ActiveSession(
+        session_id="scene-1",
+        phase=SessionStatus.EXPLORATION,
+        state_data={
+            "characters": {"human_1": {"name": "Aria", "is_ai": False}},
+            "current_scene": {
+                "scene_id": "scene_tavern",
+                "pois": [{"id": "azaka", "name": "Azaka", "kind": "npc", "icon": "npc"}],
+            },
+        },
+    )
+    resolver = MagicMock()
+    resolver.resolve = AsyncMock(return_value=SimpleNamespace(mechanics={}))
+    resolver.social_conclude = AsyncMock()
+    resolver.resolve_npc_dialogue = AsyncMock(return_value=False)
+    published: list[tuple[str, dict]] = []
+
+    async def capture(_session_id, event_type, payload, source=None):
+        published.append((event_type, payload))
+
+    with patch("app.services.narrative_flow_service.event_bus.publish_to_session", new=capture):
+        exchange = await NarrativeFlowService().handle_exploration_action(
+            session_id="scene-1",
+            action=_action("Je demande à Azaka si elle connaît la route."),
+            active=active,
+            action_resolver=resolver,
+            db=None,
+        )
+
+    resolver.resolve.assert_awaited_once()
+    resolver.resolve_npc_dialogue.assert_awaited_once()
+    system_entries = [
+        payload
+        for event_type, payload in published
+        if event_type == EventType.NARRATION and payload.get("entry_kind") == "system"
+    ]
+    assert system_entries
+    assert system_entries[0]["target_id"] == "azaka"
+    assert exchange.gm_arbitrated is True
 
 
 @pytest.mark.asyncio

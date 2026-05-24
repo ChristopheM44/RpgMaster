@@ -442,6 +442,8 @@ class GMAgent(BaseAgent):
         user_prompt = self._render_prompt(
             "gm_social_conclude.txt",
             {
+                "scene_anchor": _extract_scene_anchor(game_state),
+                "active_quest_brief": _extract_active_quest_brief(game_state),
                 "game_state": json.dumps(game_state, ensure_ascii=False, indent=2),
                 "player_action": delimit_user_input(player_action),
                 "companion_responses": responses_text,

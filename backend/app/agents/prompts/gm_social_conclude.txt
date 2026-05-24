@@ -1,6 +1,16 @@
 ÉTAT DU JEU :
 {{ game_state }}
 
+{% set anchor = scene_anchor|default({}) %}
+=== ANCRAGE DE SCÈNE (RÈGLES DURES) ===
+Lieu actuel : {% if anchor.location_venue %}{{ anchor.location_venue }} — {{ anchor.location_place }}{% else %}{{ anchor.location_place or "lieu non précisé" }}{% endif %}{% if anchor.location_region %} (région : {{ anchor.location_region }}){% endif %}
+Moment : {{ anchor.time_of_day or "morning" }}, jour {{ anchor.day_number or 1 }}
+Météo : {{ anchor.weather or "non précisée" }}
+Ambiance établie : {{ anchor.scene_brief or "(aucun décor détaillé établi)" }}
+PNJ présents : {% for npc in anchor.present_npcs or [] %}{{ npc.name }}{% if not loop.last %}, {% endif %}{% else %}aucun PNJ nommé{% endfor %}
+{% if anchor.absent_npcs %}PNJ absents : {% for npc in anchor.absent_npcs %}{{ npc.name }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}
+=== FIN ANCRAGE ===
+
 ACTION DU JOUEUR :
 {{ player_action }}
 
@@ -14,6 +24,7 @@ Instructions :
 - Le groupe vient d'échanger — conclus la scène et ouvre sur la suite (départ, transition, action imminente).
 - Ne répète pas les répliques déjà dites par les compagnons.
 - Pas de dialogue inventé pour les compagnons — uniquement la narration de transition.
+- L'ANCRAGE DE SCÈNE est la vérité physique : ne déplace pas le groupe et n'invente pas de décor contradictoire.
 - Ancre dans le lieu, l'ambiance, le mouvement du groupe.
 - Si aucune action mécanique n'est requise, laisse le tableau "actions" vide [].
 - action_intent doit être "social".

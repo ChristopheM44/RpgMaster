@@ -136,7 +136,9 @@ Le prompt de combat impose :
 
 ## Événements WebSocket enrichis
 
-Le payload `narration` accepte maintenant des champs optionnels :
+Le dialogue est canonique en `event_type="dialogue"` pour les compagnons et les PNJ.
+Les actions visibles et la narration MJ restent en `event_type="narration"`.
+Les anciens `narration + entry_kind="dialogue"` restent acceptés côté frontend en lecture.
 
 ```json
 {
@@ -154,7 +156,28 @@ Valeurs prévues :
 - `speaker_kind` : `gm`, `human`, `companion`, `npc`, `monster`
 - `entry_kind` : `narration`, `dialogue`, `action`, `system`
 
-Ces champs sont optionnels. Les anciens clients peuvent continuer à lire `text` et `speaker`.
+Ces champs sont optionnels en lecture, mais les nouvelles publications backend les renseignent
+pour les dialogues et actions compagnons/PNJ.
+
+## État Et Social
+
+`current_scene` est stocké sous forme plate : `current_scene.pois`, `current_scene.exits`,
+`current_scene.party_positions`. La lecture de `current_scene.scene_layout.pois` reste tolérée
+uniquement pour les anciennes sauvegardes.
+
+Les dossiers de campagne sans `opening_scene` sont migrés à l'ouverture de session :
+une scène canonique est inférée, écrite dans `campaign_context.active_chapter.opening_scene`
+et persistée dans le dossier GM quand il existe.
+
+Les compagnons IA voient un état anonymisé : un PNJ de `current_scene.pois` ou `npc_states`
+avec `known_to_party=false` perd son `id` et affiche sa description visible.
+
+`social_outcome` est borné par le moteur après un `skill_check` social :
+
+- ordre d'attitude : `hostile < unfriendly < indifferent < friendly < helpful` ;
+- succès : amélioration maximale d'un cran ;
+- échec : aucune amélioration possible, dégradation maximale d'un cran ;
+- si le LLM n'émet pas de `social_outcome`, le moteur applique l'issue minimale déterministe.
 
 ## Frontend
 
@@ -172,7 +195,7 @@ Ces champs sont optionnels. Les anciens clients peuvent continuer à lire `text`
 - jets ;
 - système.
 
-`stores/game.ts` mappe `entry_kind="dialogue"` vers une entrée `dialogue`, sans casser les narrations existantes.
+`stores/game.ts` mappe `event_type="dialogue"` et le legacy `entry_kind="dialogue"` vers une entrée `dialogue`.
 
 ## Persistance
 
@@ -181,7 +204,9 @@ Aucune migration DB n'a été ajoutée.
 Les informations de scène sont stockées dans `Message.metadata_` :
 
 - `scene_id`
+- `speaker_id`
 - `speaker_kind`
+- `entry_kind`
 - `audience`
 - `addressed_to`
 - `is_ai_player`
@@ -198,7 +223,10 @@ Les messages compagnons sont persistés avec `role=player` et `message_type=dial
 - `backend/app/agents/combat_gm_agent.py` : MJ combat spécialisé.
 - `backend/app/agents/prompts/gm_combat_system.txt` : system prompt combat.
 - `backend/app/game/action_pipeline.py` : routage MJ narratif / MJ combat.
-- `backend/app/game/action_resolver.py` : injection `combat_gm_agent`, flag `persist_actor_action`.
+- `backend/app/game/action_resolver.py` : injection `combat_gm_agent`, dialogue PNJ.
+- `backend/app/game/visible_events.py` : routage canonique `dialogue` / `narration`.
+- `backend/app/game/social_resolution.py` : bornes déterministes des attitudes PNJ.
+- `backend/app/game/companion_visibility.py` : anonymisation de l'état visible compagnon.
 - `backend/app/api/ws_game.py` : champs WebSocket `addressed_to`, `audience`, `scene_id` et branche exploration.
 - `frontend/src/components/common/ActionBar.vue` : ciblage compagnon.
 - `frontend/src/components/narrative/NarrativeLog.vue` : rendu dialogue.

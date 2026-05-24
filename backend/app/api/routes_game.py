@@ -307,7 +307,7 @@ def _opening_scene_has_content(scene: dict[str, Any]) -> bool:
     )
 
 
-def _legacy_opening_present_npcs(
+def _infer_opening_present_npcs(
     campaign_context: Optional[dict[str, Any]],
 ) -> list[dict[str, str]]:
     if not isinstance(campaign_context, dict):
@@ -335,7 +335,7 @@ def _legacy_opening_present_npcs(
         })
         if len(present) >= 2:
             break
-    host = _legacy_opening_host(campaign_context, present)
+    host = _infer_opening_host(campaign_context, present)
     if host is not None:
         present_ids = {npc["id"] for npc in present}
         if host["id"] not in present_ids:
@@ -347,7 +347,7 @@ def _legacy_opening_present_npcs(
     return present
 
 
-def _legacy_opening_host(
+def _infer_opening_host(
     campaign_context: Optional[dict[str, Any]],
     present_npcs: list[dict[str, str]],
 ) -> Optional[dict[str, str]]:
@@ -383,12 +383,12 @@ def _normalize_for_match(value: str) -> str:
     return re.sub(r"\s+", " ", ascii_text).strip()
 
 
-def _legacy_opening_description(
+def _infer_opening_description(
     campaign_context: Optional[dict[str, Any]],
     present_npcs: list[dict[str, str]],
 ) -> str:
     if present_npcs:
-        host = _legacy_opening_host(campaign_context, present_npcs)
+        host = _infer_opening_host(campaign_context, present_npcs)
         if host is not None:
             primary_names = [npc["name"] for npc in present_npcs if npc["id"] != host["id"]]
             primary = ", ".join(primary_names) or "La personne qui a convoqué le groupe"
@@ -408,17 +408,17 @@ def _legacy_opening_description(
     return (first_sentence + ".")[:300] if first_sentence else ""
 
 
-def _legacy_opening_scene(
+def _infer_opening_scene_from_context(
     campaign_context: Optional[dict[str, Any]],
     fallback_place: str,
 ) -> dict[str, Any]:
-    present_npcs = _legacy_opening_present_npcs(campaign_context)
-    host = _legacy_opening_host(campaign_context, present_npcs)
+    present_npcs = _infer_opening_present_npcs(campaign_context)
+    host = _infer_opening_host(campaign_context, present_npcs)
     return {
         "region": "",
         "place": fallback_place,
         "venue": f"Chez {host['name']}" if host is not None else None,
-        "description": _legacy_opening_description(campaign_context, present_npcs),
+        "description": _infer_opening_description(campaign_context, present_npcs),
         "present_npcs": present_npcs,
         "visible_clues": [],
         "exits": [],
@@ -437,16 +437,6 @@ def _opening_scene(campaign_context: Optional[dict[str, Any]]) -> dict[str, Any]
             chapter = {}
     raw = chapter.get("opening_scene")
     scene = raw if isinstance(raw, dict) else {}
-    if not _opening_scene_has_content(scene):
-        legacy_scene = _legacy_opening_scene(campaign_context, fallback_place)
-        scene = {
-            **legacy_scene,
-            **{
-                key: value
-                for key, value in scene.items()
-                if value not in (None, "", [], {})
-            },
-        }
 
     place = str(scene.get("place") or scene.get("location_place") or fallback_place).strip()
     region = str(scene.get("region") or scene.get("location_region") or "").strip()
@@ -472,6 +462,56 @@ def _opening_scene(campaign_context: Optional[dict[str, Any]]) -> dict[str, Any]
         "time_of_day": time_of_day,
         "weather": weather,
     }
+
+
+async def _migrate_missing_opening_scene(
+    session_id: str,
+    campaign_context: Optional[dict[str, Any]],
+    db: AsyncSession,
+) -> bool:
+    if not isinstance(campaign_context, dict):
+        return False
+    chapter = campaign_context.get("active_chapter")
+    if not isinstance(chapter, dict):
+        return False
+    raw_scene = chapter.get("opening_scene")
+    scene = raw_scene if isinstance(raw_scene, dict) else {}
+    if _opening_scene_has_content(scene):
+        return False
+
+    fallback_place = _first_key_location(campaign_context) or "un lieu de départ"
+    inferred = _infer_opening_scene_from_context(campaign_context, fallback_place)
+    merged = {
+        **inferred,
+        **{
+            key: value
+            for key, value in scene.items()
+            if value not in (None, "", [], {})
+        },
+    }
+    chapter["opening_scene"] = merged
+
+    from app.services import campaign_dossier_service
+
+    campaign = await campaign_dossier_service.campaign_for_session(session_id, db)
+    if campaign is None:
+        return True
+    dossier = await campaign_dossier_service.get_dossier(campaign.id, db)
+    if dossier is None or not isinstance(dossier.gm_dossier, dict):
+        return True
+
+    chapters = dossier.gm_dossier.get("chapters")
+    if isinstance(chapters, list):
+        active_chapter_id = str(dossier.active_chapter_id or chapter.get("id") or "")
+        for dossier_chapter in chapters:
+            if not isinstance(dossier_chapter, dict):
+                continue
+            if active_chapter_id and dossier_chapter.get("id") != active_chapter_id:
+                continue
+            dossier_chapter["opening_scene"] = merged
+            break
+    await db.commit()
+    return True
 
 
 def _opening_scene_location_label(opening_scene: dict[str, Any]) -> str:
@@ -1235,6 +1275,7 @@ async def start_game(
         db,
     )
     if campaign_context is not None:
+        await _migrate_missing_opening_scene(session_id, campaign_context, db)
         active.state_data["campaign_context"] = campaign_context
     else:
         active.state_data.pop("campaign_context", None)

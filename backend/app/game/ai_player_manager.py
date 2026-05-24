@@ -25,12 +25,14 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from app.agents.player_agent import _NON_JSON_LLM_ERROR
 from app.agents.schemas import PlayerActionChoice
+from app.game.action_mechanics import _load_spells
 from app.game.companion_visibility import (
     companion_visible_game_state,
     sanitize_companion_visible_text,
 )
 from app.game.constants import INACTIVE_STATUSES
 from app.game.event_bus import EventType, event_bus
+from app.game.visible_events import publish_visible_entry
 from app.llm.budget import (
     is_sober_mode,
 )
@@ -58,7 +60,7 @@ _EXPLORATION_ARBITRAGE_ACTIONS = {"examine", "move", "use_item", "help"}
 _MECHANICAL_ACTION_TYPES = (
     _COMBAT_STARTING_ACTIONS
     | _EXPLORATION_ARBITRAGE_ACTIONS
-    | {"dash", "disengage", "dodge", "hide", "stabilize", "death_save"}
+    | {"dash", "disengage", "dodge", "hide", "stabilize", "death_save", "wait"}
 )
 
 
@@ -103,7 +105,7 @@ def _build_scene_context(messages: list) -> str:
     return "\n".join(p for p in [last_gm, last_player] if p)
 
 
-def register_ai_player(active: "ActiveSession", char_id: str, cdata: dict[str, Any]) -> None:
+def register_ai_player(active: ActiveSession, char_id: str, cdata: dict[str, Any]) -> None:
     """Instancie et enregistre un PlayerAgent pour un compagnon IA donné.
 
     Idempotent : ne recrée pas l'agent s'il est déjà présent dans
@@ -135,13 +137,13 @@ def register_ai_player(active: "ActiveSession", char_id: str, cdata: dict[str, A
     )
 
 
-def unregister_ai_player(active: "ActiveSession", char_id: str) -> None:
+def unregister_ai_player(active: ActiveSession, char_id: str) -> None:
     """Retire le PlayerAgent d'un personnage (passage sous contrôle humain)."""
     if active.ai_players.pop(char_id, None) is not None:
         logger.info("unregister_ai_player: PlayerAgent retiré pour %s.", char_id)
 
 
-def rebuild_ai_players(active: "ActiveSession") -> int:
+def rebuild_ai_players(active: ActiveSession) -> int:
     """Reconstruit le registre ``ai_players`` à partir de ``state_data['characters']``.
 
     Appelé à l'ouverture d'une session pour restaurer les agents après un
@@ -177,9 +179,9 @@ class AIPlayerManager:
     async def process_ai_turns(
         self,
         session_id: str,
-        active: "ActiveSession",
-        action_resolver: "ActionResolver",
-        db: Optional["AsyncSession"] = None,
+        active: ActiveSession,
+        action_resolver: ActionResolver,
+        db: Optional[AsyncSession] = None,
         max_turns: Optional[int] = None,
     ) -> int:
         """Trigger all consecutive AI-controlled PC turns from the current entry.
@@ -293,16 +295,22 @@ class AIPlayerManager:
                     action = _WAIT_ACTION
 
             visible_text = self._visible_action_text(action, current.name)
+            scene_id = str(uuid.uuid4())
+            entry_kind = "dialogue" if action.action_type == "talk" else "action"
 
             # Broadcast the AI player's visible intention first
-            await event_bus.publish_to_session(
+            await publish_visible_entry(
+                event_bus,
                 session_id,
-                EventType.NARRATION,
                 {
                     "text": visible_text,
                     "speaker": current.name,
+                    "speaker_id": current.combatant_id,
+                    "speaker_kind": "companion",
+                    "entry_kind": entry_kind,
                     "action_type": action.action_type,
                     "is_ai_player": True,
+                    "scene_id": scene_id,
                 },
                 source="ai_player_manager",
             )
@@ -316,12 +324,20 @@ class AIPlayerManager:
                     current.name,
                     db,
                     role=MessageRole.PLAYER,
-                    message_type=MessageType.ACTION,
+                    message_type=(
+                        MessageType.DIALOGUE
+                        if entry_kind == "dialogue"
+                        else MessageType.ACTION
+                    ),
                     metadata={
                         "is_ai_player": True,
+                        "speaker_id": current.combatant_id,
+                        "speaker_kind": "companion",
+                        "entry_kind": entry_kind,
                         "character_id": current.combatant_id,
                         "action_type": action.action_type,
                         "target": action.target,
+                        "scene_id": scene_id,
                     },
                 )
 
@@ -330,7 +346,7 @@ class AIPlayerManager:
                 await action_resolver.resolve(
                     session_id=session_id,
                     action_type=action.action_type,
-                    content=f"[Compagnon IA] {action.action_description}",
+                    content=self._companion_action_prompt(action, current.name),
                     character_id=current.combatant_id,
                     target_id=action.target,
                     active=active,
@@ -356,12 +372,12 @@ class AIPlayerManager:
     async def run_exploration_reactions(
         self,
         session_id: str,
-        active: "ActiveSession",
-        action_resolver: "ActionResolver",
+        active: ActiveSession,
+        action_resolver: ActionResolver,
         trigger_character_id: Optional[str] = None,
-        db: Optional["AsyncSession"] = None,
+        db: Optional[AsyncSession] = None,
         max_reactors: Optional[int] = None,
-    ) -> "tuple[int, list[dict[str, str]]]":
+    ) -> tuple[int, list[dict[str, str]]]:
         """Fait réagir une fois chaque compagnon IA en exploration.
 
         Contrairement à :meth:`process_ai_turns` (pensé pour le combat), cette
@@ -573,7 +589,7 @@ class AIPlayerManager:
                     await action_resolver.resolve(
                         session_id=session_id,
                         action_type=action.action_type,
-                        content=f"[Compagnon IA] {action.action_description}",
+                        content=self._companion_action_prompt(action, char_name),
                         character_id=char_id,
                         target_id=action.target,
                         active=active,
@@ -619,9 +635,9 @@ class AIPlayerManager:
         entry_kind: str,
         scene_id: str,
     ) -> None:
-        await event_bus.publish_to_session(
+        await publish_visible_entry(
+            event_bus,
             session_id,
-            EventType.NARRATION,
             {
                 "text": text,
                 "speaker": char_name,
@@ -665,9 +681,8 @@ class AIPlayerManager:
                 db=db,
             )
             if not isawaitable(result):
-                return False
-            await result
-            return True
+                return bool(result)
+            return bool(await result)
         except Exception as exc:
             logger.error(
                 "run_exploration_reactions: relais dialogue PNJ échoué pour %s : %s",
@@ -857,7 +872,7 @@ class AIPlayerManager:
     @staticmethod
     async def _get_action(
         agent: Any,
-        active: "ActiveSession",
+        active: ActiveSession,
         available_actions: Optional[list[str]] = None,
     ) -> PlayerActionChoice:
         """Ask the agent for an action based on the current game phase."""
@@ -908,9 +923,9 @@ class AIPlayerManager:
         if not isinstance(known_spells, list) or not known_spells:
             return False
         try:
-            from app.game.action_resolver import _load_spells
             spells = _load_spells()
-        except Exception:
+        except Exception as exc:
+            logger.warning("AIPlayerManager: chargement des sorts impossible: %s", exc)
             return False
         for spell_id in known_spells:
             spell = spells.get(str(spell_id))
@@ -986,9 +1001,9 @@ class AIPlayerManager:
             return None
 
         try:
-            from app.game.action_resolver import _load_spells
             spells = _load_spells()
-        except Exception:
+        except Exception as exc:
+            logger.warning("AIPlayerManager: chargement des sorts impossible: %s", exc)
             return None
 
         wanted = cls._normalize_text(raw_spell)
@@ -1149,6 +1164,11 @@ class AIPlayerManager:
 
     @classmethod
     def _visible_action_text(cls, action: PlayerActionChoice, character_name: str) -> str:
+        if action.action_type == "wait" and str(action.roleplay_text or "").strip():
+            return sanitize_companion_visible_text(
+                action.roleplay_text,
+                character_name=character_name,
+            )
         if action.action_type not in _MECHANICAL_ACTION_TYPES:
             return sanitize_companion_visible_text(
                 action.roleplay_text,
@@ -1166,6 +1186,23 @@ class AIPlayerManager:
         if text[-1] not in ".!?…":
             text += "."
         return sanitize_companion_visible_text(text, character_name=character_name)
+
+    @classmethod
+    def _companion_action_prompt(
+        cls,
+        action: PlayerActionChoice,
+        character_name: str,
+    ) -> str:
+        description = str(action.action_description or "").strip()
+        if not description:
+            description = str(action.roleplay_text or action.action_type).strip()
+        if not description:
+            return f"{character_name} agit."
+        if description.casefold().startswith(character_name.casefold()):
+            text = description
+        else:
+            text = f"{character_name} {cls._lowercase_initial(description)}"
+        return text if text[-1] in ".!?…" else f"{text}."
 
     @staticmethod
     def _lowercase_initial(text: str) -> str:

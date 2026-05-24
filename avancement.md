@@ -55,8 +55,12 @@ Refonte du flux d'exploration pour se rapprocher d'une vraie table de JDR.
 - `NarrativeFlowService` orchestre les scènes hors combat : détection d'audience, réponses des compagnons IA, arbitrage MJ si nécessaire.
 - Le WebSocket `action` accepte `addressed_to`, `audience` et `scene_id`.
 - Les payloads `narration` sont enrichis avec `speaker_id`, `speaker_kind`, `entry_kind` et `scene_id`, tout en restant rétrocompatibles.
+- Les dialogues compagnon / PNJ utilisent maintenant l'événement canonique `dialogue`; le frontend garde la compatibilité `narration + entry_kind=dialogue`.
 - `PlayerAgent.respond_to_player()` permet un vrai dialogue ciblé avec un compagnon IA via le nouveau prompt `player_dialogue.txt`.
 - Les actions arbitrables d'un compagnon (`examine`, `move`, `use_item`, `help`) publient d'abord son dialogue naturel, puis repassent par le MJ pour préserver la transition de scène, même en mode sobre.
+- `current_scene.pois` est la forme canonique plate, avec anonymisation des PNJ inconnus pour les compagnons IA.
+- Les conséquences `social_outcome` sont bornées par le résultat mécanique du jet social ; le LLM ne choisit que la prose et une note dans la plage autorisée.
+- Les dossiers de campagne sans `opening_scene` sont migrés à l'ouverture de session vers une scène canonique persistée.
 - `CombatGMAgent` isole la narration de combat avec un contexte compact et le prompt `gm_combat_system.txt`.
 - `ActionPipeline` route les appels vers le MJ narratif ou le MJ combat selon la phase.
 
@@ -221,7 +225,7 @@ npm run dev
 ```bash
 cd backend
 source .venv/bin/activate
-pytest tests/test_engine/ -v              # Tests moteur uniquement
+pytest backend/tests/test_engine/ -v      # Tests moteur uniquement depuis la racine du repo
 pytest --cov=app --cov-report=term-missing  # Couverture complete
 ```
 
@@ -509,7 +513,7 @@ Architecture complète de la vue de jeu avec layout responsive.
 
 | Composant | Fichier | Rôle |
 |-----------|---------|------|
-| `NarrativeLog` | `narrative/NarrativeLog.vue` | Scroll de narration (4 types : narration MJ, action joueur, jet de dés, système) avec auto-scroll |
+| `NarrativeLog` | `narrative/NarrativeLog.vue` | Scroll de narration (5 types : narration MJ, dialogue, action joueur, jet de dés, système) avec auto-scroll |
 | `DiceRollResult` | `narrative/DiceRollResult.vue` | Affichage structuré d'un jet : notation, dés individuels (rouge/doré sur 1/20), modificateur, total coloré succès/échec |
 | `CombatTracker` | `combat/CombatTracker.vue` | Liste d'initiative triée, barre de PV colorée (vert→jaune→rouge), badge conditions, indicateur tour actif |
 | `CharacterSummary` | `character/CharacterSummary.vue` | Fiche condensée : identité, barre PV, grille 6 caractéristiques avec modificateurs, badges conditions |

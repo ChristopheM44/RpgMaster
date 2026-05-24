@@ -392,6 +392,128 @@ class TestPipelineExecutorUnits:
         assert bus.published[-1][0] == EventType.SCENE_LAYOUT_CHANGED
         assert bus.published[-1][1]["scene"] == scene
 
+    async def test_social_outcome_failure_cannot_improve_attitude(self) -> None:
+        active = ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.EXPLORATION,
+            state_data={"npc_states": {"azaka": {"name": "Azaka", "attitude": "indifferent"}}},
+        )
+        bus = _FakeBus()
+
+        await GMResponseExecutor(bus).execute_gm_response(
+            AgentResponse(
+                content="",
+                actions=[
+                    GMAction(
+                        type="social_outcome",
+                        params={"npc_id": "azaka", "attitude_shift": "helpful"},
+                    )
+                ],
+            ),
+            active,
+            session_id=SESSION_ID,
+            social_roll_results={
+                "type": "skill_check",
+                "success": False,
+                "social_target_id": "azaka",
+            },
+        )
+
+        assert active.state_data["npc_states"]["azaka"]["attitude"] == "indifferent"
+        social_events = [p for et, p in bus.published if et == EventType.SOCIAL_OUTCOME]
+        assert social_events[-1]["clamped"] is True
+        assert social_events[-1]["roll_success"] is False
+
+    async def test_social_outcome_success_improves_at_most_one_step(self) -> None:
+        active = ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.EXPLORATION,
+            state_data={"npc_states": {"azaka": {"name": "Azaka", "attitude": "indifferent"}}},
+        )
+
+        await GMResponseExecutor(_FakeBus()).execute_gm_response(
+            AgentResponse(
+                content="",
+                actions=[
+                    GMAction(
+                        type="social_outcome",
+                        params={"npc_id": "azaka", "attitude_shift": "helpful"},
+                    )
+                ],
+            ),
+            active,
+            session_id=SESSION_ID,
+            social_roll_results={
+                "type": "skill_check",
+                "success": True,
+                "social_target_id": "azaka",
+            },
+        )
+
+        assert active.state_data["npc_states"]["azaka"]["attitude"] == "friendly"
+
+    async def test_social_success_without_social_outcome_applies_default(self) -> None:
+        active = ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.EXPLORATION,
+            state_data={"npc_states": {"azaka": {"name": "Azaka", "attitude": "indifferent"}}},
+        )
+        bus = _FakeBus()
+
+        await GMResponseExecutor(bus).execute_gm_response(
+            AgentResponse(content="", actions=[]),
+            active,
+            session_id=SESSION_ID,
+            social_roll_results={
+                "type": "skill_check",
+                "success": True,
+                "social_target_id": "azaka",
+            },
+        )
+
+        assert active.state_data["npc_states"]["azaka"]["attitude"] == "friendly"
+        social_events = [p for et, p in bus.published if et == EventType.SOCIAL_OUTCOME]
+        assert social_events[-1]["source"] == "engine_default"
+
+    async def test_social_outcome_ignores_non_target_and_invalid_attitude(self) -> None:
+        active = ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.EXPLORATION,
+            state_data={
+                "npc_states": {
+                    "azaka": {"name": "Azaka", "attitude": "indifferent"},
+                    "jobal": {"name": "Jobal", "attitude": "hostile"},
+                }
+            },
+        )
+        bus = _FakeBus()
+
+        await GMResponseExecutor(bus).execute_gm_response(
+            AgentResponse(
+                content="",
+                actions=[
+                    GMAction(
+                        type="social_outcome",
+                        params={"npc_id": "jobal", "attitude_shift": "helpful"},
+                    ),
+                    GMAction(
+                        type="social_outcome",
+                        params={"npc_id": "azaka", "attitude_shift": "best_friend"},
+                    ),
+                ],
+            ),
+            active,
+            session_id=SESSION_ID,
+            social_roll_results={
+                "type": "skill_check",
+                "success": True,
+                "social_target_id": "azaka",
+            },
+        )
+
+        assert active.state_data["npc_states"]["jobal"]["attitude"] == "hostile"
+        assert active.state_data["npc_states"]["azaka"]["attitude"] == "indifferent"
+
     async def test_executor_scene_layout_filters_known_absent_npcs(self) -> None:
         active = _make_combat_active()
         active.state_data["npc_states"] = {
@@ -812,7 +934,7 @@ class TestHumanPlayerPipeline:
                     actor_name="Shade",
                     actor_kind="companion",
                     action_type="examine",
-                    content="[Compagnon IA] Shade examine le passage secret.",
+                    content="Shade examine le passage secret.",
                     display_text="Shade s'accroupit à l'entrée du passage.",
                     persist_actor_action=False,
                 ),

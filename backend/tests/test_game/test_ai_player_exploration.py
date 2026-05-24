@@ -131,18 +131,18 @@ async def test_exploration_reactions_calls_roleplay_for_ai() -> None:
         if call.args[1] == "ai_thinking"
     ]
     assert thinking_flags == [True, False]
-    narration_calls = [
-        call for call in publish.await_args_list if call.args[1] == "narration"
+    dialogue_calls = [
+        call for call in publish.await_args_list if call.args[1] == "dialogue"
     ]
     expected_text = (
         "Thorin désigne le contact visible. "
         "« Commençons par lui poser des questions précises. »"
     )
-    assert narration_calls[-1].args[2]["text"] == expected_text
-    assert narration_calls[-1].args[2]["speaker_id"] == "ai_1"
-    assert narration_calls[-1].args[2]["speaker_kind"] == "companion"
-    assert narration_calls[-1].args[2]["entry_kind"] == "dialogue"
-    assert narration_calls[-1].args[2]["scene_id"]
+    assert dialogue_calls[-1].args[2]["text"] == expected_text
+    assert dialogue_calls[-1].args[2]["speaker_id"] == "ai_1"
+    assert dialogue_calls[-1].args[2]["speaker_kind"] == "companion"
+    assert dialogue_calls[-1].args[2]["entry_kind"] == "dialogue"
+    assert dialogue_calls[-1].args[2]["scene_id"]
     assert responses == [
         {"speaker": "Thorin", "text": expected_text}
     ]
@@ -452,7 +452,7 @@ async def test_exploration_reactions_examine_triggers_gm_arbitrage() -> None:
     call_kwargs = resolver.resolve.call_args.kwargs
     assert call_kwargs["character_id"] == "ai_1"
     assert call_kwargs["action_type"] == "examine"
-    assert call_kwargs["content"] == "[Compagnon IA] Thorin examine la porte suspecte."
+    assert call_kwargs["content"] == "Thorin examine la porte suspecte."
 
     narration_calls = [
         call for call in publish.await_args_list if call.args[1] == "narration"
@@ -874,6 +874,29 @@ def test_companion_visible_state_anonymizes_unknown_npc_in_scene() -> None:
     npc_state = visible["npc_states"]["volothamp"]
     assert npc_state["name"] == "un homme au chapeau à plumes"
     assert "id" not in npc_state
+
+
+def test_companion_visible_state_anonymizes_unknown_npc_in_root_scene_pois() -> None:
+    """La forme canonique current_scene.pois est anonymisée."""
+    from app.game.companion_visibility import companion_visible_game_state
+
+    visible = companion_visible_game_state({
+        "current_scene": {
+            "pois": [
+                {
+                    "id": "volothamp",
+                    "name": "Volothamp Geddarm",
+                    "kind": "npc",
+                    "known_to_party": False,
+                    "description": "un homme au chapeau à plumes",
+                }
+            ]
+        }
+    })
+
+    npc_poi = visible["current_scene"]["pois"][0]
+    assert npc_poi["name"] == "un homme au chapeau à plumes"
+    assert "id" not in npc_poi
 
 
 def test_companion_visible_state_reveals_known_npc() -> None:

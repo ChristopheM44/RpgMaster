@@ -13,7 +13,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field
 
 from app.agents.schemas import AgentContext, AgentResponse, GMAction, GMResponse
-from app.engine.ability_checks import Ability, SKILL_ABILITY, Proficiency, skill_check
+from app.engine.ability_checks import SKILL_ABILITY, Ability, Proficiency, skill_check
 from app.game.action_orchestrator import ActionOrchestrator
 from app.game.combat_triggers import prime_combat_from_hostile_narration
 from app.game.constants import INACTIVE_STATUSES
@@ -695,6 +695,7 @@ class ActionPipeline:
                 actual_db,
                 session_id=request.session_id,
                 fallback_actor_id=request.actor_id,
+                social_roll_results=roll_results,
             )
             pending_rolls.extend(exec_result.pending_rolls)
             roll_events.extend(exec_result.pending_rolls)
@@ -752,6 +753,15 @@ class ActionPipeline:
                     actual_db,
                     session_id=request.session_id,
                     fallback_actor_id=request.actor_id,
+                    social_roll_results=(
+                        pending_rolls[0]
+                        if pending_rolls
+                        and (
+                            pending_rolls[0].get("type") == "skill_check"
+                            or pending_rolls[0].get("social_target_id")
+                        )
+                        else None
+                    ),
                 )
                 roll_events.extend(outcome_exec.pending_rolls)
                 executed_actions.extend(outcome_exec.executed_actions)
@@ -1166,8 +1176,6 @@ class ActionPipeline:
         elif request.action_type == "attack" and target_name:
             if request.actor_kind == "monster":
                 text = f"[Tour du monstre] {actor_name} attaque {target_name}."
-            elif request.actor_kind == "companion":
-                text = f"[Compagnon IA] {actor_name} attaque {target_name}."
             else:
                 text = f"{actor_name} attaque {target_name}."
         else:

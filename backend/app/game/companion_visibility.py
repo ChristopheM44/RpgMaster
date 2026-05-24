@@ -5,10 +5,10 @@ voluntary gestures, but the GM owns world consequences and NPC reactions.
 """
 from __future__ import annotations
 
-from copy import deepcopy
 import logging
 import re
 import unicodedata
+from copy import deepcopy
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -126,16 +126,18 @@ def companion_visible_game_state(state_data: dict[str, Any]) -> dict[str, Any]:
         if key in state_data:
             visible[key] = deepcopy(state_data[key])
 
-    # Anonymize NPCs in current_scene.scene_layout.pois
+    # Anonymize NPCs in canonical current_scene.pois, plus legacy nested saves.
     current_scene = visible.get("current_scene")
     if isinstance(current_scene, dict):
-        scene_layout = current_scene.get("scene_layout")
-        if isinstance(scene_layout, dict):
-            pois = scene_layout.get("pois")
+        for scene_container in (current_scene, current_scene.get("scene_layout")):
+            if not isinstance(scene_container, dict):
+                continue
+            pois = scene_container.get("pois")
             if isinstance(pois, list):
-                scene_layout["pois"] = [
+                scene_container["pois"] = [
                     anonymize_npc(poi) if poi.get("kind") == "npc" else poi
                     for poi in pois
+                    if isinstance(poi, dict)
                 ]
 
     # Anonymize NPCs in npc_states (dict keyed by npc id)

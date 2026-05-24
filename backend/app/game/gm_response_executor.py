@@ -20,6 +20,7 @@ from app.agents.schemas import AgentResponse, GMResponse
 from app.engine.srd_data import find_equipment
 from app.game.event_bus import EventType, event_bus
 from app.game.session_manager import ActiveSession
+from app.game.social_resolution import SocialResolution
 from app.game.state_sync import sync_character_state
 from app.models.character import Character
 from app.schemas.equipment import EquipmentItem
@@ -80,6 +81,7 @@ class GMResponseExecutor:
         *,
         session_id: Optional[str] = None,
         fallback_actor_id: Optional[str] = None,
+        social_roll_results: Optional[dict[str, Any]] = None,
     ) -> GMExecutionResult:
         """Execute toutes les actions d'une reponse GM.
 
@@ -88,6 +90,8 @@ class GMResponseExecutor:
         """
         result = GMExecutionResult()
         actual_session_id = session_id or active.session_id
+        social_context = SocialResolution.roll_context(social_roll_results)
+        social_outcome_targets: set[str] = set()
 
         for gm_action in response.actions:
             params: dict[str, Any] = dict(gm_action.params)
@@ -109,17 +113,36 @@ class GMResponseExecutor:
                 )
                 continue
 
-            await self.execute_action(
-                actual_session_id,
-                gm_action.type,
-                params,
-                active,
-                db=db,
-            )
+            if gm_action.type == "social_outcome":
+                applied_npc_id = await self._apply_social_outcome(
+                    actual_session_id,
+                    params,
+                    active,
+                    social_roll_results=social_roll_results,
+                )
+                if applied_npc_id:
+                    social_outcome_targets.add(applied_npc_id)
+            else:
+                await self.execute_action(
+                    actual_session_id,
+                    gm_action.type,
+                    params,
+                    active,
+                    db=db,
+                )
             result.executed_actions.append(
                 {"type": gm_action.type, "target": gm_action.target, "params": params}
             )
             if gm_action.type in CANON_DIRTY_ACTIONS:
+                result.canon_dirty = True
+
+        if social_context and social_context.target_id not in social_outcome_targets:
+            if await self._apply_default_social_outcome(
+                actual_session_id,
+                social_context.target_id,
+                active,
+                social_roll_results,
+            ):
                 result.canon_dirty = True
 
         return result
@@ -471,22 +494,54 @@ class GMResponseExecutor:
         session_id: str,
         params: dict[str, Any],
         active: ActiveSession,
-    ) -> None:
+        *,
+        social_roll_results: Optional[dict[str, Any]] = None,
+    ) -> Optional[str]:
         npc_id = str(params.get("npc_id") or params.get("target") or "").strip()
-        attitude_shift = str(params.get("attitude_shift") or "").strip().lower()
+        raw_attitude_shift = params.get("attitude_shift")
+        attitude_shift = str(raw_attitude_shift or "").strip().lower()
         note = str(params.get("note") or "").strip()
         new_quest = params.get("new_quest")
+        roll_context = SocialResolution.roll_context(social_roll_results)
 
         if not npc_id:
             logger.warning("social_outcome ignore : npc_id manquant - params=%s", params)
-            return
+            return None
+        if roll_context and npc_id != roll_context.target_id:
+            logger.warning(
+                "social_outcome ignore : PNJ '%s' different de la cible sociale '%s'",
+                npc_id,
+                roll_context.target_id,
+            )
+            return None
 
         npc_states = active.state_data.setdefault("npc_states", {})
         npc = npc_states.setdefault(npc_id, {})
         if isinstance(npc, dict):
             old_attitude = npc.get("attitude", "indifferent")
+            clamped = False
             if attitude_shift:
-                npc["attitude"] = attitude_shift
+                if roll_context:
+                    next_attitude, clamped = SocialResolution.bounded_attitude(
+                        old_attitude,
+                        attitude_shift,
+                        success=roll_context.success,
+                    )
+                else:
+                    valid_attitudes = {
+                        "hostile",
+                        "unfriendly",
+                        "indifferent",
+                        "friendly",
+                        "helpful",
+                    }
+                    next_attitude = (
+                        attitude_shift
+                        if attitude_shift in valid_attitudes
+                        else SocialResolution.normalize_attitude(old_attitude)
+                    )
+                    clamped = next_attitude != attitude_shift
+                npc["attitude"] = next_attitude
             if note:
                 notes = list(npc.get("notes", []))
                 notes.append(note)
@@ -518,13 +573,16 @@ class GMResponseExecutor:
                         quests.append(quest_entry)
             active.mark_dirty()
 
-            payload: dict[str, Any] = {
-                "npc_id": npc_id,
-                "attitude": npc.get("attitude", old_attitude),
-                "note": note,
-            }
-            if isinstance(new_quest, dict):
-                payload["new_quest"] = new_quest
+            payload = SocialResolution.outcome_payload(
+                npc_id=npc_id,
+                previous_attitude=old_attitude,
+                attitude=SocialResolution.normalize_attitude(npc.get("attitude", old_attitude)),
+                note=note,
+                roll_context=roll_context,
+                clamped=clamped,
+                source="llm_bounded" if roll_context else "llm",
+                new_quest=new_quest if isinstance(new_quest, dict) else None,
+            )
 
             await self._event_bus.publish_to_session(
                 session_id,
@@ -532,6 +590,53 @@ class GMResponseExecutor:
                 payload,
                 source=self._source,
             )
+            return npc_id
+        return None
+
+    async def _apply_default_social_outcome(
+        self,
+        session_id: str,
+        npc_id: str,
+        active: ActiveSession,
+        social_roll_results: dict[str, Any],
+    ) -> bool:
+        roll_context = SocialResolution.roll_context(social_roll_results)
+        if roll_context is None:
+            return False
+
+        npc_states = active.state_data.setdefault("npc_states", {})
+        if not isinstance(npc_states, dict):
+            npc_states = {}
+            active.state_data["npc_states"] = npc_states
+        npc = npc_states.setdefault(npc_id, {})
+        if not isinstance(npc, dict):
+            npc = {}
+            npc_states[npc_id] = npc
+
+        old_attitude = npc.get("attitude", "indifferent")
+        next_attitude = SocialResolution.default_attitude(
+            old_attitude,
+            success=roll_context.success,
+        )
+        npc.setdefault("name", npc_id)
+        npc["attitude"] = next_attitude
+        npc["last_interaction_turn"] = active.state_data.get("turn_number", 0)
+        active.mark_dirty()
+
+        await self._event_bus.publish_to_session(
+            session_id,
+            EventType.SOCIAL_OUTCOME,
+            SocialResolution.outcome_payload(
+                npc_id=npc_id,
+                previous_attitude=old_attitude,
+                attitude=next_attitude,
+                roll_context=roll_context,
+                clamped=False,
+                source="engine_default",
+            ),
+            source=self._source,
+        )
+        return True
 
     async def _apply_region_map_update(
         self,
@@ -900,7 +1005,12 @@ class GMResponseExecutor:
         await self._event_bus.publish_to_session(
             session_id,
             EventType.EQUIPMENT_UPDATED,
-            {"character_id": target, "equipment": result.equipment, "removed": item_id, "source": "gm"},
+            {
+                "character_id": target,
+                "equipment": result.equipment,
+                "removed": item_id,
+                "source": "gm",
+            },
             source=self._source,
         )
 
@@ -1257,6 +1367,7 @@ async def execute_gm_response(
     fallback_actor_id: Optional[str] = None,
     event_bus_instance: Any = event_bus,
     source: str = "action_pipeline",
+    social_roll_results: Optional[dict[str, Any]] = None,
 ) -> GMExecutionResult:
     """Fonction pratique gardant l'API explicite du lot 1.4."""
     executor = GMResponseExecutor(event_bus_instance, source=source)
@@ -1266,4 +1377,5 @@ async def execute_gm_response(
         db,
         session_id=session_id,
         fallback_actor_id=fallback_actor_id,
+        social_roll_results=social_roll_results,
     )

@@ -711,6 +711,7 @@ class TestNpcDialogueRouting:
         assert mock_gm.run_npc_dialogue.await_args.kwargs["roll_results"] == {
             "type": "skill_check",
             "success": True,
+            "social_target_id": "azaka",
         }
         assert active.state_data["npc_states"]["azaka"]["attitude"] == "friendly"
         assert active.state_data["npc_states"]["azaka"]["notes"] == [
@@ -757,7 +758,7 @@ class TestNpcDialogueRouting:
                         type="roll_request",
                         params={
                             "skill": "persuasion",
-                            "dc": 12,
+                            "dc": 1,
                             "target": "hero-1",
                         },
                     )
@@ -814,4 +815,3 @@ class TestNpcDialogueRouting:
         assert active.state_data["npc_states"]["azaka"]["notes"] == [
             "Azaka est convaincue."
         ]
-

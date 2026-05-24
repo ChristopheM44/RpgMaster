@@ -5,6 +5,7 @@ from typing import Any, Optional
 
 from app.game.async_tasks import create_logged_task
 from app.game.event_bus import EventType
+from app.game.visible_events import publish_visible_entry
 
 
 class ActionOrchestrator:
@@ -30,9 +31,9 @@ class ActionOrchestrator:
         db: Optional[Any],
     ) -> None:
         narration_id = str(uuid.uuid4())
-        await self._event_bus.publish_to_session(
+        await publish_visible_entry(
+            self._event_bus,
             session_id,
-            EventType.NARRATION,
             {
                 "text": narration_text,
                 "speaker": "Maître du Jeu",

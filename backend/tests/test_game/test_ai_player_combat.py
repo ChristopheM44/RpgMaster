@@ -403,6 +403,56 @@ async def test_process_ai_turns_invalid_spell_falls_back_to_attack() -> None:
     assert call_kwargs["target_id"] == "goblin_1"
 
 
+async def test_process_ai_turns_valid_known_spell_dispatches_cast_spell() -> None:
+    """Un sort connu avec slot disponible reste un cast_spell structuré."""
+    state = _build_game_state()
+    state["characters"]["elara_1"]["known_spells"] = ["magic_missile"]
+    state["characters"]["elara_1"]["spell_slots"] = {"1": {"total": 2, "used": 0}}
+    active = _make_active_session(state)
+
+    elara_agent = PlayerAgent(
+        character_id="elara_1",
+        character_name="Elara",
+        personality=PlayerPersonality(traits=["arcane"]),
+        client=MagicMock(),
+    )
+    active.ai_players["elara_1"] = elara_agent
+
+    from app.game.turn_manager import TurnEntry
+
+    active.turn_manager._order = [
+        TurnEntry("elara_1", "Elara", 18, True, True),
+        TurnEntry("aria_1", "Aria", 12, True, False),
+    ]
+    active.turn_manager._index = 0
+
+    spell_json = json.dumps({
+        "action_type": "cast_spell",
+        "action_description": "Elara lance projectile magique",
+        "target": "goblin_1",
+        "params": {"spell_name": "Projectile magique", "slot_level": 1},
+        "roleplay_text": "Elara trace trois traits lumineux.",
+    }, ensure_ascii=False)
+    with patch.object(elara_agent._client, "chat", new=AsyncMock(return_value=spell_json)), \
+         patch("app.game.ai_player_manager.is_sober_mode", return_value=False):
+        resolver = MagicMock()
+        resolver.resolve = AsyncMock()
+
+        with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=AsyncMock()):
+            triggered = await AIPlayerManager().process_ai_turns(
+                "test_session",
+                active,
+                resolver,
+            )
+
+    assert triggered == 1
+    call_kwargs = resolver.resolve.call_args.kwargs
+    assert call_kwargs["action_type"] == "cast_spell"
+    assert call_kwargs["spell_id"] == "magic_missile"
+    assert call_kwargs["slot_level"] == 1
+    assert call_kwargs["target_id"] == "goblin_1"
+
+
 async def test_process_ai_turns_persists_ai_combat_action(db_session) -> None:
     """Les actions visibles des compagnons IA sont écrites dans l'historique."""
     from sqlalchemy import select

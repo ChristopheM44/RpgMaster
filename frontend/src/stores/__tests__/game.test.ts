@@ -116,4 +116,23 @@ describe('useGameStore map decoration state', () => {
       scene_id: 'scene-1',
     })
   })
+
+  it('keeps legacy narration events with dialogue entry_kind as dialogue entries', () => {
+    const store = useGameStore()
+
+    store.addNarration({
+      text: 'Je reste avec toi.',
+      speaker: 'Thorin',
+      speaker_kind: 'companion',
+      entry_kind: 'dialogue',
+    })
+
+    expect(store.narrativeLog[0]).toMatchObject({
+      type: 'dialogue',
+      text: 'Je reste avec toi.',
+      speaker: 'Thorin',
+      speaker_kind: 'companion',
+      entry_kind: 'dialogue',
+    })
+  })
 })
