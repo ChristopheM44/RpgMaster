@@ -124,7 +124,7 @@ describe('useWebSocket', () => {
     vi.unstubAllGlobals()
   })
 
-  it('handles dialogue events as narration entries', () => {
+  it('handles dialogue events as dialogue entries even without entry_kind', () => {
     const socket = useWebSocket('session-1')
     const gameStore = useGameStore()
 
@@ -137,7 +137,6 @@ describe('useWebSocket', () => {
         payload: {
           text: 'Je reste avec toi.',
           speaker: 'Elara',
-          entry_kind: 'dialogue',
         },
       }),
     })

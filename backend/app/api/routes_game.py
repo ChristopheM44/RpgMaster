@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 import unicodedata
 import uuid
@@ -10,6 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.gm_agent import _FALLBACK_NARRATION, GMAgent
 from app.agents.schemas import GMAction, GMResponse
 from app.api.ws_payloads import (
     build_session_state_payload,
@@ -28,6 +30,7 @@ from app.models.save_slot import SaveSlot
 from app.models.session import Session, SessionStatus
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class StartGameBody(BaseModel):
@@ -53,6 +56,16 @@ _STOPWORDS = {
     "au",
     "aux",
 }
+
+_OPENING_NARRATION_IN_PROGRESS = "_opening_narration_in_progress"
+_PATH_CHOICE_CLOSER_RE = re.compile(
+    r"(?is)([^.!?…]*(?:\bchemin\b|\broute\b|\bvoie\b|\bdirection\b|"
+    r"\bitin[ée]raire\b|\bsentier\b|\bpassage\b|\bcap\b)[^.!?…]*\?)\s*$"
+)
+_PATH_CHOICE_ALLOWED_RE = re.compile(
+    r"(?i)\b(carrefour|crois[ée]e|embranchement|intersection|plusieurs chemins|"
+    r"plusieurs routes|routes partent|chemins partent)\b"
+)
 
 
 def _build_session_state_payload(session_id: str) -> dict:
@@ -215,20 +228,34 @@ def _opening_scene_entity(value: Any, *, fallback_id: str) -> Optional[dict[str,
         entity_id = str(value.get("id") or "").strip()
         name = str(value.get("name") or value.get("label") or entity_id).strip()
         description = str(value.get("description") or value.get("action_hint") or "").strip()
+        action_hint = str(value.get("action_hint") or "").strip()
+        opening_intent = str(value.get("opening_intent") or "").strip()
     else:
         entity_id = ""
         name = str(value or "").strip()
         description = ""
+        action_hint = ""
+        opening_intent = ""
     if not name and not entity_id:
         return None
-    return {
+    out = {
         "id": entity_id or _safe_id(name, fallback_id),
         "name": name or entity_id,
         "description": description,
     }
+    if action_hint:
+        out["action_hint"] = action_hint
+    if opening_intent:
+        out["opening_intent"] = opening_intent
+    return out
 
 
-def _opening_scene_entities(value: Any, *, fallback_prefix: str, limit: int) -> list[dict[str, str]]:
+def _opening_scene_entities(
+    value: Any,
+    *,
+    fallback_prefix: str,
+    limit: int,
+) -> list[dict[str, str]]:
     if not isinstance(value, list):
         return []
     out: list[dict[str, str]] = []
@@ -280,7 +307,9 @@ def _opening_scene_has_content(scene: dict[str, Any]) -> bool:
     )
 
 
-def _legacy_opening_present_npcs(campaign_context: Optional[dict[str, Any]]) -> list[dict[str, str]]:
+def _legacy_opening_present_npcs(
+    campaign_context: Optional[dict[str, Any]],
+) -> list[dict[str, str]]:
     if not isinstance(campaign_context, dict):
         return []
     contract = campaign_context.get("player_contract") or {}
@@ -302,7 +331,7 @@ def _legacy_opening_present_npcs(campaign_context: Optional[dict[str, Any]]) -> 
         present.append({
             "id": _safe_id(name, f"npc_{index + 1}"),
             "name": name,
-            "description": f"Une personne du nom de {name}, présente pour vous accueillir.",
+            "description": f"{name} attend le groupe.",
         })
         if len(present) >= 2:
             break
@@ -313,7 +342,7 @@ def _legacy_opening_present_npcs(campaign_context: Optional[dict[str, Any]]) -> 
             present.append({
                 "id": host["id"],
                 "name": host["name"],
-                "description": "Hôte du lieu, présent pour accueillir le groupe et soutenir la scène.",
+                "description": f"{host['name']} occupe les lieux.",
             })
     return present
 
@@ -364,15 +393,11 @@ def _legacy_opening_description(
             primary_names = [npc["name"] for npc in present_npcs if npc["id"] != host["id"]]
             primary = ", ".join(primary_names) or "La personne qui a convoqué le groupe"
             return (
-                f"Chez {host['name']}, {primary} se tient face au groupe pour exposer "
-                "l'urgence de la mission et répondre aux premières questions. "
-                f"{host['name']} reste présent comme hôte et soutien logistique."
+                f"Chez {host['name']}, {primary} attend le groupe. "
+                f"{host['name']} occupe les lieux."
             )
         names = ", ".join(npc["name"] for npc in present_npcs)
-        return (
-            f"{names} se tient face au groupe pour exposer l'urgence de la mission et répondre "
-            "aux premières questions. Aucun détail de décor plus précis n'est encore établi."
-        )
+        return f"{names} attend le groupe. Aucun détail de décor plus précis n'est encore établi."
     if not isinstance(campaign_context, dict):
         return ""
     chapter = campaign_context.get("active_chapter") or {}
@@ -525,6 +550,202 @@ def _party_positions(active: Any) -> dict[str, dict[str, int]]:
     return positions
 
 
+def _opening_scene_allows_path_choice(state_data: dict[str, Any]) -> bool:
+    campaign_context = state_data.get("campaign_context")
+    if not isinstance(campaign_context, dict):
+        return False
+    opening_scene = _opening_scene(campaign_context)
+    text = " ".join(
+        str(opening_scene.get(key) or "")
+        for key in ("place", "venue", "description")
+    )
+    return bool(_PATH_CHOICE_ALLOWED_RE.search(text))
+
+
+def _normalize_opening_narration_closer(text: str, state_data: dict[str, Any]) -> str:
+    cleaned = str(text or "").strip()
+    if not cleaned or _opening_scene_allows_path_choice(state_data):
+        return cleaned
+    match = _PATH_CHOICE_CLOSER_RE.search(cleaned)
+    if not match:
+        return cleaned
+    prefix = cleaned[: match.start(1)].rstrip()
+    return f"{prefix} Que faites-vous ?" if prefix else "Que faites-vous ?"
+
+
+def _brief_list(value: Any, *, limit: int = 6) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    out: list[str] = []
+    for item in value:
+        if isinstance(item, dict):
+            text = ", ".join(
+                f"{key}: {val}"
+                for key, val in item.items()
+                if val not in (None, "", [], {})
+            )
+        else:
+            text = str(item or "").strip()
+        if text:
+            out.append(text)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _append_brief_items(lines: list[str], label: str, values: list[str]) -> None:
+    if values:
+        lines.append(f"- {label}:")
+        lines.extend(f"  - {value}" for value in values)
+
+
+def _build_opening_brief(state_data: dict[str, Any]) -> str:
+    """Build a private GM brief for ``GMAgent.open_scene``.
+
+    This text is sent only to the GM LLM. The visible narration must still obey
+    the public quest block in ``gm_open_scene.txt`` and avoid leaking private
+    hooks or chapter notes.
+    """
+    campaign_context = state_data.get("campaign_context")
+    if not isinstance(campaign_context, dict):
+        campaign_context = {}
+    contract = campaign_context.get("player_contract") or {}
+    if not isinstance(contract, dict):
+        contract = {}
+    chapter = campaign_context.get("active_chapter") or {}
+    if not isinstance(chapter, dict):
+        chapter = {}
+    continuity = campaign_context.get("continuity") or {}
+    if not isinstance(continuity, dict):
+        continuity = {}
+    opening_scene = _opening_scene(campaign_context)
+
+    lines: list[str] = ["## PUBLIC JOUEURS"]
+    title = str(contract.get("title") or "").strip()
+    pitch_public = str(contract.get("pitch_public") or "").strip()
+    duration = str(contract.get("duration") or "").strip()
+    played_summary = str(
+        continuity.get("played_summary") or contract.get("played_summary") or ""
+    ).strip()
+    if title:
+        lines.append(f"- Titre: {title}")
+    if pitch_public:
+        lines.append(f"- Pitch public: {pitch_public}")
+    _append_brief_items(lines, "Objectifs connus", _brief_list(contract.get("known_objectives")))
+    _append_brief_items(lines, "Tons", _brief_list(contract.get("tones"), limit=5))
+    if duration:
+        lines.append(f"- Durée prévue: {duration}")
+    if played_summary:
+        lines.append(f"- Résumé joué: {played_summary}")
+
+    lines.extend(["", "## SCÈNE VISIBLE"])
+    location = _opening_scene_location_label(opening_scene)
+    lines.append(f"- Lieu physique: {location}")
+    if opening_scene.get("region"):
+        lines.append(f"- Région: {opening_scene['region']}")
+    if opening_scene.get("time_of_day"):
+        lines.append(f"- Moment: {opening_scene['time_of_day']}")
+    if opening_scene.get("weather"):
+        lines.append(f"- Météo: {opening_scene['weather']}")
+    description = str(opening_scene.get("description") or "").strip()
+    if description:
+        lines.append(f"- Description immédiate: {description}")
+    present_npcs = opening_scene.get("present_npcs") or []
+    if present_npcs:
+        lines.append("- PNJ présents:")
+        for npc in present_npcs[:8]:
+            if not isinstance(npc, dict):
+                continue
+            npc_line = (
+                f"  - {npc.get('name') or npc.get('id')}: "
+                f"{npc.get('description') or ''}"
+            ).rstrip()
+            details = []
+            if npc.get("action_hint"):
+                details.append(f"action_hint={npc['action_hint']}")
+            if npc.get("opening_intent"):
+                details.append(f"opening_intent={npc['opening_intent']}")
+            if details:
+                npc_line += f" ({'; '.join(details)})"
+            lines.append(npc_line)
+    clues = opening_scene.get("visible_clues") or []
+    if clues:
+        lines.append("- Indices visibles:")
+        for clue in clues[:8]:
+            if isinstance(clue, dict):
+                lines.append(
+                    (
+                        f"  - {clue.get('name') or clue.get('id')}: "
+                        f"{clue.get('description') or ''}"
+                    ).rstrip()
+                )
+    exits = opening_scene.get("exits") or []
+    if exits:
+        lines.append("- Sorties immédiates:")
+        for exit_ in exits[:6]:
+            if isinstance(exit_, dict):
+                target = str(exit_.get("leads_to") or "").strip()
+                suffix = f" -> {target}" if target else ""
+                lines.append(f"  - {exit_.get('label') or exit_.get('id')}{suffix}")
+
+    lines.extend(["", "## PJ PRÉSENTS"])
+    characters = state_data.get("characters")
+    if isinstance(characters, dict) and characters:
+        for char_id, character in characters.items():
+            if not isinstance(character, dict):
+                continue
+            name = str(character.get("name") or char_id)
+            species = str(character.get("species") or "").strip()
+            char_class = str(character.get("char_class") or character.get("class") or "").strip()
+            level = character.get("level")
+            background = str(character.get("background") or "").strip()
+            is_ai = bool(character.get("is_ai"))
+            basics = ", ".join(
+                part
+                for part in (
+                    species,
+                    char_class,
+                    f"niveau {level}" if level else "",
+                    "compagnon IA" if is_ai else "",
+                )
+                if part
+            )
+            line = f"- {name}"
+            if basics:
+                line += f" ({basics})"
+            if background:
+                line += f": background={background}"
+            lines.append(line)
+            personality = character.get("personality")
+            if isinstance(personality, dict):
+                bond = str(personality.get("bond") or "").strip()
+                flaw = str(personality.get("flaw") or "").strip()
+                if bond or flaw:
+                    lines.append(f"  - Personnalité: bond={bond or 'n/a'}; flaw={flaw or 'n/a'}")
+    else:
+        lines.append("- Le groupe est présent, mais aucun détail de PJ n'est disponible.")
+
+    lines.extend(["", "## PRIVÉ MJ"])
+    hook = str(contract.get("hook") or "").strip()
+    if hook:
+        lines.append(f"- Hook privé: {hook}")
+    for label, key in (
+        ("Objectif de chapitre", "objective"),
+        ("Enjeux", "stakes"),
+        ("État initial", "initial_state"),
+    ):
+        value = str(chapter.get(key) or "").strip()
+        if value:
+            lines.append(f"- {label}: {value}")
+    _append_brief_items(lines, "Indices privés du chapitre", _brief_list(chapter.get("clues")))
+    _append_brief_items(lines, "Secrets privés du chapitre", _brief_list(chapter.get("secrets")))
+    _append_brief_items(lines, "Complications", _brief_list(chapter.get("complications")))
+    _append_brief_items(lines, "Issues possibles", _brief_list(chapter.get("possible_exits")))
+    _append_brief_items(lines, "DD indicatifs", _brief_list(chapter.get("indicative_dcs"), limit=4))
+
+    return "\n".join(lines).strip()
+
+
 def _opening_response(
     active: Any,
     *,
@@ -576,7 +797,11 @@ def _opening_response(
         for index, clue in enumerate(clues):
             clue_name = str(clue.get("name") or clue.get("id") or f"Indice {index + 1}").strip()
             clue_text = str(clue.get("description") or clue_name).strip()
-            clue_id = str(clue.get("id") or "").strip() or _safe_id(clue_name, f"indice_{index + 1}")
+            clue_action_hint = str(clue.get("action_hint") or "Chercher cette piste avant d'agir.")
+            clue_id = str(clue.get("id") or "").strip() or _safe_id(
+                clue_name,
+                f"indice_{index + 1}",
+            )
             pois.append({
                 "id": clue_id,
                 "name": (clue_name[:48].rstrip() + "…") if len(clue_name) > 48 else clue_name,
@@ -584,7 +809,7 @@ def _opening_response(
                 "position": {"col": 5 + index, "row": 3},
                 "icon": "clue",
                 "description": clue_text[:200],
-                "action_hint": "Chercher cette piste avant d'agir.",
+                "action_hint": clue_action_hint[:160],
                 "interactions": [
                     {
                         "label": "Se renseigner",
@@ -596,13 +821,16 @@ def _opening_response(
     for index, npc in enumerate(present_npcs):
         npc_name = str(npc.get("name") or npc.get("id") or f"PNJ {index + 1}").strip()
         npc_id = str(npc.get("id") or "").strip() or _safe_id(npc_name, f"npc_{index + 1}")
-        npc_description = str(npc.get("description") or "Personne présente dans la scène d'ouverture.")
+        npc_description = str(
+            npc.get("description") or "Personne présente dans la scène d'ouverture."
+        )
         if npc_name and not any(npc_name.startswith(pfx) for pfx in ("npc_", "npc ", "PNJ ")):
             prompt_target = npc_name
         else:
             prompt_target = npc_description
             if len(prompt_target) > 60:
                 prompt_target = prompt_target[:60].rsplit(' ', 1)[0] + "..."
+        npc_action_hint = str(npc.get("action_hint") or "Lui parler ou négocier avant d'agir.")
 
         pois.append({
             "id": npc_id,
@@ -611,7 +839,7 @@ def _opening_response(
             "position": {"col": 4 + index, "row": 5},
             "icon": "npc",
             "description": npc_description,
-            "action_hint": "Lui parler ou négocier avant d'agir.",
+            "action_hint": npc_action_hint[:160],
             # PNJ non encore présenté : masqué dans la vue compagnons jusqu'à
             # ce que le MJ le nomme ou qu'un joueur l'interpelle par son nom.
             "known_to_party": False,
@@ -778,7 +1006,7 @@ def _seed_campaign_opening_quest(
     objective = ""
     if isinstance(objectives, list) and objectives:
         objective = str(objectives[0]).strip()
-    summary = str(contract.get("hook") or contract.get("pitch_public") or objective).strip()
+    summary = str(contract.get("pitch_public") or objective).strip()
     if not summary and not objective:
         return False
 
@@ -810,13 +1038,45 @@ async def _send_campaign_opening_narration(
     campaign_context: dict[str, Any],
     db: AsyncSession,
 ) -> None:
-    response = _opening_response(active, campaign_context=campaign_context)
+    quest_changed = _seed_campaign_opening_quest(active, campaign_context)
+    baseline = _opening_response(active, campaign_context=campaign_context)
+    response = baseline
+
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.AI_THINKING,
+        {"agent_kind": "gm", "thinking": True},
+        source="routes_game",
+    )
+    try:
+        llm_response = await GMAgent().open_scene(
+            game_state=active.state_data,
+            opening_brief=_build_opening_brief(active.state_data),
+            messages=None,
+        )
+        llm_narration = str(getattr(llm_response, "narration", "") or "").strip()
+        if llm_narration and llm_narration != _FALLBACK_NARRATION:
+            response = GMResponse(
+                narration=llm_narration,
+                actions=baseline.actions,
+                mood=getattr(llm_response, "mood", None) or baseline.mood,
+            )
+    except Exception as exc:
+        logger.warning("Opening scene LLM failed; falling back to deterministic opening: %s", exc)
+    finally:
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.AI_THINKING,
+            {"agent_kind": "gm", "thinking": False},
+            source="routes_game",
+        )
+
     await _publish_opening_scene(
         session_id,
         active,
         db,
         response,
-        quest_changed=_seed_campaign_opening_quest(active, campaign_context),
+        quest_changed=quest_changed,
     )
 
 
@@ -842,10 +1102,15 @@ async def _publish_opening_scene(
 ) -> None:
     from app.services.message_service import persist_narration
 
+    response.narration = _normalize_opening_narration_closer(
+        response.narration,
+        active.state_data,
+    )
     executor = GMResponseExecutor(event_bus, source="routes_game")
     await executor.execute_gm_response(response, active, db, session_id=session_id)
 
     active.state_data["welcome_narration_sent"] = True
+    active.state_data.pop(_OPENING_NARRATION_IN_PROGRESS, None)
     active.mark_dirty()
     await session_manager.save_state(session_id, db)
 
@@ -979,6 +1244,7 @@ async def start_game(
         active.state_data["adventure_script"] = body.adventure_script
     if body.auto_generate:
         active.state_data["auto_generate_adventure"] = True
+    active.state_data[_OPENING_NARRATION_IN_PROGRESS] = True
     active.mark_dirty()
     await session_manager.save_state(session_id, db)
 
@@ -996,33 +1262,39 @@ async def start_game(
         source="routes_game",
     )
 
-    if body.adventure_script:
-        await _send_free_opening_narration(
-            session_id,
-            active,
-            db,
-            script=body.adventure_script,
-        )
-    elif campaign_context is not None:
-        await _send_campaign_opening_narration(
-            session_id,
-            active,
-            campaign_context,
-            db,
-        )
-    elif body.auto_generate:
-        await _send_free_opening_narration(
-            session_id,
-            active,
-            db,
-            auto_generate=True,
-        )
-    else:
-        await _send_free_opening_narration(
-            session_id,
-            active,
-            db,
-        )
+    try:
+        if body.adventure_script:
+            await _send_free_opening_narration(
+                session_id,
+                active,
+                db,
+                script=body.adventure_script,
+            )
+        elif campaign_context is not None:
+            await _send_campaign_opening_narration(
+                session_id,
+                active,
+                campaign_context,
+                db,
+            )
+        elif body.auto_generate:
+            await _send_free_opening_narration(
+                session_id,
+                active,
+                db,
+                auto_generate=True,
+            )
+        else:
+            await _send_free_opening_narration(
+                session_id,
+                active,
+                db,
+            )
+    except Exception:
+        active.state_data.pop(_OPENING_NARRATION_IN_PROGRESS, None)
+        active.mark_dirty()
+        await session_manager.save_state(session_id, db)
+        raise
 
     return {
         "status": "ok",

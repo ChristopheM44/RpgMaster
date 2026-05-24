@@ -6,6 +6,9 @@ assurant que tout s'exécute dans le même event loop interne du TestClient.
 """
 from __future__ import annotations
 
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
 import pytest
 from starlette.websockets import WebSocketDisconnect
 
@@ -73,6 +76,26 @@ class TestWebSocketConnection:
             assert data["session_id"] == session_id
             assert "phase" in data["payload"]
             assert data["payload"]["phase"] == "lobby"
+
+    @pytest.mark.asyncio
+    async def test_welcome_narration_skips_while_opening_in_progress(self, monkeypatch) -> None:
+        from app.api import ws_game
+
+        active = SimpleNamespace(
+            state_data={"_opening_narration_in_progress": True},
+        )
+        narrate = AsyncMock()
+
+        monkeypatch.setattr(ws_game.action_resolver._gm, "narrate", narrate)
+        monkeypatch.setattr(ws_game.event_bus, "publish_to_session", AsyncMock())
+        monkeypatch.setattr(ws_game, "persist_narration", AsyncMock())
+
+        await ws_game._send_welcome_narration("session-1", active, db=None)
+
+        narrate.assert_not_awaited()
+        ws_game.event_bus.publish_to_session.assert_not_awaited()
+        ws_game.persist_narration.assert_not_awaited()
+        assert active.state_data == {"_opening_narration_in_progress": True}
 
     def test_connect_requires_access_token_when_configured(self, ws_client, monkeypatch) -> None:
         from app.config import settings

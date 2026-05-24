@@ -30,6 +30,7 @@ Instructions :
 - Émets toujours un scene_layout cohérent avec 2 à 5 POI, 1 à 3 sorties et les positions approximatives du groupe.
 - Si un lieu régional, une ville, un quartier ou une destination est connu, émets region_map_update et/ou city_map_update par patch incrémental.
 - Les PNJ ne doivent apparaître sur la scène QUE s'ils sont présents dans la description du lieu physique. Un PNJ mentionné uniquement dans le contexte narratif n'est PAS dans la scène.
-- La narration doit être interactive : 2 à 4 courts paragraphes, puis une question ouverte qui n'enferme pas dans une seule option.
+- La narration doit être interactive : 2 à 4 courts paragraphes, puis une question courte d'action immédiate. Termine de préférence par "Que faites-vous ?".
+- N'utilise PAS une conclusion de trajet comme "Quel chemin souhaitez-vous prendre ?", "Quelle route prenez-vous ?", "Quelle direction choisissez-vous ?" sauf si la scène visible est explicitement un carrefour, une croisée ou un embranchement avec plusieurs routes physiquement présentes.
 
 Réponds avec UN SEUL objet JSON valide selon le schéma du system prompt. Pas de balises markdown.

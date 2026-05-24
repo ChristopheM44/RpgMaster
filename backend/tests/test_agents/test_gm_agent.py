@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -48,6 +49,20 @@ def test_outcome_prompt_requires_fail_forward() -> None:
     assert "tu n'entends rien" in prompt
 
 
+def test_open_scene_prompt_rejects_path_choice_closer() -> None:
+    prompt = (
+        Path(__file__).parents[2]
+        / "app"
+        / "agents"
+        / "prompts"
+        / "gm_open_scene.txt"
+    ).read_text(encoding="utf-8")
+
+    assert "Que faites-vous ?" in prompt
+    assert "Quel chemin souhaitez-vous prendre ?" in prompt
+    assert "carrefour" in prompt
+
+
 # ---------------------------------------------------------------------------
 # narrate()
 # ---------------------------------------------------------------------------
@@ -81,6 +96,29 @@ async def test_narrate_with_actions(gm_agent: GMAgent) -> None:
     assert response.actions[0].type == "roll_request"
     assert response.actions[0].target == "player_1"
     assert response.actions[0].params["ability"] == "dexterity"
+
+
+async def test_open_scene_renders_opening_brief_into_prompt(gm_agent: GMAgent) -> None:
+    captured: dict[str, object] = {}
+
+    async def _capture(**kwargs):
+        captured["messages"] = kwargs.get("messages", [])
+        return _valid_gm_json(narration="La scène s'ouvre.")
+
+    with patch.object(gm_agent._client, "chat", new=_capture):
+        await gm_agent.open_scene(
+            game_state={"phase": "EXPLORATION"},
+            opening_brief="## PUBLIC JOUEURS\nObjectif test\n\n## PRIVÉ MJ\nHook test",
+        )
+
+    messages = captured["messages"]
+    assert isinstance(messages, list)
+    prompt = messages[-1]["content"]
+    assert "BRIEF D'OUVERTURE" in prompt
+    assert "## PUBLIC JOUEURS" in prompt
+    assert "Objectif test" in prompt
+    assert "## PRIVÉ MJ" in prompt
+    assert "Hook test" in prompt
 
 
 async def test_narrate_without_player_action(gm_agent: GMAgent) -> None:

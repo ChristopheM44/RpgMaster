@@ -2135,7 +2135,10 @@ async def _handle_move(
 async def _send_welcome_narration(session_id: str, active: Any, db: AsyncSession) -> None:
     """Demande au GMAgent de décrire la scène courante quand un joueur rejoint en exploration."""
     # Guard d'idempotence : atomique en asyncio (pas d'await avant cette ligne)
-    if active.state_data.get("welcome_narration_sent"):
+    if (
+        active.state_data.get("welcome_narration_sent")
+        or active.state_data.get("_opening_narration_in_progress")
+    ):
         return
     active.state_data["welcome_narration_sent"] = True
 

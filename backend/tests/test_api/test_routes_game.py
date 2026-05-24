@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -156,7 +157,7 @@ def test_opening_response_legacy_fallback_keeps_hiring_scene_playable() -> None:
     assert "Jobal" not in response.narration
     assert "Zindar" not in response.narration
     assert "Grandfather Zitembe" not in response.narration
-    assert "Syndra Silvane se tient face au groupe" in response.narration
+    assert "Syndra Silvane attend le groupe" in response.narration
     assert "Wakanga O'tamu" in response.narration
     # Le briefing public (known_objectives) apparaît bien — c'est l'objectif
     # officiel connu du groupe.
@@ -377,6 +378,201 @@ def test_campaign_opening_text_without_known_objective_skips_briefing() -> None:
     text = _campaign_opening_text(campaign_context)
     assert "Mission confiée" not in text
     assert text.endswith("Que faites-vous ?")
+
+
+def test_seed_campaign_opening_quest_never_uses_hook() -> None:
+    from app.api.routes_game import _seed_campaign_opening_quest
+
+    active = SimpleNamespace(state_data={})
+    campaign_context = {
+        "player_contract": {
+            "hook": "SECRET_ARTEFACT necromantique sous la ville.",
+            "pitch_public": "Une disparition inquiète le quartier.",
+            "known_objectives": ["Retrouver la personne disparue"],
+        }
+    }
+
+    assert _seed_campaign_opening_quest(active, campaign_context) is True
+
+    quest = active.state_data["quests"][0]
+    assert quest["id"] == "campaign_opening"
+    assert quest["summary"] == "Une disparition inquiète le quartier."
+    assert "SECRET_ARTEFACT" not in quest["summary"]
+
+
+@pytest.mark.asyncio
+async def test_send_campaign_opening_narration_uses_llm_text_only(monkeypatch) -> None:
+    from app.agents.schemas import GMAction, GMResponse
+    from app.api import routes_game
+
+    active = SimpleNamespace(
+        state_data={
+            "characters": {"shade": {"name": "Shade", "is_ai": True}},
+            "campaign_context": {
+                "player_contract": {
+                    "hook": "SECRET_ARTEFACT privé.",
+                    "pitch_public": "Public pitch.",
+                    "known_objectives": ["Suivre la piste publique"],
+                },
+                "active_chapter": {
+                    "opening_scene": {
+                        "place": "Vieille route",
+                        "description": "La brume colle aux bottes.",
+                    }
+                },
+            },
+        }
+    )
+    captured: dict = {}
+
+    async def fake_open_scene(self, **kwargs):
+        captured["brief"] = kwargs["opening_brief"]
+        return GMResponse(
+            narration="SENTINEL_NARRATION",
+            actions=[
+                GMAction(
+                    type="quest_add",
+                    params={"id": "llm_quest", "title": "Ne pas exécuter"},
+                )
+            ],
+        )
+
+    async def fake_publish(session_id, active_session, db, response, *, quest_changed):
+        captured["response"] = response
+        captured["quest_changed"] = quest_changed
+
+    monkeypatch.setattr(routes_game.GMAgent, "open_scene", fake_open_scene)
+    monkeypatch.setattr(routes_game, "_publish_opening_scene", fake_publish)
+    monkeypatch.setattr(routes_game.event_bus, "publish_to_session", AsyncMock())
+
+    await routes_game._send_campaign_opening_narration(
+        "session-1",
+        active,
+        active.state_data["campaign_context"],
+        db=None,
+    )
+
+    response = captured["response"]
+    assert response.narration == "SENTINEL_NARRATION"
+    assert [action.type for action in response.actions] == [
+        "journal_update",
+        "scene_layout",
+        "region_map_update",
+    ]
+    assert "llm_quest" not in str(response.actions)
+    assert captured["quest_changed"] is True
+    assert "## PUBLIC JOUEURS" in captured["brief"]
+    assert "## PRIVÉ MJ" in captured["brief"]
+
+
+@pytest.mark.asyncio
+async def test_send_campaign_opening_narration_falls_back_on_llm_fallback(monkeypatch) -> None:
+    from app.agents.gm_agent import _FALLBACK_NARRATION
+    from app.agents.schemas import GMResponse
+    from app.api import routes_game
+
+    active = SimpleNamespace(
+        state_data={
+            "characters": {},
+            "campaign_context": {
+                "player_contract": {
+                    "hook": "SECRET_ARTEFACT privé.",
+                    "pitch_public": "Public pitch.",
+                    "known_objectives": ["Suivre la piste publique"],
+                },
+                "active_chapter": {
+                    "opening_scene": {
+                        "place": "Vieille route",
+                        "description": "La brume colle aux bottes.",
+                    }
+                },
+            },
+        }
+    )
+    captured: dict = {}
+
+    async def fake_open_scene(self, **kwargs):
+        return GMResponse(narration=_FALLBACK_NARRATION, actions=[])
+
+    async def fake_publish(session_id, active_session, db, response, *, quest_changed):
+        captured["response"] = response
+
+    monkeypatch.setattr(routes_game.GMAgent, "open_scene", fake_open_scene)
+    monkeypatch.setattr(routes_game, "_publish_opening_scene", fake_publish)
+    monkeypatch.setattr(routes_game.event_bus, "publish_to_session", AsyncMock())
+
+    await routes_game._send_campaign_opening_narration(
+        "session-1",
+        active,
+        active.state_data["campaign_context"],
+        db=None,
+    )
+
+    assert captured["response"].narration != _FALLBACK_NARRATION
+    assert "Mission confiée" in captured["response"].narration
+    assert "Que faites-vous ?" in captured["response"].narration
+
+
+@pytest.mark.asyncio
+async def test_publish_opening_scene_normalizes_path_closer_and_clears_flag(monkeypatch) -> None:
+    from app.agents.schemas import GMResponse
+    from app.api import routes_game
+    from app.game.event_bus import EventType
+
+    published: list[tuple[str, dict]] = []
+
+    class FakeExecutor:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def execute_gm_response(self, response, active, db, *, session_id=None):
+            return None
+
+    async def fake_publish(session_id, event_type, payload, source=None):
+        published.append((event_type, payload))
+
+    active = SimpleNamespace(
+        state_data={
+            "_opening_narration_in_progress": True,
+            "campaign_context": {
+                "active_chapter": {
+                    "opening_scene": {
+                        "place": "Résidence de Wakanga",
+                        "description": "Un salon calme autour d'une table basse.",
+                    }
+                }
+            },
+        },
+        mark_dirty=lambda: None,
+    )
+
+    monkeypatch.setattr(routes_game, "GMResponseExecutor", FakeExecutor)
+    monkeypatch.setattr(routes_game.session_manager, "save_state", AsyncMock())
+    monkeypatch.setattr(routes_game.event_bus, "publish_to_session", fake_publish)
+    monkeypatch.setattr(
+        routes_game,
+        "_build_session_state_payload_with_maps",
+        AsyncMock(return_value={}),
+    )
+    monkeypatch.setattr("app.services.message_service.persist_narration", AsyncMock())
+
+    await routes_game._publish_opening_scene(
+        "session-1",
+        active,
+        db=None,
+        response=GMResponse(
+            narration="Syndra vous observe. Quel chemin souhaitez-vous prendre ?",
+            actions=[],
+        ),
+        quest_changed=False,
+    )
+
+    assert active.state_data["welcome_narration_sent"] is True
+    assert "_opening_narration_in_progress" not in active.state_data
+    narration_payload = next(
+        payload for event, payload in published if event == EventType.NARRATION
+    )
+    assert narration_payload["text"] == "Syndra vous observe. Que faites-vous ?"
 
 
 @pytest.mark.asyncio

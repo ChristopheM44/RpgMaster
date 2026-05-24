@@ -1049,13 +1049,21 @@ def _sanitize_opening_scene_entity(value: Any, max_name: int) -> Optional[dict[s
         entity_id = _text(value.get("id") or "", 80)
         name = _text(value.get("name") or value.get("label") or entity_id, max_name)
         description = _text(value.get("description") or value.get("action_hint") or "", 260)
+        action_hint = _text(value.get("action_hint") or "", 180)
+        opening_intent = _text(value.get("opening_intent") or "", 200)
     else:
         entity_id = ""
         name = _text(value, max_name)
         description = ""
+        action_hint = ""
+        opening_intent = ""
     if not name and not entity_id:
         return None
     out = {"id": entity_id, "name": name or entity_id, "description": description}
+    if action_hint:
+        out["action_hint"] = action_hint
+    if opening_intent:
+        out["opening_intent"] = opening_intent
     return out
 
 

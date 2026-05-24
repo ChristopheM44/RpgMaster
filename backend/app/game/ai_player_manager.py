@@ -19,6 +19,8 @@ from __future__ import annotations
 import logging
 import re
 import unicodedata
+import uuid
+from inspect import isawaitable
 from typing import TYPE_CHECKING, Any, Optional
 
 from app.agents.player_agent import _NON_JSON_LLM_ERROR
@@ -482,16 +484,15 @@ class AIPlayerManager:
                 if active.state_data.get("pending_encounter"):
                     # Legitimate: publish the aggressive action, flag transition, stop
                     visible_text = self._visible_action_text(action, char_name)
-                    await event_bus.publish_to_session(
+                    scene_id = str(uuid.uuid4())
+                    await self._publish_companion_visible(
                         session_id,
-                        EventType.NARRATION,
-                        {
-                            "text": visible_text,
-                            "speaker": char_name,
-                            "action_type": action.action_type,
-                            "is_ai_player": True,
-                        },
-                        source="ai_player_manager",
+                        visible_text,
+                        char_name=char_name,
+                        char_id=char_id,
+                        action_type=action.action_type,
+                        entry_kind="action",
+                        scene_id=scene_id,
                     )
                     active.state_data["pending_phase_transition"] = "COMBAT"
                     active.mark_dirty()
@@ -510,16 +511,18 @@ class AIPlayerManager:
 
             # Publish post-guard roleplay
             visible_text = self._visible_action_text(action, char_name)
-            await event_bus.publish_to_session(
+            scene_id = str(uuid.uuid4())
+            entry_kind = (
+                "action" if action.action_type in _MECHANICAL_ACTION_TYPES else "dialogue"
+            )
+            await self._publish_companion_visible(
                 session_id,
-                EventType.NARRATION,
-                {
-                    "text": visible_text,
-                    "speaker": char_name,
-                    "action_type": action.action_type,
-                    "is_ai_player": True,
-                },
-                source="ai_player_manager",
+                visible_text,
+                char_name=char_name,
+                char_id=char_id,
+                action_type=action.action_type,
+                entry_kind=entry_kind,
+                scene_id=scene_id,
             )
 
             # Collecter la réponse pour la conclusion sociale éventuelle
@@ -543,9 +546,25 @@ class AIPlayerManager:
                     message_type=msg_type,
                     metadata={
                         "is_ai_player": True,
+                        "speaker_id": char_id,
+                        "speaker_kind": "companion",
+                        "entry_kind": entry_kind,
                         "character_id": char_id,
                         "action_type": action.action_type,
+                        "scene_id": scene_id,
                     },
+                )
+
+            relayed_to_npc = False
+            if action.action_type == "talk":
+                relayed_to_npc = await self._relay_companion_talk_to_npc(
+                    session_id=session_id,
+                    active=active,
+                    action_resolver=action_resolver,
+                    action=action,
+                    visible_text=visible_text,
+                    char_id=char_id,
+                    db=db,
                 )
 
             # GM pipeline only for actions requiring world arbitration
@@ -573,6 +592,8 @@ class AIPlayerManager:
 
             if active.state_data.get("pending_phase_transition") == "COMBAT":
                 break
+            if relayed_to_npc:
+                break
 
             # Recharger le contexte pour que le prochain compagnon voie ce qui
             # vient d'être dit (séquentialité : N+1 voit la réplique de N).
@@ -586,6 +607,232 @@ class AIPlayerManager:
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    async def _publish_companion_visible(
+        session_id: str,
+        text: str,
+        *,
+        char_name: str,
+        char_id: str,
+        action_type: str,
+        entry_kind: str,
+        scene_id: str,
+    ) -> None:
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.NARRATION,
+            {
+                "text": text,
+                "speaker": char_name,
+                "speaker_id": char_id,
+                "speaker_kind": "companion",
+                "entry_kind": entry_kind,
+                "action_type": action_type,
+                "is_ai_player": True,
+                "scene_id": scene_id,
+            },
+            source="ai_player_manager",
+        )
+
+    @classmethod
+    async def _relay_companion_talk_to_npc(
+        cls,
+        *,
+        session_id: str,
+        active: ActiveSession,
+        action_resolver: ActionResolver,
+        action: PlayerActionChoice,
+        visible_text: str,
+        char_id: str,
+        db: Optional[AsyncSession],
+    ) -> bool:
+        relay = getattr(action_resolver, "resolve_npc_dialogue", None)
+        if relay is None or not callable(relay):
+            return False
+
+        npc_id = cls._companion_npc_dialogue_target(action, visible_text, active.state_data)
+        if not npc_id:
+            return False
+
+        try:
+            result = relay(
+                session_id=session_id,
+                content=visible_text,
+                character_id=char_id,
+                target_id=npc_id,
+                active=active,
+                db=db,
+            )
+            if not isawaitable(result):
+                return False
+            await result
+            return True
+        except Exception as exc:
+            logger.error(
+                "run_exploration_reactions: relais dialogue PNJ échoué pour %s : %s",
+                char_id,
+                exc,
+            )
+            return False
+
+    @classmethod
+    def _companion_npc_dialogue_target(
+        cls,
+        action: PlayerActionChoice,
+        visible_text: str,
+        state_data: dict[str, Any],
+    ) -> Optional[str]:
+        raw_target = str(action.target or "").strip()
+        explicit_target_id = (
+            cls._resolve_present_npc_target(raw_target, state_data) if raw_target else None
+        )
+        text_target_id = cls._resolve_present_npc_target(visible_text, state_data)
+        npc_id = explicit_target_id or text_target_id
+        if not npc_id:
+            return None
+
+        npc_name = cls._present_npc_name(npc_id, state_data)
+        if not cls._looks_like_direct_npc_address(
+            visible_text,
+            npc_name=npc_name,
+            has_explicit_target=explicit_target_id is not None,
+        ):
+            return None
+        return npc_id
+
+    @classmethod
+    def _resolve_present_npc_target(
+        cls,
+        text: str,
+        state_data: dict[str, Any],
+    ) -> Optional[str]:
+        if not text:
+            return None
+        present_ids = cls._present_npc_ids(state_data)
+        if text in present_ids:
+            return text
+        try:
+            from app.game.action_pipeline import resolve_npc_target_id
+
+            target_id = resolve_npc_target_id(text, state_data)
+        except Exception:
+            target_id = None
+        if target_id and target_id in present_ids:
+            return target_id
+        return None
+
+    @staticmethod
+    def _present_npc_ids(state_data: dict[str, Any]) -> set[str]:
+        scene = state_data.get("current_scene", {})
+        scene_id = str(scene.get("scene_id") or "") if isinstance(scene, dict) else ""
+        present: set[str] = set()
+        if isinstance(scene, dict):
+            for poi in scene.get("pois", []) or []:
+                if not isinstance(poi, dict):
+                    continue
+                kind = str(poi.get("kind") or poi.get("icon") or "").casefold()
+                if kind == "npc":
+                    poi_id = str(poi.get("id") or "").strip()
+                    if poi_id:
+                        present.add(poi_id)
+
+        npc_states = state_data.get("npc_states", {})
+        if isinstance(npc_states, dict) and scene_id:
+            for npc_id, npc in npc_states.items():
+                if isinstance(npc, dict) and str(npc.get("last_location") or "") == scene_id:
+                    present.add(str(npc_id))
+        return present
+
+    @staticmethod
+    def _present_npc_name(npc_id: str, state_data: dict[str, Any]) -> str:
+        npc_states = state_data.get("npc_states", {})
+        if isinstance(npc_states, dict):
+            npc = npc_states.get(npc_id)
+            if isinstance(npc, dict) and npc.get("name"):
+                return str(npc["name"])
+        scene = state_data.get("current_scene", {})
+        if isinstance(scene, dict):
+            for poi in scene.get("pois", []) or []:
+                if isinstance(poi, dict) and str(poi.get("id") or "") == npc_id:
+                    return str(poi.get("name") or npc_id)
+        return npc_id
+
+    @classmethod
+    def _looks_like_direct_npc_address(
+        cls,
+        text: str,
+        *,
+        npc_name: str,
+        has_explicit_target: bool,
+    ) -> bool:
+        normalized = cls._normalize_text(text)
+        if not normalized:
+            return False
+
+        has_question_or_request = (
+            "?" in text
+            or any(
+                marker in normalized
+                for marker in (
+                    "vous",
+                    "votre",
+                    "vos",
+                    "tu",
+                    "toi",
+                    "ton",
+                    "ta",
+                    "tes",
+                    "dites",
+                    "expliquez",
+                    "repondez",
+                    "parlez",
+                    "pouvez",
+                    "avez vous",
+                    "savez vous",
+                )
+            )
+        )
+        if has_explicit_target:
+            return has_question_or_request
+
+        aliases = [npc_name]
+        first_name = str(npc_name).split(" ", 1)[0]
+        if first_name and first_name != npc_name:
+            aliases.append(first_name)
+        alias_patterns = [re.escape(cls._normalize_text(alias)) for alias in aliases if alias]
+        if not alias_patterns:
+            return False
+        alias_pattern = "|".join(alias_patterns)
+        raw_text = unicodedata.normalize("NFKD", str(text).casefold())
+        raw_text = "".join(ch for ch in raw_text if not unicodedata.combining(ch))
+        raw_aliases = [
+            re.escape(
+                "".join(
+                    ch
+                    for ch in unicodedata.normalize("NFKD", str(alias).casefold())
+                    if not unicodedata.combining(ch)
+                )
+            )
+            for alias in aliases
+            if str(alias).strip()
+        ]
+        raw_alias_pattern = "|".join(raw_aliases)
+        has_vocative_name = bool(
+            raw_alias_pattern
+            and re.search(rf"(^|[«\"“”\s])@?(?:{raw_alias_pattern})\s*[:,]", raw_text)
+        )
+        speaks_to_name = bool(
+            re.search(
+                rf"(demande|interroge|parle|adresse|dit|questionne)\s+(a\s+)?(?:{alias_pattern})",
+                normalized,
+            )
+        )
+        has_direct_name_address = bool(
+            has_vocative_name
+            or speaks_to_name
+        )
+        return has_direct_name_address and has_question_or_request
 
     @staticmethod
     async def _publish_thinking(

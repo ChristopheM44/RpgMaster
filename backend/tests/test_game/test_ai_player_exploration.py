@@ -139,9 +139,118 @@ async def test_exploration_reactions_calls_roleplay_for_ai() -> None:
         "« Commençons par lui poser des questions précises. »"
     )
     assert narration_calls[-1].args[2]["text"] == expected_text
+    assert narration_calls[-1].args[2]["speaker_id"] == "ai_1"
+    assert narration_calls[-1].args[2]["speaker_kind"] == "companion"
+    assert narration_calls[-1].args[2]["entry_kind"] == "dialogue"
+    assert narration_calls[-1].args[2]["scene_id"]
     assert responses == [
         {"speaker": "Thorin", "text": expected_text}
     ]
+
+
+@pytest.mark.asyncio
+async def test_companion_talk_addressing_present_npc_calls_npc_dialogue_once() -> None:
+    """Un compagnon qui pose une vraie question à un PNJ déclenche sa réponse.
+
+    La chaîne s'arrête ensuite : pas de deuxième compagnon automatique dans le
+    même passage.
+    """
+    active = _make_exploration_session()
+    active.state_data["current_scene"] = {
+        "scene_id": "scene_goldenthrone",
+        "pois": [
+            {
+                "id": "syndra_silvane",
+                "name": "Syndra Silvane",
+                "kind": "npc",
+                "icon": "npc",
+            }
+        ],
+    }
+    active.state_data["characters"]["ai_1"]["name"] = "Shade"
+    active.turn_manager._order.append(TurnEntry("ai_2", "Elara", 0, True, True))
+
+    shade = MagicMock()
+    shade.character_name = "Shade"
+    shade.roleplay = AsyncMock(return_value=PlayerActionChoice(
+        action_type="talk",
+        action_description="Interroge Syndra.",
+        target="Syndra Silvane",
+        roleplay_text=(
+            "Shade incline la tête vers l'archimage. "
+            "« Archimage, avez-vous une piste plus précise ? »"
+        ),
+    ))
+    elara = MagicMock()
+    elara.character_name = "Elara"
+    elara.roleplay = AsyncMock(return_value=PlayerActionChoice(
+        action_type="talk",
+        action_description="Ajoute un doute.",
+        roleplay_text="Elara observe en silence.",
+    ))
+    active.ai_players = {"ai_1": shade, "ai_2": elara}
+
+    resolver = MagicMock()
+    resolver.resolve = AsyncMock()
+    resolver.resolve_npc_dialogue = AsyncMock()
+
+    with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=AsyncMock()):
+        reacted, _ = await AIPlayerManager().run_exploration_reactions(
+            "expl_session",
+            active,
+            resolver,
+            trigger_character_id="human_1",
+            max_reactors=2,
+        )
+
+    assert reacted == 1
+    resolver.resolve.assert_not_called()
+    resolver.resolve_npc_dialogue.assert_awaited_once()
+    assert resolver.resolve_npc_dialogue.await_args.kwargs["character_id"] == "ai_1"
+    assert resolver.resolve_npc_dialogue.await_args.kwargs["target_id"] == "syndra_silvane"
+    assert "Archimage" in resolver.resolve_npc_dialogue.await_args.kwargs["content"]
+    elara.roleplay.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_companion_talk_merely_mentioning_npc_does_not_call_npc_dialogue() -> None:
+    active = _make_exploration_session()
+    active.state_data["current_scene"] = {
+        "scene_id": "scene_goldenthrone",
+        "pois": [
+            {
+                "id": "syndra_silvane",
+                "name": "Syndra Silvane",
+                "kind": "npc",
+                "icon": "npc",
+            }
+        ],
+    }
+    ai_agent = MagicMock()
+    ai_agent.character_name = "Shade"
+    ai_agent.roleplay = AsyncMock(return_value=PlayerActionChoice(
+        action_type="talk",
+        action_description="Commente la scène.",
+        target=None,
+        roleplay_text="Syndra cache-t-elle quelque chose ? Restons attentifs.",
+    ))
+    active.ai_players["ai_1"] = ai_agent
+
+    resolver = MagicMock()
+    resolver.resolve = AsyncMock()
+    resolver.resolve_npc_dialogue = AsyncMock()
+
+    with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=AsyncMock()):
+        reacted, _ = await AIPlayerManager().run_exploration_reactions(
+            "expl_session",
+            active,
+            resolver,
+            trigger_character_id="human_1",
+        )
+
+    assert reacted == 1
+    resolver.resolve.assert_not_called()
+    resolver.resolve_npc_dialogue.assert_not_called()
 
 
 @pytest.mark.asyncio

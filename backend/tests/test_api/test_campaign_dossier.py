@@ -70,7 +70,19 @@ class DummyForgeAgent:
                             "venue": None,
                             "description": "La vieille route disparaît dans une brume basse.",
                             "present_npcs": [
-                                {"id": "bram", "name": "Bram", "description": "Témoin nerveux."}
+                                {
+                                    "id": "bram",
+                                    "name": "Bram",
+                                    "description": (
+                                        "Bram serre une lanterne contre sa poitrine, voix rauque "
+                                        "et bottes couvertes de boue froide."
+                                    ),
+                                    "action_hint": "Lui demander ce qu'il a vu dans la brume.",
+                                    "opening_intent": (
+                                        "Il veut être cru sans révéler tout de suite "
+                                        "qui l'a menacé."
+                                    ),
+                                }
                             ],
                             "visible_clues": [
                                 {
@@ -149,7 +161,15 @@ class DummyForgeAgent:
 
 @pytest.fixture(autouse=True)
 def dummy_forge_agent(monkeypatch):
+    from app.agents.gm_agent import _FALLBACK_NARRATION
+    from app.agents.schemas import GMResponse
+    from app.api import routes_game
+
+    async def fallback_open_scene(self, **kwargs):
+        return GMResponse(narration=_FALLBACK_NARRATION, actions=[])
+
     monkeypatch.setattr(campaign_dossier_service, "CampaignForgeAgent", DummyForgeAgent)
+    monkeypatch.setattr(routes_game.GMAgent, "open_scene", fallback_open_scene)
 
 
 async def _create_campaign(async_client):
@@ -402,6 +422,21 @@ async def test_campaign_gm_dossier_endpoint_exposes_author_notes_only(async_clie
 
 
 @pytest.mark.asyncio
+async def test_forge_dossier_npc_descriptions_are_roleplay_grade(async_client):
+    forged = await _forge_and_validate(async_client)
+    response = await async_client.get(f"/api/campaigns/{forged['campaign_id']}/gm-dossier")
+
+    assert response.status_code == 200
+    npc = response.json()["gm_dossier"]["chapters"][0]["opening_scene"]["present_npcs"][0]
+    assert "Bram serre une lanterne" in npc["description"]
+    assert "voix rauque" in npc["description"]
+    assert npc["action_hint"] == "Lui demander ce qu'il a vu dans la brume."
+    assert "menacé" in npc["opening_intent"]
+    assert len(npc["description"]) <= 260
+    assert len(npc["opening_intent"]) <= 200
+
+
+@pytest.mark.asyncio
 async def test_start_game_injects_minimal_campaign_context(async_client, db_session):
     forged = await _forge_and_validate(async_client)
     campaign_id = forged["campaign_id"]
@@ -438,7 +473,8 @@ async def test_start_game_injects_minimal_campaign_context(async_client, db_sess
     assert f"{SECRET}_FUTURE" not in serialized
     assert SECRET not in serialized
     assert game_state.state_data["quests"][0]["id"] == "campaign_opening"
-    assert "Une lueur bleue" in game_state.state_data["quests"][0]["summary"]
+    assert "Des brumes coupent les routes" in game_state.state_data["quests"][0]["summary"]
+    assert "Une lueur bleue" not in game_state.state_data["quests"][0]["summary"]
     assert game_state.state_data["current_scene"]["scene_id"] == "scene_vieille_route"
     assert len(game_state.state_data["current_scene"]["pois"]) >= 3
     assert "bram" in game_state.state_data["npc_states"]

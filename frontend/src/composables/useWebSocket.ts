@@ -147,8 +147,15 @@ export function useWebSocket(sessionId: string) {
         if (isSessionStatePayload(msg.payload)) gameStore.applySessionState(msg.payload)
         break
       case 'narration':
-      case 'dialogue':
         if (isNarrationPayload(msg.payload)) gameStore.addNarration(msg.payload)
+        break
+      case 'dialogue':
+        if (isNarrationPayload(msg.payload)) {
+          gameStore.addNarration({
+            ...msg.payload,
+            entry_kind: msg.payload.entry_kind ?? 'dialogue',
+          })
+        }
         break
       case 'roll_result':
         if (isRollResultPayload(msg.payload)) gameStore.addRollResult(msg.payload)
