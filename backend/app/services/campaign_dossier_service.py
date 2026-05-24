@@ -1,4 +1,5 @@
 """Campaign dossier service — player-safe contracts and private GM dossiers."""
+
 from __future__ import annotations
 
 import html
@@ -13,6 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.campaign_forge_agent import CampaignForgeAgent
+from app.agents.persona import BasePersona, NPCPersona, persona_from_dict
 from app.models.campaign import Campaign
 from app.models.campaign_dossier import CampaignDossier
 from app.models.character import Character
@@ -38,6 +40,7 @@ def empty_played_canon() -> dict[str, Any]:
         "plan_changes": [],
         "rolling_summary": "",
         "chapter_progression": [],
+        "npc_personas": {},  # dict[persona_id → NPCPersona dump] — généré en cours de jeu
     }
 
 
@@ -216,11 +219,13 @@ async def reset_played_state(campaign: Campaign, db: AsyncSession) -> Optional[C
     contract = sanitize_player_contract(dossier.player_contract or {}, campaign, brief={})
     chapters = []
     for index, chapter in enumerate(contract.get("visible_chapters", [])):
-        chapters.append({
-            **chapter,
-            "state": "active" if index == 0 else "planned",
-            "sessions": 0,
-        })
+        chapters.append(
+            {
+                **chapter,
+                "state": "active" if index == 0 else "planned",
+                "sessions": 0,
+            }
+        )
     contract["visible_chapters"] = chapters
     contract["played_summary"] = ""
 
@@ -352,12 +357,86 @@ async def synthesize_canon_for_session(
         context = game_state.get("campaign_context")
         if isinstance(context, dict):
             context["played_canon"] = dossier.played_canon
-            context["player_contract"]["played_summary"] = (
-                dossier.player_contract or {}
-            ).get("played_summary", "")
+            context["player_contract"]["played_summary"] = (dossier.player_contract or {}).get(
+                "played_summary", ""
+            )
         return dossier
     finally:
         _SYNTHESIS_IN_FLIGHT.discard(key)
+
+
+async def upsert_npc_persona(
+    campaign_id: str,
+    persona: NPCPersona,
+    db: AsyncSession,
+) -> CampaignDossier:
+    """Persiste/met à jour une persona PNJ dans played_canon.npc_personas."""
+    dossier = await get_or_create_dossier(campaign_id, db)
+    canon = sanitize_played_canon(dossier.played_canon or {})
+    personas = dict(canon.get("npc_personas") or {})
+    personas[persona.id] = persona.model_dump(mode="json")
+    canon["npc_personas"] = personas
+    dossier.played_canon = canon
+    await db.commit()
+    await db.refresh(dossier)
+    return dossier
+
+
+async def get_npc_persona(
+    campaign_id: str,
+    persona_id: str,
+    db: AsyncSession,
+) -> Optional[NPCPersona]:
+    """Récupère une persona PNJ — cherche d'abord dans played_canon, puis gm_dossier."""
+    dossier = await get_dossier(campaign_id, db)
+    if dossier is None:
+        return None
+    canon = sanitize_played_canon(dossier.played_canon or {})
+    raw = (canon.get("npc_personas") or {}).get(persona_id)
+    if raw is None:
+        for item in (dossier.gm_dossier or {}).get("important_npcs", []):
+            if isinstance(item, dict) and item.get("id") == persona_id:
+                raw = item
+                break
+    if not isinstance(raw, dict):
+        return None
+    try:
+        persona = persona_from_dict({**raw, "persona_type": "npc"})
+    except Exception:
+        return None
+    return persona if isinstance(persona, NPCPersona) else None
+
+
+async def list_personas(
+    campaign_id: str,
+    db: AsyncSession,
+) -> dict[str, list[BasePersona]]:
+    """Retourne toutes les personas connues d'une campagne, groupées par type."""
+    dossier = await get_dossier(campaign_id, db)
+    if dossier is None:
+        return {"npcs": [], "monsters": [], "companions": []}
+    gm = dossier.gm_dossier or {}
+    canon = sanitize_played_canon(dossier.played_canon or {})
+
+    def _load(items: list[Any], expected: str) -> list[BasePersona]:
+        out: list[BasePersona] = []
+        for item in items or []:
+            if not isinstance(item, dict):
+                continue
+            try:
+                p = persona_from_dict({**item, "persona_type": expected})
+            except Exception:
+                continue
+            out.append(p)
+        return out
+
+    npcs = _load(gm.get("important_npcs", []), "npc")
+    npcs.extend(_load(list((canon.get("npc_personas") or {}).values()), "npc"))
+    return {
+        "npcs": npcs,
+        "monsters": _load(gm.get("bestiary", []), "monster"),
+        "companions": _load(gm.get("companion_seeds", []), "companion"),
+    }
 
 
 async def campaign_for_session(session_id: str, db: AsyncSession) -> Optional[Campaign]:
@@ -568,8 +647,11 @@ def sanitize_player_contract(
         100,
     )
     pitch = _text(
-        data.get("pitch_public") or brief.get("pitch_public") or brief.get("pitch")
-        or campaign.description or "Une nouvelle chronique attend d'être jouée.",
+        data.get("pitch_public")
+        or brief.get("pitch_public")
+        or brief.get("pitch")
+        or campaign.description
+        or "Une nouvelle chronique attend d'être jouée.",
         700,
     )
     tones = _string_list(data.get("tones") or brief.get("tones") or brief.get("tonalities"), 5)
@@ -628,23 +710,27 @@ def sanitize_gm_dossier(
             }
             for i, ch in enumerate(contract.get("visible_chapters", []))
         ]
-    return sanitize_gm_dossier_map_defaults({
-        "narrative_arc": _text(data.get("narrative_arc") or campaign.description, 2000),
-        "chapters": [_sanitize_private_chapter(ch, i) for i, ch in enumerate(chapters)],
-        "important_npcs": _generic_list(data.get("important_npcs")),
-        "locations": _generic_list(data.get("locations")),
-        "factions": _generic_list(data.get("factions")),
-        "secrets": _generic_list(data.get("secrets")),
-        "revelations": _generic_list(data.get("revelations")),
-        "fronts": _generic_list(data.get("fronts")),
-        "quests": _generic_list(data.get("quests")),
-        "complications": _generic_list(data.get("complications")),
-        "clues": _generic_list(data.get("clues")),
-        "light_mechanics": _generic_list(data.get("light_mechanics")),
-        "region_map": data.get("region_map"),
-        "city_maps": data.get("city_maps"),
-        "active_city_id": data.get("active_city_id"),
-    })
+    return sanitize_gm_dossier_map_defaults(
+        {
+            "narrative_arc": _text(data.get("narrative_arc") or campaign.description, 2000),
+            "chapters": [_sanitize_private_chapter(ch, i) for i, ch in enumerate(chapters)],
+            "important_npcs": _sanitize_npc_personas(data.get("important_npcs")),
+            "bestiary": _sanitize_monster_personas(data.get("bestiary")),
+            "companion_seeds": _sanitize_companion_personas(data.get("companion_seeds")),
+            "locations": _generic_list(data.get("locations")),
+            "factions": _generic_list(data.get("factions")),
+            "secrets": _generic_list(data.get("secrets")),
+            "revelations": _generic_list(data.get("revelations")),
+            "fronts": _generic_list(data.get("fronts")),
+            "quests": _generic_list(data.get("quests")),
+            "complications": _generic_list(data.get("complications")),
+            "clues": _generic_list(data.get("clues")),
+            "light_mechanics": _generic_list(data.get("light_mechanics")),
+            "region_map": data.get("region_map"),
+            "city_maps": data.get("city_maps"),
+            "active_city_id": data.get("active_city_id"),
+        }
+    )
 
 
 def sanitize_played_canon(data: dict[str, Any]) -> dict[str, Any]:
@@ -662,6 +748,7 @@ def sanitize_played_canon(data: dict[str, Any]) -> dict[str, Any]:
     ):
         canon[key] = _generic_list(data.get(key))
     canon["rolling_summary"] = _text(data.get("rolling_summary") or "", 2000)
+    canon["npc_personas"] = _sanitize_persona_dict(data.get("npc_personas"), expected_type="npc")
     return canon
 
 
@@ -713,7 +800,9 @@ def _fallback_dossier(
 ) -> dict[str, Any]:
     title = _text(brief.get("title") or brief.get("name") or campaign.name, 100)
     pitch = _text(
-        brief.get("pitch_public") or brief.get("pitch") or campaign.description
+        brief.get("pitch_public")
+        or brief.get("pitch")
+        or campaign.description
         or "Une menace ancienne remue dans l'ombre.",
         700,
     )
@@ -1102,12 +1191,14 @@ def _sanitize_opening_scene_exits(value: Any) -> list[dict[str, str]]:
             description = ""
         if not label and not leads_to:
             continue
-        out.append({
-            "id": exit_id,
-            "label": label or leads_to,
-            "leads_to": leads_to,
-            "description": description,
-        })
+        out.append(
+            {
+                "id": exit_id,
+                "label": label or leads_to,
+                "leads_to": leads_to,
+                "description": description,
+            }
+        )
         if len(out) >= 6:
             break
     return out
@@ -1212,6 +1303,90 @@ def _generic_list(value: Any) -> list[Any]:
     if not isinstance(value, list):
         return []
     return value[:50]
+
+
+def _coerce_legacy_npc_dict(item: dict[str, Any]) -> dict[str, Any]:
+    """Migration douce — un dict ancien format devient un NPCPersona light.
+
+    Préserve les anciens champs (`name`, `role`, `description`, etc.) dans
+    `short_description` faute de mieux.
+    """
+    name = _text(item.get("name") or item.get("title") or "PNJ inconnu", 120)
+    short = _text(
+        item.get("short_description") or item.get("description") or item.get("role") or "",
+        300,
+    )
+    raw_id = _text(item.get("id") or name.lower().replace(" ", "_"), 80)
+    return {
+        "id": raw_id or "unknown_npc",
+        "name": name,
+        "archetype": _text(item.get("archetype") or item.get("role") or "figurant", 60),
+        "short_description": short or f"{name}, croisé en cours d'aventure.",
+        "importance": "light",
+        "persona_type": "npc",
+    }
+
+
+def _coerce_persona(item: Any, expected_type: str) -> Optional[dict[str, Any]]:
+    """Valide un item dict via Pydantic. Renvoie le dump validé, ou None si rejet.
+
+    Migration douce : pour les NPC, accepte un ancien format (sans archetype) à condition
+    qu'il fournisse au minimum un name ou un id reconnaissables.
+    """
+    if not isinstance(item, dict):
+        return None
+    payload = dict(item)
+    payload.setdefault("persona_type", expected_type)
+    if expected_type == "npc" and "archetype" not in payload:
+        if not (item.get("name") or item.get("title") or item.get("id")):
+            return None
+        payload = _coerce_legacy_npc_dict(payload)
+    try:
+        persona = persona_from_dict(payload)
+    except Exception as exc:
+        logger.debug("Invalid persona payload (%s): %s", expected_type, exc)
+        return None
+    if persona.persona_type != expected_type:
+        return None
+    return persona.model_dump(mode="json")
+
+
+def _sanitize_personas_list(value: Any, expected_type: str, cap: int = 50) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for item in value:
+        dumped = _coerce_persona(item, expected_type)
+        if dumped is not None:
+            out.append(dumped)
+        if len(out) >= cap:
+            break
+    return out
+
+
+def _sanitize_npc_personas(value: Any) -> list[dict[str, Any]]:
+    return _sanitize_personas_list(value, "npc")
+
+
+def _sanitize_monster_personas(value: Any) -> list[dict[str, Any]]:
+    return _sanitize_personas_list(value, "monster")
+
+
+def _sanitize_companion_personas(value: Any) -> list[dict[str, Any]]:
+    return _sanitize_personas_list(value, "companion")
+
+
+def _sanitize_persona_dict(value: Any, expected_type: str) -> dict[str, dict[str, Any]]:
+    if not isinstance(value, dict):
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    for key, item in value.items():
+        dumped = _coerce_persona(item, expected_type)
+        if dumped is not None:
+            out[str(key)] = dumped
+        if len(out) >= 100:
+            break
+    return out
 
 
 def _append_unique(items: list[Any], value: Any) -> None:

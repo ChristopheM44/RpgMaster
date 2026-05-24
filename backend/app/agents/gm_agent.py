@@ -6,6 +6,7 @@ from typing import Any, Optional
 
 from app.agents.base_agent import BaseAgent
 from app.agents.context_manager import ContextManager
+from app.agents.persona import MonsterPersona, NPCPersona, stub_npc_persona_from_legacy
 from app.agents.prompt_safety import delimit_user_input
 from app.agents.schemas import AgentContext, AgentResponse, GMAction, GMResponse
 from app.llm.base_client import LLMClient
@@ -216,9 +217,7 @@ def _extract_scene_anchor(game_state: dict[str, Any]) -> dict[str, Any]:
     npc_states = game_state.get("npc_states") or {}
     if not isinstance(npc_states, dict):
         npc_states = {}
-    present_npcs, absent_npcs, unknown_npcs = _compute_npc_attendance(
-        npc_states, scene, journal
-    )
+    present_npcs, absent_npcs, unknown_npcs = _compute_npc_attendance(npc_states, scene, journal)
 
     return {
         "location_place": location_place,
@@ -404,24 +403,57 @@ class GMAgent(BaseAgent):
     async def run_npc_dialogue(
         self,
         npc_name: str,
-        npc_personality: str,
+        npc_personality: str | NPCPersona,
         player_message: str,
         game_state: Optional[dict[str, Any]] = None,
         context_manager: Optional[ContextManager] = None,
         messages: Optional[list] = None,
         roll_results: Optional[dict[str, Any]] = None,
     ) -> GMResponse:
-        """Génère une réplique de PNJ avec sa personnalité."""
+        """Génère une réplique de PNJ avec sa persona.
+
+        Backward-compat : ``npc_personality`` accepte une `NPCPersona` structurée
+        OU un string libre (ancien format). Dans le second cas, on wrap en
+        `NPCPersona(importance="light")` via `stub_npc_persona_from_legacy`.
+        """
         state = game_state or {}
+        if isinstance(npc_personality, NPCPersona):
+            npc_persona = npc_personality
+        else:
+            npc_persona = stub_npc_persona_from_legacy(npc_name, str(npc_personality or ""))
         user_prompt = self._render_prompt(
             "gm_npc_dialogue.txt",
             {
                 "scene_anchor": _extract_scene_anchor(state),
                 "active_quest_brief": _extract_active_quest_brief(state),
                 "game_state": json.dumps(state, ensure_ascii=False, indent=2),
-                "npc_name": npc_name,
-                "npc_personality": npc_personality,
+                "npc_persona": npc_persona,
                 "player_message": delimit_user_input(player_message),
+                "roll_results": json.dumps(roll_results or {}, ensure_ascii=False, indent=2),
+                "recent_messages": self._format_messages(messages),
+            },
+        )
+        return await self._call_and_parse(user_prompt, context_manager)
+
+    async def run_monster_combat(
+        self,
+        monster_persona: MonsterPersona,
+        game_state: dict[str, Any],
+        roll_results: Optional[dict[str, Any]] = None,
+        messages: Optional[list] = None,
+        context_manager: Optional[ContextManager] = None,
+    ) -> GMResponse:
+        """Narre un tour de combat avec une voix de monstre intelligent.
+
+        À utiliser quand le combattant actif est un monstre disposant d'une
+        ``MonsterPersona`` (boss, dragon, gobelin nommé). Pour les monstres
+        muets / mindless, utiliser ``run_combat_turn`` standard.
+        """
+        user_prompt = self._render_prompt(
+            "gm_monster_combat.txt",
+            {
+                "monster_persona": monster_persona,
+                "game_state": json.dumps(game_state, ensure_ascii=False, indent=2),
                 "roll_results": json.dumps(roll_results or {}, ensure_ascii=False, indent=2),
                 "recent_messages": self._format_messages(messages),
             },
@@ -436,9 +468,7 @@ class GMAgent(BaseAgent):
         context_manager: Optional[ContextManager] = None,
     ) -> GMResponse:
         """Narre la conclusion d'une scène sociale après les réponses des compagnons."""
-        responses_text = "\n".join(
-            f"[{r['speaker']}] {r['text']}" for r in companion_responses
-        )
+        responses_text = "\n".join(f"[{r['speaker']}] {r['text']}" for r in companion_responses)
         user_prompt = self._render_prompt(
             "gm_social_conclude.txt",
             {
@@ -476,8 +506,10 @@ class GMAgent(BaseAgent):
                     else ""
                 ),
                 outcome=(
-                    "SUCCÈS" if r.get("success") is True
-                    else "ÉCHEC" if r.get("success") is False
+                    "SUCCÈS"
+                    if r.get("success") is True
+                    else "ÉCHEC"
+                    if r.get("success") is False
                     else str(r.get("total", "?"))
                 ),
             )
@@ -531,19 +563,19 @@ class GMAgent(BaseAgent):
             return _FALLBACK_NARRATION
 
         text = text.strip()
-        if text and text[-1] not in {'.', '!', '?', '…', '"', '»', '”'}:
+        if text and text[-1] not in {".", "!", "?", "…", '"', "»", "”"}:
             last_boundary = max(
-                text.rfind('. '),
-                text.rfind('! '),
-                text.rfind('? '),
-                text.rfind('.\n'),
-                text.rfind('!\n'),
-                text.rfind('?\n'),
+                text.rfind(". "),
+                text.rfind("! "),
+                text.rfind("? "),
+                text.rfind(".\n"),
+                text.rfind("!\n"),
+                text.rfind("?\n"),
             )
             if last_boundary > len(text) * 0.5:
-                text = text[: last_boundary + 1] + '…'
+                text = text[: last_boundary + 1] + "…"
             else:
-                text = text + '…'
+                text = text + "…"
         return text or _FALLBACK_NARRATION
 
     @staticmethod
@@ -577,7 +609,7 @@ class GMAgent(BaseAgent):
                     lookahead += 1
                 if lookahead >= len(raw) or raw[lookahead] in {",", "}", "]"}:
                     try:
-                        value = json.loads(raw[start:index + 1])
+                        value = json.loads(raw[start : index + 1])
                     except json.JSONDecodeError:
                         return None
                     return str(value)
@@ -599,9 +631,7 @@ class GMAgent(BaseAgent):
             ]
             raw_intent = data.get("action_intent")
             action_intent = (
-                str(raw_intent)
-                if raw_intent in ("social", "environmental", "mixed")
-                else None
+                str(raw_intent) if raw_intent in ("social", "environmental", "mixed") else None
             )
             return GMResponse(
                 narration=str(data.get("narration", raw.strip())),

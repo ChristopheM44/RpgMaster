@@ -14,6 +14,7 @@ Usage::
     # After a human action resolves, trigger any consecutive AI turns:
     triggered = await ai_manager.process_ai_turns(session_id, active, action_resolver)
 """
+
 from __future__ import annotations
 
 import logging
@@ -110,7 +111,12 @@ def register_ai_player(active: ActiveSession, char_id: str, cdata: dict[str, Any
 
     Idempotent : ne recrée pas l'agent s'il est déjà présent dans
     ``active.ai_players``. Ignore les entrées non-IA.
+
+    Priorité de chargement de la personnalité :
+    1. ``cdata['persona']`` (CompanionPersona dump — nouveau format)
+    2. ``cdata['personality']`` (PlayerPersonality / list traits / string — legacy)
     """
+    from app.agents.persona import CompanionPersona
     from app.agents.player_agent import PlayerAgent, PlayerPersonality
 
     if not cdata.get("is_ai", False):
@@ -118,23 +124,47 @@ def register_ai_player(active: ActiveSession, char_id: str, cdata: dict[str, Any
     if char_id in active.ai_players:
         return
 
-    traits = cdata.get("personality") or ["brave"]
-    if isinstance(traits, str):
-        traits = [traits]
-    # Les traits peuvent être stockés comme dict {"traits": [...]}
-    if isinstance(traits, dict):
-        traits = list(traits.get("traits") or ["brave"])
+    character_name = cdata.get("name", char_id)
+    persona: PlayerPersonality | CompanionPersona
+
+    raw_persona = cdata.get("persona")
+    if isinstance(raw_persona, dict) and raw_persona.get("persona_type") == "companion":
+        try:
+            persona = CompanionPersona.model_validate(raw_persona)
+        except Exception as exc:
+            logger.warning(
+                "register_ai_player: CompanionPersona invalide pour %s : %s — fallback legacy.",
+                char_id,
+                exc,
+            )
+            persona = _legacy_personality(cdata)
+    else:
+        persona = _legacy_personality(cdata)
 
     active.ai_players[char_id] = PlayerAgent(
         character_id=char_id,
-        character_name=cdata.get("name", char_id),
-        personality=PlayerPersonality(traits=list(traits)),
+        character_name=character_name,
+        personality=persona,
     )
     logger.info(
         "register_ai_player: PlayerAgent enregistré pour '%s' (%s).",
-        cdata.get("name", char_id),
+        character_name,
         char_id,
     )
+
+
+def _legacy_personality(cdata: dict[str, Any]) -> Any:
+    """Construit un PlayerPersonality à partir de l'ancien champ ``personality``."""
+    from app.agents.player_agent import PlayerPersonality
+
+    raw = cdata.get("personality") or ["brave"]
+    if isinstance(raw, str):
+        traits: list[str] = [raw]
+    elif isinstance(raw, dict):
+        traits = list(raw.get("traits") or ["brave"])
+    else:
+        traits = list(raw)
+    return PlayerPersonality(traits=traits)
 
 
 def unregister_ai_player(active: ActiveSession, char_id: str) -> None:
@@ -253,8 +283,7 @@ class AIPlayerManager:
                         "source": "player_agent",
                         "character": current.name,
                         "message": (
-                            f"L'IA de {current.name} n'a pas pu répondre : "
-                            f"{action.llm_error}"
+                            f"L'IA de {current.name} n'a pas pu répondre : {action.llm_error}"
                         ),
                     },
                     source="ai_player_manager",
@@ -318,6 +347,7 @@ class AIPlayerManager:
             if db is not None and action.action_type in {"talk", "wait"}:
                 from app.models.message import MessageRole, MessageType
                 from app.services.message_service import persist_narration
+
                 await persist_narration(
                     session_id,
                     visible_text,
@@ -325,9 +355,7 @@ class AIPlayerManager:
                     db,
                     role=MessageRole.PLAYER,
                     message_type=(
-                        MessageType.DIALOGUE
-                        if entry_kind == "dialogue"
-                        else MessageType.ACTION
+                        MessageType.DIALOGUE if entry_kind == "dialogue" else MessageType.ACTION
                     ),
                     metadata={
                         "is_ai_player": True,
@@ -419,6 +447,7 @@ class AIPlayerManager:
         scene_context = ""
         if db is not None:
             from app.services.message_service import load_recent_messages
+
             recent_messages = await load_recent_messages(session_id, db)
             scene_context = _build_scene_context(recent_messages)
 
@@ -449,7 +478,10 @@ class AIPlayerManager:
 
             char_name = getattr(agent, "character_name", char_id)
             await self._publish_thinking(
-                session_id, True, character_id=char_id, character_name=char_name,
+                session_id,
+                True,
+                character_id=char_id,
+                character_name=char_name,
             )
             try:
                 action = await agent.roleplay(
@@ -460,7 +492,8 @@ class AIPlayerManager:
             except Exception as exc:
                 logger.error(
                     "run_exploration_reactions: agent '%s' raised exception: %s",
-                    char_name, exc,
+                    char_name,
+                    exc,
                 )
                 action = PlayerActionChoice(
                     action_type="wait",
@@ -470,7 +503,10 @@ class AIPlayerManager:
                 )
             finally:
                 await self._publish_thinking(
-                    session_id, False, character_id=char_id, character_name=char_name,
+                    session_id,
+                    False,
+                    character_id=char_id,
+                    character_name=char_name,
                 )
 
             # Provider error → visible event, skip this companion
@@ -482,8 +518,7 @@ class AIPlayerManager:
                         "source": "player_agent",
                         "character": char_name,
                         "message": (
-                            f"L'IA de {char_name} n'a pas pu répondre : "
-                            f"{action.llm_error}"
+                            f"L'IA de {char_name} n'a pas pu répondre : {action.llm_error}"
                         ),
                     },
                     source="ai_player_manager",
@@ -528,9 +563,7 @@ class AIPlayerManager:
             # Publish post-guard roleplay
             visible_text = self._visible_action_text(action, char_name)
             scene_id = str(uuid.uuid4())
-            entry_kind = (
-                "action" if action.action_type in _MECHANICAL_ACTION_TYPES else "dialogue"
-            )
+            entry_kind = "action" if action.action_type in _MECHANICAL_ACTION_TYPES else "dialogue"
             await self._publish_companion_visible(
                 session_id,
                 visible_text,
@@ -548,6 +581,7 @@ class AIPlayerManager:
             if db is not None and action.action_type not in _EXPLORATION_ARBITRAGE_ACTIONS:
                 from app.models.message import MessageRole, MessageType
                 from app.services.message_service import persist_narration
+
                 msg_type = (
                     MessageType.ACTION
                     if action.action_type in _EXPLORATION_ARBITRAGE_ACTIONS
@@ -601,7 +635,8 @@ class AIPlayerManager:
                 except Exception as exc:
                     logger.error(
                         "run_exploration_reactions: action_resolver a échoué pour %s : %s",
-                        char_name, exc,
+                        char_name,
+                        exc,
                     )
 
             reacted += 1
@@ -615,6 +650,7 @@ class AIPlayerManager:
             # vient d'être dit (séquentialité : N+1 voit la réplique de N).
             if db is not None and reacted < max_reactors:
                 from app.services.message_service import load_recent_messages
+
                 recent_messages = await load_recent_messages(session_id, db)
                 scene_context = _build_scene_context(recent_messages)
 
@@ -785,27 +821,24 @@ class AIPlayerManager:
         if not normalized:
             return False
 
-        has_question_or_request = (
-            "?" in text
-            or any(
-                marker in normalized
-                for marker in (
-                    "vous",
-                    "votre",
-                    "vos",
-                    "tu",
-                    "toi",
-                    "ton",
-                    "ta",
-                    "tes",
-                    "dites",
-                    "expliquez",
-                    "repondez",
-                    "parlez",
-                    "pouvez",
-                    "avez vous",
-                    "savez vous",
-                )
+        has_question_or_request = "?" in text or any(
+            marker in normalized
+            for marker in (
+                "vous",
+                "votre",
+                "vos",
+                "tu",
+                "toi",
+                "ton",
+                "ta",
+                "tes",
+                "dites",
+                "expliquez",
+                "repondez",
+                "parlez",
+                "pouvez",
+                "avez vous",
+                "savez vous",
             )
         )
         if has_explicit_target:
@@ -843,10 +876,7 @@ class AIPlayerManager:
                 normalized,
             )
         )
-        has_direct_name_address = bool(
-            has_vocative_name
-            or speaks_to_name
-        )
+        has_direct_name_address = bool(has_vocative_name or speaks_to_name)
         return has_direct_name_address and has_question_or_request
 
     @staticmethod
@@ -1018,8 +1048,7 @@ class AIPlayerManager:
                 spell.get("name_fr", ""),
             ]
             if not any(
-                cls._normalize_text(alias) in wanted
-                or wanted in cls._normalize_text(alias)
+                cls._normalize_text(alias) in wanted or wanted in cls._normalize_text(alias)
                 for alias in aliases
                 if alias
             ):
@@ -1213,9 +1242,7 @@ class AIPlayerManager:
     @staticmethod
     def _normalize_text(value: Any) -> str:
         normalized = unicodedata.normalize("NFKD", str(value).lower())
-        without_accents = "".join(
-            ch for ch in normalized if not unicodedata.combining(ch)
-        )
+        without_accents = "".join(ch for ch in normalized if not unicodedata.combining(ch))
         return re.sub(r"[^a-z0-9_]+", " ", without_accents).strip()
 
     @classmethod

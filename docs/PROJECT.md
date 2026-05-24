@@ -10,17 +10,23 @@ L'objectif est de permettre a quiconque de vivre une experience de JDR complete 
 
 ### Maitre de Jeu IA
 - Narration dynamique et contextuelle des scenes, lieux et evenements
-- Incarnation de PNJ avec des personnalites distinctes
+- Incarnation de PNJ avec des **Personas structurees** (voix, motivations visibles + cachees, savoir explicite, relations)
 - Gestion des rencontres (combat, social, exploration, enigmes)
 - Application stricte des regles D&D SRD 5.2 via le moteur de regles
 - Adaptation du rythme et de la difficulte en fonction du groupe
-- Generation de dialogues vocaux via Voxtral TTS (optionnel)
+- Generation de dialogues vocaux via TTS local (Kokoro/Voxtral) ou OpenAI Realtime API (optionnel)
 
 ### Joueurs IA (Compagnons)
 - Agents IA jouant des personnages membres du groupe
-- Profils de personnalite configurables (brave, prudent, cupide, noble...)
+- Profils de personnalite configurables (brave, prudent, cupide, noble...) enrichis par `CompanionPersona` (lien au groupe, peurs en combat, style de discours)
 - Prise de decision basee sur les capacites du personnage et la situation
 - Roleplay textuel automatique en combat et en exploration
+
+### Systeme de Personas
+- **Personas polymorphes** pour PNJ, monstres intelligents et compagnons IA — voix, motivations (publiques + GM-only), peurs, relations, savoir explicite (anti-hallucination)
+- **Generation par le MJ IA** : forge des PNJ recurrents au moment de la creation de campagne, ou generation a la volee pour les figurants (strategie "stub-then-enrich" pour eviter la latence)
+- **Voix configurable** : local (Kokoro/Voxtral), hybride (Realtime pour personnages rich uniquement), ou full Realtime (OpenAI). Fallback automatique sur le TTS local si la Realtime API echoue
+- **Dialogue Realtime bidi** via un endpoint WebSocket dedie (`/ws/dialogue/{session_id}/{persona_id}`) — le joueur parle au micro, la voix du PNJ repond en direct, transcription remontee au MJ pour coherence narrative
 
 ### Joueurs Humains
 - Interface web intuitive pour interagir avec le MJ IA
@@ -56,10 +62,13 @@ L'objectif est de permettre a quiconque de vivre une experience de JDR complete 
 └──────────────┘                │  (GM +    │  ┌────���───────────┐  │
                                 │  Players) │  │  SQLite DB      │  │
 ┌──────────────┐                │           │  │  (Game State)   │  │
-│  Voxtral TTS │◄───────────────┤           │  └────────────────┘  │
-│  (vLLM-Omni) │                └───────────┤                      │
-└──────────────┘                            └──────────────────────┘
+│ Kokoro/Voxtral│◄──────────────┤           │  └────────────────┘  │
+│ OpenAI TTS    │               │  Voice    │                      │
+│ Realtime API  │◄──────────────┤  Router   │                      │
+└──────────────┘                └───────────┴──────────────────────┘
 ```
+
+Le **Voice Router** (`app/voice/router.py`) choisit entre TTS local (Kokoro/Voxtral) et l'API OpenAI selon `VOICE_PROVIDER` (`local` / `hybrid` / `realtime`) et l'`importance` de la persona. Fallback automatique sur le TTS local si l'API distante echoue.
 
 ### Flux de jeu typique
 

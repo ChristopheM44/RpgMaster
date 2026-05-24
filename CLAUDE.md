@@ -13,8 +13,10 @@ Application de jeu de role avec un Maitre de Jeu IA, utilisant les regles D&D SR
 | CSS | TailwindCSS v4 | Tokens `@theme` + classes `.rpg-*` dans `src/assets/main.css` |
 | LLM texte | Ollama | Modele local configurable (default: mistral:7b) |
 | LLM voix | Voxtral 4B TTS | Via vLLM-Omni (PAS Ollama), optionnel, port 8091 |
+| TTS local | Kokoro-ONNX | Subprocess Python 3.11 dans `tts_service/`, voix paramétrable |
+| Voix Realtime | OpenAI Realtime API | Optionnel, voice-to-voice bidi pour PNJ "rich" |
 | Base de donnees | SQLite | Via SQLAlchemy async (aiosqlite) + Alembic |
-| Temps reel | WebSocket | Natif FastAPI, endpoint `/ws/game/{session_id}` |
+| Temps reel | WebSocket | Natif FastAPI, `/ws/game/{session_id}` + `/ws/dialogue/{session_id}/{persona_id}` |
 
 ## Lancer le stack
 
@@ -38,6 +40,9 @@ Copier `.env.example` vers `backend/.env`.
 | `DATABASE_URL` | `sqlite+aiosqlite:///./rpgmaster.db` | |
 | `VOXTRAL_ENABLED` | `false` | Garder `false` si vLLM-Omni non démarré |
 | `VOXTRAL_BASE_URL` | `http://localhost:8091` | Si TTS active |
+| `VOICE_PROVIDER` | `local` | `local` \| `hybrid` \| `realtime` — cf. section Personas |
+| `OPENAI_REALTIME_API_KEY` | `` | Requise pour `hybrid`/`realtime` et endpoint `/ws/dialogue/*` |
+| `OPENAI_REALTIME_MODEL` | `gpt-4o-realtime-preview` | Modèle Realtime API |
 | `MAX_CONTEXT_MESSAGES` | `20` | |
 | `TTS_ASYNC` | `true` | |
 
@@ -68,9 +73,12 @@ RpgMaster/
 │   ├── engine/              # Moteur de regles D&D (pure logic, NO I/O)
 │   │   └── srd_data/        # Donnees SRD 5.2 en JSON
 │   ├── agents/              # Agents IA (GM + joueurs)
-│   │   └── prompts/         # Templates de prompts Jinja2
-│   ├── llm/                 # Clients Ollama + Voxtral
+│   │   ├── persona.py       # Schémas polymorphes Persona (NPC, Monster, Companion)
+│   │   └── prompts/         # Templates Jinja2 (gm_*, player_*, _persona_render.j2)
+│   ├── llm/                 # Clients Ollama + Voxtral/Kokoro
+│   ├── voice/               # Voice abstraction (local Kokoro / OpenAI Realtime)
 │   ├── game/                # Orchestration (game loop, turn manager, event bus)
+│   │   └── persona_factory.py  # Génération Persona (stub-then-enrich + règles SRD)
 │   └── db/                  # SQLAlchemy async engine
 ├── frontend/src/
 │   ├── views/               # Pages (Home, Lobby, CharacterCreation, GameSession)
@@ -192,6 +200,74 @@ COMBAT (rounds) → ENCOUNTER_END → EXPLORATION → ...
 - Voxtral TTS via vLLM-Omni uniquement (port 8091) — PAS Ollama
 - Frontend port 5173, backend port 8000, CORS configure pour `http://localhost:5173`
 
+## Personas et voix
+
+### Schémas polymorphes (`backend/app/agents/persona.py`)
+
+Tous les personnages importants ont une **Persona structurée** qui guide voix, motivations, savoir et relations :
+
+| Classe | Pour qui | Champs spécifiques |
+|---|---|---|
+| `NPCPersona` | Quest-givers, marchands, alliés récurrents | `attitude_default`, `secrets` (GM-only), `quest_hooks`, `catchphrases` |
+| `MonsterPersona` | Boss, dragons, ennemis intelligents *et* mindless | `monster_srd_id`, `behavior_pattern`, `combat_taunts`, `surrender_threshold`, `can_speak` |
+| `CompanionPersona` | Joueurs IA — sur-ensemble strict de `PlayerPersonality` | `traits`, `backstory_hook`, `speech_style`, `bond_to_party`, `fears_in_combat` |
+
+Sub-models communs : `PersonaVoice` (gender, age_range, accent, speech_register, pitch, rate, timbre, voice_id_local, voice_id_realtime), `PersonaMotivations` (visible / **hidden GM-only** / fears), `PersonaRelationship`, `PersonaKnowledge` (knows / ignores / rumors — anti-hallucination).
+
+Le niveau `importance` (`light` / `standard` / `rich`) pilote la richesse de génération et le routage voix.
+
+### Persistence
+
+Pas de nouvelle table SQLAlchemy — tout dans `Campaign.dossier` JSON :
+- `gm_dossier.important_npcs[]` → `NPCPersona` complètes (forge ou pré-écrites)
+- `gm_dossier.bestiary[]` → `MonsterPersona` des boss signatures
+- `gm_dossier.companion_seeds[]` → `CompanionPersona` pré-écrites
+- `played_canon.npc_personas{}` → personas générées en cours de jeu (persistées entre sessions)
+
+Migration douce : l'ancien format `important_npcs: [{"name": "Bram"}]` est coerced en `NPCPersona(importance="light")` automatiquement.
+
+### Génération (stub-then-enrich)
+
+`backend/app/game/persona_factory.py` — `PersonaFactory` :
+- `stub_npc_persona()` : **synchrone**, instantané, sans LLM — pour PNJ légers introduits à la volée.
+- `enrich_npc_persona()` : **async LLM** avec retry + fallback sur le stub si JSON invalide.
+- `generate_monster_persona()` : règle SRD-based pour mindless/beast/ooze (pas d'appel LLM), sinon LLM avec retry.
+
+Templates : `gm_persona_npc_generate.txt`, `gm_persona_monster_generate.txt` (few-shot examples).
+Macro Jinja partagée : `_persona_render.j2` avec `include_hidden=True` côté MJ (voit secrets), `False` côté joueur IA.
+
+### Voice layer (`backend/app/voice/`)
+
+| Mode (`VOICE_PROVIDER`) | Comportement |
+|---|---|
+| `local` | Tout via `LocalVoiceProvider` → Kokoro (default) ou Voxtral |
+| `realtime` | Tout via `RealtimeVoiceProvider` → OpenAI TTS API + Realtime API |
+| `hybrid` | Realtime pour personas `importance="rich"`, Local pour le reste |
+
+`VoiceRouter.speak_for_persona(persona, text)` fait le routage automatique avec **fallback Local** si Realtime échoue (réseau / quota / clé manquante) — jamais d'erreur visible côté joueur.
+
+Mapping voix :
+- Kokoro : `PersonaVoice(gender, age_range)` → `voice_id` (fallback `ff_siwis` en français). Override via `voice.voice_id_local`.
+- OpenAI : mapping vers `alloy|echo|nova|onyx|shimmer`. Override via `voice.voice_id_realtime`.
+- Vitesse modulée par `age_range` (elder=0.92, ancient=0.85) + `rate` (slow/normal/fast).
+
+### Endpoint dialogue Realtime
+
+`/ws/dialogue/{session_id}/{persona_id}` (voir `backend/app/api/ws_dialogue.py`) — WebSocket bidi joueur ↔ PNJ.
+
+Messages client → serveur :
+- `{"type": "user_audio", "audio_b64": "..."}` — chunk PCM16 base64
+- `{"type": "commit"}` — fin de tour, déclenche réponse IA
+- `{"type": "cancel"}` — interrompt la réponse en cours
+- `{"type": "close"}` — fermeture propre
+
+Messages serveur → client :
+- `{"type": "session_ready", "persona_id": "..."}`
+- `{"type": "openai_event", "event": {...}}` — events Realtime bruts
+- `{"type": "error", "message": "..."}`
+
+À la fermeture (manuelle ou idle 30 s), la transcription complète est publiée sur le WS principal comme event `DIALOGUE` avec `{"persona_id", "transcript": {"user_turns", "assistant_turns"}}`.
+
 ## Anti-patterns
 
 - **WebSocket** : ne jamais creer une session SQLAlchemy dans un handler — reutiliser le `db` injecte.
@@ -200,3 +276,6 @@ COMBAT (rounds) → ENCOUNTER_END → EXPLORATION → ...
 - **Game state** : pas de champs relationnels complexes, pas de nouvelles tables SQLAlchemy.
 - **`engine/`** : zero I/O — reste testable sans DB ni reseau.
 - **TTS** : ne pas utiliser `tts_backend="vllm"` sans vLLM-Omni actif.
+- **Persona** : ne jamais exposer `motivations.hidden`, `secrets` ou `quest_hooks` au joueur — `include_hidden=False` côté joueur IA, `True` côté MJ uniquement.
+- **Voice** : ne jamais appeler `provider.speak()` dans un handler WS bloquant — toujours via `voice_router.speak_for_persona()` qui gère le fallback.
+- **Realtime** : ne pas exposer la clé `OPENAI_REALTIME_API_KEY` côté frontend — toute la session Realtime transite par le backend WS.

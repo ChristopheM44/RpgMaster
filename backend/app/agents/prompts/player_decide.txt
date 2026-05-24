@@ -1,3 +1,4 @@
+{% import '_persona_render.j2' as P %}
 Tu joues {{ character_name }} en combat.
 
 DONNÉES DU PERSONNAGE :
@@ -11,6 +12,10 @@ MESSAGES RÉCENTS :
 
 ACTIONS DISPONIBLES CE TOUR :
 {{ available_actions }}
+
+=== TA PERSONA ===
+{{ P.render_persona(companion_persona, include_hidden=False) }}
+=== FIN PERSONA ===
 
 Ta personnalité guide ton choix :
 {{ personality_description }}

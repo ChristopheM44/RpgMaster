@@ -21,6 +21,15 @@ class Settings(BaseSettings):
     voxtral_model: str = "mistralai/Voxtral-4B-TTS-2603"
     voxtral_enabled: bool = False
 
+    # Voice layer (cf. plan persona §5) — routage TTS vs Realtime API
+    # local   : tout via TTS local (Kokoro/Voxtral)
+    # hybrid  : Realtime API pour personas importance="rich", local pour le reste
+    # realtime: tout via Realtime API
+    voice_provider: str = "local"
+    openai_realtime_api_key: str = ""
+    openai_realtime_model: str = "gpt-4o-realtime-preview"
+    openai_realtime_base_url: str = "wss://api.openai.com/v1/realtime"
+
     # Database
     database_url: str = "sqlite+aiosqlite:///./rpgmaster.db"
 

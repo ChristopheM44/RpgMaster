@@ -1,0 +1,76 @@
+{# Macro Jinja2 partagée pour sérialiser une persona en texte injectable dans un prompt LLM.
+   `include_hidden=True` côté MJ (voit secrets/motivations cachées), False côté joueur IA.
+   Utilisation depuis un autre template:
+     {% import '_persona_render.j2' as P %}
+     {{ P.render_persona(npc_persona, include_hidden=True) }}
+#}
+
+{% macro render_persona(p, include_hidden=False, max_relationships=3) %}
+═══ {{ p.name }} ({{ p.archetype }}) ═══
+{{ p.short_description }}
+Importance narrative : {{ p.importance }}
+
+VOIX : {{ p.voice.gender }} {{ p.voice.age_range }} — registre {{ p.voice.speech_register }}, débit {{ p.voice.rate }}{% if p.voice.accent %}, accent {{ p.voice.accent }}{% endif %}{% if p.voice.timbre %}, timbre {{ p.voice.timbre }}{% endif %}.
+
+MOTIVATIONS APPARENTES (le groupe peut les deviner) :
+{% for m in p.motivations.visible %}- {{ m }}
+{% else %}- (aucune motivation publique établie)
+{% endfor %}
+
+{% if include_hidden %}
+MOTIVATIONS CACHÉES (GM-ONLY — ne révèle JAMAIS sauf jet d'Insight réussi explicite) :
+{% for m in p.motivations.hidden %}- {{ m }}
+{% else %}- (aucun agenda caché)
+{% endfor %}
+
+PEURS PROFONDES (GM-ONLY) :
+{% for f in p.motivations.fears %}- {{ f }}
+{% else %}- (rien de notable)
+{% endfor %}
+{% endif %}
+
+SAIT / IGNORE / RUMEURS :
+- SAIT : {{ p.knowledge.knows | join(" ; ") or "(rien d'explicite)" }}
+- IGNORE EXPLICITEMENT : {{ p.knowledge.ignores | join(" ; ") or "(rien)" }}
+{% if p.knowledge.rumors %}- A ENTENDU SANS CERTITUDE : {{ p.knowledge.rumors | join(" ; ") }}{% endif %}
+
+{% set sorted_rels = (p.relationships | sort(attribute='intensity', reverse=true))[:max_relationships] %}
+{% if sorted_rels %}
+RELATIONS CLÉS :
+{% for r in sorted_rels %}- {{ r.target_name }} ({{ r.kind }}, intensité {{ r.intensity }}){% if r.notes %} — {{ r.notes }}{% endif %}
+{% endfor %}
+{% endif %}
+
+{# Champs spécifiques NPC #}
+{% if p.persona_type == "npc" %}
+{% if p.catchphrases %}
+TICS DE LANGAGE : {{ p.catchphrases | join(" / ") }}
+{% endif %}
+{% if include_hidden and p.secrets %}
+SECRETS (GM-ONLY) :
+{% for s in p.secrets %}- {{ s }}
+{% endfor %}
+{% endif %}
+{% if include_hidden and p.quest_hooks %}
+HOOKS DE QUÊTE (GM-ONLY) :
+{% for h in p.quest_hooks %}- {{ h }}
+{% endfor %}
+{% endif %}
+{% endif %}
+
+{# Champs spécifiques Monster #}
+{% if p.persona_type == "monster" %}
+COMPORTEMENT EN COMBAT : {{ p.behavior_pattern }}{% if not p.can_speak %} (muet){% endif %}
+{% if p.combat_taunts %}TAUNTS / RÉPLIQUES POSSIBLES : {{ p.combat_taunts | join(" / ") }}
+{% endif %}
+{% if p.surrender_threshold is not none %}SE REND SI HP < {{ (p.surrender_threshold * 100) | int }} %.{% else %}COMBAT À MORT — ne se rend pas.{% endif %}
+{% endif %}
+
+{# Champs spécifiques Companion #}
+{% if p.persona_type == "companion" %}
+TRAITS : {{ p.traits | join(", ") or "(équilibré)" }}
+{% if p.speech_style %}STYLE DE DISCOURS : {{ p.speech_style }}{% endif %}
+{% if p.bond_to_party %}LIEN AVEC LE GROUPE : {{ p.bond_to_party }}{% endif %}
+{% if p.fears_in_combat %}PEURS EN COMBAT : {{ p.fears_in_combat | join(", ") }}{% endif %}
+{% endif %}
+{% endmacro %}

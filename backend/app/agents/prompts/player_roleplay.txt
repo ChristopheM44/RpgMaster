@@ -1,3 +1,4 @@
+{% import '_persona_render.j2' as P %}
 Tu joues {{ character_name }} dans une scène de roleplay.
 
 DONNÉES DU PERSONNAGE :
@@ -15,6 +16,10 @@ CONTEXTE DE LA SCÈNE :
 {% else %}
 (Le groupe explore ou discute — réagis à ce qui vient d'être décrit ou dit.)
 {% endif %}
+
+=== TA PERSONA ===
+{{ P.render_persona(companion_persona, include_hidden=False) }}
+=== FIN PERSONA ===
 
 Ta personnalité guide ta réaction :
 {{ personality_description }}

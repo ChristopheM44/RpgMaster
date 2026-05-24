@@ -2,6 +2,7 @@
 
 Usage:
     python synthesize.py --text "Texte à synthétiser"
+    python synthesize.py --text "Hello" --voice am_michael --lang en-us --speed 0.9
 
 Output:
     Bytes WAV sur stdout (format WAV standard).
@@ -55,8 +56,19 @@ def _ensure_models() -> None:
         print("[TTS] Voix téléchargées.", file=sys.stderr)
 
 
-def synthesize(text: str) -> bytes:
+def synthesize(
+    text: str,
+    voice: str = _VOICE,
+    lang: str = _LANG,
+    speed: float = _SPEED,
+) -> bytes:
     """Génère un fichier WAV à partir du texte.
+
+    Args:
+        text: Texte à synthétiser.
+        voice: ID de voix Kokoro (ex: 'ff_siwis', 'am_michael', 'af_bella').
+        lang: Langue ('fr-fr', 'en-us', 'en-gb'...).
+        speed: Facteur de vitesse (0.5 à 2.0, default 1.0).
 
     Returns:
         Bytes du fichier WAV (24000 Hz, mono).
@@ -67,7 +79,7 @@ def synthesize(text: str) -> bytes:
     _ensure_models()
 
     kokoro = Kokoro(str(_MODEL_PATH), str(_VOICES_PATH))
-    samples, sample_rate = kokoro.create(text, voice=_VOICE, speed=_SPEED, lang=_LANG)
+    samples, sample_rate = kokoro.create(text, voice=voice, speed=speed, lang=lang)
 
     buf = io.BytesIO()
     sf.write(buf, samples, sample_rate, format="WAV")
@@ -78,6 +90,15 @@ def synthesize(text: str) -> bytes:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Kokoro TTS CLI")
     parser.add_argument("--text", required=True, help="Texte à synthétiser")
+    parser.add_argument(
+        "--voice", default=_VOICE, help=f"ID de voix Kokoro (default: {_VOICE})"
+    )
+    parser.add_argument(
+        "--lang", default=_LANG, help=f"Langue (default: {_LANG})"
+    )
+    parser.add_argument(
+        "--speed", type=float, default=_SPEED, help=f"Vitesse 0.5-2.0 (default: {_SPEED})"
+    )
     args = parser.parse_args()
 
     text = args.text.strip()
@@ -85,10 +106,14 @@ def main() -> None:
         print("[TTS] Texte vide, rien à synthétiser.", file=sys.stderr)
         sys.exit(1)
 
-    print(f"[TTS] Synthèse : {text[:60]}{'...' if len(text) > 60 else ''}", file=sys.stderr)
+    print(
+        f"[TTS] Synthèse voice={args.voice} lang={args.lang} speed={args.speed} : "
+        f"{text[:60]}{'...' if len(text) > 60 else ''}",
+        file=sys.stderr,
+    )
 
     try:
-        wav_bytes = synthesize(text)
+        wav_bytes = synthesize(text, voice=args.voice, lang=args.lang, speed=args.speed)
         # Écriture des bytes WAV sur stdout (mode binaire)
         sys.stdout.buffer.write(wav_bytes)
         print(f"[TTS] OK — {len(wav_bytes)} bytes générés.", file=sys.stderr)

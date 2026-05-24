@@ -21,6 +21,8 @@ Contraintes importantes :
 - "present_npcs[].description" décrit apparence visible, posture et/ou voix en 1-2 phrases. Pas de fonction méta.
 - "present_npcs[].action_hint" reste court et jouable. "present_npcs[].opening_intent" est optionnel et indique ce que le PNJ veut ou sait dans l'instant.
 - "visible_clues[].description" doit être sensoriel et examinable.
+- "important_npcs" contient les PNJ RÉCURRENTS de la campagne au format NPCPersona structuré (voix, motivations visibles/cachées, savoir explicite). Génère 2 à 4 PNJ importants, dont au moins ceux mentionnés dans opening_scene.present_npcs. Chaque persona doit avoir un `id` unique kebab-case réutilisé dans `present_npcs` quand pertinent, pour qu'on puisse les retrouver entre scènes.
+- "bestiary" (optionnel, 0 à 2 entrées) contient les MONSTRES SIGNATURES de la campagne (boss de chapitre, créature unique) au format MonsterPersona. Ne mets PAS les monstres SRD génériques (gobelins lambda, loups) ici — uniquement les créatures qui méritent une voix propre.
 
 Réponds avec ce JSON exact :
 {
@@ -74,7 +76,43 @@ Réponds avec ce JSON exact :
         "possible_srd_encounters": ["goblin"]
       }
     ],
-    "important_npcs": [],
+    "important_npcs": [
+      {
+        "id": "pnj_id_kebab_case",
+        "name": "Nom du PNJ (réutilisable dans present_npcs)",
+        "archetype": "ex: mentor | merchant | tyrant | informer | rival",
+        "short_description": "1 phrase qui brieffe le MJ sur ce PNJ.",
+        "voice": {"gender": "male|female|neutral", "age_range": "child|young|adult|elder|ancient", "speech_register": "formal|casual|archaic|vulgar", "pitch": "very_low|low|medium|high|very_high", "rate": "slow|normal|fast", "accent": null, "timbre": null},
+        "motivations": {"visible": ["1-2 objectifs apparents"], "hidden": ["1-2 motivations cachées GM-only"], "fears": ["0-2 peurs profondes"]},
+        "knowledge": {"knows": ["2-4 faits connus"], "ignores": ["1-2 choses qu'il ne sait PAS"], "rumors": []},
+        "relationships": [],
+        "importance": "standard",
+        "persona_type": "npc",
+        "attitude_default": "hostile|unfriendly|indifferent|friendly|helpful",
+        "secrets": ["0-2 secrets GM-only"],
+        "quest_hooks": ["0-2 amorces de quête"],
+        "catchphrases": []
+      }
+    ],
+    "bestiary": [
+      {
+        "id": "monstre_id_kebab_case",
+        "name": "Nom propre du monstre signature",
+        "archetype": "ex: ancient_tyrant | feral_pack_leader | cunning_lieutenant",
+        "short_description": "1 phrase qui personnalise ce monstre dans la campagne.",
+        "voice": {"gender": "male|female|neutral", "age_range": "young|adult|elder|ancient", "speech_register": "formal|casual|archaic|vulgar", "pitch": "very_low|low|medium|high|very_high", "rate": "slow|normal|fast", "accent": null, "timbre": null},
+        "motivations": {"visible": ["objectif en combat"], "hidden": ["motivation cachée si pertinent"], "fears": []},
+        "knowledge": {"knows": ["1-2 choses connues"], "ignores": [], "rumors": []},
+        "relationships": [],
+        "importance": "rich",
+        "persona_type": "monster",
+        "monster_srd_id": "id_srd_du_monstre_de_reference",
+        "behavior_pattern": "predatory|tactical|frenzied|cunning|cowardly|lawful|mindless",
+        "combat_taunts": ["1-3 répliques courtes"],
+        "surrender_threshold": null,
+        "can_speak": true
+      }
+    ],
     "locations": [],
     "factions": [],
     "secrets": [],

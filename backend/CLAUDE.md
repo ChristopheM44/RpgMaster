@@ -23,7 +23,8 @@ app/
 │   ├── routes_encounters.py # Construction et gestion des rencontres
 │   ├── routes_campaign.py   # Campagnes (enchainement de sessions)
 │   ├── routes_admin.py      # Parametres TTS, health backends
-│   └── ws_game.py           # WebSocket /ws/game/{session_id}
+│   ├── ws_game.py           # WebSocket /ws/game/{session_id}
+│   └── ws_dialogue.py       # WebSocket /ws/dialogue/{session_id}/{persona_id} (Realtime bidi)
 ├── engine/                  # Logique D&D pure — AUCUN I/O
 │   ├── dice.py              # Notations "2d6+3", "4d6kh3", avantage/desavantage
 │   ├── ability_checks.py    # Tests de caracteristiques, jets de sauvegarde
@@ -37,27 +38,37 @@ app/
 ├── agents/
 │   ├── gm_agent.py          # Agent MJ : contexte -> prompt -> LLM -> JSON valide
 │   ├── player_agent.py      # Agent joueur IA : decision + roleplay
+│   ├── persona.py           # Schémas polymorphes (NPCPersona, MonsterPersona, CompanionPersona)
+│   ├── campaign_forge_agent.py # Forge dossier campagne + synthese canon
 │   ├── context_manager.py   # Fenetre glissante, summarization
-│   └── prompts/             # Templates Jinja2 (.txt)
+│   └── prompts/             # Templates Jinja2 (gm_*, player_*, campaign_forge_*, _persona_render.j2)
 ├── game/
 │   ├── game_loop.py         # Machine a etats (phases)
 │   ├── turn_manager.py      # Ordre des tours, initiative
 │   ├── session_manager.py   # Cycle de vie sessions actives en memoire
 │   ├── action_resolver.py   # Dispatch actions joueur -> moteur -> narration
-│   ├── ai_player_manager.py # Gestion des tours IA compagnons
+│   ├── ai_player_manager.py # Gestion des tours IA compagnons (lit cdata['persona'] avec fallback legacy)
+│   ├── persona_factory.py   # Génération Persona stub-then-enrich (NPC) + règles SRD (monstres)
 │   └── event_bus.py         # asyncio.Queue pub/sub par session
 ├── llm/
 │   ├── ollama_client.py     # Client async Ollama (retry, streaming)
-│   └── voxtral_client.py    # Client TTS dual-backend (Kokoro ou vLLM-Omni)
+│   └── voxtral_client.py    # Client TTS dual-backend (Kokoro avec --voice/--lang/--speed, ou vLLM-Omni)
+├── voice/                   # Voice abstraction layer (cf. CLAUDE.md racine)
+│   ├── base.py              # VoiceProvider abstrait + AudioBlob + VoiceProviderError
+│   ├── local_provider.py    # LocalVoiceProvider (Kokoro/Voxtral) + mapping persona -> voice_id
+│   ├── realtime_provider.py # RealtimeVoiceProvider (OpenAI TTS API) + format_voice_directive
+│   ├── realtime_session.py  # Bridge WebSocket OpenAI Realtime (bidi audio + transcript)
+│   └── router.py            # VoiceRouter selon settings.voice_provider + fallback Local
 └── services/
     ├── message_service.py        # Persistance narrations en DB
     ├── encounter_service.py      # Construction rencontres depuis monster_ids
     ├── narrative_flow_service.py # Orchestration exploration vivante
+    ├── campaign_dossier_service.py # Forge + synthese + helpers upsert_npc_persona / get_npc_persona
     ├── equipment_service.py      # Equip/use/drop, sync DB + ActiveSession
     └── rest_service.py           # Repos court/long, des de vie, sorts
 ```
 
-## Protocole WebSocket
+## Protocole WebSocket — `/ws/game/{session_id}`
 
 Endpoint : `ws://localhost:8000/ws/game/{session_id}?character_id={id}`
 
@@ -101,6 +112,32 @@ Le repos court depense les des de vie choisis par le client via
 | `session_state` | Snapshot complet du game state |
 | `audio` | Audio WAV base64 (TTS) |
 | `error` | Erreur applicative |
+| `dialogue` | Aussi utilisé pour publier le `transcript` complet à la fin d'une session `/ws/dialogue/*` |
+
+## Protocole WebSocket — `/ws/dialogue/{session_id}/{persona_id}`
+
+Endpoint dédié au dialogue Realtime bidi avec un PNJ. Requiert `OPENAI_REALTIME_API_KEY` configurée.
+
+### Messages client → serveur
+
+```json
+{ "type": "user_audio", "audio_b64": "<base64 PCM16>" }
+{ "type": "commit" }
+{ "type": "cancel" }
+{ "type": "close" }
+```
+
+### Messages serveur → client
+
+```json
+{ "type": "session_ready", "persona_id": "..." }
+{ "type": "openai_event", "event": { ...event Realtime brut... } }
+{ "type": "error", "message": "..." }
+```
+
+À la fermeture (manuelle, idle 30 s, ou échec Realtime), le backend publie sur le WS principal `/ws/game/{session_id}` un event `DIALOGUE` contenant `{persona_id, transcript: {user_turns[], assistant_turns[]}}` — le MJ peut alors en tenir compte dans les narrations suivantes.
+
+Fallback : si la clé OpenAI est absente ou que la connexion échoue, le pipeline retombe sur le TTS local. Voir `app/voice/router.py` (`VoiceRouter`).
 
 ## Patterns SQLAlchemy async
 
@@ -119,6 +156,13 @@ Les prompts sont des templates Jinja2 dans `agents/prompts/`.
 Le GMAgent attend une reponse JSON valide selon `agents/schemas.py` (classe `GMResponse`).
 Tout nouveau type d'action doit etre ajoute dans `EventType` (event_bus.py) ET gere dans `action_resolver.py`.
 
+Pour les prompts qui doivent injecter une persona (dialogue PNJ, combat monstre, joueurs IA), réutiliser la macro `_persona_render.j2` :
+```jinja
+{% import '_persona_render.j2' as P %}
+{{ P.render_persona(npc_persona, include_hidden=True) }}   {# côté MJ : voit secrets #}
+{{ P.render_persona(companion_persona, include_hidden=False) }}   {# côté joueur IA : pas de secrets #}
+```
+
 Exceptions actuelles : les actions directes d'inventaire et de repos passent
 par `EquipmentService` / `RestService`, puis publient directement leurs
 evenements via l'event bus depuis `ws_game.py` ou le service.
@@ -128,7 +172,8 @@ evenements via l'event bus depuis `ws_game.py` ou le service.
 ```bash
 pytest tests/test_engine/ -v         # Moteur (rapide, aucune dependance)
 pytest tests/test_api/ -v            # API (DB SQLite in-memory)
-pytest tests/test_agents/ -v         # Agents (Ollama mocke)
+pytest tests/test_agents/ -v         # Agents + Persona schemas + PersonaFactory (Ollama mocke)
 pytest tests/test_game/ -v           # Game loop + WebSocket
+pytest tests/test_voice/ -v          # Voice layer (Kokoro/OpenAI mocke, WS Realtime mocke)
 pytest --cov=app --cov-report=term-missing
 ```

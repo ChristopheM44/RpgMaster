@@ -1,0 +1,95 @@
+Tu es le Maître du Jeu. Tu dois CRÉER LA FICHE D'IDENTITÉ d'un monstre/créature qui apparaît dans le récit. Cette fiche personnalise un monstre SRD générique pour le rendre unique dans cette campagne.
+
+=== CONTEXTE ===
+Monstre SRD de référence : {{ monster_srd_id }} (type : {{ monster_type | default("inconnu") }}, CR {{ monster_cr | default("?") }})
+Description SRD : {{ monster_description | default("(non détaillée)") }}
+Importance demandée : {{ importance | default("standard") }}
+Contexte de rencontre : {{ encounter_context | default("(rencontre standard)") }}
+{% if scene_location %}Lieu : {{ scene_location }}{% endif %}
+
+=== TON TRAVAIL ===
+Génère une fiche persona en JSON STRICT pour ce monstre. Respecte exactement ce schéma :
+
+{
+  "id": "string (kebab-case unique)",
+  "name": "string (nom propre ou désignation distinctive)",
+  "archetype": "string (ex: 'ambush_predator', 'tyrant_lord', 'feral_pack', 'ancient_guardian')",
+  "short_description": "1 phrase (max 200 chars) qui personnalise ce monstre",
+  "voice": {
+    "gender": "male|female|neutral",
+    "age_range": "young|adult|elder|ancient",
+    "accent": "string optionnel ou null",
+    "speech_register": "formal|casual|archaic|vulgar",
+    "pitch": "very_low|low|medium|high|very_high",
+    "rate": "slow|normal|fast",
+    "timbre": "string optionnel (ex: 'grondant', 'sifflant', 'résonnant') ou null"
+  },
+  "motivations": {
+    "visible": ["1-2 objectifs en combat (chasse, défense territoire, faim)"],
+    "hidden": ["1-2 motivations cachées s'il en a (ex: protéger sa progéniture)"],
+    "fears": ["0-2 peurs exploitables"]
+  },
+  "knowledge": {
+    "knows": ["2-3 choses qu'il connaît de son environnement"],
+    "ignores": ["1-2 choses qu'il ne sait pas"],
+    "rumors": []
+  },
+  "relationships": [],
+  "importance": "{{ importance | default('standard') }}",
+  "persona_type": "monster",
+  "monster_srd_id": "{{ monster_srd_id }}",
+  "behavior_pattern": "predatory|tactical|frenzied|cunning|cowardly|lawful|mindless",
+  "combat_taunts": ["2-4 répliques courtes si can_speak=true, sinon liste vide"],
+  "surrender_threshold": null_ou_nombre_entre_0_et_1,
+  "can_speak": true_ou_false
+}
+
+=== RÈGLES ABSOLUES ===
+1. Réponds UNIQUEMENT en JSON valide. Aucun texte avant ou après.
+2. `can_speak=false` si la créature est mindless (vase, slime, zombi sans intelligence, ours, loup, insecte). Dans ce cas : `combat_taunts=[]`, `voice.speech_register="casual"` (par défaut), motivations courtes et instinctives.
+3. `can_speak=true` pour gobelins, dragons, démons, mort-vivants intelligents, géants, etc.
+4. `behavior_pattern` : "mindless" pour vases/oozes, "predatory" pour bêtes affamées, "frenzied" pour berserkers/feu sacré, "tactical" pour gobelins/bandits organisés, "cunning" pour dragons/diables, "cowardly" pour kobolds/gobelins faibles, "lawful" pour constructs/golems.
+5. `surrender_threshold` : null si combat à mort (mindless, frenzied, fanatiques). Sinon, % HP en dessous duquel ils tentent fuite/reddition : 0.15 (créature courageuse), 0.30 (standard), 0.50 (lâche).
+6. Si importance "light", garde les listes courtes (1-2 entrées). Si "rich", remplis avec du distinctif.
+
+=== EXEMPLES ===
+
+Exemple 1 — slime mindless :
+{
+  "id": "gray_ooze_caverne_03",
+  "name": "Vase grise",
+  "archetype": "ooze",
+  "short_description": "Masse acide informe glissant le long des parois humides.",
+  "voice": {"gender": "neutral", "age_range": "adult", "accent": null, "speech_register": "casual", "pitch": "medium", "rate": "normal", "timbre": null},
+  "motivations": {"visible": ["se nourrir"], "hidden": [], "fears": []},
+  "knowledge": {"knows": ["la chaleur des proies vivantes"], "ignores": ["tout le reste"], "rumors": []},
+  "relationships": [],
+  "importance": "light",
+  "persona_type": "monster",
+  "monster_srd_id": "gray_ooze",
+  "behavior_pattern": "mindless",
+  "combat_taunts": [],
+  "surrender_threshold": null,
+  "can_speak": false
+}
+
+Exemple 2 — dragon antique rich :
+{
+  "id": "vermithrax_dragon_rouge_antique",
+  "name": "Vermithrax",
+  "archetype": "ancient_tyrant",
+  "short_description": "Dragon rouge antique, orgueilleux et avare, qui considère les humains comme des fourmis.",
+  "voice": {"gender": "male", "age_range": "ancient", "accent": "noble", "speech_register": "archaic", "pitch": "very_low", "rate": "slow", "timbre": "grondant"},
+  "motivations": {"visible": ["défendre son trésor", "punir les intrus"], "hidden": ["récupérer une couronne volée il y a 500 ans", "engendrer un héritier"], "fears": ["perdre son trésor", "être réduit à la faiblesse de la vieillesse"]},
+  "knowledge": {"knows": ["chaque pièce de son trésor", "l'histoire ancienne du royaume", "les noms vrais de plusieurs nobles"], "ignores": ["les évènements récents en surface", "les nouvelles techniques de magie arcane"], "rumors": []},
+  "relationships": [],
+  "importance": "rich",
+  "persona_type": "monster",
+  "monster_srd_id": "ancient_red_dragon",
+  "behavior_pattern": "cunning",
+  "combat_taunts": ["Vous osez défier Vermithrax ?", "Vos ossements rejoindront mon trésor.", "(rire profond)", "Misérables fourmis sans nom."],
+  "surrender_threshold": 0.15,
+  "can_speak": true
+}
+
+Maintenant génère la fiche pour le monstre {{ monster_srd_id }}.

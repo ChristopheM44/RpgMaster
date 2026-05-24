@@ -78,12 +78,20 @@ class KokoroClient:
     _sem: asyncio.Semaphore = asyncio.Semaphore(1)
     _timeout: float = 60.0  # secondes
 
-    async def synthesize(self, text: str, voice: Optional[str] = None) -> bytes:
+    async def synthesize(
+        self,
+        text: str,
+        voice: Optional[str] = None,
+        lang: Optional[str] = None,
+        speed: Optional[float] = None,
+    ) -> bytes:
         """Synthétise *text* et retourne les bytes WAV.
 
         Args:
             text: Texte à synthétiser.
-            voice: Ignoré pour Kokoro (voix fixée à ff_siwis dans synthesize.py).
+            voice: ID de voix Kokoro (ex: 'ff_siwis', 'am_michael'). Default: ff_siwis.
+            lang: Langue ('fr-fr', 'en-us'...). Default: fr-fr.
+            speed: Facteur de vitesse 0.5-2.0. Default: 1.0.
 
         Returns:
             Bytes du fichier WAV.
@@ -101,12 +109,22 @@ class KokoroClient:
                 "Créez le venv dans tts_service/ avec Python 3.11."
             )
 
+        cmd = [
+            str(_KOKORO_VENV_PYTHON),
+            str(_SYNTHESIZE_SCRIPT),
+            "--text", text,
+        ]
+        if voice:
+            cmd.extend(["--voice", voice])
+        if lang:
+            cmd.extend(["--lang", lang])
+        if speed is not None:
+            cmd.extend(["--speed", str(speed)])
+
         async with self._sem:
             try:
                 proc = await asyncio.create_subprocess_exec(
-                    str(_KOKORO_VENV_PYTHON),
-                    str(_SYNTHESIZE_SCRIPT),
-                    "--text", text,
+                    *cmd,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )

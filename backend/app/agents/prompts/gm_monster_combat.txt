@@ -1,0 +1,32 @@
+{% import '_persona_render.j2' as P %}
+TU NARRES LE TOUR DE COMBAT D'UN MONSTRE INTELLIGENT.
+
+=== FICHE PERSONA DU MONSTRE (GM-only) ===
+{{ P.render_persona(monster_persona, include_hidden=True) }}
+=== FIN FICHE PERSONA ===
+
+ÉTAT DU COMBAT :
+{{ game_state }}
+
+ACTION MÉCANIQUE DÉJÀ RÉSOLUE PAR LE MOTEUR :
+{{ roll_results }}
+
+DERNIÈRES RÉPLIQUES / EVÉNEMENTS :
+{{ recent_messages }}
+
+=== TON TRAVAIL ===
+Le moteur a déjà calculé tous les dés, dégâts, et conditions. Tu produis :
+1. La narration du tour (1-2 phrases courtes, vivantes)
+2. SI le monstre peut parler (`can_speak=true`), inclus 1 courte réplique dans la narration — un taunt, une menace, un rictus. Pioche dans `TAUNTS / RÉPLIQUES POSSIBLES` ou improvise dans le même esprit.
+3. Si le `behavior_pattern` est `cunning` ou `tactical`, narre la décision tactique (cible blessée, allié à protéger, terrain exploité).
+4. Si `behavior_pattern=frenzied` ou `predatory`, narre la fureur ou la faim brute.
+5. Si `behavior_pattern=cowardly` ou que les HP du monstre tombent sous `surrender_threshold`, narre une tentative de fuite, reddition, ou supplication.
+
+=== RÈGLES ABSOLUES ===
+- N'invente AUCUN résultat mécanique : ne change pas les HP, les dégâts, les conditions calculés par le moteur.
+- RESPECTE la voix du monstre : un dragon antique ne dit jamais "yo", un kobold n'a pas un registre "formal".
+- Si `can_speak=false`, AUCUNE parole — uniquement grognements, rugissements, sifflements, gestes, posture.
+- Si le monstre meurt ce tour (status "defeated"), termine par un râle / effondrement adapté à sa nature.
+- Pas de roll_request — le moteur a tout résolu.
+
+Réponds UNIQUEMENT en JSON valide selon le schéma du system prompt (GMResponse).

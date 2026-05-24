@@ -15,6 +15,7 @@ from app.agents.json_recovery import (
     recover_prose_action_response,
     recover_structured_text_response,
 )
+from app.agents.persona import CompanionPersona, NPCPersona
 from app.agents.schemas import (
     PLAYER_ACTION_TYPES,
     AgentContext,
@@ -150,9 +151,7 @@ def _describe_personality(personality: PlayerPersonality) -> str:
 def _normalize_for_match(value: Any) -> str:
     """Normalise un texte pour des comparaisons simples et accent-insensibles."""
     normalized = unicodedata.normalize("NFKD", str(value).lower())
-    without_accents = "".join(
-        ch for ch in normalized if not unicodedata.combining(ch)
-    )
+    without_accents = "".join(ch for ch in normalized if not unicodedata.combining(ch))
     return re.sub(r"[^a-z0-9_]+", " ", without_accents).strip()
 
 
@@ -168,13 +167,26 @@ class PlayerAgent(BaseAgent):
         self,
         character_id: str,
         character_name: str,
-        personality: Optional[PlayerPersonality] = None,
+        personality: Optional[PlayerPersonality | CompanionPersona] = None,
         client: Optional[LLMClient] = None,
         model: Optional[str] = None,
     ):
         self._character_id = character_id
         self._character_name = character_name
-        self._personality = personality or PlayerPersonality(traits=["brave"])
+        if isinstance(personality, CompanionPersona):
+            self._persona: CompanionPersona = personality
+            self._personality = PlayerPersonality(
+                traits=list(personality.traits),
+                backstory_hook=personality.backstory_hook,
+                speech_style=personality.speech_style,
+            )
+        else:
+            self._personality = personality or PlayerPersonality(traits=["brave"])
+            self._persona = CompanionPersona.from_player_personality(
+                self._personality,
+                character_id=character_id,
+                name=character_name,
+            )
         self._client: LLMClient = client or router.get_player_client()
         self._system_prompt = self._build_system_prompt()
 
@@ -225,6 +237,7 @@ class PlayerAgent(BaseAgent):
             {
                 "character_name": self._character_name,
                 "character_data": json.dumps(character_data, ensure_ascii=False, indent=2),
+                "companion_persona": self._persona,
                 "personality_description": _describe_personality(self._personality),
                 "game_state": json.dumps(prompt_game_state, ensure_ascii=False, indent=2),
                 "available_actions": ", ".join(actions_list),
@@ -257,6 +270,7 @@ class PlayerAgent(BaseAgent):
             {
                 "character_name": self._character_name,
                 "character_data": json.dumps(character_data, ensure_ascii=False, indent=2),
+                "companion_persona": self._persona,
                 "personality_description": _describe_personality(self._personality),
                 "game_state": json.dumps(game_state, ensure_ascii=False, indent=2),
                 "scene_context": scene_context,
@@ -277,12 +291,15 @@ class PlayerAgent(BaseAgent):
         player_message: str,
         context_manager: Optional[ContextManager] = None,
         messages: Optional[list] = None,
+        interlocutor_persona: Optional[NPCPersona] = None,
     ) -> PlayerActionChoice:
         """Répond à un joueur humain dans une scène de dialogue libre.
 
         Contrairement à :meth:`roleplay`, ce mode part explicitement de la
         parole d'un joueur adressée au compagnon. La réponse peut rester purement
         conversationnelle (``talk``) ou proposer une action que le MJ arbitrera.
+        Si ``interlocutor_persona`` est fourni, sa fiche publique (sans secrets)
+        est injectée dans le prompt pour que le compagnon connaisse le PNJ.
         """
         character_data = self._extract_character(game_state)
         recent_messages = self._format_messages(messages)
@@ -294,6 +311,8 @@ class PlayerAgent(BaseAgent):
             {
                 "character_name": self._character_name,
                 "character_data": json.dumps(character_data, ensure_ascii=False, indent=2),
+                "companion_persona": self._persona,
+                "interlocutor_persona": interlocutor_persona,
                 "personality_description": _describe_personality(self._personality),
                 "game_state": json.dumps(game_state, ensure_ascii=False, indent=2),
                 "player_message": player_message,
@@ -344,8 +363,7 @@ class PlayerAgent(BaseAgent):
                 return False, "use_item sans item_name dans params"
             inventory = character_data.get("inventory", [])
             item_names = [
-                (i.get("name") or i) if isinstance(i, (dict, str)) else ""
-                for i in inventory
+                (i.get("name") or i) if isinstance(i, (dict, str)) else "" for i in inventory
             ]
             if item_name not in item_names:
                 return False, f"Objet '{item_name}' absent de l'inventaire"
@@ -488,8 +506,8 @@ class PlayerAgent(BaseAgent):
                     "Si l'action n'est pas claire, utilise action_type='wait'.\n\n"
                     "Règle table stricte : le personnage peut décrire ses paroles, intentions, "
                     "postures et gestes volontaires, mais pas les conséquences du monde ni les "
-                    "réactions d'autrui. Ne mets pas dans roleplay_text un objet qui casse, du bois "
-                    "qui craque, un PNJ convaincu, une foule qui réagit ou un indice découvert.\n\n"
+                    "réactions d'autrui. Ne mets pas dans roleplay_text un objet qui casse, "
+                    "du bois qui craque, un PNJ convaincu, une foule qui réagit ou un indice.\n\n"
                     f"Réponse brute :\n{stripped[:1200]}"
                 ),
             },
@@ -872,3 +890,7 @@ class PlayerAgent(BaseAgent):
     @property
     def personality(self) -> PlayerPersonality:
         return self._personality
+
+    @property
+    def persona(self) -> CompanionPersona:
+        return self._persona
