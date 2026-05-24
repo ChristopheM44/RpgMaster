@@ -1,13 +1,21 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { computed, ref, watch, nextTick } from 'vue'
 import { useGameStore } from '../../stores/game'
 import DiceRollResult from './DiceRollResult.vue'
 
 const gameStore = useGameStore()
 const logEl = ref<HTMLElement | null>(null)
+const hasThinkingEntry = computed(() =>
+  gameStore.isProcessing || gameStore.isGmThinking || gameStore.isPlayerAiThinking,
+)
+const thinkingLabel = computed(() =>
+  gameStore.isPlayerAiThinking && !gameStore.isGmThinking
+    ? 'Le joueur IA réfléchit'
+    : 'Le Maître du Jeu réfléchit',
+)
 
 watch(
-  () => gameStore.narrativeLog.length + ((gameStore.isProcessing || gameStore.isGmThinking) ? 1 : 0),
+  () => gameStore.narrativeLog.length + (hasThinkingEntry.value ? 1 : 0),
   async () => {
     await nextTick()
     if (logEl.value) {
@@ -125,11 +133,11 @@ watch(
 
       <!-- GM pense -->
       <div
-        v-if="gameStore.isProcessing || gameStore.isGmThinking"
+        v-if="hasThinkingEntry"
         class="rpg-thinking-entry flex items-center gap-3 rounded-lg border-l-2 py-3 pl-4"
       >
         <span class="rpg-text-gold font-serif italic text-sm opacity-70">
-          Le Maître du Jeu réfléchit
+          {{ thinkingLabel }}
         </span>
         <span class="flex gap-1">
           <span v-for="delay in ['0ms', '150ms', '300ms']" :key="delay" class="rpg-thinking-dot inline-block h-1.5 w-1.5 rounded-full animate-bounce" :style="{ animationDelay: delay }" />

@@ -80,6 +80,7 @@ Instructions :
   * Pièces : currency_grant vers un personnage concret, ex. {"type":"currency_grant","target":"id_personnage","params":{"gp":12,"sp":4,"cp":0}}
   * Achat : currency_spend puis loot_grant. Vente : item_remove puis currency_grant.
   * XP : xp_grant uniquement après victoire, objectif accompli ou jalon clair ; target peut être "party".
+  * Avance ou soutien d'un PNJ : indique un montant ou une quantité exacte et applique currency_grant / loot_grant. Ne laisse pas "une bourse", "quelques potions" ou "un médaillon" sans effet structuré.
 - Si la narration introduit un voyage entre lieux, un nouveau lieu d'intérêt régional, ou une ville/quartier important : mets à jour game_state.world_maps par patch incrémental.
   Utilise region_map_update pour la géographie entre lieux, city_map_update pour les districts/bâtiments/rues d'une ville, node_status_update pour marquer un lieu current/visited/known/rumored.
   Ne remplace jamais toute une carte si un patch suffit : réutilise les ids visibles dans game_state.world_maps et n'envoie que nodes_upsert/edges_upsert/nodes_remove/edges_remove nécessaires.

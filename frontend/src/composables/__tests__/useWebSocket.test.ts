@@ -241,11 +241,18 @@ describe('useWebSocket', () => {
     WebSocketMock.instances[0]!.open()
     gameStore.setProcessing(true)
     gameStore.applyAiThinking({ agent_kind: 'gm', thinking: true })
+    gameStore.applyAiThinking({
+      agent_kind: 'player_ai',
+      thinking: true,
+      character_id: 'shade',
+      character_name: 'Shade',
+    })
 
     WebSocketMock.instances[0]!.close()
 
     expect(gameStore.isProcessing).toBe(false)
     expect(gameStore.isGmThinking).toBe(false)
+    expect(gameStore.isPlayerAiThinking).toBe(false)
 
     socket.disconnect()
     vi.unstubAllGlobals()

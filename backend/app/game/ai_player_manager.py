@@ -54,6 +54,7 @@ _WAIT_ACTION = PlayerActionChoice(
 )
 
 _COMBAT_STARTING_ACTIONS = {"attack", "cast_spell", "shove"}
+_COMPANION_SPOTLIGHT_KEY = "_companion_spotlight_recent"
 
 # Actions d'exploration qui nécessitent un arbitrage MJ (résolution moteur + narration).
 # talk/wait sont purement narratifs et ne déclenchent PAS le pipeline MJ.
@@ -63,6 +64,62 @@ _MECHANICAL_ACTION_TYPES = (
     | _EXPLORATION_ARBITRAGE_ACTIONS
     | {"dash", "disengage", "dodge", "hide", "stabilize", "death_save", "wait"}
 )
+
+
+def order_companion_spotlight(
+    active: ActiveSession,
+    candidate_ids: list[str],
+    *,
+    trigger_character_id: Optional[str] = None,
+    max_count: Optional[int] = None,
+) -> list[str]:
+    """Prefer companions who have not had the recent spotlight.
+
+    This keeps table chatter varied without forcing every companion to speak.
+    The list stored in state_data is ordered oldest → newest.
+    """
+    seen: set[str] = set()
+    available: list[str] = []
+    for char_id in candidate_ids:
+        if char_id == trigger_character_id or char_id in seen:
+            continue
+        if char_id not in active.ai_players:
+            continue
+        seen.add(char_id)
+        available.append(char_id)
+    if len(available) <= 1:
+        return available[:max_count] if max_count is not None else available
+
+    raw_recent = active.state_data.get(_COMPANION_SPOTLIGHT_KEY, [])
+    recent = [str(char_id) for char_id in raw_recent if str(char_id) in available]
+    recent_rank = {char_id: index for index, char_id in enumerate(recent)}
+    original_rank = {char_id: index for index, char_id in enumerate(available)}
+    ordered = sorted(
+        available,
+        key=lambda char_id: (
+            char_id in recent_rank,
+            recent_rank.get(char_id, -1),
+            original_rank[char_id],
+        ),
+    )
+    return ordered[:max_count] if max_count is not None else ordered
+
+
+def record_companion_spotlight(active: ActiveSession, character_id: str) -> None:
+    """Remember that a companion just spoke or visibly acted."""
+    char_id = str(character_id)
+    ai_ids = set(active.ai_players.keys())
+    if char_id not in ai_ids:
+        return
+    raw_recent = active.state_data.get(_COMPANION_SPOTLIGHT_KEY, [])
+    recent = [
+        str(existing)
+        for existing in raw_recent
+        if str(existing) in ai_ids and str(existing) != char_id
+    ]
+    recent.append(char_id)
+    active.state_data[_COMPANION_SPOTLIGHT_KEY] = recent[-max(1, len(ai_ids)):]
+    active.mark_dirty()
 
 
 def _detect_reaction_mode(recent_messages: list) -> str:
@@ -465,6 +522,11 @@ class AIPlayerManager:
         iterable = [e.combatant_id for e in order if e.is_ai_controlled]
         if not iterable:
             iterable = list(active.ai_players.keys())
+        iterable = order_companion_spotlight(
+            active,
+            iterable,
+            trigger_character_id=trigger_character_id,
+        )
 
         for char_id in iterable:
             if reacted >= max_reactors:
@@ -547,6 +609,7 @@ class AIPlayerManager:
                     )
                     active.state_data["pending_phase_transition"] = "COMBAT"
                     active.mark_dirty()
+                    record_companion_spotlight(active, char_id)
                     reacted += 1
                     break
                 else:
@@ -576,6 +639,7 @@ class AIPlayerManager:
 
             # Collecter la réponse pour la conclusion sociale éventuelle
             companion_responses.append({"speaker": char_name, "text": visible_text})
+            record_companion_spotlight(active, char_id)
 
             # Persist locally only for non-pipeline social/passive reactions.
             if db is not None and action.action_type not in _EXPLORATION_ARBITRAGE_ACTIONS:

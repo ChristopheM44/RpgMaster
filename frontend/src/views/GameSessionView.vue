@@ -34,6 +34,7 @@ const { connect, disconnect, reconnect, sendAction, toggleAiControl, triggerAiRe
 const startingGame = ref(false)
 const showSaveLoad = ref(false)
 const showStartModal = ref(false)
+const routeStartPending = ref(route.query.start === '1')
 const showLobbyConfirm = ref(false)
 const showEndCombatConfirm = ref(false)
 const showRestDialog = ref(false)
@@ -41,7 +42,11 @@ type MapInteractionMode = 'inspect' | 'move' | 'attack' | 'spell'
 const mobileMapMode = ref<MapInteractionMode>('inspect')
 
 async function initSession() {
+  const shouldStartAfterConnect = routeStartPending.value
   gameStore.reset()
+  if (shouldStartAfterConnect) {
+    gameStore.setProcessing(true)
+  }
   disconnect()
 
   const session = sessionStore.currentSession
@@ -70,6 +75,7 @@ async function initSession() {
   }
 
   connect(charStore.myCharacter?.id)
+  await startPendingRouteSession()
 }
 
 async function handleLoadComplete() {
@@ -125,6 +131,7 @@ function handleAction(
 async function handleStartConfirm(mode: 'libre' | 'script' | 'auto', script?: string) {
   showStartModal.value = false
   startingGame.value = true
+  gameStore.setProcessing(true)
   try {
     const body =
       mode === 'script' && script
@@ -132,11 +139,32 @@ async function handleStartConfirm(mode: 'libre' | 'script' | 'auto', script?: st
         : mode === 'auto'
           ? { auto_generate: true }
           : undefined
-    await gameApi.start(sessionId, body)
+    const result = await gameApi.start(sessionId, body)
+    if (result.status === 'already_started') {
+      gameStore.setProcessing(false)
+    }
   } catch {
     gameStore.setError('Impossible de démarrer la partie.')
   } finally {
     startingGame.value = false
+  }
+}
+
+async function startPendingRouteSession() {
+  if (!routeStartPending.value || !gameStore.connected) return
+  routeStartPending.value = false
+  gameStore.setProcessing(true)
+  try {
+    const result = await gameApi.start(sessionId)
+    if (result.status === 'already_started') {
+      gameStore.setProcessing(false)
+    }
+  } catch {
+    gameStore.setError('Impossible de démarrer la partie.')
+  } finally {
+    const nextQuery = { ...route.query }
+    delete nextQuery.start
+    await router.replace({ name: 'game-session', params: { id: sessionId }, query: nextQuery })
   }
 }
 
@@ -208,6 +236,10 @@ watch(() => gameStore.currentTurnId, (turnId) => {
     (c) => c.id === turnId && !c.is_ai,
   )
   if (activeHuman) charStore.setMyCharacter(activeHuman)
+})
+
+watch(() => gameStore.connected, (connected) => {
+  if (connected) void startPendingRouteSession()
 })
 
 const PHASE_LABELS: Record<string, string> = {

@@ -27,6 +27,27 @@ import type {
   NodeStatus,
 } from '../types'
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function stripSpeakerPrefix(text: string, speaker?: string): string {
+  const cleaned = text.trimStart()
+  const speakerName = speaker?.trim()
+  if (!speakerName || !cleaned) return text
+
+  const names = [speakerName]
+  const firstName = speakerName.split(/\s+/)[0]
+  if (firstName && firstName !== speakerName) names.push(firstName)
+
+  for (const name of names.sort((a, b) => b.length - a.length)) {
+    const fullPrefix = new RegExp(`^${escapeRegExp(name)}\\s*(?:[:：,\\-–—]\\s*|\\s+)(.+)$`, 'i')
+    const match = cleaned.match(fullPrefix)
+    if (match?.[1]) return match[1]
+  }
+  return text
+}
+
 export const useGameStore = defineStore('game', () => {
   // ─── Session state ──────────────────────────────────────────────────────────
   const sessionId = ref<string | null>(null)
@@ -60,6 +81,7 @@ export const useGameStore = defineStore('game', () => {
   const isProcessing = ref(false)
   const isGmThinking = ref(false)
   const thinkingCharacterIds = ref<Set<string>>(new Set())
+  const thinkingCharacterNames = ref<Record<string, string>>({})
   const seenEventIds = ref<Set<string>>(new Set())
 
   // ─── Computed ───────────────────────────────────────────────────────────────
@@ -68,6 +90,10 @@ export const useGameStore = defineStore('game', () => {
     combatants.value.find((c) => c.id === currentTurnId.value) ?? null,
   )
   const isAnyAiThinking = computed(() => isGmThinking.value || thinkingCharacterIds.value.size > 0)
+  const isPlayerAiThinking = computed(() => thinkingCharacterIds.value.size > 0)
+  const playerAiThinkingNames = computed(() =>
+    [...thinkingCharacterIds.value].map((id) => thinkingCharacterNames.value[id] ?? id),
+  )
 
   // ─── Actions ────────────────────────────────────────────────────────────────
   function applyJournalUpdated(payload: { journal: AdventureJournal }) {
@@ -187,7 +213,7 @@ export const useGameStore = defineStore('game', () => {
     narrativeLog.value.push({
       id: crypto.randomUUID(),
       type,
-      text: payload.text,
+      text: type === 'dialogue' ? stripSpeakerPrefix(payload.text, payload.speaker) : payload.text,
       speaker: payload.speaker,
       speaker_id: payload.speaker_id,
       speaker_kind: payload.speaker_kind,
@@ -347,6 +373,8 @@ export const useGameStore = defineStore('game', () => {
   function setError(msg: string | null) {
     isProcessing.value = false
     isGmThinking.value = false
+    thinkingCharacterIds.value = new Set()
+    thinkingCharacterNames.value = {}
     error.value = msg
     if (msg) addSystemEntry(`Erreur : ${msg}`)
   }
@@ -359,9 +387,10 @@ export const useGameStore = defineStore('game', () => {
     isProcessing.value = false
     isGmThinking.value = false
     thinkingCharacterIds.value = new Set()
+    thinkingCharacterNames.value = {}
   }
 
-  function applyAiThinking(payload: { agent_kind: 'gm' | 'player_ai'; thinking: boolean; character_id?: string }) {
+  function applyAiThinking(payload: { agent_kind: 'gm' | 'player_ai'; thinking: boolean; character_id?: string; character_name?: string }) {
     if (payload.agent_kind === 'gm') {
       isGmThinking.value = payload.thinking
       if (payload.thinking) {
@@ -373,12 +402,16 @@ export const useGameStore = defineStore('game', () => {
     if (!payload.character_id) return
 
     const next = new Set(thinkingCharacterIds.value)
+    const nextNames = { ...thinkingCharacterNames.value }
     if (payload.thinking) {
       next.add(payload.character_id)
+      if (payload.character_name) nextNames[payload.character_id] = payload.character_name
     } else {
       next.delete(payload.character_id)
+      delete nextNames[payload.character_id]
     }
     thinkingCharacterIds.value = next
+    thinkingCharacterNames.value = nextNames
   }
 
   function isCharacterThinking(characterId?: string | null): boolean {
@@ -439,7 +472,7 @@ export const useGameStore = defineStore('game', () => {
       return {
         id: m.id,
         type,
-        text: m.content,
+        text: type === 'dialogue' ? stripSpeakerPrefix(m.content, m.speaker) : m.content,
         speaker: m.speaker,
         speaker_id: metadataString('speaker_id') ?? metadataString('character_id'),
         speaker_kind: speakerKind,
@@ -463,6 +496,7 @@ export const useGameStore = defineStore('game', () => {
     isProcessing.value = false
     isGmThinking.value = false
     thinkingCharacterIds.value = new Set()
+    thinkingCharacterNames.value = {}
     seenEventIds.value = new Set()
     adventureJournal.value = null
     quests.value = []
@@ -497,6 +531,8 @@ export const useGameStore = defineStore('game', () => {
     isProcessing,
     isGmThinking,
     isAnyAiThinking,
+    isPlayerAiThinking,
+    playerAiThinkingNames,
     isInCombat,
     activeCombatant,
     applyJournalUpdated,

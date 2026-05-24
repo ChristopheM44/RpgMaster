@@ -88,6 +88,9 @@ TYPES D'ACTIONS :
 - item_remove    : retirer un objet d'un personnage concret, par exemple vente ou offrande.
                     (target: id personnage ; params: {"item_id":"id_instance"})
 
+RESSOURCES CONCRÈTES :
+- Si un PNJ donne une avance, une récompense, des potions, un médaillon ou tout objet utile, quantifie clairement ce qui est donné et émets les actions structurées correspondantes. Ne laisse jamais une "bourse", "avance" ou "objet magique" seulement dans la prose.
+
 ACTION_INTENT :
 - "social"        : le joueur s'adresse directement à ses compagnons (question, proposition, demande d'avis)
 - "environmental" : le joueur interagit avec le monde (explorer, examiner, bouger, utiliser un objet)

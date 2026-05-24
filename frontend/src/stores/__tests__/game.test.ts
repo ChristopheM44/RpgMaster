@@ -135,4 +135,61 @@ describe('useGameStore map decoration state', () => {
       entry_kind: 'dialogue',
     })
   })
+
+  it('tracks player AI thinking separately from GM thinking', () => {
+    const store = useGameStore()
+
+    store.applyAiThinking({
+      agent_kind: 'player_ai',
+      thinking: true,
+      character_id: 'shade',
+      character_name: 'Shade',
+    })
+
+    expect(store.isGmThinking).toBe(false)
+    expect(store.isPlayerAiThinking).toBe(true)
+    expect(store.isAnyAiThinking).toBe(true)
+    expect(store.playerAiThinkingNames).toEqual(['Shade'])
+
+    store.applyAiThinking({
+      agent_kind: 'player_ai',
+      thinking: false,
+      character_id: 'shade',
+    })
+
+    expect(store.isPlayerAiThinking).toBe(false)
+    expect(store.playerAiThinkingNames).toEqual([])
+  })
+
+  it('clears player AI thinking state on errors', () => {
+    const store = useGameStore()
+
+    store.applyAiThinking({
+      agent_kind: 'player_ai',
+      thinking: true,
+      character_id: 'shade',
+      character_name: 'Shade',
+    })
+    store.setError('Erreur test')
+
+    expect(store.isPlayerAiThinking).toBe(false)
+    expect(store.playerAiThinkingNames).toEqual([])
+  })
+
+  it('strips redundant dialogue speaker prefixes', () => {
+    const store = useGameStore()
+
+    store.addNarration({
+      text: 'Syndra laisse échapper un soupir las.',
+      speaker: 'Syndra Silvane',
+      speaker_kind: 'npc',
+      entry_kind: 'dialogue',
+    })
+
+    expect(store.narrativeLog[0]).toMatchObject({
+      type: 'dialogue',
+      text: 'laisse échapper un soupir las.',
+      speaker: 'Syndra Silvane',
+    })
+  })
 })

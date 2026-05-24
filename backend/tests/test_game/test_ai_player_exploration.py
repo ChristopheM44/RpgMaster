@@ -8,7 +8,7 @@ Couvre :
 """
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -19,9 +19,7 @@ from app.game.ai_player_manager import AIPlayerManager, rebuild_ai_players
 from app.game.session_manager import ActiveSession
 from app.game.turn_manager import TurnEntry
 from app.models.character import Character
-from app.models.session import Session
-from app.models.session import SessionStatus
-
+from app.models.session import Session, SessionStatus
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -57,7 +55,7 @@ def _attack_roleplay_json(character_name: str) -> str:
 
 def _make_exploration_session() -> ActiveSession:
     """ActiveSession en EXPLORATION avec 1 joueur humain + 1 compagnon IA."""
-    state: Dict[str, Any] = {
+    state: dict[str, Any] = {
         "phase": "EXPLORATION",
         "characters": {
             "human_1": {
@@ -138,7 +136,11 @@ async def test_exploration_reactions_calls_roleplay_for_ai() -> None:
         "Thorin désigne le contact visible. "
         "« Commençons par lui poser des questions précises. »"
     )
-    assert dialogue_calls[-1].args[2]["text"] == expected_text
+    expected_visible_text = (
+        "désigne le contact visible. "
+        "« Commençons par lui poser des questions précises. »"
+    )
+    assert dialogue_calls[-1].args[2]["text"] == expected_visible_text
     assert dialogue_calls[-1].args[2]["speaker_id"] == "ai_1"
     assert dialogue_calls[-1].args[2]["speaker_kind"] == "companion"
     assert dialogue_calls[-1].args[2]["entry_kind"] == "dialogue"
@@ -317,7 +319,11 @@ async def test_exploration_reactions_skips_trigger_character() -> None:
     )
     active.ai_players["ai_1"] = ai_agent
 
-    with patch.object(ai_agent._client, "chat", new=AsyncMock(return_value=_roleplay_json("Thorin"))):
+    with patch.object(
+        ai_agent._client,
+        "chat",
+        new=AsyncMock(return_value=_roleplay_json("Thorin")),
+    ):
         resolver = MagicMock()
         resolver.resolve = AsyncMock()
 
@@ -572,7 +578,7 @@ async def test_resume_mid_combat_ai_players_populated_before_first_ai_turn() -> 
     """Simule une reprise de session en combat : rebuild_ai_players() peuple
     ai_players avant le premier appel à process_ai_turns().
     """
-    state: Dict[str, Any] = {
+    state: dict[str, Any] = {
         "phase": "COMBAT",
         "characters": {
             "human_1": {"name": "Aria", "is_ai": False, "hp": 30, "hp_max": 30},
@@ -763,12 +769,24 @@ async def test_sync_ai_control_from_db_repairs_stale_combat_state(db_session) ->
 
 def _make_two_ai_session() -> ActiveSession:
     """ActiveSession en EXPLORATION avec 1 joueur humain + 2 compagnons IA."""
-    state: Dict[str, Any] = {
+    state: dict[str, Any] = {
         "phase": "EXPLORATION",
         "characters": {
             "human_1": {"name": "Aria", "is_ai": False, "hp": 30, "hp_max": 30},
-            "ai_1": {"name": "Thorin", "is_ai": True, "hp": 28, "hp_max": 28, "personality": ["noble"]},
-            "ai_2": {"name": "Shade", "is_ai": True, "hp": 22, "hp_max": 22, "personality": ["cautious"]},
+            "ai_1": {
+                "name": "Thorin",
+                "is_ai": True,
+                "hp": 28,
+                "hp_max": 28,
+                "personality": ["noble"],
+            },
+            "ai_2": {
+                "name": "Shade",
+                "is_ai": True,
+                "hp": 22,
+                "hp_max": 22,
+                "personality": ["cautious"],
+            },
         },
     }
     active = ActiveSession(
@@ -978,9 +996,47 @@ async def test_max_reactors_explicit_override() -> None:
 
 
 @pytest.mark.asyncio
+async def test_single_reactor_rotates_after_previous_spotlight() -> None:
+    """Deux réactions successives ne redonnent pas la parole au même compagnon."""
+    active = _make_two_ai_session()
+
+    for char_id, char_name in [("ai_1", "Thorin"), ("ai_2", "Shade")]:
+        agent = PlayerAgent(
+            character_id=char_id,
+            character_name=char_name,
+            personality=PlayerPersonality(traits=["noble"]),
+            client=MagicMock(),
+        )
+        agent._client.chat = AsyncMock(return_value=_roleplay_json(char_name))
+        active.ai_players[char_id] = agent
+
+    with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=AsyncMock()):
+        reacted_1, responses_1 = await AIPlayerManager().run_exploration_reactions(
+            "two_ai_session",
+            active,
+            MagicMock(),
+            trigger_character_id="human_1",
+            max_reactors=1,
+        )
+        reacted_2, responses_2 = await AIPlayerManager().run_exploration_reactions(
+            "two_ai_session",
+            active,
+            MagicMock(),
+            trigger_character_id="human_1",
+            max_reactors=1,
+        )
+
+    assert reacted_1 == 1
+    assert reacted_2 == 1
+    assert responses_1[0]["speaker"] == "Thorin"
+    assert responses_2[0]["speaker"] == "Shade"
+
+
+@pytest.mark.asyncio
 async def test_follow_up_mode_allows_two_reactors() -> None:
     """En mode follow_up (action joueur dans recent_messages), cap à 2 compagnons."""
     from types import SimpleNamespace
+
     from app.game.ai_player_manager import _detect_reaction_mode
 
     # Simuler un message joueur humain dans recent_messages
@@ -1051,9 +1107,14 @@ async def test_context_reloaded_between_companions() -> None:
     resolver = MagicMock()
     resolver.resolve = AsyncMock()
 
-    with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=AsyncMock()), \
-         patch("app.services.message_service.persist_narration", new=AsyncMock()), \
-         patch("app.services.message_service.load_recent_messages", new=AsyncMock(side_effect=mock_load_recent)):
+    with (
+        patch("app.game.ai_player_manager.event_bus.publish_to_session", new=AsyncMock()),
+        patch("app.services.message_service.persist_narration", new=AsyncMock()),
+        patch(
+            "app.services.message_service.load_recent_messages",
+            new=AsyncMock(side_effect=mock_load_recent),
+        ),
+    ):
         reacted, _ = await AIPlayerManager().run_exploration_reactions(
             "two_ai_session", active, resolver,
             trigger_character_id="human_1",

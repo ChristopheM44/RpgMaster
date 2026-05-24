@@ -18,6 +18,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.player_agent import _NON_JSON_LLM_ERROR
 from app.agents.schemas import PlayerActionChoice
+from app.game.ai_player_manager import (
+    order_companion_spotlight,
+    record_companion_spotlight,
+)
 from app.game.companion_visibility import (
     companion_visible_game_state,
     sanitize_companion_visible_text,
@@ -175,9 +179,15 @@ class NarrativeFlowService:
                 addressed_to=None,
                 reason="npc_target",
             )
+        trigger_character_id = getattr(action, "character_id", None)
         target_ids = list(detection.target_ids)
         if detection.audience in {"party", "mixed"}:
-            target_ids = target_ids[:_MAX_GROUP_COMPANION_RESPONSES]
+            target_ids = order_companion_spotlight(
+                active,
+                target_ids,
+                trigger_character_id=trigger_character_id,
+                max_count=_MAX_GROUP_COMPANION_RESPONSES,
+            )
         exchange = SceneExchange(
             scene_id=scene_id,
             audience=detection.audience,
@@ -199,7 +209,7 @@ class NarrativeFlowService:
                 action_resolver=action_resolver,
                 player_text=text,
                 target_ids=target_ids,
-                trigger_character_id=getattr(action, "character_id", None),
+                trigger_character_id=trigger_character_id,
                 db=db,
                 scene_id=scene_id,
             )
@@ -445,6 +455,7 @@ class NarrativeFlowService:
                     },
                 )
             responses.append({"speaker": char_name, "text": visible_text})
+            record_companion_spotlight(active, char_id)
 
             if choice.action_type in _COMPANION_ARBITRAGE_ACTIONS:
                 await action_resolver.resolve(

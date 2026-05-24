@@ -10,6 +10,7 @@ from app.agents.schemas import GMResponse, PlayerActionChoice
 from app.game.action_resolver import ActionResolver
 from app.game.event_bus import EventType
 from app.game.session_manager import ActiveSession
+from app.game.visible_events import strip_visible_speaker_prefix
 from app.models.session import SessionStatus
 from app.services.narrative_flow_service import NarrativeFlowService
 
@@ -105,6 +106,15 @@ def test_detects_mixed_world_and_party_prompt() -> None:
 
     assert detected.audience == "mixed"
     assert set(detected.target_ids) == {"thorin_1", "elara_1"}
+
+
+def test_visible_dialogue_strips_redundant_speaker_prefix() -> None:
+    text = strip_visible_speaker_prefix(
+        "Syndra laisse échapper un soupir las.",
+        "Syndra Silvane",
+    )
+
+    assert text == "laisse échapper un soupir las."
 
 
 @pytest.mark.asyncio
@@ -320,7 +330,7 @@ async def test_direct_companion_action_keeps_dialogue_then_calls_gm() -> None:
         payload for event_type, payload in published if event_type == "dialogue"
     ]
     assert dialogue_payloads[-1]["text"] == (
-        "Thorin s'accroupit à l'entrée du passage. "
+        "s'accroupit à l'entrée du passage. "
         "« Je passe devant, attendez mon signal. »"
     )
 
@@ -366,6 +376,35 @@ async def test_party_dialogue_limits_group_companion_responses() -> None:
     resolver.social_conclude.assert_awaited_once()
     assert len(exchange.companion_responses) == 2
     active.ai_players["solana_1"].respond_to_player.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_party_dialogue_rotates_group_companion_responses() -> None:
+    active = _active_with_companions()
+    _add_third_companion(active)
+    resolver = MagicMock()
+    resolver.resolve = AsyncMock()
+    resolver.social_conclude = AsyncMock()
+    service = NarrativeFlowService()
+
+    with patch("app.services.narrative_flow_service.event_bus.publish_to_session", new=AsyncMock()):
+        first = await service.handle_exploration_action(
+            session_id="scene-1",
+            action=_action("Compagnons, que fait-on ?"),
+            active=active,
+            action_resolver=resolver,
+            db=None,
+        )
+        second = await service.handle_exploration_action(
+            session_id="scene-1",
+            action=_action("Compagnons, que fait-on ?"),
+            active=active,
+            action_resolver=resolver,
+            db=None,
+        )
+
+    assert [r["speaker"] for r in first.companion_responses] == ["Thorin", "Elara"]
+    assert [r["speaker"] for r in second.companion_responses] == ["Solana", "Thorin"]
 
 
 @pytest.mark.asyncio

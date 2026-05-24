@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCampaignStore } from '../stores/campaign'
-import { gameApi } from '../services/api'
+import { useGameStore } from '../stores/game'
 import type {
   Campaign,
   CampaignGmDossier,
@@ -16,6 +16,7 @@ import ConfirmDialog from '../components/common/ConfirmDialog.vue'
 
 const router = useRouter()
 const campaignStore = useCampaignStore()
+const gameStore = useGameStore()
 
 type DetailTab = 'sessions' | 'scenario' | 'notes'
 type ForgeStep = 1 | 2 | 3 | 4 | 5
@@ -364,11 +365,16 @@ async function playCurrent() {
 }
 
 async function startAndOpenSession(sessionId: string): Promise<boolean> {
+  gameStore.setProcessing(true)
   try {
-    await gameApi.start(sessionId)
-    await router.push({ name: 'game-session', params: { id: sessionId } })
+    await router.push({
+      name: 'game-session',
+      params: { id: sessionId },
+      query: { start: '1' },
+    })
     return true
   } catch {
+    gameStore.setProcessing(false)
     actionError.value = 'Impossible de lancer la session. Vérifiez que la campagne possède au moins un personnage.'
     activeTab.value = 'sessions'
     return false
