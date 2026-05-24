@@ -149,6 +149,32 @@ async def get_campaign_gm_dossier(campaign_id: str, db: AsyncSession = Depends(g
         raise HTTPException(status_code=404, detail=str(exc))
 
 
+@router.get("/{campaign_id}/personas")
+async def get_campaign_personas(
+    campaign_id: str, db: AsyncSession = Depends(get_db)
+):
+    """Liste les personas connues d'une campagne (PNJ, monstres, compagnons).
+
+    Retourne un dict ``{npcs, monsters, companions}`` où chaque entrée est une
+    persona Pydantic dumpée en JSON. Utile pour debug / admin / inspection MJ.
+
+    NB : les secrets et motivations cachées sont inclus (GM-only). Ne pas
+    exposer cet endpoint au-delà du contexte MJ.
+    """
+    personas = await campaign_dossier_service.list_personas(campaign_id, db)
+    return {
+        "campaign_id": campaign_id,
+        "npcs": [p.model_dump(mode="json") for p in personas["npcs"]],
+        "monsters": [p.model_dump(mode="json") for p in personas["monsters"]],
+        "companions": [p.model_dump(mode="json") for p in personas["companions"]],
+        "counts": {
+            "npcs": len(personas["npcs"]),
+            "monsters": len(personas["monsters"]),
+            "companions": len(personas["companions"]),
+        },
+    }
+
+
 @router.post("/{campaign_id}/synthesize-canon")
 async def synthesize_campaign_canon(
     campaign_id: str,

@@ -213,7 +213,12 @@ class ActionResolver:
             roll_results.setdefault("social_target_id", npc_id)
 
         npc_name = str(npc.get("name", npc_id))
-        npc_personality = str(npc.get("personality_hint", "indifferent"))
+        npc_personality: Any = await self._resolve_npc_persona_or_hint(
+            session_id=session_id,
+            npc_id=npc_id,
+            npc=npc,
+            db=db,
+        )
         recent_messages: list[Any] = []
         if db is not None:
             from app.services.message_service import load_recent_messages
@@ -388,6 +393,54 @@ class ActionResolver:
             except Exception as exc:
                 logger.warning("Synthese canon campagne ignoree apres dialogue PNJ : %s", exc)
         return published_visible or bool(exec_result.pending_rolls)
+
+    # ------------------------------------------------------------------
+    # Helpers Personas
+    # ------------------------------------------------------------------
+
+    async def _resolve_npc_persona_or_hint(
+        self,
+        *,
+        session_id: str,
+        npc_id: str,
+        npc: dict[str, Any],
+        db: Optional[Any],
+    ) -> Any:
+        """Cherche une NPCPersona riche dans le dossier, sinon retourne le hint legacy.
+
+        Priorité de lookup :
+        1. ``played_canon.npc_personas[npc_id]`` (personas générées en cours de jeu)
+        2. ``gm_dossier.important_npcs[]`` (personas pré-écrites lors de la forge)
+        3. Fallback : string ``personality_hint`` (l'ancien format)
+
+        Le caller passe le résultat tel quel à ``GMAgent.run_npc_dialogue`` qui sait
+        gérer les deux types (NPCPersona structurée OU string legacy).
+        """
+        if db is not None:
+            try:
+                campaign = await campaign_dossier_service.campaign_for_session(
+                    session_id, db
+                )
+                if campaign is not None:
+                    persona = await campaign_dossier_service.get_npc_persona(
+                        campaign.id, npc_id, db
+                    )
+                    if persona is not None:
+                        logger.debug(
+                            "resolve_npc_dialogue: persona riche trouvée pour %s "
+                            "(importance=%s)",
+                            npc_id,
+                            persona.importance,
+                        )
+                        return persona
+            except Exception as exc:
+                logger.debug(
+                    "resolve_npc_dialogue: lookup persona échoué pour %s : %s — "
+                    "fallback hint legacy",
+                    npc_id,
+                    exc,
+                )
+        return str(npc.get("personality_hint", "indifferent"))
 
     # ------------------------------------------------------------------
     # Conclusion sociale (compagnons ont déjà parlé)

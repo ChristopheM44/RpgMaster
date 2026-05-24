@@ -422,6 +422,31 @@ async def test_campaign_gm_dossier_endpoint_exposes_author_notes_only(async_clie
 
 
 @pytest.mark.asyncio
+async def test_personas_endpoint_returns_dossier_personas(async_client):
+    """L'endpoint /personas liste les personas de la campagne par type."""
+    forged = await _forge_and_validate(async_client)
+    response = await async_client.get(
+        f"/api/campaigns/{forged['campaign_id']}/personas"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["campaign_id"] == forged["campaign_id"]
+    # 3 buckets toujours présents (même vides)
+    assert "npcs" in data
+    assert "monsters" in data
+    assert "companions" in data
+    assert "counts" in data
+    # Le DummyForgeAgent retourne `important_npcs: [{"name": "Bram", "secret": ...}]`
+    # qui est coerced en NPCPersona light via _coerce_legacy_npc_dict
+    assert data["counts"]["npcs"] >= 1
+    bram = next((n for n in data["npcs"] if n["name"] == "Bram"), None)
+    assert bram is not None
+    assert bram["persona_type"] == "npc"
+    assert bram["importance"] == "light"  # coerced from legacy format
+
+
+@pytest.mark.asyncio
 async def test_forge_dossier_npc_descriptions_are_roleplay_grade(async_client):
     forged = await _forge_and_validate(async_client)
     response = await async_client.get(f"/api/campaigns/{forged['campaign_id']}/gm-dossier")
