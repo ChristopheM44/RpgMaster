@@ -6,6 +6,12 @@ from typing import Any, Optional
 
 from app.agents.base_agent import BaseAgent
 from app.agents.schemas import AgentContext, AgentResponse
+from app.config import (
+    get_forge_chapter_max_tokens,
+    get_forge_indexes_max_tokens,
+    get_forge_outline_max_tokens,
+    get_forge_source_note_max_tokens,
+)
 from app.llm.base_client import LLMClient
 from app.llm.model_router import router
 
@@ -46,6 +52,70 @@ class CampaignForgeAgent(BaseAgent):
         )
         return await self._call_json(prompt, max_tokens=4096)
 
+    async def forge_outline(
+        self,
+        campaign: dict[str, Any],
+        brief: dict[str, Any],
+        options: dict[str, Any],
+        source_notes: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        prompt = self._render_prompt(
+            "campaign_forge_outline.txt",
+            {
+                "campaign": json.dumps(campaign, ensure_ascii=False, indent=2),
+                "brief": json.dumps(brief, ensure_ascii=False, indent=2),
+                "options": json.dumps(options, ensure_ascii=False, indent=2),
+                "source_notes": json.dumps(source_notes, ensure_ascii=False, indent=2),
+            },
+        )
+        return await self._call_json(prompt, max_tokens=get_forge_outline_max_tokens())
+
+    async def forge_chapter(
+        self,
+        campaign: dict[str, Any],
+        player_contract: dict[str, Any],
+        visible_chapter: dict[str, Any],
+        chapter_index: int,
+        chapter_total: int,
+        source_notes: list[dict[str, Any]],
+        options: dict[str, Any],
+    ) -> dict[str, Any]:
+        prompt = self._render_prompt(
+            "campaign_forge_chapter.txt",
+            {
+                "campaign": json.dumps(campaign, ensure_ascii=False, indent=2),
+                "player_contract": json.dumps(player_contract, ensure_ascii=False, indent=2),
+                "visible_chapter": json.dumps(visible_chapter, ensure_ascii=False, indent=2),
+                "chapter_index": chapter_index,
+                "chapter_total": chapter_total,
+                "source_notes": json.dumps(source_notes, ensure_ascii=False, indent=2),
+                "options": json.dumps(options, ensure_ascii=False, indent=2),
+            },
+        )
+        return await self._call_json(prompt, max_tokens=get_forge_chapter_max_tokens())
+
+    async def forge_global_indexes(
+        self,
+        campaign: dict[str, Any],
+        brief: dict[str, Any],
+        options: dict[str, Any],
+        player_contract: dict[str, Any],
+        chapters: list[dict[str, Any]],
+        source_notes: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        prompt = self._render_prompt(
+            "campaign_forge_indexes.txt",
+            {
+                "campaign": json.dumps(campaign, ensure_ascii=False, indent=2),
+                "brief": json.dumps(brief, ensure_ascii=False, indent=2),
+                "options": json.dumps(options, ensure_ascii=False, indent=2),
+                "player_contract": json.dumps(player_contract, ensure_ascii=False, indent=2),
+                "chapters": json.dumps(chapters, ensure_ascii=False, indent=2),
+                "source_notes": json.dumps(source_notes, ensure_ascii=False, indent=2),
+            },
+        )
+        return await self._call_json(prompt, max_tokens=get_forge_indexes_max_tokens())
+
     async def synthesize_canon(
         self,
         player_contract: dict[str, Any],
@@ -71,7 +141,7 @@ class CampaignForgeAgent(BaseAgent):
             "campaign_import_source.txt",
             {"source": json.dumps(source, ensure_ascii=False, indent=2)},
         )
-        return await self._call_json(prompt, max_tokens=2048)
+        return await self._call_json(prompt, max_tokens=get_forge_source_note_max_tokens())
 
     async def _call_json(self, prompt: str, max_tokens: int) -> dict[str, Any]:
         raw = await self._client.chat(

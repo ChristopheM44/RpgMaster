@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import { adminApi } from '../../services/api'
-import type { LlmProvider, OllamaHealthResponse, LlmSettingsUpdate } from '../../types'
+import type { LlmProvider, OllamaHealthResponse, OllamaModelInfo, LlmSettingsUpdate } from '../../types'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -43,12 +43,54 @@ const clearApiKey = ref(false)
 // Modèles (communs aux deux modes)
 const gmModel = ref('')
 const playerModel = ref('')
+const sourceMaxChars = ref(120_000)
+
+// Caractéristiques du modèle MJ Ollama
+const modelInfo = ref<OllamaModelInfo | null>(null)
+const modelInfoLoading = ref(false)
+const modelInfoError = ref<string | null>(null)
+let modelInfoTimer: ReturnType<typeof setTimeout> | null = null
 
 const sortedModels = computed(() =>
   [...(health.value?.models ?? [])].sort((a, b) =>
     a.localeCompare(b, 'fr', { numeric: true, sensitivity: 'base' }),
   ),
 )
+
+function formatNumber(value: number | null | undefined): string {
+  return typeof value === 'number' ? value.toLocaleString('fr-FR') : '—'
+}
+
+function formatTokens(value: number | null | undefined): string {
+  return typeof value === 'number' ? `${formatNumber(value)} tokens` : '—'
+}
+
+function modelInfoFamilies(info: OllamaModelInfo): string {
+  return info.families.length > 0 ? info.families.join(', ') : info.family || '—'
+}
+
+async function loadModelInfo() {
+  const model = gmModel.value.trim()
+  modelInfo.value = null
+  modelInfoError.value = null
+  if (provider.value !== 'ollama' || !model) return
+
+  modelInfoLoading.value = true
+  try {
+    modelInfo.value = await adminApi.getLlmModelInfo(model)
+  } catch (e) {
+    modelInfoError.value = e instanceof Error ? e.message : 'Caractéristiques indisponibles'
+  } finally {
+    modelInfoLoading.value = false
+  }
+}
+
+function scheduleModelInfoLoad() {
+  if (modelInfoTimer) clearTimeout(modelInfoTimer)
+  modelInfoTimer = setTimeout(() => {
+    void loadModelInfo()
+  }, 300)
+}
 
 async function loadSettings() {
   try {
@@ -58,6 +100,7 @@ async function loadSettings() {
     ollamaApiKeySet.value = s.ollama_api_key_set
     gmModel.value = s.gm_model
     playerModel.value = s.player_model
+    sourceMaxChars.value = s.source_max_chars
     openaiBaseUrl.value = s.openai_base_url
     apiKeySet.value = s.api_key_set
   } catch {
@@ -86,6 +129,7 @@ async function saveSettings() {
       llm_provider: provider.value,
       gm_model: gmModel.value || undefined,
       player_model: playerModel.value || undefined,
+      source_max_chars: sourceMaxChars.value,
     }
 
     if (provider.value === 'ollama') {
@@ -109,6 +153,7 @@ async function saveSettings() {
     ollamaUrl.value = updated.ollama_base_url
     gmModel.value = updated.gm_model
     playerModel.value = updated.player_model
+    sourceMaxChars.value = updated.source_max_chars
     openaiBaseUrl.value = updated.openai_base_url
     apiKeySet.value = updated.api_key_set
     ollamaApiKeySet.value = updated.ollama_api_key_set
@@ -137,6 +182,10 @@ function handleClearOllamaApiKey() {
   clearOllamaApiKey.value = true
   ollamaApiKeyInput.value = ''
 }
+
+watch([provider, gmModel], () => {
+  scheduleModelInfoLoad()
+})
 
 onMounted(async () => {
   await loadSettings()
@@ -310,6 +359,63 @@ onMounted(async () => {
         </div>
       </div>
 
+      <!-- Caractéristiques modèle MJ -->
+      <div class="p-4 rounded-lg bg-ink/40 border border-parchment/10 space-y-3">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <p class="font-medium text-parchment">Caractéristiques du modèle MJ</p>
+            <p class="text-sm text-parchment/60 font-mono">{{ gmModel || '—' }}</p>
+          </div>
+          <button
+            class="px-3 py-1.5 rounded border border-parchment/20 text-xs text-parchment/70 hover:border-parchment/40 transition-colors disabled:opacity-50"
+            :disabled="modelInfoLoading || !gmModel"
+            @click="loadModelInfo"
+          >
+            {{ modelInfoLoading ? 'Lecture…' : 'Rafraîchir' }}
+          </button>
+        </div>
+
+        <div
+          v-if="modelInfo"
+          class="grid grid-cols-2 gap-3 text-sm"
+        >
+          <div>
+            <p class="text-xs text-parchment/40">Famille</p>
+            <p class="text-parchment/80">{{ modelInfo.family || '—' }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-parchment/40">Familles</p>
+            <p class="text-parchment/80">{{ modelInfoFamilies(modelInfo) }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-parchment/40">Taille</p>
+            <p class="text-parchment/80">{{ modelInfo.parameter_size || '—' }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-parchment/40">Quantization</p>
+            <p class="text-parchment/80">{{ modelInfo.quantization_level || '—' }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-parchment/40">Format</p>
+            <p class="text-parchment/80">{{ modelInfo.format || '—' }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-parchment/40">Contexte déclaré</p>
+            <p class="text-parchment/80">{{ formatTokens(modelInfo.context_length) }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-parchment/40">num_ctx</p>
+            <p class="text-parchment/80">{{ formatTokens(modelInfo.num_ctx) }}</p>
+          </div>
+        </div>
+
+        <p v-else-if="modelInfoLoading" class="text-sm text-parchment/50">Lecture des caractéristiques…</p>
+        <p v-else-if="modelInfoError" class="text-sm text-yellow-300/80">{{ modelInfoError }}</p>
+        <p v-else class="text-sm text-parchment/45">
+          Sélectionnez un modèle MJ Ollama pour lire ses caractéristiques.
+        </p>
+      </div>
+
       <!-- Liste des modèles disponibles -->
       <div v-if="health && sortedModels.length > 0" class="space-y-2">
         <p class="text-sm font-medium text-parchment/70">
@@ -401,6 +507,24 @@ onMounted(async () => {
         </p>
       </div>
     </template>
+
+    <!-- Limite Campaign Forge -->
+    <div class="space-y-2">
+      <label class="block text-sm font-medium text-parchment/80">
+        Limite d'import Campaign Forge
+      </label>
+      <input
+        v-model.number="sourceMaxChars"
+        type="number"
+        min="1000"
+        max="2000000"
+        step="10000"
+        class="w-full px-3 py-2 rounded-lg bg-ink/60 border border-parchment/20 text-parchment font-mono text-sm focus:outline-none focus:border-arcane/60"
+      />
+      <p class="text-xs text-parchment/40">
+        Nombre maximal de caractères conservés par source importée. Par défaut : 120 000.
+      </p>
+    </div>
 
     <!-- Erreur / succès -->
     <p v-if="error" class="text-blood text-sm">{{ error }}</p>

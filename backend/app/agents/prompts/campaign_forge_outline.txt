@@ -1,0 +1,45 @@
+Construis uniquement le contrat joueur et le plan public complet de la campagne.
+
+CAMPAGNE :
+{{ campaign }}
+
+BRIEF :
+{{ brief }}
+
+OPTIONS :
+{{ options }}
+
+NOTES STRUCTURÉES DES SOURCES PRIVÉES :
+{{ source_notes }}
+
+Contraintes :
+- Conserve TOUS les chapitres, actes ou grandes sections détectés dans les sources. Ne plafonne jamais le nombre de chapitres.
+- Si la source décrit 18 chapitres, `visible_chapters` contient 18 entrées.
+- Les titres et résumés publics ne doivent pas révéler de secrets, twists, plans d'antagonistes ou contenu privé.
+- Chaque chapitre doit avoir un `id` stable `chapter_1`, `chapter_2`, etc. dans l'ordre de jeu.
+- Le premier chapitre est `active`, tous les suivants sont `planned`, sauf information jouée explicite.
+- `hook` explique pourquoi les PJ sont concernés, sans décrire ce qu'ils voient physiquement.
+
+Réponds avec un seul objet JSON valide, sans markdown :
+{
+  "player_contract": {
+    "title": "Titre public",
+    "pitch_public": "Pitch public sans spoiler",
+    "tones": ["Mystère"],
+    "duration": "Durée estimée",
+    "hook": "Pourquoi les PJ sont concernés par l'aventure",
+    "visible_chapters": [
+      {
+        "id": "chapter_1",
+        "num": "I",
+        "title": "Titre public",
+        "state": "active",
+        "sessions": 0,
+        "summary": "Résumé visible sans spoiler"
+      }
+    ],
+    "known_objectives": ["Objectif connu"],
+    "played_summary": ""
+  },
+  "active_chapter_id": "chapter_1"
+}

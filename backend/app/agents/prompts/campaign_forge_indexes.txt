@@ -1,0 +1,61 @@
+Génère les index globaux privés du dossier MJ à partir du contrat et des chapitres déjà forgés.
+
+CAMPAGNE :
+{{ campaign }}
+
+BRIEF :
+{{ brief }}
+
+OPTIONS :
+{{ options }}
+
+CONTRAT JOUEUR :
+{{ player_contract }}
+
+CHAPITRES PRIVÉS DÉJÀ FORGÉS :
+{{ chapters }}
+
+NOTES STRUCTURÉES DES SOURCES PRIVÉES :
+{{ source_notes }}
+
+Contraintes :
+- Ne regénère pas `chapters`; ils sont déjà définitifs.
+- "important_npcs" contient les PNJ RÉCURRENTS de la campagne au format NPCPersona structuré.
+- Génère les PNJ nécessaires aux scènes d'ouverture et aux arcs récurrents.
+- "bestiary" contient seulement les monstres signatures, pas les créatures SRD génériques.
+- Les listes globales synthétisent toute l'aventure, y compris tous les chapitres.
+- Ne mets aucun secret dans une section publique; ce bloc est privé MJ.
+
+Réponds avec un seul objet JSON valide, sans markdown :
+{
+  "narrative_arc": "Arc privé global",
+  "important_npcs": [
+    {
+      "id": "pnj_id_kebab_case",
+      "name": "Nom du PNJ",
+      "archetype": "mentor",
+      "short_description": "1 phrase qui brieffe le MJ sur ce PNJ.",
+      "voice": {"gender": "neutral", "age_range": "adult", "speech_register": "formal", "pitch": "medium", "rate": "normal", "accent": null, "timbre": null},
+      "motivations": {"visible": ["objectif apparent"], "hidden": ["motivation cachée"], "fears": []},
+      "knowledge": {"knows": ["fait connu"], "ignores": ["limite de savoir"], "rumors": []},
+      "relationships": [],
+      "importance": "standard",
+      "persona_type": "npc",
+      "attitude_default": "indifferent",
+      "secrets": [],
+      "quest_hooks": [],
+      "catchphrases": []
+    }
+  ],
+  "bestiary": [],
+  "companion_seeds": [],
+  "locations": [],
+  "factions": [],
+  "secrets": [],
+  "revelations": [],
+  "fronts": [],
+  "quests": [],
+  "complications": [],
+  "clues": [],
+  "light_mechanics": []
+}

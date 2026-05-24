@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     tts_async: bool = True
     llm_budget_mode: str = "sober"
     ollama_max_concurrent_requests: int = 1
+    source_max_chars: int = 120_000
+    forge_source_note_max_tokens: int = 4_096
+    forge_outline_max_tokens: int = 16_384
+    forge_chapter_max_tokens: int = 8_192
+    forge_indexes_max_tokens: int = 16_384
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
@@ -152,6 +157,7 @@ def update_llm_settings(
     openai_base_url: str | None = None,
     openai_api_key: str | None = None,
     ollama_api_key: str | None = None,
+    source_max_chars: int | None = None,
 ) -> None:
     """Met à jour le(s) setting(s) LLM en mémoire et persiste."""
     if ollama_base_url is not None:
@@ -186,6 +192,8 @@ def update_llm_settings(
             _runtime_llm.pop("ollama_api_key", None)
         else:
             _runtime_llm["ollama_api_key"] = normalized
+    if source_max_chars is not None:
+        _runtime_llm["source_max_chars"] = int(source_max_chars)
     _save_runtime_llm()
 
 
@@ -216,6 +224,31 @@ def get_ollama_max_concurrent_requests() -> int:
         return max(1, int(raw))
     except (TypeError, ValueError):
         return 1
+
+
+def get_source_max_chars() -> int:
+    raw = _runtime_llm.get("source_max_chars", settings.source_max_chars)
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        value = settings.source_max_chars
+    return max(1, value)
+
+
+def get_forge_source_note_max_tokens() -> int:
+    return max(1, int(settings.forge_source_note_max_tokens))
+
+
+def get_forge_outline_max_tokens() -> int:
+    return max(1, int(settings.forge_outline_max_tokens))
+
+
+def get_forge_chapter_max_tokens() -> int:
+    return max(1, int(settings.forge_chapter_max_tokens))
+
+
+def get_forge_indexes_max_tokens() -> int:
+    return max(1, int(settings.forge_indexes_max_tokens))
 
 
 def get_ollama_api_key() -> str:

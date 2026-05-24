@@ -5,6 +5,7 @@ import { useCampaignStore } from '../stores/campaign'
 import { useGameStore } from '../stores/game'
 import type {
   Campaign,
+  CampaignForgeJobResponse,
   CampaignGmDossier,
   CampaignGmDossierResponse,
   CampaignImportSourceBody,
@@ -55,6 +56,7 @@ const newSessionName = ref('')
 const forgeStep = ref<ForgeStep>(1)
 const forgeCampaignId = ref<string | null>(null)
 const draftContract = ref<CampaignPlayerContract | null>(null)
+const forgeJob = ref<CampaignForgeJobResponse | null>(null)
 const sourceCount = ref(0)
 const isForging = ref(false)
 const isImporting = ref(false)
@@ -114,6 +116,16 @@ const gmDossierRaw = computed(() => {
   return JSON.stringify(gmDossier.value, null, 2)
 })
 
+const forgeProgressPercent = computed(() => {
+  if (!forgeJob.value) return 0
+  const total = Math.max(forgeJob.value.total_steps || 1, 1)
+  return Math.min(100, Math.round(((forgeJob.value.current_step || 0) / total) * 100))
+})
+
+const forgeRetryEvents = computed(() =>
+  (forgeJob.value?.events ?? []).filter((event) => event.type.includes('retry')).slice(-4),
+)
+
 const campaignToDelete = computed(
   () => campaignStore.campaigns.find((c) => c.id === confirmDeleteId.value) ?? null,
 )
@@ -135,6 +147,7 @@ function openForge() {
   forgeStep.value = 1
   forgeCampaignId.value = null
   draftContract.value = null
+  forgeJob.value = null
   sourceCount.value = 0
   modalError.value = null
   Object.assign(forgeForm, {
@@ -154,6 +167,7 @@ function openForge() {
 }
 
 function closeForge() {
+  if (isForging.value) return
   showForge.value = false
 }
 
@@ -176,8 +190,13 @@ function nextStep() {
 }
 
 function previousStep() {
+  if (isForging.value) return
   modalError.value = null
   forgeStep.value = Math.max(1, forgeStep.value - 1) as ForgeStep
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
 }
 
 async function ensureForgeCampaign(): Promise<string | null> {
@@ -241,12 +260,14 @@ async function handleFileImport(event: Event) {
 }
 
 async function forgeDraft() {
+  if (isForging.value) return
   modalError.value = null
   const campaignId = await ensureForgeCampaign()
   if (!campaignId) return
   isForging.value = true
+  forgeJob.value = null
   try {
-    const result = await campaignStore.forgeDraft(
+    const initial = await campaignStore.startForgeDraftJob(
       campaignId,
       {
         title: forgeForm.name,
@@ -260,11 +281,27 @@ async function forgeDraft() {
         combat: forgeForm.combat,
       },
     )
-    if (!result) {
+    if (!initial) {
       modalError.value = campaignStore.error ?? 'La forge a échoué.'
       return
     }
-    draftContract.value = cloneContract(result.player_contract)
+    forgeJob.value = initial
+    let current = initial
+    while (current.status === 'queued' || current.status === 'running') {
+      await delay(1000)
+      const next = await campaignStore.getForgeDraftJob(campaignId, current.job_id)
+      if (!next) {
+        modalError.value = campaignStore.error ?? 'Suivi de forge impossible.'
+        return
+      }
+      current = next
+      forgeJob.value = next
+    }
+    if (current.status !== 'completed' || !current.player_contract) {
+      modalError.value = current.error || 'La forge a échoué.'
+      return
+    }
+    draftContract.value = cloneContract(current.player_contract)
     forgeStep.value = 5
   } finally {
     isForging.value = false
@@ -944,7 +981,7 @@ function cloneContract(contract: CampaignPlayerContract): CampaignPlayerContract
       <div
         v-if="showForge"
         class="rpg-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4"
-        @click.self="closeForge"
+        @click.self="!isForging && closeForge()"
       >
         <div class="rpg-dialog-panel rpg-tone-gold relative max-h-[90vh] w-full max-w-[640px] overflow-y-auto overflow-x-hidden rounded-[14px] border p-7">
           <div class="rpg-campaign-modal-glow pointer-events-none absolute -right-12 -top-20 h-60 w-60 rounded-full" />
@@ -1048,6 +1085,27 @@ function cloneContract(contract: CampaignPlayerContract): CampaignPlayerContract
               <p class="mx-auto mt-2 max-w-md font-serif text-sm italic text-parchment-dark">
                 Le dossier privé sera structuré côté MJ, puis seul le contrat joueur sera affiché.
               </p>
+              <div v-if="forgeJob" class="mx-auto mt-4 max-w-md rounded-lg border border-border bg-black/25 p-3 text-left">
+                <div class="flex items-center justify-between gap-3 font-mono text-[10px] uppercase tracking-wider text-text-muted">
+                  <span>{{ forgeJob.message || 'Forge en cours...' }}</span>
+                  <span>{{ forgeJob.current_step }} / {{ forgeJob.total_steps }}</span>
+                </div>
+                <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-raised">
+                  <div
+                    class="h-full rounded-full bg-[linear-gradient(90deg,var(--color-ember),var(--color-gold))] transition-all"
+                    :style="{ width: `${forgeProgressPercent}%` }"
+                  />
+                </div>
+                <div v-if="forgeRetryEvents.length" class="mt-3 space-y-1">
+                  <div
+                    v-for="event in forgeRetryEvents"
+                    :key="event.at + event.message"
+                    class="font-mono text-[10px] text-gold"
+                  >
+                    {{ event.message }}<span v-if="event.error" class="text-text-dim"> — {{ event.error }}</span>
+                  </div>
+                </div>
+              </div>
               <button class="rpg-btn-primary mt-5" :disabled="isForging" @click="forgeDraft">
                 <span>⚔</span> {{ isForging ? 'Forge en cours...' : 'Forger le dossier' }}
               </button>
@@ -1090,11 +1148,13 @@ function cloneContract(contract: CampaignPlayerContract): CampaignPlayerContract
             </div>
 
             <div class="mt-7 flex justify-end gap-2">
-              <button class="rpg-btn-secondary" @click="forgeStep === 1 ? closeForge() : previousStep()">
+              <button class="rpg-btn-secondary" :disabled="isForging" @click="forgeStep === 1 ? closeForge() : previousStep()">
                 {{ forgeStep === 1 ? 'Annuler' : 'Retour' }}
               </button>
-              <button v-if="forgeStep < 4" class="rpg-btn-primary" @click="nextStep">Suivant</button>
-              <button v-else-if="forgeStep === 4" class="rpg-btn-secondary" @click="forgeDraft">Forger</button>
+              <button v-if="forgeStep < 4" class="rpg-btn-primary" :disabled="isForging" @click="nextStep">Suivant</button>
+              <button v-else-if="forgeStep === 4" class="rpg-btn-secondary" :disabled="isForging" @click="forgeDraft">
+                {{ isForging ? 'Forge en cours...' : 'Forger' }}
+              </button>
               <button v-else class="rpg-btn-primary" :disabled="isValidating" @click="validateContract">
                 {{ isValidating ? 'Validation...' : 'Valider le contrat' }}
               </button>

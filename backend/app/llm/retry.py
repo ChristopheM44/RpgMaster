@@ -1,17 +1,47 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
+import inspect
 import logging
 from collections.abc import Awaitable, Callable
+from contextlib import contextmanager
 from functools import wraps
-from typing import Optional, TypeVar
+from typing import Any, Optional, TypeVar
 
 ResultT = TypeVar("ResultT")
 AsyncCallable = Callable[..., Awaitable[ResultT]]
 ErrorFactory = Callable[[Optional[BaseException], int], Exception]
 JitterFactory = Callable[[], float]
+RetryObserver = Callable[[dict[str, Any]], Any]
 
 logger = logging.getLogger(__name__)
+_retry_observer: contextvars.ContextVar[Optional[RetryObserver]] = contextvars.ContextVar(
+    "llm_retry_observer",
+    default=None,
+)
+
+
+@contextmanager
+def observe_llm_retries(observer: Optional[RetryObserver]):
+    """Register a task-local observer for low-level LLM retry attempts."""
+    token = _retry_observer.set(observer)
+    try:
+        yield
+    finally:
+        _retry_observer.reset(token)
+
+
+async def _notify_retry_observer(event: dict[str, Any]) -> None:
+    observer = _retry_observer.get()
+    if observer is None:
+        return
+    try:
+        result = observer(event)
+        if inspect.isawaitable(result):
+            await result
+    except Exception:
+        logger.debug("LLM retry observer failed", exc_info=True)
 
 
 def with_llm_retry(
@@ -50,6 +80,15 @@ def with_llm_retry(
                         max_retries,
                         exc,
                         delay,
+                    )
+                    await _notify_retry_observer(
+                        {
+                            "provider": provider_name,
+                            "attempt": attempt,
+                            "max_attempts": max_retries,
+                            "delay": delay,
+                            "error": str(exc),
+                        }
                     )
                     sleep_delay = delay + (jitter() if jitter is not None else 0.0)
                     await asyncio.sleep(sleep_delay)

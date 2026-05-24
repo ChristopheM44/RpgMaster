@@ -899,6 +899,7 @@ export interface LlmSettings {
   openai_base_url: string
   api_key_set: boolean
   ollama_api_key_set: boolean
+  source_max_chars: number
 }
 
 export interface LlmSettingsUpdate {
@@ -909,6 +910,18 @@ export interface LlmSettingsUpdate {
   openai_base_url?: string
   openai_api_key?: string
   ollama_api_key?: string
+  source_max_chars?: number
+}
+
+export interface OllamaModelInfo {
+  model: string
+  family: string | null
+  families: string[]
+  parameter_size: string | null
+  quantization_level: string | null
+  format: string | null
+  context_length: number | null
+  num_ctx: number | null
 }
 
 // ─── Campaign ─────────────────────────────────────────────────────────────────
@@ -1029,6 +1042,34 @@ export interface CampaignForgeDraftResponse {
   generation_status: CampaignGenerationStatus
   player_contract: CampaignPlayerContract
   active_chapter_id: string
+}
+
+export interface CampaignForgeJobEvent {
+  at: string
+  type: string
+  phase?: string
+  message: string
+  provider?: string
+  attempt?: number
+  max_attempts?: number
+  delay?: number
+  error?: string
+}
+
+export interface CampaignForgeJobResponse {
+  job_id: string
+  campaign_id: string
+  status: 'queued' | 'running' | 'completed' | 'failed'
+  generation_status: CampaignGenerationStatus
+  phase: string
+  current_step: number
+  total_steps: number
+  retry_count: number
+  events: CampaignForgeJobEvent[]
+  message: string
+  player_contract?: CampaignPlayerContract | null
+  active_chapter_id?: string
+  error?: string | null
 }
 
 export interface CampaignImportSourceBody {

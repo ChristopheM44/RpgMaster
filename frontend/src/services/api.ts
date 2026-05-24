@@ -20,6 +20,7 @@ import type {
   TtsSettings,
   TtsHealthResponse,
   OllamaHealthResponse,
+  OllamaModelInfo,
   LlmSettings,
   LlmSettingsUpdate,
   Campaign,
@@ -27,6 +28,7 @@ import type {
   CampaignAdvanceBody,
   CampaignAdvanceResponse,
   CampaignForgeDraftResponse,
+  CampaignForgeJobResponse,
   CampaignGmDossierResponse,
   CampaignImportSourceBody,
   CampaignImportSourceResponse,
@@ -237,6 +239,19 @@ export const campaignApi = {
       body: JSON.stringify({ brief, options }),
     }),
 
+  startForgeDraftJob: (
+    campaignId: string,
+    brief: Record<string, unknown>,
+    options: Record<string, unknown>,
+  ) =>
+    request<CampaignForgeJobResponse>(`/campaigns/${campaignId}/forge-draft/jobs`, {
+      method: 'POST',
+      body: JSON.stringify({ brief, options }),
+    }),
+
+  getForgeDraftJob: (campaignId: string, jobId: string) =>
+    request<CampaignForgeJobResponse>(`/campaigns/${campaignId}/forge-draft/jobs/${jobId}`),
+
   validateContract: (campaignId: string, playerContract: CampaignPlayerContract) =>
     request<CampaignForgeDraftResponse>(`/campaigns/${campaignId}/validate-contract`, {
       method: 'POST',
@@ -300,6 +315,9 @@ export const adminApi = {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
+
+  getLlmModelInfo: (model: string) =>
+    request<OllamaModelInfo>(`/admin/llm/model-info?model=${encodeURIComponent(model)}`),
 
   pingLlm: () =>
     request<{ ok: boolean; provider: string; model: string; latency_ms?: number; sample_response?: string; error?: string }>(

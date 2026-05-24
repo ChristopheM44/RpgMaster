@@ -1,8 +1,10 @@
 """Campaign API routes — CRUD + session progression."""
 from __future__ import annotations
 
+import asyncio
+
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
@@ -113,7 +115,51 @@ async def forge_campaign_draft(
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
     return campaign_dossier_service.response_for_draft(dossier)
+
+
+@router.post("/{campaign_id}/forge-draft/jobs")
+async def start_campaign_forge_job(
+    campaign_id: str,
+    body: ForgeDraftBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        job, should_start = await campaign_dossier_service.begin_forge_job(
+            campaign_id,
+            body.brief,
+            body.options,
+            db,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    if should_start:
+        session_factory = request.app.state.db_session_factory
+        asyncio.create_task(
+            campaign_dossier_service.run_forge_job(
+                job["job_id"],
+                campaign_id,
+                body.brief,
+                body.options,
+                session_factory,
+            )
+        )
+    return job
+
+
+@router.get("/{campaign_id}/forge-draft/jobs/{job_id}")
+async def get_campaign_forge_job(
+    campaign_id: str,
+    job_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        return await campaign_dossier_service.forge_job_status(campaign_id, job_id, db)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
 
 
 @router.post("/{campaign_id}/validate-contract")

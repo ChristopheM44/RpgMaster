@@ -7,17 +7,19 @@ Endpoints :
     GET  /api/admin/llm/health        → état Ollama (disponibilité + modèles)
     GET  /api/admin/llm/settings      → paramètres LLM courants (provider inclus)
     PUT  /api/admin/llm/settings      → mise à jour provider/URL/modèles/clé API (runtime)
+    GET  /api/admin/llm/model-info    → caractéristiques Ollama du modèle sélectionné
     POST /api/admin/llm/ping          → test rapide d'un appel LLM (provider courant)
 """
 from __future__ import annotations
 
 import logging
+import re
 import time
-from typing import Optional
+from typing import Any, Optional
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, field_validator
+from fastapi import APIRouter, HTTPException, Query, Request
+from pydantic import BaseModel, Field, field_validator
 
 from app.api.rate_limit import FixedWindowRateLimiter, client_ip
 from app.config import (
@@ -27,6 +29,7 @@ from app.config import (
     get_ollama_url,
     get_openai_base_url,
     get_player_model,
+    get_source_max_chars,
     is_ollama_api_key_set,
     is_openai_api_key_set,
     update_llm_settings,
@@ -85,6 +88,18 @@ class LlmSettingsResponse(BaseModel):
     openai_base_url: str
     api_key_set: bool
     ollama_api_key_set: bool
+    source_max_chars: int
+
+
+class OllamaModelInfoResponse(BaseModel):
+    model: str
+    family: Optional[str] = None
+    families: list[str] = Field(default_factory=list)
+    parameter_size: Optional[str] = None
+    quantization_level: Optional[str] = None
+    format: Optional[str] = None
+    context_length: Optional[int] = None
+    num_ctx: Optional[int] = None
 
 
 class LlmPingResponse(BaseModel):
@@ -104,6 +119,7 @@ class LlmSettingsUpdate(BaseModel):
     openai_base_url: Optional[str] = None
     openai_api_key: Optional[str] = None
     ollama_api_key: Optional[str] = None
+    source_max_chars: Optional[int] = Field(default=None, ge=1_000, le=2_000_000)
 
     @field_validator("llm_provider")
     @classmethod
@@ -111,6 +127,52 @@ class LlmSettingsUpdate(BaseModel):
         if v is not None and v not in ("ollama", "openai_compatible"):
             raise ValueError("llm_provider doit être 'ollama' ou 'openai_compatible'")
         return v
+
+
+def _to_positive_int(value: Any) -> Optional[int]:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _model_info_context_length(model_info: Any) -> Optional[int]:
+    if not isinstance(model_info, dict):
+        return None
+    values = []
+    for key, value in model_info.items():
+        normalized_key = str(key).lower()
+        if normalized_key == "context_length" or normalized_key.endswith(".context_length"):
+            parsed = _to_positive_int(value)
+            if parsed is not None:
+                values.append(parsed)
+    return max(values) if values else None
+
+
+def _model_info_num_ctx(*texts: Any) -> Optional[int]:
+    for text in texts:
+        if not isinstance(text, str):
+            continue
+        match = re.search(r"(?im)^\s*(?:PARAMETER\s+)?num_ctx\s+(\d+)\s*$", text)
+        if match:
+            return _to_positive_int(match.group(1))
+    return None
+
+
+def _ollama_model_info_response(model: str, payload: dict[str, Any]) -> OllamaModelInfoResponse:
+    details = payload.get("details") if isinstance(payload.get("details"), dict) else {}
+    families = details.get("families")
+    return OllamaModelInfoResponse(
+        model=model,
+        family=details.get("family"),
+        families=[str(item) for item in families] if isinstance(families, list) else [],
+        parameter_size=details.get("parameter_size"),
+        quantization_level=details.get("quantization_level"),
+        format=details.get("format"),
+        context_length=_model_info_context_length(payload.get("model_info")),
+        num_ctx=_model_info_num_ctx(payload.get("parameters"), payload.get("modelfile")),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -182,6 +244,7 @@ async def get_llm_settings() -> LlmSettingsResponse:
         openai_base_url=get_openai_base_url(),
         api_key_set=is_openai_api_key_set(),
         ollama_api_key_set=is_ollama_api_key_set(),
+        source_max_chars=get_source_max_chars(),
     )
 
 
@@ -196,6 +259,7 @@ async def update_llm_settings_endpoint(body: LlmSettingsUpdate) -> LlmSettingsRe
         openai_base_url=body.openai_base_url,
         openai_api_key=body.openai_api_key,
         ollama_api_key=body.ollama_api_key,
+        source_max_chars=body.source_max_chars,
     )
     return LlmSettingsResponse(
         ollama_base_url=get_ollama_url(),
@@ -205,7 +269,30 @@ async def update_llm_settings_endpoint(body: LlmSettingsUpdate) -> LlmSettingsRe
         openai_base_url=get_openai_base_url(),
         api_key_set=is_openai_api_key_set(),
         ollama_api_key_set=is_ollama_api_key_set(),
+        source_max_chars=get_source_max_chars(),
     )
+
+
+@router.get("/llm/model-info", response_model=OllamaModelInfoResponse)
+async def get_llm_model_info(model: str = Query(..., min_length=1)) -> OllamaModelInfoResponse:
+    """Retourne les caractéristiques déclarées par Ollama pour un modèle."""
+    model_name = model.strip()
+    if not model_name:
+        raise HTTPException(status_code=422, detail="model is required")
+    try:
+        async with httpx.AsyncClient(
+            timeout=5.0,
+            headers=get_ollama_auth_headers(),
+        ) as client:
+            resp = await client.post(f"{get_ollama_url()}/api/show", json={"model": model_name})
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Infos modèle Ollama indisponibles: {type(exc).__name__}: {exc}",
+        )
+    return _ollama_model_info_response(model_name, data)
 
 
 @router.post("/llm/ping", response_model=LlmPingResponse)

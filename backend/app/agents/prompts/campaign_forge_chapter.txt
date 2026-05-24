@@ -1,0 +1,57 @@
+Génère le dossier MJ privé d'un seul chapitre de campagne.
+
+CAMPAGNE :
+{{ campaign }}
+
+CONTRAT JOUEUR COMPLET :
+{{ player_contract }}
+
+CHAPITRE PUBLIC À DÉTAILLER ({{ chapter_index }}/{{ chapter_total }}) :
+{{ visible_chapter }}
+
+NOTES STRUCTURÉES DES SOURCES PRIVÉES :
+{{ source_notes }}
+
+OPTIONS :
+{{ options }}
+
+Contraintes absolues :
+- Réponds pour CE chapitre uniquement.
+- L'id retourné doit être exactement celui de `visible_chapter.id`.
+- Ne saute pas le chapitre, même s'il est bref dans la source.
+- "initial_state" résume le contexte narratif privé du chapitre.
+- "opening_scene" décrit seulement ce que les PJ voient physiquement au début du chapitre.
+- "opening_scene.description" doit être un paragraphe concret de 2-3 phrases avec au moins deux registres sensoriels.
+- "present_npcs[].description" décrit apparence visible, posture et/ou voix en 1-2 phrases.
+- "visible_clues[].description" doit être sensoriel et examinable.
+- Les chapitres sont des situations ouvertes, pas des scripts rigides.
+- Utilise seulement des monstres SRD possibles parmi : goblin, hobgoblin, orc, skeleton, zombie, wolf, giant_spider, bandit, cultist, bugbear.
+
+Réponds avec un seul objet JSON valide, sans markdown :
+{
+  "id": "chapter_1",
+  "title": "Titre",
+  "state": "active",
+  "objective": "Objectif ouvert",
+  "stakes": "Enjeux",
+  "initial_state": "Contexte narratif privé du chapitre",
+  "opening_scene": {
+    "region": "Région ou zone large",
+    "place": "Ville, quartier, route ou site où les PJ commencent physiquement",
+    "venue": "Lieu précis visible au début, ou null",
+    "description": "Description sensorielle de départ.",
+    "present_npcs": [{"id": "pnj_id", "name": "PNJ physiquement présent", "description": "Apparence et posture visibles.", "action_hint": "Action jouable.", "opening_intent": "Ce que le PNJ veut dans l'instant."}],
+    "visible_clues": [{"id": "indice_id", "name": "Indice visible", "description": "Détail examinable."}],
+    "exits": [{"id": "sortie_id", "label": "Sortie visible", "leads_to": "destination", "description": "Où cela mène"}],
+    "time_of_day": "morning",
+    "weather": null
+  },
+  "key_locations": ["Lieu"],
+  "involved_npcs": ["PNJ"],
+  "clues": ["Indice"],
+  "secrets": ["Secret privé"],
+  "complications": ["Complication"],
+  "possible_exits": ["Sortie possible"],
+  "indicative_dcs": [{"label": "Observer", "ability": "wis", "dc": 13}],
+  "possible_srd_encounters": ["goblin"]
+}

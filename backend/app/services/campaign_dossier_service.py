@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import html
 import logging
 import re
 import uuid
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Awaitable, Callable, Optional
 
 import httpx
 from sqlalchemy import func, select
@@ -15,6 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.campaign_forge_agent import CampaignForgeAgent
 from app.agents.persona import BasePersona, NPCPersona, persona_from_dict
+from app.config import get_source_max_chars
+from app.llm.retry import observe_llm_retries
 from app.models.campaign import Campaign
 from app.models.campaign_dossier import CampaignDossier
 from app.models.character import Character
@@ -24,8 +27,11 @@ from app.services import map_service
 logger = logging.getLogger(__name__)
 
 VALID_STATUSES = {"empty", "drafting", "draft", "validated", "failed"}
-SOURCE_MAX_CHARS = 120_000
 URL_MAX_BYTES = 2_000_000
+SOURCE_NOTE_CHUNK_CHARS = 60_000
+FORGE_PHASE_MAX_ATTEMPTS = 3
+FORGE_PHASE_RETRY_BASE_DELAY = 1.0
+FORGE_JOB_EVENT_LIMIT = 80
 _SYNTHESIS_IN_FLIGHT: set[str] = set()
 _MISSING = object()
 
@@ -70,6 +76,7 @@ async def get_or_create_dossier(campaign_id: str, db: AsyncSession) -> CampaignD
         gm_dossier={},
         played_canon=empty_played_canon(),
         import_sources=[],
+        forge_job={},
         active_chapter_id="",
         generation_status="empty",
     )
@@ -109,7 +116,7 @@ async def import_source(
         "title": title[:180],
         "url": url or None,
         "filename": filename or None,
-        "content": _clip(content, SOURCE_MAX_CHARS),
+        "content": _clip(content, get_source_max_chars()),
         "created_at": datetime.utcnow().isoformat(),
     }
     sources = list(dossier.import_sources or [])
@@ -154,6 +161,12 @@ async def forge_draft(
             import_sources=sources_for_agent,
         )
     except Exception as exc:
+        if sources_for_agent:
+            dossier.generation_status = "failed"
+            await db.commit()
+            raise ValueError(
+                "Campaign forge failed with imported sources; no deterministic fallback was used."
+            ) from exc
         logger.warning("Campaign forge failed, using deterministic fallback: %s", exc)
         generated = _fallback_dossier(campaign, brief, options, dossier.import_sources or [])
 
@@ -181,6 +194,68 @@ async def forge_draft(
     await db.commit()
     await db.refresh(dossier)
     return dossier
+
+
+async def begin_forge_job(
+    campaign_id: str,
+    brief: dict[str, Any],
+    options: dict[str, Any],
+    db: AsyncSession,
+) -> tuple[dict[str, Any], bool]:
+    """Create a campaign forge job state.
+
+    Returns ``(job_response, should_start_background_task)``. If a forge job is
+    already running for the campaign, the existing state is returned and no new
+    task should be started.
+    """
+    campaign = await _get_campaign_or_raise(campaign_id, db)
+    dossier = await get_or_create_dossier(campaign.id, db)
+    current = _coerce_forge_job(dossier.forge_job, campaign.id)
+    if current.get("status") in {"queued", "running"}:
+        return _forge_job_response(dossier, current), False
+
+    job_id = str(uuid.uuid4())
+    job = _new_forge_job(campaign.id, job_id)
+    job["message"] = "Forge en attente."
+    dossier.forge_job = job
+    dossier.generation_status = "drafting"
+    campaign.starting_level = _starting_level_from_options(
+        options,
+        int(getattr(campaign, "starting_level", 1) or 1),
+    )
+    await db.commit()
+    await db.refresh(dossier)
+    return _forge_job_response(dossier, dossier.forge_job), True
+
+
+async def forge_job_status(
+    campaign_id: str,
+    job_id: str,
+    db: AsyncSession,
+) -> dict[str, Any]:
+    campaign = await _get_campaign_or_raise(campaign_id, db)
+    dossier = await get_or_create_dossier(campaign.id, db)
+    job = _coerce_forge_job(dossier.forge_job, campaign.id)
+    if not job or job.get("job_id") != job_id:
+        raise KeyError(f"Forge job {job_id} not found")
+    return _forge_job_response(dossier, job)
+
+
+async def run_forge_job(
+    job_id: str,
+    campaign_id: str,
+    brief: dict[str, Any],
+    options: dict[str, Any],
+    session_factory: Callable[[], Any],
+    agent: Optional[CampaignForgeAgent] = None,
+) -> None:
+    """Run the campaign forge in a fresh DB session."""
+    async with session_factory() as db:
+        try:
+            await _run_forge_job(job_id, campaign_id, brief, options, db, agent=agent)
+        except Exception as exc:
+            logger.warning("Campaign forge job failed: %s", exc, exc_info=True)
+            await _mark_forge_job_failed(campaign_id, job_id, db, str(exc))
 
 
 async def validate_contract(
@@ -634,6 +709,465 @@ def source_count_response(dossier: CampaignDossier) -> dict[str, Any]:
         "campaign_id": dossier.campaign_id,
         "generation_status": dossier.generation_status,
         "source_count": len(dossier.import_sources or []),
+    }
+
+
+async def _run_forge_job(
+    job_id: str,
+    campaign_id: str,
+    brief: dict[str, Any],
+    options: dict[str, Any],
+    db: AsyncSession,
+    agent: Optional[CampaignForgeAgent] = None,
+) -> CampaignDossier:
+    campaign = await _get_campaign_or_raise(campaign_id, db)
+    dossier = await get_or_create_dossier(campaign.id, db)
+    campaign.starting_level = _starting_level_from_options(
+        options,
+        int(getattr(campaign, "starting_level", 1) or 1),
+    )
+    dossier.generation_status = "drafting"
+    await _update_forge_job(
+        dossier,
+        db,
+        job_id,
+        status="running",
+        phase="source_notes",
+        current_step=0,
+        total_steps=2,
+        message="Préparation de la forge.",
+    )
+
+    forge_agent = agent or CampaignForgeAgent()
+    campaign_data = {
+        "id": campaign.id,
+        "name": campaign.name,
+        "description": campaign.description,
+    }
+    sources_for_agent = [
+        {k: v for k, v in source.items() if k in {"kind", "title", "url", "filename", "content"}}
+        for source in list(dossier.import_sources or [])
+    ]
+    source_inputs = _source_note_inputs(sources_for_agent)
+    total_steps = max(len(source_inputs) + 2, 2)
+    source_notes: list[dict[str, Any]] = []
+
+    async def observe_retry(event: dict[str, Any]) -> None:
+        await _record_forge_retry_event(
+            campaign_id,
+            job_id,
+            db,
+            event_type="llm_retry",
+            message=(
+                f"Retry {event.get('provider', 'LLM')} "
+                f"{event.get('attempt')}/{event.get('max_attempts')} dans "
+                f"{float(event.get('delay') or 0.0):.1f}s"
+            ),
+            provider=event.get("provider"),
+            attempt=event.get("attempt"),
+            max_attempts=event.get("max_attempts"),
+            delay=event.get("delay"),
+            error=_text(event.get("error") or "", 240),
+        )
+
+    with observe_llm_retries(observe_retry):
+        for index, source in enumerate(source_inputs):
+            await _update_forge_job(
+                dossier,
+                db,
+                job_id,
+                phase="source_notes",
+                current_step=index + 1,
+                total_steps=total_steps,
+                message=f"Analyse source {index + 1}/{len(source_inputs)}.",
+            )
+            note = await _call_forge_phase_with_retry(
+                campaign_id,
+                job_id,
+                db,
+                phase="source_notes",
+                call=lambda source=source: forge_agent.normalize_import_source(source),
+                validator=lambda data: _require_json_object(data, "source_notes"),
+            )
+            source_notes.append(note)
+
+        await _update_forge_job(
+            dossier,
+            db,
+            job_id,
+            phase="outline",
+            current_step=len(source_inputs) + 1,
+            total_steps=total_steps,
+            message="Plan de campagne complet.",
+        )
+        outline = await _call_forge_phase_with_retry(
+            campaign_id,
+            job_id,
+            db,
+            phase="outline",
+            call=lambda: forge_agent.forge_outline(
+                campaign=campaign_data,
+                brief=brief,
+                options=options,
+                source_notes=source_notes,
+            ),
+            validator=_validate_outline_payload,
+        )
+        contract = sanitize_player_contract(
+            outline.get("player_contract", {}),
+            campaign,
+            brief=brief,
+        )
+        visible_chapters = contract.get("visible_chapters", [])
+        if not visible_chapters:
+            raise ValueError("Le plan de campagne ne contient aucun chapitre.")
+
+        total_steps = len(source_inputs) + 1 + len(visible_chapters) + 1
+        await _update_forge_job(
+            dossier,
+            db,
+            job_id,
+            current_step=len(source_inputs) + 1,
+            total_steps=total_steps,
+            message=f"Plan détecté : {len(visible_chapters)} chapitre(s).",
+        )
+
+        private_chapters: list[dict[str, Any]] = []
+        for index, chapter in enumerate(visible_chapters):
+            chapter_step = len(source_inputs) + 2 + index
+            await _update_forge_job(
+                dossier,
+                db,
+                job_id,
+                phase="chapter",
+                current_step=chapter_step,
+                total_steps=total_steps,
+                message=f"Chapitre {index + 1}/{len(visible_chapters)}.",
+            )
+            expected_id = str(chapter.get("id") or "")
+            private_chapter = await _call_forge_phase_with_retry(
+                campaign_id,
+                job_id,
+                db,
+                phase=f"chapter:{expected_id}",
+                call=lambda chapter=chapter, index=index: forge_agent.forge_chapter(
+                    campaign=campaign_data,
+                    player_contract=contract,
+                    visible_chapter=chapter,
+                    chapter_index=index + 1,
+                    chapter_total=len(visible_chapters),
+                    source_notes=source_notes,
+                    options=options,
+                ),
+                validator=lambda data, expected_id=expected_id: _validate_private_chapter_payload(
+                    data,
+                    expected_id,
+                ),
+            )
+            private_chapters.append(private_chapter)
+
+        await _update_forge_job(
+            dossier,
+            db,
+            job_id,
+            phase="global_indexes",
+            current_step=total_steps,
+            total_steps=total_steps,
+            message="Index MJ globaux.",
+        )
+        global_indexes = await _call_forge_phase_with_retry(
+            campaign_id,
+            job_id,
+            db,
+            phase="global_indexes",
+            call=lambda: forge_agent.forge_global_indexes(
+                campaign=campaign_data,
+                brief=brief,
+                options=options,
+                player_contract=contract,
+                chapters=private_chapters,
+                source_notes=source_notes,
+            ),
+            validator=_validate_global_indexes_payload,
+        )
+
+    gm_raw = dict(global_indexes)
+    gm_raw["chapters"] = private_chapters
+    gm_dossier = sanitize_gm_dossier(gm_raw, campaign, contract)
+    _validate_chapter_alignment(contract, gm_dossier)
+    active_chapter_id = str(outline.get("active_chapter_id") or "").strip()
+    if not active_chapter_id:
+        active_chapter_id = _first_chapter_id(contract, gm_dossier)
+
+    dossier.player_contract = contract
+    dossier.gm_dossier = gm_dossier
+    dossier.played_canon = empty_played_canon()
+    dossier.active_chapter_id = active_chapter_id
+    dossier.generation_status = "draft"
+    await _update_forge_job(
+        dossier,
+        db,
+        job_id,
+        status="completed",
+        phase="completed",
+        current_step=total_steps,
+        total_steps=total_steps,
+        message="Forge terminée.",
+        player_contract=contract,
+        active_chapter_id=active_chapter_id,
+    )
+    await db.commit()
+    await db.refresh(dossier)
+    return dossier
+
+
+async def _call_forge_phase_with_retry(
+    campaign_id: str,
+    job_id: str,
+    db: AsyncSession,
+    *,
+    phase: str,
+    call: Callable[[], Awaitable[dict[str, Any]]],
+    validator: Callable[[dict[str, Any]], dict[str, Any]],
+) -> dict[str, Any]:
+    last_exc: Optional[BaseException] = None
+    for attempt in range(1, FORGE_PHASE_MAX_ATTEMPTS + 1):
+        try:
+            return validator(await call())
+        except Exception as exc:
+            last_exc = exc
+            if attempt >= FORGE_PHASE_MAX_ATTEMPTS:
+                break
+            delay = FORGE_PHASE_RETRY_BASE_DELAY * (2 ** (attempt - 1))
+            await _record_forge_retry_event(
+                campaign_id,
+                job_id,
+                db,
+                event_type="phase_retry",
+                message=f"Retry forge {attempt}/{FORGE_PHASE_MAX_ATTEMPTS} dans {delay:.1f}s",
+                attempt=attempt,
+                max_attempts=FORGE_PHASE_MAX_ATTEMPTS,
+                delay=delay,
+                error=_text(str(exc), 240),
+                phase=phase,
+            )
+            await asyncio.sleep(delay)
+    raise ValueError(f"Phase {phase} échouée après {FORGE_PHASE_MAX_ATTEMPTS} tentatives: {last_exc}") from last_exc
+
+
+async def _mark_forge_job_failed(
+    campaign_id: str,
+    job_id: str,
+    db: AsyncSession,
+    error: str,
+) -> None:
+    try:
+        dossier = await get_or_create_dossier(campaign_id, db)
+        dossier.generation_status = "failed"
+        await _update_forge_job(
+            dossier,
+            db,
+            job_id,
+            status="failed",
+            phase="failed",
+            error=_text(error, 700),
+            message="Forge interrompue.",
+            event={"type": "error", "message": _text(error, 700)},
+        )
+        await db.commit()
+    except Exception:
+        logger.warning("Unable to persist campaign forge job failure", exc_info=True)
+
+
+def _source_note_inputs(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    inputs: list[dict[str, Any]] = []
+    for source in sources:
+        content = str(source.get("content") or "")
+        if len(content) <= SOURCE_NOTE_CHUNK_CHARS:
+            inputs.append(source)
+            continue
+        chunks = [
+            content[start : start + SOURCE_NOTE_CHUNK_CHARS]
+            for start in range(0, len(content), SOURCE_NOTE_CHUNK_CHARS)
+        ]
+        for index, chunk in enumerate(chunks):
+            inputs.append(
+                {
+                    **source,
+                    "title": f"{source.get('title') or 'Source'} — partie {index + 1}/{len(chunks)}",
+                    "content": chunk,
+                    "chunk_index": index + 1,
+                    "chunk_count": len(chunks),
+                }
+            )
+    return inputs
+
+
+def _require_json_object(data: dict[str, Any], phase: str) -> dict[str, Any]:
+    if not isinstance(data, dict):
+        raise ValueError(f"{phase} returned no JSON object")
+    return data
+
+
+def _validate_outline_payload(data: dict[str, Any]) -> dict[str, Any]:
+    data = _require_json_object(data, "outline")
+    contract = data.get("player_contract")
+    if not isinstance(contract, dict):
+        raise ValueError("outline.player_contract missing")
+    chapters = contract.get("visible_chapters")
+    if not isinstance(chapters, list) or not chapters:
+        raise ValueError("outline.player_contract.visible_chapters missing")
+    for index, chapter in enumerate(chapters):
+        if not isinstance(chapter, dict):
+            raise ValueError(f"outline chapter {index + 1} is not an object")
+    return data
+
+
+def _validate_private_chapter_payload(data: dict[str, Any], expected_id: str) -> dict[str, Any]:
+    data = _require_json_object(data, "chapter")
+    chapter = data.get("chapter") if isinstance(data.get("chapter"), dict) else data
+    if not isinstance(chapter, dict):
+        raise ValueError("chapter payload missing")
+    chapter_id = str(chapter.get("id") or "")
+    if chapter_id != expected_id:
+        raise ValueError(f"chapter id mismatch: expected {expected_id}, got {chapter_id}")
+    return chapter
+
+
+def _validate_global_indexes_payload(data: dict[str, Any]) -> dict[str, Any]:
+    data = _require_json_object(data, "global_indexes")
+    indexes = data.get("gm_dossier") if isinstance(data.get("gm_dossier"), dict) else data
+    if not isinstance(indexes, dict):
+        raise ValueError("global indexes payload missing")
+    return indexes
+
+
+def _validate_chapter_alignment(contract: dict[str, Any], gm_dossier: dict[str, Any]) -> None:
+    public_ids = [str(ch.get("id") or "") for ch in contract.get("visible_chapters", [])]
+    private_ids = [str(ch.get("id") or "") for ch in gm_dossier.get("chapters", [])]
+    if public_ids != private_ids:
+        raise ValueError(
+            "Les chapitres publics et privés ne correspondent pas "
+            f"({len(public_ids)} publics, {len(private_ids)} privés)."
+        )
+
+
+def _new_forge_job(campaign_id: str, job_id: str) -> dict[str, Any]:
+    return {
+        "job_id": job_id,
+        "campaign_id": campaign_id,
+        "status": "queued",
+        "generation_status": "drafting",
+        "phase": "queued",
+        "current_step": 0,
+        "total_steps": 1,
+        "retry_count": 0,
+        "events": [],
+        "message": "",
+        "error": None,
+        "player_contract": None,
+        "active_chapter_id": "",
+        "created_at": datetime.utcnow().isoformat(),
+        "updated_at": datetime.utcnow().isoformat(),
+    }
+
+
+def _coerce_forge_job(raw: Any, campaign_id: str) -> dict[str, Any]:
+    if not isinstance(raw, dict) or not raw:
+        return {}
+    job = dict(raw)
+    job.setdefault("campaign_id", campaign_id)
+    job.setdefault("job_id", "")
+    job.setdefault("status", "queued")
+    job.setdefault("generation_status", "drafting")
+    job.setdefault("phase", "queued")
+    job.setdefault("current_step", 0)
+    job.setdefault("total_steps", 1)
+    job.setdefault("retry_count", 0)
+    job.setdefault("events", [])
+    job.setdefault("message", "")
+    job.setdefault("error", None)
+    job.setdefault("active_chapter_id", "")
+    return job
+
+
+async def _update_forge_job(
+    dossier: CampaignDossier,
+    db: AsyncSession,
+    job_id: str,
+    *,
+    event: Optional[dict[str, Any]] = None,
+    **patch: Any,
+) -> dict[str, Any]:
+    job = _coerce_forge_job(dossier.forge_job, dossier.campaign_id)
+    if job.get("job_id") and job.get("job_id") != job_id:
+        raise KeyError(f"Forge job {job_id} not found")
+    job.update({key: value for key, value in patch.items() if value is not None})
+    job["updated_at"] = datetime.utcnow().isoformat()
+    if event is not None:
+        job = _append_forge_event(job, event)
+    job["generation_status"] = patch.get("generation_status") or dossier.generation_status
+    dossier.forge_job = dict(job)
+    await db.commit()
+    await db.refresh(dossier)
+    return job
+
+
+async def _record_forge_retry_event(
+    campaign_id: str,
+    job_id: str,
+    db: AsyncSession,
+    *,
+    event_type: str,
+    message: str,
+    **payload: Any,
+) -> None:
+    dossier = await get_or_create_dossier(campaign_id, db)
+    job = _coerce_forge_job(dossier.forge_job, dossier.campaign_id)
+    if job.get("job_id") != job_id:
+        return
+    job["retry_count"] = int(job.get("retry_count") or 0) + 1
+    event = {
+        "type": event_type,
+        "message": message,
+        **{key: value for key, value in payload.items() if value is not None},
+    }
+    job = _append_forge_event(job, event)
+    job["updated_at"] = datetime.utcnow().isoformat()
+    dossier.forge_job = dict(job)
+    await db.commit()
+    await db.refresh(dossier)
+
+
+def _append_forge_event(job: dict[str, Any], event: dict[str, Any]) -> dict[str, Any]:
+    events = list(job.get("events") or [])
+    events.append(
+        {
+            "at": datetime.utcnow().isoformat(),
+            "phase": job.get("phase", ""),
+            **event,
+        }
+    )
+    job["events"] = events[-FORGE_JOB_EVENT_LIMIT:]
+    return job
+
+
+def _forge_job_response(dossier: CampaignDossier, job: dict[str, Any]) -> dict[str, Any]:
+    job = _coerce_forge_job(job, dossier.campaign_id)
+    return {
+        "job_id": job.get("job_id", ""),
+        "campaign_id": dossier.campaign_id,
+        "status": job.get("status", "queued"),
+        "generation_status": dossier.generation_status,
+        "phase": job.get("phase", ""),
+        "current_step": int(job.get("current_step") or 0),
+        "total_steps": int(job.get("total_steps") or 1),
+        "retry_count": int(job.get("retry_count") or 0),
+        "events": list(job.get("events") or []),
+        "message": job.get("message") or "",
+        "player_contract": job.get("player_contract") or dossier.player_contract or None,
+        "active_chapter_id": job.get("active_chapter_id") or dossier.active_chapter_id,
+        "error": job.get("error"),
     }
 
 
@@ -1104,7 +1638,7 @@ def _sanitize_visible_chapters(value: Any, title: str) -> list[dict[str, Any]]:
             }
         ]
     chapters = []
-    for i, chapter in enumerate(raw[:12]):
+    for i, chapter in enumerate(raw):
         if not isinstance(chapter, dict):
             continue
         state = str(chapter.get("state") or ("active" if i == 0 else "planned")).lower()
@@ -1398,13 +1932,21 @@ def _append_unique(items: list[Any], value: Any) -> None:
 
 def _roman(value: int) -> str:
     numerals = [
+        (1000, "M"),
+        (900, "CM"),
+        (500, "D"),
+        (400, "CD"),
+        (100, "C"),
+        (90, "XC"),
+        (50, "L"),
+        (40, "XL"),
         (10, "X"),
         (9, "IX"),
         (5, "V"),
         (4, "IV"),
         (1, "I"),
     ]
-    remaining = max(1, min(value, 12))
+    remaining = max(1, value)
     out = ""
     for num, label in numerals:
         while remaining >= num:

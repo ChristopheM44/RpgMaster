@@ -32,6 +32,7 @@ class CampaignDossier(Base):
     gm_dossier: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     played_canon: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     import_sources: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    forge_job: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     active_chapter_id: Mapped[str] = mapped_column(String(80), nullable=False, default="")
     generation_status: Mapped[str] = mapped_column(String(20), nullable=False, default="empty")
 

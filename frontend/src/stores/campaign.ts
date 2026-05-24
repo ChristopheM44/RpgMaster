@@ -7,6 +7,7 @@ import type {
   CampaignAdvanceBody,
   CampaignAdvanceResponse,
   CampaignForgeDraftResponse,
+  CampaignForgeJobResponse,
   CampaignGmDossierResponse,
   CampaignImportSourceBody,
   CampaignImportSourceResponse,
@@ -103,6 +104,31 @@ export const useCampaignStore = defineStore('campaign', () => {
     }
   }
 
+  async function startForgeDraftJob(
+    campaignId: string,
+    brief: Record<string, unknown>,
+    options: Record<string, unknown>,
+  ): Promise<CampaignForgeJobResponse | null> {
+    try {
+      return await campaignApi.startForgeDraftJob(campaignId, brief, options)
+    } catch {
+      error.value = 'Erreur lors du démarrage de la forge de campagne'
+      return null
+    }
+  }
+
+  async function getForgeDraftJob(
+    campaignId: string,
+    jobId: string,
+  ): Promise<CampaignForgeJobResponse | null> {
+    try {
+      return await campaignApi.getForgeDraftJob(campaignId, jobId)
+    } catch {
+      error.value = 'Erreur de suivi de la forge de campagne'
+      return null
+    }
+  }
+
   async function validateContract(
     campaignId: string,
     playerContract: CampaignPlayerContract,
@@ -182,6 +208,8 @@ export const useCampaignStore = defineStore('campaign', () => {
     fetchGmDossier,
     importSource,
     forgeDraft,
+    startForgeDraftJob,
+    getForgeDraftJob,
     validateContract,
     attachSession,
     advance,

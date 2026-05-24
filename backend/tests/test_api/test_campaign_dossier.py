@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import socket
+import asyncio
 
 import pytest
 from sqlalchemy import select
 
+from app.models.campaign_dossier import CampaignDossier
 from app.models.game_state import GameState
 from app.models.message import Message
 from app.security_url import UnsafeUrlError, validate_public_http_url
@@ -24,6 +26,19 @@ BASE_CHARACTER = {
 
 
 class DummyForgeAgent:
+    def _chapters(self, count: int = 2) -> list[dict]:
+        return [
+            {
+                "id": f"chapter_{idx}",
+                "num": campaign_dossier_service._roman(idx),
+                "title": f"Chapitre {idx}",
+                "state": "active" if idx == 1 else "planned",
+                "sessions": 0,
+                "summary": f"Résumé public {idx}.",
+            }
+            for idx in range(1, count + 1)
+        ]
+
     async def forge_dossier(self, campaign, brief, options, import_sources):
         title = brief.get("title") or campaign["name"]
         return {
@@ -135,6 +150,97 @@ class DummyForgeAgent:
             "active_chapter_id": "chapter_1",
         }
 
+    async def normalize_import_source(self, source):
+        return {
+            "title": source.get("title") or "Source",
+            "summary_private": "Résumé privé.",
+            "public_hook": "Accroche publique.",
+            "locations": [],
+            "npcs": [],
+            "secrets": [],
+            "quests": [],
+            "encounters": [],
+        }
+
+    async def forge_outline(self, campaign, brief, options, source_notes):
+        count = int(options.get("chapter_count") or 2)
+        return {
+            "player_contract": {
+                "title": brief.get("title") or campaign["name"],
+                "pitch_public": "Une aventure découpée en chapitres.",
+                "tones": ["Mystère"],
+                "duration": f"{count} chapitres",
+                "hook": "Une piste attire les héros.",
+                "visible_chapters": self._chapters(count),
+                "known_objectives": ["Suivre la piste."],
+                "played_summary": "",
+            },
+            "active_chapter_id": "chapter_1",
+        }
+
+    async def forge_chapter(
+        self,
+        campaign,
+        player_contract,
+        visible_chapter,
+        chapter_index,
+        chapter_total,
+        source_notes,
+        options,
+    ):
+        return {
+            "id": visible_chapter["id"],
+            "title": visible_chapter["title"],
+            "state": visible_chapter["state"],
+            "objective": f"Objectif privé {chapter_index}.",
+            "stakes": f"Enjeux {chapter_index}.",
+            "initial_state": f"État initial {chapter_index}.",
+            "opening_scene": {
+                "region": "Côte",
+                "place": f"Lieu {chapter_index}",
+                "venue": None,
+                "description": "La pluie frappe les pierres et l'air sent le sel froid.",
+                "present_npcs": [],
+                "visible_clues": [],
+                "exits": [],
+                "time_of_day": "morning",
+                "weather": "Pluie",
+            },
+            "key_locations": [f"Lieu {chapter_index}"],
+            "involved_npcs": [],
+            "clues": [],
+            "secrets": [f"Secret {chapter_index}"],
+            "complications": [],
+            "possible_exits": [],
+            "indicative_dcs": [],
+            "possible_srd_encounters": [],
+        }
+
+    async def forge_global_indexes(
+        self,
+        campaign,
+        brief,
+        options,
+        player_contract,
+        chapters,
+        source_notes,
+    ):
+        return {
+            "narrative_arc": "Arc privé global.",
+            "important_npcs": [],
+            "bestiary": [],
+            "companion_seeds": [],
+            "locations": [{"name": chapter["title"]} for chapter in chapters],
+            "factions": [],
+            "secrets": [],
+            "revelations": [],
+            "fronts": [],
+            "quests": [],
+            "complications": [],
+            "clues": [],
+            "light_mechanics": [],
+        }
+
     async def synthesize_canon(
         self,
         player_contract,
@@ -198,6 +304,19 @@ async def _forge_and_validate(async_client) -> dict:
     return {"campaign_id": campaign_id, "contract": contract}
 
 
+async def _poll_forge_job(async_client, campaign_id: str, job_id: str) -> dict:
+    for _ in range(50):
+        response = await async_client.get(
+            f"/api/campaigns/{campaign_id}/forge-draft/jobs/{job_id}"
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        if payload["status"] in {"completed", "failed"}:
+            return payload
+        await asyncio.sleep(0.02)
+    raise AssertionError("Forge job did not finish")
+
+
 @pytest.mark.asyncio
 async def test_campaign_dossier_public_endpoints_never_leak_private_blocks(async_client):
     campaign = await _create_campaign(async_client)
@@ -240,6 +359,32 @@ async def test_campaign_dossier_public_endpoints_never_leak_private_blocks(async
     campaign_list = await async_client.get("/api/campaigns")
     assert campaign_list.status_code == 200
     assert SECRET not in campaign_list.text
+
+
+@pytest.mark.asyncio
+async def test_import_source_uses_configured_source_max_chars(
+    async_client,
+    db_session,
+    monkeypatch,
+):
+    monkeypatch.setattr(campaign_dossier_service, "get_source_max_chars", lambda: 12)
+    campaign = await _create_campaign(async_client)
+
+    response = await async_client.post(
+        f"/api/campaigns/{campaign['id']}/import-source",
+        json={
+            "kind": "text",
+            "title": "Long markdown",
+            "content": "abcdefghijklmnop",
+        },
+    )
+
+    assert response.status_code == 200
+    result = await db_session.execute(
+        select(CampaignDossier).where(CampaignDossier.campaign_id == campaign["id"])
+    )
+    dossier = result.scalar_one()
+    assert dossier.import_sources[0]["content"] == "abcdefghijk…"
 
 
 @pytest.mark.asyncio
@@ -403,6 +548,91 @@ async def test_forge_draft_persists_campaign_starting_level(async_client):
     detail = await async_client.get(f"/api/campaigns/{campaign['id']}")
     assert detail.status_code == 200
     assert detail.json()["starting_level"] == 3
+
+
+@pytest.mark.asyncio
+async def test_forge_job_preserves_all_detected_chapters(async_client):
+    campaign = await _create_campaign(async_client)
+
+    started = await async_client.post(
+        f"/api/campaigns/{campaign['id']}/forge-draft/jobs",
+        json={
+            "brief": {"title": "Grande campagne"},
+            "options": {"chapter_count": 18},
+        },
+    )
+
+    assert started.status_code == 200
+    job = await _poll_forge_job(async_client, campaign["id"], started.json()["job_id"])
+    assert job["status"] == "completed"
+    assert job["total_steps"] == 20
+    assert len(job["player_contract"]["visible_chapters"]) == 18
+
+    gm_response = await async_client.get(f"/api/campaigns/{campaign['id']}/gm-dossier")
+    assert gm_response.status_code == 200
+    gm_chapters = gm_response.json()["gm_dossier"]["chapters"]
+    public_ids = [chapter["id"] for chapter in job["player_contract"]["visible_chapters"]]
+    private_ids = [chapter["id"] for chapter in gm_chapters]
+    assert len(gm_chapters) == 18
+    assert private_ids == public_ids
+
+
+@pytest.mark.asyncio
+async def test_forge_job_records_phase_retries(async_client, monkeypatch):
+    monkeypatch.setattr(campaign_dossier_service, "FORGE_PHASE_RETRY_BASE_DELAY", 0.0)
+
+    class FlakyForgeAgent(DummyForgeAgent):
+        attempts = 0
+
+        async def forge_outline(self, campaign, brief, options, source_notes):
+            type(self).attempts += 1
+            if type(self).attempts == 1:
+                raise ValueError("JSON tronqué")
+            return await super().forge_outline(campaign, brief, options, source_notes)
+
+    monkeypatch.setattr(campaign_dossier_service, "CampaignForgeAgent", FlakyForgeAgent)
+    campaign = await _create_campaign(async_client)
+
+    started = await async_client.post(
+        f"/api/campaigns/{campaign['id']}/forge-draft/jobs",
+        json={"brief": {"title": "Retry visible"}, "options": {"chapter_count": 2}},
+    )
+
+    assert started.status_code == 200
+    job = await _poll_forge_job(async_client, campaign["id"], started.json()["job_id"])
+    assert job["status"] == "completed"
+    assert job["retry_count"] >= 1
+    assert any(event["type"] == "phase_retry" and "JSON tronqué" in event["error"] for event in job["events"])
+
+
+@pytest.mark.asyncio
+async def test_legacy_forge_draft_does_not_fallback_when_sources_are_imported(
+    async_client,
+    monkeypatch,
+):
+    class FailingForgeAgent(DummyForgeAgent):
+        async def forge_dossier(self, campaign, brief, options, import_sources):
+            raise ValueError("JSON tronqué")
+
+    monkeypatch.setattr(campaign_dossier_service, "CampaignForgeAgent", FailingForgeAgent)
+    campaign = await _create_campaign(async_client)
+    imported = await async_client.post(
+        f"/api/campaigns/{campaign['id']}/import-source",
+        json={"kind": "text", "title": "Source longue", "content": "Chapitre 1"},
+    )
+    assert imported.status_code == 200
+
+    response = await async_client.post(
+        f"/api/campaigns/{campaign['id']}/forge-draft",
+        json={"brief": {"title": "Source fragile"}, "options": {}},
+    )
+
+    assert response.status_code == 502
+    gm_response = await async_client.get(f"/api/campaigns/{campaign['id']}/gm-dossier")
+    assert gm_response.status_code == 200
+    assert gm_response.json()["generation_status"] == "failed"
+    assert len(gm_response.json()["gm_dossier"]["chapters"]) == 1
+    assert gm_response.json()["gm_dossier"]["chapters"][0]["title"] == "Prologue"
 
 
 @pytest.mark.asyncio
