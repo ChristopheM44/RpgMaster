@@ -65,6 +65,7 @@ class BuiltEncounter:
     total_xp_adjusted: int = 0
     difficulty: str = "medium"
     xp_budget: int = 0
+    monsters_by_id: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------

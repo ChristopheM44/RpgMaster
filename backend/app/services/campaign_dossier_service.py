@@ -21,6 +21,11 @@ from app.llm.retry import observe_llm_retries
 from app.models.campaign import Campaign
 from app.models.campaign_dossier import CampaignDossier
 from app.models.character import Character
+from app.schemas.campaign_content import (
+    CustomMonsterTemplate,
+    normalize_content_id,
+    validate_custom_item_template,
+)
 from app.security_url import validate_public_http_url
 from app.services import map_service
 
@@ -47,6 +52,7 @@ def empty_played_canon() -> dict[str, Any]:
         "rolling_summary": "",
         "chapter_progression": [],
         "npc_personas": {},  # dict[persona_id → NPCPersona dump] — généré en cours de jeu
+        "granted_unique_items": [],
     }
 
 
@@ -334,6 +340,7 @@ async def scenario_view(campaign_id: str, db: AsyncSession) -> dict[str, Any]:
         }
 
     contract = sanitize_player_contract(dossier.player_contract or {}, campaign, brief={})
+    gm_dossier = sanitize_gm_dossier(dossier.gm_dossier or {}, campaign, contract)
     canon = sanitize_played_canon(dossier.played_canon or {})
     timeline = _apply_chapter_progress(contract["visible_chapters"], canon)
     current = _current_public_chapter(timeline, dossier.active_chapter_id)
@@ -402,6 +409,14 @@ async def synthesize_canon(
         next_canon = _fallback_canon(current_canon, game_state or {}, recent_messages or [])
 
     canon = sanitize_played_canon(next_canon)
+    if not canon.get("npc_personas") and current_canon.get("npc_personas"):
+        canon["npc_personas"] = current_canon["npc_personas"]
+    if current_canon.get("granted_unique_items"):
+        granted = list(canon.get("granted_unique_items") or [])
+        for item_id in current_canon["granted_unique_items"]:
+            if item_id not in granted:
+                granted.append(item_id)
+        canon["granted_unique_items"] = granted
     dossier.played_canon = canon
     contract = sanitize_player_contract(dossier.player_contract or {}, campaign, brief={})
     if canon.get("rolling_summary"):
@@ -451,6 +466,28 @@ async def upsert_npc_persona(
     personas = dict(canon.get("npc_personas") or {})
     personas[persona.id] = persona.model_dump(mode="json")
     canon["npc_personas"] = personas
+    dossier.played_canon = canon
+    await db.commit()
+    await db.refresh(dossier)
+    return dossier
+
+
+async def record_granted_unique_items(
+    campaign_id: str,
+    item_ids: list[str],
+    db: AsyncSession,
+) -> CampaignDossier:
+    """Persiste les objets uniques déjà attribués dans played_canon."""
+    dossier = await get_or_create_dossier(campaign_id, db)
+    canon = sanitize_played_canon(dossier.played_canon or {})
+    granted = list(canon.get("granted_unique_items") or [])
+    seen = set(granted)
+    for item_id in item_ids:
+        normalized = normalize_content_id(item_id)
+        if normalized and normalized not in seen:
+            granted.append(normalized)
+            seen.add(normalized)
+    canon["granted_unique_items"] = granted
     dossier.played_canon = canon
     await db.commit()
     await db.refresh(dossier)
@@ -650,12 +687,13 @@ async def compile_campaign_context_for_session(
         return None
 
     contract = sanitize_player_contract(dossier.player_contract or {}, campaign, brief={})
+    gm_dossier = sanitize_gm_dossier(dossier.gm_dossier or {}, campaign, contract)
     canon = sanitize_played_canon(dossier.played_canon or {})
     if _is_initial_campaign_session(campaign, session_id):
         canon = empty_played_canon()
         contract["played_summary"] = ""
     active_chapter = _active_chapter_for_context(
-        dossier.gm_dossier or {},
+        gm_dossier,
         contract,
         dossier.active_chapter_id,
     )
@@ -665,8 +703,10 @@ async def compile_campaign_context_for_session(
         "campaign_id": campaign.id,
         "player_contract": contract,
         "active_chapter": active_chapter,
+        "items": list(gm_dossier.get("items") or []),
+        "custom_monsters": list(gm_dossier.get("custom_monsters") or []),
         "played_canon": canon,
-        "known_quests": _public_quests(canon, dossier.gm_dossier or {}),
+        "known_quests": _public_quests(canon, gm_dossier),
         "continuity": {
             "played_summary": canon.get("rolling_summary") or contract.get("played_summary") or "",
             "established_facts": canon.get("established_facts", []),
@@ -891,8 +931,12 @@ async def _run_forge_job(
             validator=_validate_global_indexes_payload,
         )
 
-    gm_raw = dict(global_indexes)
-    gm_raw["chapters"] = private_chapters
+        private_chapters = _merge_chapter_custom_encounters(
+            private_chapters,
+            global_indexes.get("chapter_custom_encounters"),
+        )
+        gm_raw = dict(global_indexes)
+        gm_raw["chapters"] = private_chapters
     gm_dossier = sanitize_gm_dossier(gm_raw, campaign, contract)
     _validate_chapter_alignment(contract, gm_dossier)
     active_chapter_id = str(outline.get("active_chapter_id") or "").strip()
@@ -1040,6 +1084,34 @@ def _validate_global_indexes_payload(data: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(indexes, dict):
         raise ValueError("global indexes payload missing")
     return indexes
+
+
+def _merge_chapter_custom_encounters(
+    chapters: list[dict[str, Any]],
+    mapping: Any,
+) -> list[dict[str, Any]]:
+    if not isinstance(mapping, dict):
+        return chapters
+    merged: list[dict[str, Any]] = []
+    for chapter in chapters:
+        if not isinstance(chapter, dict):
+            merged.append(chapter)
+            continue
+        chapter_id = str(chapter.get("id") or "")
+        values = mapping.get(chapter_id)
+        if values is None:
+            merged.append(chapter)
+            continue
+        next_chapter = dict(chapter)
+        current = next_chapter.get("possible_custom_encounters")
+        next_chapter["possible_custom_encounters"] = _content_id_list(current, 12)
+        for item in _content_id_list(values, 12):
+            if item not in next_chapter["possible_custom_encounters"]:
+                next_chapter["possible_custom_encounters"].append(item)
+            if len(next_chapter["possible_custom_encounters"]) >= 12:
+                break
+        merged.append(next_chapter)
+    return merged
 
 
 def _validate_chapter_alignment(contract: dict[str, Any], gm_dossier: dict[str, Any]) -> None:
@@ -1241,6 +1313,7 @@ def sanitize_gm_dossier(
                 "possible_exits": [],
                 "indicative_dcs": [],
                 "possible_srd_encounters": [],
+                "possible_custom_encounters": [],
             }
             for i, ch in enumerate(contract.get("visible_chapters", []))
         ]
@@ -1250,6 +1323,8 @@ def sanitize_gm_dossier(
             "chapters": [_sanitize_private_chapter(ch, i) for i, ch in enumerate(chapters)],
             "important_npcs": _sanitize_npc_personas(data.get("important_npcs")),
             "bestiary": _sanitize_monster_personas(data.get("bestiary")),
+            "items": _sanitize_custom_items(data.get("items")),
+            "custom_monsters": _sanitize_custom_monsters(data.get("custom_monsters")),
             "companion_seeds": _sanitize_companion_personas(data.get("companion_seeds")),
             "locations": _generic_list(data.get("locations")),
             "factions": _generic_list(data.get("factions")),
@@ -1283,6 +1358,7 @@ def sanitize_played_canon(data: dict[str, Any]) -> dict[str, Any]:
         canon[key] = _generic_list(data.get(key))
     canon["rolling_summary"] = _text(data.get("rolling_summary") or "", 2000)
     canon["npc_personas"] = _sanitize_persona_dict(data.get("npc_personas"), expected_type="npc")
+    canon["granted_unique_items"] = _content_id_list(data.get("granted_unique_items"), 100)
     return canon
 
 
@@ -1414,10 +1490,15 @@ def _fallback_dossier(
                     "possible_exits": [],
                     "indicative_dcs": [{"label": "Lire la situation", "ability": "wis", "dc": 13}],
                     "possible_srd_encounters": ["bandit"],
+                    "possible_custom_encounters": [],
                 }
                 for ch in chapters
             ],
             "important_npcs": [],
+            "bestiary": [],
+            "items": [],
+            "custom_monsters": [],
+            "companion_seeds": [],
             "locations": [],
             "factions": [],
             "secrets": [],
@@ -1568,6 +1649,7 @@ def _active_chapter_for_context(
         "possible_exits",
         "indicative_dcs",
         "possible_srd_encounters",
+        "possible_custom_encounters",
     }
     return {key: value for key, value in chapter.items() if key in allowed}
 
@@ -1792,7 +1874,8 @@ def _sanitize_private_chapter(chapter: Any, index: int) -> dict[str, Any]:
         "complications": _generic_list(data.get("complications")),
         "possible_exits": _generic_list(data.get("possible_exits")),
         "indicative_dcs": _generic_list(data.get("indicative_dcs")),
-        "possible_srd_encounters": _string_list(data.get("possible_srd_encounters"), 12),
+        "possible_srd_encounters": _content_id_list(data.get("possible_srd_encounters"), 12),
+        "possible_custom_encounters": _content_id_list(data.get("possible_custom_encounters"), 12),
     }
 
 
@@ -1833,10 +1916,63 @@ def _string_list(value: Any, max_items: int = 20) -> list[str]:
     return out
 
 
+def _content_id_list(value: Any, max_items: int = 20) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    out: list[str] = []
+    for item in value:
+        normalized = normalize_content_id(item)
+        if normalized and normalized not in out:
+            out.append(normalized)
+        if len(out) >= max_items:
+            break
+    return out
+
+
 def _generic_list(value: Any) -> list[Any]:
     if not isinstance(value, list):
         return []
     return value[:50]
+
+
+def _sanitize_custom_items(value: Any, cap: int = 50) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        try:
+            dumped = validate_custom_item_template(item)
+        except Exception as exc:
+            logger.debug("Invalid custom item payload: %s", exc)
+            continue
+        if not dumped.get("id") or not dumped.get("template_id"):
+            continue
+        out.append(dumped)
+        if len(out) >= cap:
+            break
+    return out
+
+
+def _sanitize_custom_monsters(value: Any, cap: int = 50) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        try:
+            monster = CustomMonsterTemplate.model_validate(item)
+        except Exception as exc:
+            logger.debug("Invalid custom monster payload: %s", exc)
+            continue
+        if not monster.id or not monster.base_srd_id:
+            continue
+        out.append(monster.model_dump(mode="json"))
+        if len(out) >= cap:
+            break
+    return out
 
 
 def _coerce_legacy_npc_dict(item: dict[str, Any]) -> dict[str, Any]:

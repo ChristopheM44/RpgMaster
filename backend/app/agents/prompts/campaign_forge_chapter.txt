@@ -15,6 +15,9 @@ NOTES STRUCTURÉES DES SOURCES PRIVÉES :
 OPTIONS :
 {{ options }}
 
+INDEX SRD MONSTRES COMPACT :
+{{ srd_monster_index }}
+
 Contraintes absolues :
 - Réponds pour CE chapitre uniquement.
 - L'id retourné doit être exactement celui de `visible_chapter.id`.
@@ -25,7 +28,8 @@ Contraintes absolues :
 - "present_npcs[].description" décrit apparence visible, posture et/ou voix en 1-2 phrases.
 - "visible_clues[].description" doit être sensoriel et examinable.
 - Les chapitres sont des situations ouvertes, pas des scripts rigides.
-- Utilise seulement des monstres SRD possibles parmi : goblin, hobgoblin, orc, skeleton, zombie, wolf, giant_spider, bandit, cultist, bugbear.
+- Pour `possible_srd_encounters`, utilise uniquement des `id` présents dans l'index SRD compact.
+- Pour une créature custom définie dans les index globaux, utilise `possible_custom_encounters` avec l'id custom sans préfixe.
 
 Réponds avec un seul objet JSON valide, sans markdown :
 {
@@ -53,5 +57,6 @@ Réponds avec un seul objet JSON valide, sans markdown :
   "complications": ["Complication"],
   "possible_exits": ["Sortie possible"],
   "indicative_dcs": [{"label": "Observer", "ability": "wis", "dc": 13}],
-  "possible_srd_encounters": ["goblin"]
+  "possible_srd_encounters": ["goblin"],
+  "possible_custom_encounters": []
 }

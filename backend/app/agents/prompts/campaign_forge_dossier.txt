@@ -12,6 +12,9 @@ OPTIONS :
 SOURCES IMPORTÉES PRIVÉES :
 {{ import_sources }}
 
+INDEX SRD MONSTRES COMPACT :
+{{ srd_monster_index }}
+
 Contraintes importantes :
 - "hook" explique pourquoi les PJ sont concernés.
 - "initial_state" résume le contexte narratif du chapitre.
@@ -23,6 +26,9 @@ Contraintes importantes :
 - "visible_clues[].description" doit être sensoriel et examinable.
 - "important_npcs" contient les PNJ RÉCURRENTS de la campagne au format NPCPersona structuré (voix, motivations visibles/cachées, savoir explicite). Génère 2 à 4 PNJ importants, dont au moins ceux mentionnés dans opening_scene.present_npcs. Chaque persona doit avoir un `id` unique kebab-case réutilisé dans `present_npcs` quand pertinent, pour qu'on puisse les retrouver entre scènes.
 - "bestiary" (optionnel, 0 à 2 entrées) contient les MONSTRES SIGNATURES de la campagne (boss de chapitre, créature unique) au format MonsterPersona. Ne mets PAS les monstres SRD génériques (gobelins lambda, loups) ici — uniquement les créatures qui méritent une voix propre.
+- "possible_srd_encounters" contient uniquement des ids présents dans l'index SRD compact.
+- "custom_monsters" contient les créatures inventées ou variantes mécaniques, basées sur un `base_srd_id` valide.
+- "items" contient les objets custom de la campagne au format équipement compact ; les objets uniques doivent avoir `unique: true`.
 
 Réponds avec ce JSON exact :
 {
@@ -73,7 +79,8 @@ Réponds avec ce JSON exact :
         "complications": ["Complication"],
         "possible_exits": ["Sortie possible"],
         "indicative_dcs": [{"label": "Observer", "ability": "wis", "dc": 13}],
-        "possible_srd_encounters": ["goblin"]
+        "possible_srd_encounters": ["goblin"],
+        "possible_custom_encounters": []
       }
     ],
     "important_npcs": [
@@ -94,7 +101,7 @@ Réponds avec ce JSON exact :
         "catchphrases": []
       }
     ],
-    "bestiary": [
+	    "bestiary": [
       {
         "id": "monstre_id_kebab_case",
         "name": "Nom propre du monstre signature",
@@ -112,8 +119,44 @@ Réponds avec ce JSON exact :
         "surrender_threshold": null,
         "can_speak": true
       }
+	    ],
+    "items": [
+      {
+        "id": "lame_de_braise",
+        "template_id": "lame_de_braise",
+        "name": "Ember Blade",
+        "name_fr": "Lame de braise",
+        "category": "martial",
+        "item_type": "weapon",
+        "damage_dice": "1d8",
+        "damage_type": "slashing",
+        "properties": ["versatile"],
+        "versatile_dice": "1d10",
+        "weight_lb": 3.0,
+        "cost_gp": 250.0,
+        "rarity": "uncommon",
+        "unique": true
+      }
     ],
-    "locations": [],
+    "custom_monsters": [
+      {
+        "id": "squelette_enflamme",
+        "base_srd_id": "skeleton",
+        "name": "Flaming Skeleton",
+        "name_fr": "Squelette enflammé",
+        "description": "Un squelette nimbé de flammes bleues.",
+        "stat_overrides": {
+          "hp": 18,
+          "ac": 14,
+          "damage_dice": "1d6+2",
+          "damage_type": "fire",
+          "damage_immunities": ["fire"],
+          "traits": [{"name": "Burning Aura", "name_fr": "Aura brûlante", "description": "Une chaleur dangereuse pulse autour de lui."}]
+        },
+        "persona_id": null
+      }
+    ],
+	    "locations": [],
     "factions": [],
     "secrets": [],
     "revelations": [],
@@ -130,8 +173,9 @@ Réponds avec ce JSON exact :
     "npc_relationships": [],
     "revealed_secrets": [],
     "plan_changes": [],
-    "rolling_summary": "",
-    "chapter_progression": []
-  },
+	    "rolling_summary": "",
+	    "chapter_progression": [],
+    "granted_unique_items": []
+	  },
   "active_chapter_id": "chapter_1"
 }

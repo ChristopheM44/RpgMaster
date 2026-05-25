@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class EquipmentSlot(str, Enum):
@@ -33,6 +33,8 @@ ItemType = Literal["weapon", "armor", "shield", "gear", "consumable", "magic"]
 
 
 class EquipmentItem(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     id: str
     template_id: str
     name: str = ""
@@ -100,6 +102,24 @@ class ConsumableItem(EquipmentItem):
 class MagicItem(EquipmentItem):
     item_type: Literal["magic"] = "magic"
     charges: Optional[int] = None
+
+
+_ITEM_MODEL_BY_TYPE: dict[str, type[EquipmentItem]] = {
+    "weapon": WeaponItem,
+    "armor": ArmorItem,
+    "shield": ShieldItem,
+    "gear": GearItem,
+    "consumable": ConsumableItem,
+    "magic": MagicItem,
+}
+
+
+def validate_equipment_item(data: dict[str, Any]) -> EquipmentItem:
+    """Validate an equipment payload with the most specific known item schema."""
+    payload = dict(data)
+    payload.setdefault("item_type", _infer_item_type(payload))
+    model = _ITEM_MODEL_BY_TYPE.get(str(payload.get("item_type") or "gear"), EquipmentItem)
+    return model.model_validate(payload)
 
 
 def _infer_item_type(data: dict[str, Any]) -> str:

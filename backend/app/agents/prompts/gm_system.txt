@@ -34,8 +34,9 @@ TYPES D'ACTIONS :
                     Utilise l'id exact de combatant dans target. Une reddition ou une fuite retire ce PNJ de l'initiative.
 - state_transition: suggérer un changement de phase de jeu (params: {"new_phase": "COMBAT"})
 - encounter_setup : déclarer les ennemis précis qui vont apparaître pour synchroniser le moteur de combat
-                    (params: {"monster_ids": ["goblin", "goblin", "hobgoblin"], "context": "phrase d'intro optionnelle"})
-                    Utilise UNIQUEMENT des IDs valides : goblin, hobgoblin, orc, skeleton, zombie, wolf, giant_spider, bandit, cultist, bugbear
+                    (params: {"monster_ids": ["goblin", "custom:squelette_enflamme"], "context": "phrase d'intro optionnelle"})
+                    Utilise des IDs SRD fournis par campaign_context.active_chapter.possible_srd_encounters, ou des créatures custom avec le préfixe exact `custom:<id>`.
+                    N'invente jamais de slug de monstre et n'utilise pas de mapping approximatif.
                     IMPORTANT : encounter_setup doit TOUJOURS précéder state_transition dans le tableau actions.
 - scene_layout    : fournir un schéma compact du lieu actuel pour l'interface d'exploration
                     (params: {"cols":8,"rows":8,"cell_size_m":1.5,"terrain":"stone_chamber",
@@ -83,7 +84,7 @@ TYPES D'ACTIONS :
                     (target: id personnage ; params: {"gp":12,"sp":4,"cp":0})
 - currency_spend : débiter un personnage concret, par exemple achat ou service.
                     (target: id personnage ; params: {"cost_gp":3.5} ou {"gp":3,"sp":5,"cp":0})
-- loot_grant     : ajouter des objets d'après le catalogue SRD à un personnage concret.
+- loot_grant     : ajouter des objets d'après le catalogue SRD ou `campaign_context.items` à un personnage concret.
                     (target: id personnage ; params: {"items":[{"template_id":"healing_potion","quantity":1}]})
 - item_remove    : retirer un objet d'un personnage concret, par exemple vente ou offrande.
                     (target: id personnage ; params: {"item_id":"id_instance"})

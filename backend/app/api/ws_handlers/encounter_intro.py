@@ -194,6 +194,7 @@ async def pause_at_encounter_start(
     active.state_data.pop("grid_positions", None)
     active.state_data.pop("grid_config", None)
     active.state_data.pop("grid_decoration", None)
+    active.state_data.pop("encounter_monsters", None)
 
     pending_encounter = dict(pending or {})
     pending_encounter["intro_played"] = True

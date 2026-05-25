@@ -259,6 +259,16 @@ def _build_combat_start_payload(active: Any) -> dict[str, Any]:
     return build_combat_start_payload(active, encounter_service)
 
 
+def _campaign_custom_monsters(active: ActiveSession) -> list[dict[str, Any]]:
+    context = active.state_data.get("campaign_context")
+    if not isinstance(context, dict):
+        return []
+    custom_monsters = context.get("custom_monsters")
+    if not isinstance(custom_monsters, list):
+        return []
+    return [item for item in custom_monsters if isinstance(item, dict)]
+
+
 _is_unhelpful_intro = is_unhelpful_intro
 _is_async_callable = is_async_callable
 _normalized_phrase = normalized_phrase
@@ -1049,6 +1059,7 @@ async def _handle_combat_end(
     active.state_data.pop("grid_config", None)
     active.state_data.pop("grid_decoration", None)
     active.state_data.pop("pending_encounter", None)
+    active.state_data.pop("encounter_monsters", None)
     active.state_data.pop("resolved_npcs", None)
     active.mark_dirty()
     await _transition_active_phase(session_id, active, db, SessionStatus.ENCOUNTER_END)
@@ -1164,7 +1175,10 @@ async def _handle_start_combat(
             else pending.get("context") or None
         )
         if monster_ids:
-            candidate = encounter_service.build_from_monster_ids(monster_ids)
+            candidate = encounter_service.build_from_monster_ids(
+                monster_ids,
+                custom_monsters=_campaign_custom_monsters(active),
+            )
             if candidate.entries:
                 built = candidate
             else:
@@ -1190,6 +1204,7 @@ async def _handle_start_combat(
             else:
                 built = encounter_service.generate(party_levels)
 
+    encounter_monsters = dict(getattr(built, "monsters_by_id", {}) or {})
     npc_combatants = encounter_service.expand(built)
 
     # Build player combatant maps
@@ -1227,7 +1242,10 @@ async def _handle_start_combat(
         cid = npc["combatant_id"]
         encounter_service._ensure_loaded()
         monster_id_base = "_".join(cid.rsplit("_", 1)[:-1]) if "_" in cid else cid
-        monster_data = encounter_service._monsters_by_id.get(monster_id_base, {})
+        monster_data = (
+            encounter_monsters.get(monster_id_base)
+            or encounter_service._monsters_by_id.get(monster_id_base, {})
+        )
         dex = int(monster_data.get("ability_scores", {}).get("dexterity", 10))
         combatants_list.append(
             CombatantInfo(
@@ -1246,6 +1264,7 @@ async def _handle_start_combat(
             "is_ai": True,
             "status": "active",
             "monster_id": monster_id_base,
+            "base_srd_id": monster_data.get("base_srd_id"),
             "ac": npc["ac"],
             "attack_bonus": npc["attack_bonus"],
             "damage_notation": npc["damage_notation"],
@@ -1254,6 +1273,12 @@ async def _handle_start_combat(
             "xp": monster_data.get("xp", npc.get("xp", 0)),
             "ability_scores": monster_data.get("ability_scores", {}),
             "actions": _format_monster_actions(monster_data.get("actions", [])),
+            "traits": monster_data.get("traits", []),
+            "damage_resistances": monster_data.get("damage_resistances", []),
+            "damage_immunities": monster_data.get("damage_immunities", []),
+            "damage_vulnerabilities": monster_data.get("damage_vulnerabilities", []),
+            "condition_immunities": monster_data.get("condition_immunities", []),
+            "description": monster_data.get("description"),
             "color": _monster_color(monster_data.get("type")),
             "token": _monster_token_for_combatant(
                 monster_data.get("name_fr")
@@ -1274,6 +1299,10 @@ async def _handle_start_combat(
     # Roll initiative and set up TurnManager
     active.turn_manager.setup_combat(combatants_list)
     active.state_data["combatants"] = combatants_info
+    if encounter_monsters:
+        active.state_data["encounter_monsters"] = encounter_monsters
+    else:
+        active.state_data.pop("encounter_monsters", None)
 
     # Initialize tactical grid positions
     player_ids = [cid for cid, c in combatants_info.items() if c["is_player"]]
@@ -1442,6 +1471,7 @@ async def _handle_reset_combat(session_id: str, active: Any, db: AsyncSession) -
     active.state_data.pop("grid_config", None)
     active.state_data.pop("grid_decoration", None)
     active.state_data.pop("pending_encounter", None)
+    active.state_data.pop("encounter_monsters", None)
     active.state_data["phase"] = SessionStatus.EXPLORATION.value
 
     # Restore HP in characters snapshot

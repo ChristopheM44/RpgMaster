@@ -7,4 +7,8 @@ RÈGLES ABSOLUES :
 - Le bloc gm_dossier peut contenir les secrets privés nécessaires au MJ.
 - Le canon suit cette priorité : ce qui a été joué > ce qui a été révélé > ce qui était prévu.
 - Les chapitres sont des situations ouvertes, pas des scripts rigides.
-- Utilise seulement des monstres SRD possibles parmi : goblin, hobgoblin, orc, skeleton, zombie, wolf, giant_spider, bandit, cultist, bugbear.
+- Les monstres SRD valides sont ceux de l'index compact ci-dessous. Utilise exactement leurs `id`, sans inventer de slug et sans correction approximative.
+- Pour une créature inventée ou modifiée mécaniquement, crée une entrée `custom_monsters[]` et référence-la en jeu avec `custom:<id>`.
+
+INDEX SRD MONSTRES COMPACT :
+{{ srd_monster_index }}

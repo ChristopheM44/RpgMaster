@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import random
 from pathlib import Path
 from typing import Any, Optional
@@ -12,8 +13,13 @@ from app.engine.encounter_builder import (
     expand_to_combatants,
     generate_encounter,
 )
+from app.schemas.campaign_content import (
+    materialize_custom_monster,
+    normalize_monster_reference,
+)
 
 _SRD_DIR = Path(__file__).parent.parent / "engine" / "srd_data"
+logger = logging.getLogger(__name__)
 
 
 class EncounterService:
@@ -115,21 +121,33 @@ class EncounterService:
             xp_budget=0,
         )
 
-    def build_from_monster_ids(self, monster_ids: list[str]) -> BuiltEncounter:
+    def build_from_monster_ids(
+        self,
+        monster_ids: list[str],
+        *,
+        custom_monsters: Optional[list[dict[str, Any]]] = None,
+    ) -> BuiltEncounter:
         """Build an encounter from a list of monster IDs (may repeat).
 
         IDs that don't match a known monster are silently skipped.
         Returns a BuiltEncounter with empty entries if nothing matched.
         """
         self._ensure_loaded()
+        monsters_by_id: dict[str, dict[str, Any]] = dict(self._monsters_by_id)
+        if custom_monsters:
+            monsters_by_id.update(self._materialized_custom_monsters(custom_monsters))
+
         counter: dict[str, int] = {}
         for mid in monster_ids:
-            counter[mid] = counter.get(mid, 0) + 1
+            normalized = normalize_monster_reference(mid)
+            if normalized:
+                counter[normalized] = counter.get(normalized, 0) + 1
 
         entries: list[EncounterEntry] = []
         for mid, count in counter.items():
-            monster = self._monsters_by_id.get(mid)
+            monster = monsters_by_id.get(mid)
             if not monster:
+                logger.warning("EncounterService: monster_id invalide ignore '%s'.", mid)
                 continue
             first_action = next(
                 (a for a in monster.get("actions", []) if "attack_bonus" in a), {}
@@ -153,7 +171,38 @@ class EncounterService:
             total_xp_adjusted=sum(all_xp_flat),
             difficulty="custom",
             xp_budget=0,
+            monsters_by_id={
+                entry.monster_id: monsters_by_id[entry.monster_id]
+                for entry in entries
+                if entry.monster_id in monsters_by_id
+            },
         )
+
+    def _materialized_custom_monsters(
+        self,
+        custom_monsters: list[dict[str, Any]],
+    ) -> dict[str, dict[str, Any]]:
+        materialized: dict[str, dict[str, Any]] = {}
+        for template in custom_monsters:
+            if not isinstance(template, dict):
+                continue
+            ref = normalize_monster_reference(f"custom:{template.get('id') or ''}")
+            base_id = normalize_monster_reference(template.get("base_srd_id"))
+            base = self._monsters_by_id.get(base_id)
+            if not ref or not base:
+                logger.warning(
+                    "EncounterService: custom monster invalide ignore id=%r base=%r.",
+                    template.get("id"),
+                    template.get("base_srd_id"),
+                )
+                continue
+            try:
+                monster = materialize_custom_monster(base, template)
+            except Exception as exc:
+                logger.warning("EncounterService: custom monster rejeté %r: %s", ref, exc)
+                continue
+            materialized[ref] = monster
+        return materialized
 
     # ------------------------------------------------------------------
     # Dynamic encounter generation

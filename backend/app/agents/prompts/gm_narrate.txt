@@ -92,8 +92,10 @@ Instructions :
 - Si la narration décrit l'apparition d'ennemis hostiles qui veulent attaquer le groupe, inclus OBLIGATOIREMENT ces deux actions dans cet ordre exact :
     1. encounter_setup avec la liste précise des monster_ids correspondant aux ennemis décrits.
     2. state_transition vers COMBAT.
-  Le moteur utilisera encounter_setup pour instancier exactement les ennemis que tu as narrés.
-  N'utilise encounter_setup QUE pour une nouvelle rencontre, pas si le combat est déjà en cours.
+	  Le moteur utilisera encounter_setup pour instancier exactement les ennemis que tu as narrés.
+	  Les IDs valides viennent de `game_state.campaign_context.active_chapter.possible_srd_encounters` et de `game_state.campaign_context.custom_monsters`; pour un custom, écris `custom:<id>`.
+	  Si aucun ID valide ne correspond exactement, demande un cadrage narratif ou utilise une rencontre SRD clairement listée par le chapitre, jamais un slug inventé.
+	  N'utilise encounter_setup QUE pour une nouvelle rencontre, pas si le combat est déjà en cours.
   Dans ce cas, ne donne pas encore de longs dialogues aux ennemis : limite-toi à 1-2 phrases de menace ou de révélation.
   Une narration dédiée d'ouverture de rencontre ajoutera juste après les voix, postures et détails tactiques.
 - Si aucune action mécanique n'est requise, laisse le tableau "actions" vide [].

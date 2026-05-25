@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from functools import lru_cache
 from typing import Any, Optional
 
 from app.agents.base_agent import BaseAgent
@@ -14,8 +15,24 @@ from app.config import (
 )
 from app.llm.base_client import LLMClient
 from app.llm.model_router import router
+from app.engine.srd_data import get_monsters
 
 logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=1)
+def compact_srd_monster_index() -> list[dict[str, Any]]:
+    """Compact list of legal SRD monster ids for Forge prompts."""
+    return [
+        {
+            "id": str(monster.get("id") or ""),
+            "name_fr": monster.get("name_fr") or monster.get("name") or "",
+            "type": monster.get("type") or "",
+            "cr": monster.get("cr"),
+        }
+        for monster in get_monsters()
+        if monster.get("id")
+    ]
 
 
 class CampaignForgeAgent(BaseAgent):
@@ -23,7 +40,15 @@ class CampaignForgeAgent(BaseAgent):
 
     def __init__(self, client: Optional[LLMClient] = None) -> None:
         self._client: LLMClient = client or router.get_gm_client()
-        self._system_prompt = self._load_system_prompt("campaign_forge_system.txt")
+        self._srd_monster_index_json = json.dumps(
+            compact_srd_monster_index(),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        self._system_prompt = self._render_prompt(
+            "campaign_forge_system.txt",
+            {"srd_monster_index": self._srd_monster_index_json},
+        )
 
     async def think(self, context: AgentContext) -> AgentResponse:
         data = await self.forge_dossier(
@@ -48,6 +73,7 @@ class CampaignForgeAgent(BaseAgent):
                 "brief": json.dumps(brief, ensure_ascii=False, indent=2),
                 "options": json.dumps(options, ensure_ascii=False, indent=2),
                 "import_sources": json.dumps(import_sources, ensure_ascii=False, indent=2),
+                "srd_monster_index": self._srd_monster_index_json,
             },
         )
         return await self._call_json(prompt, max_tokens=4096)
@@ -66,6 +92,7 @@ class CampaignForgeAgent(BaseAgent):
                 "brief": json.dumps(brief, ensure_ascii=False, indent=2),
                 "options": json.dumps(options, ensure_ascii=False, indent=2),
                 "source_notes": json.dumps(source_notes, ensure_ascii=False, indent=2),
+                "srd_monster_index": self._srd_monster_index_json,
             },
         )
         return await self._call_json(prompt, max_tokens=get_forge_outline_max_tokens())
@@ -90,6 +117,7 @@ class CampaignForgeAgent(BaseAgent):
                 "chapter_total": chapter_total,
                 "source_notes": json.dumps(source_notes, ensure_ascii=False, indent=2),
                 "options": json.dumps(options, ensure_ascii=False, indent=2),
+                "srd_monster_index": self._srd_monster_index_json,
             },
         )
         return await self._call_json(prompt, max_tokens=get_forge_chapter_max_tokens())
@@ -112,6 +140,7 @@ class CampaignForgeAgent(BaseAgent):
                 "player_contract": json.dumps(player_contract, ensure_ascii=False, indent=2),
                 "chapters": json.dumps(chapters, ensure_ascii=False, indent=2),
                 "source_notes": json.dumps(source_notes, ensure_ascii=False, indent=2),
+                "srd_monster_index": self._srd_monster_index_json,
             },
         )
         return await self._call_json(prompt, max_tokens=get_forge_indexes_max_tokens())

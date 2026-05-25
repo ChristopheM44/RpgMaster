@@ -257,6 +257,7 @@ def test_empty_played_canon_includes_npc_personas() -> None:
     canon = empty_played_canon()
     assert "npc_personas" in canon
     assert canon["npc_personas"] == {}
+    assert canon["granted_unique_items"] == []
 
 
 def test_sanitize_played_canon_preserves_valid_personas() -> None:
@@ -346,8 +347,12 @@ def test_sanitize_gm_dossier_includes_bestiary_and_companion_seeds() -> None:
     dossier = sanitize_gm_dossier({}, campaign, contract={"visible_chapters": []})
     assert "bestiary" in dossier
     assert "companion_seeds" in dossier
+    assert "items" in dossier
+    assert "custom_monsters" in dossier
     assert dossier["bestiary"] == []
     assert dossier["companion_seeds"] == []
+    assert dossier["items"] == []
+    assert dossier["custom_monsters"] == []
 
 
 # ---------------------------------------------------------------------------
@@ -437,6 +442,88 @@ def test_sanitize_gm_dossier_preserves_bestiary_monster_persona() -> None:
     assert bestiary[0]["behavior_pattern"] == "cunning"
     assert bestiary[0]["surrender_threshold"] == 0.15
     assert "Misérables fourmis !" in bestiary[0]["combat_taunts"]
+
+
+def test_sanitize_gm_dossier_preserves_custom_items_and_monsters() -> None:
+    from app.models.campaign import Campaign
+    from app.services.campaign_dossier_service import sanitize_gm_dossier
+
+    campaign = Campaign(id="cmp1", name="T", description="T", starting_level=1)
+    forge_output = {
+        "chapters": [
+            {
+                "id": "chapter_1",
+                "title": "Cendres",
+                "possible_srd_encounters": ["skeleton"],
+                "possible_custom_encounters": ["squelette-enflamme"],
+            }
+        ],
+        "items": [
+            {
+                "id": "lame-de-braise",
+                "template_id": "lame-de-braise",
+                "name": "Ember Blade",
+                "name_fr": "Lame de braise",
+                "category": "martial",
+                "item_type": "weapon",
+                "damage_dice": "1d8",
+                "damage_type": "slashing",
+                "weight_lb": 3,
+                "cost_gp": 250,
+                "unique": True,
+            },
+            {"id": "broken", "item_type": "weapon"},
+        ],
+        "custom_monsters": [
+            {
+                "id": "squelette-enflamme",
+                "base_srd_id": "skeleton",
+                "name": "Flaming Skeleton",
+                "name_fr": "Squelette enflammé",
+                "stat_overrides": {
+                    "hp": 18,
+                    "ac": 14,
+                    "damage_dice": "1d6+2",
+                    "damage_type": "fire",
+                    "damage_immunities": ["fire"],
+                },
+            },
+            {"id": "bad", "name": "Bad"},
+        ],
+        "light_mechanics": [{"id": "rest_variant"}],
+    }
+
+    dossier = sanitize_gm_dossier(
+        forge_output,
+        campaign,
+        contract={"visible_chapters": [{"id": "chapter_1", "title": "Cendres"}]},
+    )
+
+    assert len(dossier["items"]) == 1
+    item = dossier["items"][0]
+    assert item["id"] == "lame_de_braise"
+    assert item["damage_dice"] == "1d8"
+    assert item["unique"] is True
+    assert len(dossier["custom_monsters"]) == 1
+    custom = dossier["custom_monsters"][0]
+    assert custom["id"] == "squelette_enflamme"
+    assert custom["base_srd_id"] == "skeleton"
+    assert custom["stat_overrides"]["damage_immunities"] == ["fire"]
+    assert dossier["chapters"][0]["possible_custom_encounters"] == ["squelette_enflamme"]
+    assert dossier["light_mechanics"] == [{"id": "rest_variant"}]
+
+
+def test_chapter_custom_encounter_mapping_is_merged() -> None:
+    from app.services.campaign_dossier_service import _merge_chapter_custom_encounters
+
+    chapters = [{"id": "chapter_1"}, {"id": "chapter_2", "possible_custom_encounters": ["old"]}]
+    merged = _merge_chapter_custom_encounters(
+        chapters,
+        {"chapter_1": ["squelette-enflamme"], "chapter_2": ["old", "new-beast"]},
+    )
+
+    assert merged[0]["possible_custom_encounters"] == ["squelette_enflamme"]
+    assert merged[1]["possible_custom_encounters"] == ["old", "new_beast"]
 
 
 def test_sanitize_gm_dossier_coerces_legacy_npc_dict() -> None:

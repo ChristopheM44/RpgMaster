@@ -23,7 +23,8 @@ from app.game.session_manager import ActiveSession
 from app.game.social_resolution import SocialResolution
 from app.game.state_sync import sync_character_state
 from app.models.character import Character
-from app.schemas.equipment import EquipmentItem
+from app.schemas.campaign_content import normalize_content_id
+from app.schemas.equipment import validate_equipment_item
 from app.services import campaign_dossier_service, map_service
 from app.services.currency_service import currency_service
 from app.services.equipment_service import EquipmentService
@@ -950,15 +951,28 @@ class GMResponseExecutor:
         raw_items = params.get("items") or []
         if isinstance(raw_items, dict):
             raw_items = [raw_items]
+        custom_items = self._custom_items_by_id(active)
+        granted_unique = self._granted_unique_items(active)
         added: list[dict[str, Any]] = []
+        unique_granted_now: list[str] = []
         for raw in raw_items:
             if not isinstance(raw, dict):
                 continue
-            template_id = str(raw.get("template_id") or raw.get("id") or "").strip()
+            template_id = normalize_content_id(raw.get("template_id") or raw.get("id"))
             if not template_id:
                 continue
+            custom_template = custom_items.get(template_id)
+            if custom_template and bool(custom_template.get("unique")):
+                if template_id in granted_unique:
+                    logger.warning(
+                        "loot_grant ignore : objet unique deja attribue '%s'.",
+                        template_id,
+                    )
+                    continue
+                granted_unique.add(template_id)
+                unique_granted_now.append(template_id)
             try:
-                item = self._instantiate_loot_item(template_id, raw)
+                item = self._instantiate_loot_item(template_id, raw, custom_template)
             except KeyError:
                 logger.warning("loot_grant ignore : template inconnu '%s'.", template_id)
                 continue
@@ -969,6 +983,15 @@ class GMResponseExecutor:
         char.equipment = equipment
         await db.commit()
         await db.refresh(char)
+        if unique_granted_now:
+            self._mark_unique_items_in_state(active, unique_granted_now)
+            campaign_id = self._campaign_id(active)
+            if campaign_id:
+                await campaign_dossier_service.record_granted_unique_items(
+                    campaign_id,
+                    unique_granted_now,
+                    db,
+                )
         sync_character_state(active, target, equipment=equipment)
         await self._event_bus.publish_to_session(
             session_id,
@@ -1043,8 +1066,68 @@ class GMResponseExecutor:
         return max(0, GMResponseExecutor._safe_int_value(value))
 
     @staticmethod
-    def _instantiate_loot_item(template_id: str, raw: dict[str, Any]) -> dict[str, Any]:
-        template = dict(find_equipment(template_id))
+    def _custom_items_by_id(active: ActiveSession) -> dict[str, dict[str, Any]]:
+        context = active.state_data.get("campaign_context")
+        if not isinstance(context, dict):
+            return {}
+        items = context.get("items")
+        if not isinstance(items, list):
+            return {}
+        out: dict[str, dict[str, Any]] = {}
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            item_id = normalize_content_id(item.get("template_id") or item.get("id"))
+            if item_id:
+                out[item_id] = item
+        return out
+
+    @staticmethod
+    def _granted_unique_items(active: ActiveSession) -> set[str]:
+        context = active.state_data.get("campaign_context")
+        if not isinstance(context, dict):
+            return set()
+        canon = context.get("played_canon")
+        if not isinstance(canon, dict):
+            return set()
+        values = canon.get("granted_unique_items")
+        if not isinstance(values, list):
+            return set()
+        return {normalized for item in values if (normalized := normalize_content_id(item))}
+
+    @staticmethod
+    def _mark_unique_items_in_state(active: ActiveSession, item_ids: list[str]) -> None:
+        context = active.state_data.get("campaign_context")
+        if not isinstance(context, dict):
+            return
+        canon = context.setdefault("played_canon", {})
+        if not isinstance(canon, dict):
+            canon = {}
+            context["played_canon"] = canon
+        granted = list(canon.get("granted_unique_items") or [])
+        seen = {normalize_content_id(item) for item in granted}
+        for item_id in item_ids:
+            normalized = normalize_content_id(item_id)
+            if normalized and normalized not in seen:
+                granted.append(normalized)
+                seen.add(normalized)
+        canon["granted_unique_items"] = granted
+        active.mark_dirty()
+
+    @staticmethod
+    def _campaign_id(active: ActiveSession) -> str:
+        context = active.state_data.get("campaign_context")
+        if not isinstance(context, dict):
+            return ""
+        return str(context.get("campaign_id") or "").strip()
+
+    @staticmethod
+    def _instantiate_loot_item(
+        template_id: str,
+        raw: dict[str, Any],
+        custom_template: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        template = dict(custom_template or find_equipment(template_id))
         template.setdefault("template_id", template_id)
         template.setdefault("id", template_id)
         template["id"] = f"{template_id}_{uuid.uuid4().hex[:8]}"
@@ -1056,7 +1139,7 @@ class GMResponseExecutor:
             template["hidden_properties"] = dict(raw["hidden_properties"])
         if "weight_lb" not in template and "weight" in template:
             template["weight_lb"] = template.get("weight", 0.0)
-        return EquipmentItem.model_validate(template).model_dump(mode="json")
+        return validate_equipment_item(template).model_dump(mode="json")
 
     @staticmethod
     def _state_world_maps(active: ActiveSession) -> dict[str, Any]:
