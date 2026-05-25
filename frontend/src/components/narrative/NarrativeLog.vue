@@ -3,6 +3,14 @@ import { computed, ref, watch, nextTick } from 'vue'
 import { useGameStore } from '../../stores/game'
 import DiceRollResult from './DiceRollResult.vue'
 
+withDefaults(defineProps<{
+  /**
+   * 'full'   — the standalone exploration layout (default, unchanged)
+   * 'drawer' — compact V2 combat drawer: slim header + compact entries
+   */
+  variant?: 'full' | 'drawer'
+}>(), { variant: 'full' })
+
 const gameStore = useGameStore()
 const logEl = ref<HTMLElement | null>(null)
 const hasThinkingEntry = computed(() =>
@@ -26,7 +34,74 @@ watch(
 </script>
 
 <template>
-  <div class="flex flex-1 min-h-0 flex-col overflow-hidden">
+  <!-- ══ DRAWER variant (V2 combat sidebar) ════════════════════════════════════ -->
+  <template v-if="variant === 'drawer'">
+    <!-- Drawer header -->
+    <div class="recit-drawer-header">
+      <span style="color: var(--color-ember); font-size: 12px">✦</span>
+      <h2 class="recit-drawer-title">Récit</h2>
+      <div style="flex: 1" />
+      <span class="recit-round-badge">R{{ gameStore.roundNumber || 1 }}</span>
+      <button
+        class="recit-collapse-btn"
+        title="Replier"
+        @click="gameStore.recitOpen = false"
+      >▶</button>
+    </div>
+
+    <!-- Compact log -->
+    <div ref="logEl" class="recit-drawer-log">
+      <p v-if="gameStore.narrativeLog.length === 0" class="recit-empty">
+        En attente…
+      </p>
+
+      <template v-for="entry in gameStore.narrativeLog" :key="entry.id">
+        <div v-if="entry.type === 'narration'" class="recit-entry recit-narration">
+          <div class="recit-speaker">✦ {{ entry.speaker ?? 'MJ' }}</div>
+          <p class="recit-text">{{ entry.text }}</p>
+        </div>
+
+        <div v-else-if="entry.type === 'dialogue'" class="recit-entry recit-dialogue">
+          <span class="recit-speaker" :style="{ color: entry.speaker_kind === 'companion' ? 'var(--color-arcane)' : 'var(--color-gold)' }">
+            {{ entry.speaker }}
+          </span>
+          <span class="recit-text">{{ entry.text }}</span>
+        </div>
+
+        <div v-else-if="entry.type === 'player'" class="recit-entry recit-player">
+          <span class="recit-speaker" style="color: var(--color-ember)">{{ entry.speaker }}</span>
+          <span class="recit-text">{{ entry.text }}</span>
+        </div>
+
+        <div v-else-if="entry.type === 'roll' && entry.roll" class="recit-entry">
+          <DiceRollResult :roll="entry.roll" />
+        </div>
+
+        <div v-else-if="entry.type === 'combat_action' && entry.combatAction" class="recit-entry recit-combat">
+          ⚔ <strong>{{ entry.combatAction.attacker_name }}</strong>
+          → {{ entry.combatAction.target_name }}
+          <span v-if="entry.combatAction.hit" style="color: var(--color-blood)"> {{ entry.combatAction.damage }}dmg</span>
+          <span v-else style="color: var(--color-text-dim)"> raté</span>
+        </div>
+
+        <div v-else-if="entry.type === 'system'" class="recit-entry recit-system">
+          ── {{ entry.text }} ──
+        </div>
+      </template>
+
+      <div v-if="hasThinkingEntry" class="recit-entry recit-thinking">
+        <span>{{ thinkingLabel }}</span>
+        <span class="flex gap-1 ml-2">
+          <span v-for="d in ['0ms','150ms','300ms']" :key="d"
+            class="inline-block h-1.5 w-1.5 rounded-full bg-gold/60 animate-bounce"
+            :style="{ animationDelay: d }" />
+        </span>
+      </div>
+    </div>
+  </template>
+
+  <!-- ══ FULL variant (exploration / standalone) ═══════════════════════════════ -->
+  <div v-else class="flex flex-1 min-h-0 flex-col overflow-hidden">
 
     <!-- Big section heading -->
     <div
@@ -144,5 +219,139 @@ watch(
         </span>
       </div>
     </div>
-  </div>
+  </div><!-- /v-else full variant -->
 </template>
+
+<style scoped>
+/* ── Drawer variant styles ──────────────────────────────────────────────── */
+.recit-drawer-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.recit-drawer-title {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-parchment);
+  margin: 0;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.recit-round-badge {
+  font-size: 9px;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  letter-spacing: 1px;
+}
+
+.recit-collapse-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+
+.recit-collapse-btn:hover {
+  color: var(--color-parchment);
+  border-color: var(--color-border-strong);
+}
+
+.recit-drawer-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+
+.recit-empty {
+  color: var(--color-text-dim);
+  font-family: var(--font-serif);
+  font-size: 12px;
+  font-style: italic;
+  text-align: center;
+  margin-top: 16px;
+}
+
+.recit-entry {
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.recit-narration {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.recit-speaker {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.recit-text {
+  font-family: var(--font-serif);
+  color: var(--color-parchment-dark);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.recit-dialogue,
+.recit-player {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 5px 10px;
+  border-left: 2px solid var(--color-border-strong);
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 0 4px 4px 0;
+}
+
+.recit-dialogue .recit-speaker { font-family: var(--font-display); }
+
+.recit-combat {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  padding: 4px 8px;
+  background: rgba(232, 69, 69, 0.06);
+  border-radius: 4px;
+  border: 1px solid rgba(232, 69, 69, 0.15);
+}
+
+.recit-system {
+  color: var(--color-text-dim);
+  font-size: 10px;
+  text-align: center;
+}
+
+.recit-thinking {
+  display: flex;
+  align-items: center;
+  color: var(--color-gold);
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 11px;
+  opacity: 0.7;
+}
+</style>

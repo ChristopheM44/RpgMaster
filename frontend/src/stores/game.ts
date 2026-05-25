@@ -78,6 +78,12 @@ export const useGameStore = defineStore('game', () => {
   const gridDecoration = ref<GridDecoration | null>(null)
   const reachableCells = ref<Record<string, ReachableCells>>({})
 
+  // ─── V2 UI state ────────────────────────────────────────────────────────────
+  /** Récit drawer visible (droite). Fermé = mode "carte plein écran". */
+  const recitOpen = ref(true)
+  /** Scope de la carte affichée (initiative/map). */
+  const scope = ref<'scene' | 'ville' | 'region'>('scene')
+
   // ─── Connection ─────────────────────────────────────────────────────────────
   const connected = ref(false)
   const error = ref<string | null>(null)
@@ -540,6 +546,8 @@ export const useGameStore = defineStore('game', () => {
     narrativeLog,
     combatants,
     selectedCombatantId,
+    recitOpen,
+    scope,
     gridConfig,
     gridDecoration,
     reachableCells,

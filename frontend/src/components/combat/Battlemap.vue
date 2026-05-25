@@ -63,6 +63,8 @@ interface PartyMarker {
 
 const props = withDefaults(defineProps<{
   mode?: 'combat' | 'exploration'
+  /** 'lean' hides the internal header and side panel — used by V2 CombatLayout. */
+  variant?: 'standard' | 'lean'
   sceneLayout?: SceneLayout | null
   myCharacterId?: string
   isMyTurn?: boolean
@@ -71,10 +73,13 @@ const props = withDefaults(defineProps<{
   panelHeight?: string
 }>(), {
   mode: 'combat',
+  variant: 'standard',
   sceneLayout: null,
   interactionMode: 'inspect',
   panelHeight: undefined,
 })
+
+const isLean = computed(() => props.variant === 'lean')
 
 const emit = defineEmits<{
   move: [col: number, row: number]
@@ -307,6 +312,12 @@ const legendEntries = computed<LegendEntry[]>(() => {
         }]
       : []),
   ]
+})
+
+const pendingMoveDistance = computed((): string => {
+  const sel = selected.value
+  if (!sel || sel.kind !== 'move' || !myPos.value) return ''
+  return formatMeters(distanceCells(myPos.value, sel.position) * cellSizeM.value)
 })
 
 onMounted(loadPreferences)
@@ -618,7 +629,11 @@ function handleCellClick(col: number, row: number) {
     selectZone(position, zone)
     return
   }
-  if (reachableCells.value.has(key)) selectMove(position)
+  if (reachableCells.value.has(key)) {
+    // Toujours prévisualiser la destination — en lean, la confirmation passe
+    // par le mini-panel flottant qui s'affiche sur la carte.
+    selectMove(position)
+  }
 }
 
 function selectLegend(entry: LegendEntry) {
@@ -702,6 +717,7 @@ function markerToneStyle(tone: LegendEntry['tone']) {
     }"
   >
     <div
+      v-if="!isLean"
       class="rpg-border flex shrink-0 flex-wrap items-center justify-between gap-3 border-b px-4 py-3"
     >
       <div class="min-w-0">
@@ -963,10 +979,56 @@ function markerToneStyle(tone: LegendEntry['tone']) {
               </span>
             </div>
           </button>
+
+          <!-- ── Lean move preview ────────────────────────────────────────── -->
+          <!-- Ghost token pulsé à la destination (lean seulement) -->
+          <div
+            v-if="isLean && selected?.kind === 'move'"
+            class="pointer-events-none absolute z-[36] flex items-center justify-center"
+            :style="cellBoxStyle(selected.position)"
+          >
+            <div class="move-dest-ghost" />
+          </div>
+
+          <!-- Mini-panel flottant de confirmation (lean seulement) -->
+          <Transition name="move-confirm">
+            <div
+              v-if="isLean && selected?.kind === 'move'"
+              class="move-confirm-wrapper"
+            >
+              <div class="move-confirm-panel flex items-center gap-2">
+                <!-- Info destination -->
+                <div class="move-confirm-info">
+                  <span class="move-confirm-icon">✥</span>
+                  <div>
+                    <div class="move-confirm-label">Déplacement</div>
+                    <div class="move-confirm-dest">
+                      {{ coordinateLabel(selected.position) }}
+                      <span v-if="pendingMoveDistance" class="move-confirm-dist">{{ pendingMoveDistance }}</span>
+                    </div>
+                  </div>
+                </div>
+                <!-- Actions -->
+                <button
+                  class="move-confirm-btn move-confirm-btn--ok"
+                  type="button"
+                  data-testid="lean-confirm-move"
+                  @click="confirmSelection"
+                >Confirmer ✓</button>
+                <button
+                  class="move-confirm-btn move-confirm-btn--cancel"
+                  type="button"
+                  data-testid="lean-cancel-move"
+                  @click="selected = null"
+                >✕</button>
+              </div>
+            </div>
+          </Transition>
         </div>
       </div>
 
       <aside
+        v-if="!isLean"
         class="rpg-map-side-panel flex max-h-[48%] min-h-[210px] shrink-0 flex-col border-t lg:max-h-none lg:w-[320px] lg:border-l lg:border-t-0"
       >
         <div class="rpg-border border-b p-4">
@@ -1071,3 +1133,124 @@ function markerToneStyle(tone: LegendEntry['tone']) {
     </div>
   </section>
 </template>
+
+<style scoped>
+/* ── Ghost token (destination preview en lean) ─────────────────────────────── */
+.move-dest-ghost {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px dashed rgba(79, 216, 192, 0.7);
+  background: rgba(79, 216, 192, 0.15);
+  animation: ghost-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes ghost-pulse {
+  0%, 100% { opacity: 0.6; transform: scale(0.95); }
+  50%       { opacity: 1;   transform: scale(1.05); }
+}
+
+/* ── Wrapper positionné (la Transition anime cet élément) ──────────────────── */
+.move-confirm-wrapper {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+}
+
+/* ── Panel intérieur ────────────────────────────────────────────────────────── */
+.move-confirm-panel {
+  background: rgba(14, 13, 20, 0.92);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(79, 216, 192, 0.4);
+  border-radius: 10px;
+  padding: 8px 12px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(79, 216, 192, 0.08);
+  white-space: nowrap;
+}
+
+/* ── Info destination ───────────────────────────────────────────────────────── */
+.move-confirm-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 12px;
+  border-right: 1px solid rgba(247, 236, 208, 0.1);
+}
+
+.move-confirm-icon {
+  color: var(--color-teal);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.move-confirm-label {
+  font-family: var(--font-display);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-teal);
+  line-height: 1.2;
+}
+
+.move-confirm-dest {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--color-parchment);
+  line-height: 1.3;
+}
+
+.move-confirm-dist {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-left: 4px;
+}
+
+/* ── Boutons ────────────────────────────────────────────────────────────────── */
+.move-confirm-btn {
+  padding: 5px 11px;
+  font-size: 11px;
+  font-family: var(--font-body);
+  font-weight: 700;
+  border-radius: 6px;
+  border: 1px solid;
+  cursor: pointer;
+  transition: opacity 120ms ease, background 120ms ease;
+}
+
+.move-confirm-btn--ok {
+  background: rgba(79, 216, 192, 0.15);
+  border-color: rgba(79, 216, 192, 0.5);
+  color: var(--color-teal);
+}
+
+.move-confirm-btn--ok:hover {
+  background: rgba(79, 216, 192, 0.25);
+}
+
+.move-confirm-btn--cancel {
+  background: transparent;
+  border-color: rgba(247, 236, 208, 0.2);
+  color: var(--color-text-muted);
+}
+
+.move-confirm-btn--cancel:hover {
+  background: rgba(247, 236, 208, 0.05);
+  color: var(--color-parchment);
+}
+
+/* ── Transitions (Transition name="move-confirm") ──────────────────────────── */
+/* La Transition anime .move-confirm-wrapper ; son transform de base est translateX(-50%).
+   On ajoute translateY(8px) en enter-from/leave-to pour le slide-up. */
+.move-confirm-enter-active,
+.move-confirm-leave-active {
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.move-confirm-enter-from,
+.move-confirm-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(8px);
+}
+</style>

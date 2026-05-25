@@ -319,27 +319,35 @@ onUnmounted(() => { disconnect() })
 
       <!-- Centre: phase + actions -->
       <div class="flex flex-1 items-center justify-center gap-2">
-        <!-- Phase info -->
-        <div class="rpg-text-muted flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em]">
-          <span>Phase</span>
-          <span
-            class="font-display font-bold"
-            :class="[phaseTone, 'rpg-tone-text']"
-          >{{ phaseLabel }}</span>
-          <template v-if="gameStore.isGmThinking">
-            <span class="rpg-text-dim">·</span>
-            <span class="rpg-text-gold rpg-pulse">MJ</span>
-          </template>
-          <template v-else-if="gameStore.isAnyAiThinking">
-            <span class="rpg-text-dim">·</span>
-            <span class="rpg-text-gold rpg-pulse">IA</span>
-          </template>
-          <span v-if="gameStore.isInCombat" class="rpg-text-dim">·</span>
-          <span
-            v-if="gameStore.isInCombat"
-            class="rpg-text-muted font-mono"
-          >Tour {{ gameStore.roundNumber }}</span>
-        </div>
+        <!-- Combat: compact single chip -->
+        <template v-if="gameStore.isInCombat">
+          <div class="flex items-center gap-2 rounded-full border border-blood/40 bg-blood/10 px-3 py-1">
+            <span class="text-blood text-[11px]">⚔</span>
+            <span class="font-display text-[11px] font-bold tracking-[0.12em] uppercase text-parchment">COMBAT</span>
+            <span class="text-text-dim text-[10px]">·</span>
+            <span class="font-mono text-[11px] font-bold text-gold">R{{ gameStore.roundNumber || 1 }}</span>
+            <template v-if="gameStore.isGmThinking || gameStore.isAnyAiThinking">
+              <span class="text-text-dim text-[10px]">·</span>
+              <span class="rpg-text-gold rpg-pulse text-[10px]">{{ gameStore.isGmThinking ? 'MJ' : 'IA' }}</span>
+            </template>
+          </div>
+        </template>
+
+        <!-- Non-combat: full phase info -->
+        <template v-else>
+          <div class="rpg-text-muted flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em]">
+            <span>Phase</span>
+            <span class="font-display font-bold" :class="[phaseTone, 'rpg-tone-text']">{{ phaseLabel }}</span>
+            <template v-if="gameStore.isGmThinking">
+              <span class="rpg-text-dim">·</span>
+              <span class="rpg-text-gold rpg-pulse">MJ</span>
+            </template>
+            <template v-else-if="gameStore.isAnyAiThinking">
+              <span class="rpg-text-dim">·</span>
+              <span class="rpg-text-gold rpg-pulse">IA</span>
+            </template>
+          </div>
+        </template>
 
         <div class="rpg-divider-vertical h-4 w-px mx-1" />
 
