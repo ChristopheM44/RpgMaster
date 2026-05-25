@@ -4,6 +4,7 @@ Le pipeline centralise le contrat visible :
 action acteur -> resolution mecanique -> ROLL_RESULT -> narration MJ.
 Il ne choisit pas les actions et ne fait pas avancer les tours.
 """
+
 from __future__ import annotations
 
 import logging
@@ -14,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from app.agents.schemas import AgentContext, AgentResponse, GMAction, GMResponse
 from app.engine.ability_checks import SKILL_ABILITY, Ability, Proficiency, skill_check
+from app.engine.tactical_grid import GridPosition
 from app.game.action_orchestrator import ActionOrchestrator
 from app.game.combat_triggers import prime_combat_from_hostile_narration
 from app.game.constants import INACTIVE_STATUSES
@@ -21,9 +23,12 @@ from app.game.event_bus import EventType, event_bus
 from app.game.gm_response_executor import GMResponseExecutor
 from app.game.session_manager import ActiveSession
 from app.game.tactical_combat import (
+    apply_tactical_move,
     calculate_reachable_cells,
     choose_attack_target,
+    combatant_speed_m,
     prepare_attack,
+    prepare_cast_spell,
 )
 from app.llm.budget import (
     begin_llm_call_scope,
@@ -131,18 +136,95 @@ def _detect_social_skill(text: Optional[str]) -> Optional[str]:
 
 _DESCRIPTION_STOP_WORDS = frozenset(
     {
-        "un", "une", "des", "le", "la", "les", "du", "de", "au", "aux",
-        "et", "ou", "ni", "mais", "donc", "car",
-        "a", "à", "en", "dans", "sur", "sous", "par", "pour", "avec", "vers",
-        "chez", "sans", "entre", "contre",
-        "ce", "cet", "cette", "ces", "son", "sa", "ses", "leur", "leurs",
-        "mon", "ma", "mes", "ton", "ta", "tes", "notre", "nos", "votre", "vos",
-        "qui", "que", "quoi", "dont", "où",
-        "il", "elle", "ils", "elles", "lui", "eux", "moi", "toi", "soi",
-        "est", "sont", "etre", "être", "avoir", "ont", "fait", "faire",
-        "tres", "très", "bien", "plus", "moins", "tout", "tous", "toute",
-        "encore", "deja", "déjà", "aussi", "alors", "ainsi",
-        "homme", "femme", "personne", "gens",
+        "un",
+        "une",
+        "des",
+        "le",
+        "la",
+        "les",
+        "du",
+        "de",
+        "au",
+        "aux",
+        "et",
+        "ou",
+        "ni",
+        "mais",
+        "donc",
+        "car",
+        "a",
+        "à",
+        "en",
+        "dans",
+        "sur",
+        "sous",
+        "par",
+        "pour",
+        "avec",
+        "vers",
+        "chez",
+        "sans",
+        "entre",
+        "contre",
+        "ce",
+        "cet",
+        "cette",
+        "ces",
+        "son",
+        "sa",
+        "ses",
+        "leur",
+        "leurs",
+        "mon",
+        "ma",
+        "mes",
+        "ton",
+        "ta",
+        "tes",
+        "notre",
+        "nos",
+        "votre",
+        "vos",
+        "qui",
+        "que",
+        "quoi",
+        "dont",
+        "où",
+        "il",
+        "elle",
+        "ils",
+        "elles",
+        "lui",
+        "eux",
+        "moi",
+        "toi",
+        "soi",
+        "est",
+        "sont",
+        "etre",
+        "être",
+        "avoir",
+        "ont",
+        "fait",
+        "faire",
+        "tres",
+        "très",
+        "bien",
+        "plus",
+        "moins",
+        "tout",
+        "tous",
+        "toute",
+        "encore",
+        "deja",
+        "déjà",
+        "aussi",
+        "alors",
+        "ainsi",
+        "homme",
+        "femme",
+        "personne",
+        "gens",
     }
 )
 
@@ -151,11 +233,7 @@ def _description_keywords(description: str) -> set[str]:
     """Extract salient keywords from an NPC description for fuzzy matching."""
     normalized = _normalized_text(description)
     tokens = re.findall(r"[a-zà-ÿ]+", normalized)
-    return {
-        token
-        for token in tokens
-        if len(token) >= 3 and token not in _DESCRIPTION_STOP_WORDS
-    }
+    return {token for token in tokens if len(token) >= 3 and token not in _DESCRIPTION_STOP_WORDS}
 
 
 def _detect_social_target_id(text: Optional[str], state_data: dict[str, Any]) -> Optional[str]:
@@ -478,7 +556,7 @@ class ActionPipeline:
                     )
                 if not tactical.allowed:
                     message = tactical.reason or "Action tactique impossible."
-                    if request.actor_kind == "monster":
+                    if request.actor_kind in {"monster", "companion"}:
                         narration = f"{actor_name} cherche une ouverture, mais {message.lower()}"
                         await self._publish_gm_narration(request.session_id, narration, actual_db)
                     else:
@@ -510,16 +588,15 @@ class ActionPipeline:
                 roll_results["tactical"] = {
                     "target_id": target_id,
                     "moved": bool(tactical.moved),
-                    "movement_used_m": (
-                        tactical.moved.movement_used_m if tactical.moved else 0
-                    ),
+                    "movement_used_m": (tactical.moved.movement_used_m if tactical.moved else 0),
                     "path": (
-                        [step.to_dict() for step in tactical.moved.path]
-                        if tactical.moved else []
+                        [step.to_dict() for step in tactical.moved.path] if tactical.moved else []
                     ),
                     "opportunity_attacks": [
                         attack.__dict__ for attack in tactical.moved.opportunity_attacks
-                    ] if tactical.moved else [],
+                    ]
+                    if tactical.moved
+                    else [],
                 }
             if roll_results and roll_results.get("hit") and target_id:
                 damage_amount = int(roll_results.get("damage", {}).get("total", 0))
@@ -558,8 +635,194 @@ class ActionPipeline:
                 roll_results,
                 active,
             )
+        elif request.action_type == "move" and phase_value == "COMBAT":
+            ok, message, _move_result = await self._execute_tactical_move_request(
+                request,
+                active,
+            )
+            if not ok:
+                await self._event_bus.publish_to_session(
+                    request.session_id,
+                    EventType.ERROR,
+                    {"message": message},
+                    source=self._source,
+                )
+                return ResolvedAction(
+                    actor_id=request.actor_id,
+                    actor_name=actor_name,
+                    actor_kind=request.actor_kind,
+                    action_type=request.action_type,
+                    target_id=target_id,
+                    mechanics={"error": True, "summary": message},
+                    roll_events=[],
+                    narration="",
+                    gm_actions=[],
+                    canon_dirty=False,
+                )
+        elif request.action_type == "dash" and phase_value == "COMBAT":
+            current = active.turn_manager.current_turn
+            economy = (
+                current.action_economy
+                if current is not None and current.combatant_id == request.actor_id
+                else None
+            )
+            if economy is None or not economy.use_action():
+                message = "Action déjà utilisée ce tour."
+                await self._event_bus.publish_to_session(
+                    request.session_id,
+                    EventType.ERROR,
+                    {"message": message},
+                    source=self._source,
+                )
+                return ResolvedAction(
+                    actor_id=request.actor_id,
+                    actor_name=actor_name,
+                    actor_kind=request.actor_kind,
+                    action_type=request.action_type,
+                    target_id=target_id,
+                    mechanics={"error": True, "summary": message},
+                    roll_events=[],
+                    narration="",
+                    gm_actions=[],
+                    canon_dirty=False,
+                )
+            economy.movement += economy.movement_max
+            economy.has_dashed = True
+            active.mark_dirty()
+            if self._parse_move_destination(request.content) is not None:
+                ok, message, _move_result = await self._execute_tactical_move_request(
+                    request,
+                    active,
+                )
+                if not ok:
+                    await self._event_bus.publish_to_session(
+                        request.session_id,
+                        EventType.ERROR,
+                        {"message": message},
+                        source=self._source,
+                    )
+                    return ResolvedAction(
+                        actor_id=request.actor_id,
+                        actor_name=actor_name,
+                        actor_kind=request.actor_kind,
+                        action_type=request.action_type,
+                        target_id=target_id,
+                        mechanics={"error": True, "summary": message},
+                        roll_events=[],
+                        narration="",
+                        gm_actions=[],
+                        canon_dirty=False,
+                    )
+            else:
+                await self._publish_action_economy_result(active, request.actor_id)
+        elif request.action_type == "disengage" and phase_value == "COMBAT":
+            current = active.turn_manager.current_turn
+            economy = (
+                current.action_economy
+                if current is not None and current.combatant_id == request.actor_id
+                else None
+            )
+            if economy is None or not economy.use_action():
+                message = "Action déjà utilisée ce tour."
+                await self._event_bus.publish_to_session(
+                    request.session_id,
+                    EventType.ERROR,
+                    {"message": message},
+                    source=self._source,
+                )
+                return ResolvedAction(
+                    actor_id=request.actor_id,
+                    actor_name=actor_name,
+                    actor_kind=request.actor_kind,
+                    action_type=request.action_type,
+                    target_id=target_id,
+                    mechanics={"error": True, "summary": message},
+                    roll_events=[],
+                    narration="",
+                    gm_actions=[],
+                    canon_dirty=False,
+                )
+            economy.has_disengaged = True
+            active.mark_dirty()
+            if self._parse_move_destination(request.content) is not None:
+                ok, message, _move_result = await self._execute_tactical_move_request(
+                    request,
+                    active,
+                )
+                if not ok:
+                    await self._event_bus.publish_to_session(
+                        request.session_id,
+                        EventType.ERROR,
+                        {"message": message},
+                        source=self._source,
+                    )
+                    return ResolvedAction(
+                        actor_id=request.actor_id,
+                        actor_name=actor_name,
+                        actor_kind=request.actor_kind,
+                        action_type=request.action_type,
+                        target_id=target_id,
+                        mechanics={"error": True, "summary": message},
+                        roll_events=[],
+                        narration="",
+                        gm_actions=[],
+                        canon_dirty=False,
+                    )
+            else:
+                await self._publish_action_economy_result(active, request.actor_id)
         elif request.action_type == "cast_spell":
             if request.spell_id is not None:
+                if phase_value == "COMBAT":
+                    tactical = await prepare_cast_spell(
+                        session_id=request.session_id,
+                        active=active,
+                        actor_id=request.actor_id,
+                        target_id=target_id,
+                        spell_id=request.spell_id,
+                        actor_kind=request.actor_kind,
+                        event_bus=self._event_bus,
+                        source=self._source,
+                    )
+                    target_id = tactical.target_id
+                    target_name = self._combatant_name(active.state_data, target_id)
+                    if tactical.moved is not None:
+                        await self._publish_tactical_move_result(
+                            request.session_id,
+                            request.actor_id,
+                            tactical.moved,
+                            active,
+                        )
+                    if not tactical.allowed:
+                        message = tactical.reason or "Sort tactique impossible."
+                        if request.actor_kind in {"monster", "companion"}:
+                            narration = (
+                                f"{actor_name} cherche une ouverture, mais {message.lower()}"
+                            )
+                            await self._publish_gm_narration(
+                                request.session_id,
+                                narration,
+                                actual_db,
+                            )
+                        else:
+                            await self._event_bus.publish_to_session(
+                                request.session_id,
+                                EventType.ERROR,
+                                {"message": message},
+                                source=self._source,
+                            )
+                            narration = ""
+                        return ResolvedAction(
+                            actor_id=request.actor_id,
+                            actor_name=actor_name,
+                            actor_kind=request.actor_kind,
+                            action_type=request.action_type,
+                            target_id=target_id,
+                            mechanics={"error": True, "summary": message},
+                            roll_events=[],
+                            narration=narration,
+                            gm_actions=[],
+                            canon_dirty=False,
+                        )
                 caster_snapshot: Optional[dict[str, Any]] = None
                 if actual_db is not None:
                     try:
@@ -579,6 +842,10 @@ class ActionPipeline:
                             "summary": str(exc),
                             "error": True,
                         }
+                if caster_snapshot is None and request.actor_id:
+                    snapshot = (active.state_data.get("characters") or {}).get(request.actor_id)
+                    if isinstance(snapshot, dict):
+                        caster_snapshot = snapshot
                 if roll_results is None:
                     roll_results = await mechanics._resolve_cast_spell(
                         request.session_id,
@@ -589,6 +856,24 @@ class ActionPipeline:
                         active,
                         caster_snapshot,
                     )
+                if tactical is not None and roll_results is not None:
+                    roll_results["tactical"] = {
+                        "target_id": target_id,
+                        "moved": bool(tactical.moved),
+                        "movement_used_m": (
+                            tactical.moved.movement_used_m if tactical.moved else 0
+                        ),
+                        "path": (
+                            [step.to_dict() for step in tactical.moved.path]
+                            if tactical.moved
+                            else []
+                        ),
+                        "opportunity_attacks": [
+                            attack.__dict__ for attack in tactical.moved.opportunity_attacks
+                        ]
+                        if tactical.moved
+                        else [],
+                    }
                 if roll_results and not roll_results.get("error") and target_id:
                     attack = roll_results.get("attack", {})
                     damage = roll_results.get("damage", {})
@@ -779,9 +1064,7 @@ class ActionPipeline:
         # 5. Narration finale des jets demandes par le GM.
         if pending_rolls:
             if context is None:
-                logger.warning(
-                    "ActionPipeline : jets GM en attente sans contexte de narration."
-                )
+                logger.warning("ActionPipeline : jets GM en attente sans contexte de narration.")
                 context = AgentContext(
                     session_id=request.session_id,
                     game_phase=phase_value,
@@ -911,10 +1194,7 @@ class ActionPipeline:
             if hit:
                 damage = int(roll_results.get("damage", {}).get("total", 0))
                 crit_text = " d'un coup critique" if critical else ""
-                return (
-                    f"{actor_name} touche {target_label}{crit_text} "
-                    f"et inflige {damage} degats."
-                )
+                return f"{actor_name} touche {target_label}{crit_text} et inflige {damage} degats."
             return f"{actor_name} attaque {target_label}, mais manque sa cible."
 
         if action == "cast_spell" and roll_results:
@@ -992,6 +1272,89 @@ class ActionPipeline:
                 payload,
                 source=self._source,
             )
+
+    async def _execute_tactical_move_request(
+        self,
+        request: ActionRequest,
+        active: ActiveSession,
+    ) -> tuple[bool, str, Any]:
+        if not request.actor_id:
+            return False, "Combattant introuvable.", None
+        destination = self._parse_move_destination(request.content)
+        if destination is None:
+            return False, "Format de déplacement invalide. Attendu: 'col,row'", None
+
+        combatants = active.state_data.get("combatants") or {}
+        mover_data = combatants.get(request.actor_id, {})
+        if not isinstance(mover_data, dict):
+            mover_data = {}
+        current = active.turn_manager.current_turn
+        economy = (
+            current.action_economy
+            if current is not None and current.combatant_id == request.actor_id
+            else None
+        )
+        movement_m = float(
+            economy.movement if economy is not None else combatant_speed_m(mover_data)
+        )
+        move_result = await apply_tactical_move(
+            session_id=request.session_id,
+            active=active,
+            mover_id=request.actor_id,
+            destination=destination,
+            event_bus=self._event_bus,
+            movement_m=movement_m,
+            source=self._source,
+        )
+        if not move_result.valid:
+            return False, f"Déplacement invalide : {move_result.reason}", move_result
+        if economy is not None and not economy.spend_movement(move_result.movement_used_m):
+            return False, "Mouvement insuffisant pour ce déplacement.", move_result
+        await self._publish_tactical_move_result(
+            request.session_id,
+            request.actor_id,
+            move_result,
+            active,
+        )
+        return True, "", move_result
+
+    @staticmethod
+    def _parse_move_destination(content: Optional[str]) -> Optional[GridPosition]:
+        if not content or "," not in content:
+            return None
+        try:
+            col_text, row_text = content.split(",", 1)
+            return GridPosition(col=int(col_text.strip()), row=int(row_text.strip()))
+        except (TypeError, ValueError):
+            return None
+
+    async def _publish_action_economy_result(
+        self,
+        active: ActiveSession,
+        combatant_id: Optional[str],
+    ) -> None:
+        if not combatant_id:
+            return
+        current = active.turn_manager.current_turn
+        if current is None or current.combatant_id != combatant_id:
+            return
+        payload: dict[str, Any] = {
+            "combatant_id": combatant_id,
+            "action_economy": getattr(
+                current.action_economy,
+                "__dict__",
+                current.action_economy,
+            ),
+        }
+        reachable = calculate_reachable_cells(active, combatant_id)
+        if reachable is not None:
+            payload["reachable_cells"] = reachable
+        await self._event_bus.publish_to_session(
+            active.session_id,
+            EventType.ACTION_ECONOMY_CHANGED,
+            payload,
+            source=self._source,
+        )
 
     async def _publish_gm_narration(
         self,
@@ -1101,8 +1464,7 @@ class ActionPipeline:
             return response
 
         if any(
-            gm_action.type in {"roll_request", "combatant_status"}
-            for gm_action in response.actions
+            gm_action.type in {"roll_request", "combatant_status"} for gm_action in response.actions
         ):
             return response
 
@@ -1203,9 +1565,7 @@ class ActionPipeline:
             if isinstance(npc, dict):
                 npc.setdefault("name", social_target_id)
                 npc.setdefault("attitude", "indifferent")
-                npc["last_interaction_turn"] = (
-                    active.state_data.get("turn_number", 0)
-                )
+                npc["last_interaction_turn"] = active.state_data.get("turn_number", 0)
         return roll_results
 
     @staticmethod
@@ -1215,11 +1575,7 @@ class ActionPipeline:
     ) -> AgentResponse:
         if roll_results.get("type") != "skill_check":
             return response
-        actions = [
-            gm_action
-            for gm_action in response.actions
-            if gm_action.type != "roll_request"
-        ]
+        actions = [gm_action for gm_action in response.actions if gm_action.type != "roll_request"]
         if len(actions) == len(response.actions):
             return response
         logger.warning(
@@ -1233,9 +1589,7 @@ class ActionPipeline:
 
     @staticmethod
     def _without_combat_damage_actions(response: AgentResponse) -> AgentResponse:
-        actions = [
-            gm_action for gm_action in response.actions if gm_action.type != "damage_apply"
-        ]
+        actions = [gm_action for gm_action in response.actions if gm_action.type != "damage_apply"]
         if len(actions) == len(response.actions):
             return response
         logger.warning(

@@ -30,10 +30,20 @@ Priorités tactiques (dans l'ordre) :
 4. RESSOURCES : Réserve les emplacements de sort élevés (niveau 3+) pour les ennemis puissants. Utilise cantrips si l'ennemi est presque mort.
 5. VARIÉTÉ : Ne répète pas la même action deux tours de suite si une alternative est disponible.
 
+RÈGLES DE PORTÉE ET DÉPLACEMENT :
+- Lis self_attack_range_m, self_speed_m et is_ranged_weapon dans ÉTAT DU JEU.
+- Chaque ennemi peut contenir distance_m, in_range et reachable_with_move.
+- Priorise une cible avec in_range=true. Sinon, choisis reachable_with_move=true.
+- Si is_ranged_weapon=true, reste à distance et évite de te précipiter en mêlée.
+- L'auto-déplacement peut déclencher des attaques d'opportunité ; si tu veux surtout te replacer,
+  utilise move, dash ou disengage avec une intention de déplacement.
+
 RÈGLES MÉCANIQUES :
 - N'utilise cast_spell que si l'action "cast_spell" est dans ACTIONS DISPONIBLES CE TOUR et si tu peux nommer précisément un sort connu.
 - Si tu lances un sort, params.spell_name doit contenir le nom ou l'id exact du sort.
 - Si tu attaques ou lances un sort offensif, target doit être l'id exact d'un ennemi actif listé dans ÉTAT DU JEU.
+- Si tu utilises move, dash ou disengage pour te déplacer, params doit contenir
+  {"intent": "approach|retreat|flank", "target_id": "id_de_reference"}.
 - Si aucune cible hostile active n'est listée, choisis dodge ou wait.
 
 SCHÉMA DE RÉPONSE JSON (obligatoire, aucun texte en dehors) :
@@ -44,7 +54,9 @@ SCHÉMA DE RÉPONSE JSON (obligatoire, aucun texte en dehors) :
   "params": {
     "weapon": "nom_de_l_arme si attack",
     "spell_name": "nom_du_sort si cast_spell",
-    "item_name": "nom_de_l_objet si use_item"
+    "item_name": "nom_de_l_objet si use_item",
+    "intent": "approach|retreat|flank si move/dash/disengage",
+    "target_id": "id_de_reference si move/dash/disengage"
   },
   "roleplay_text": "Ce que {{ character_name }} dit ou fait (1-2 phrases vives en français, cohérentes avec sa personnalité)",
   "inner_reasoning": "Ta réflexion tactique brève (non affichée)"

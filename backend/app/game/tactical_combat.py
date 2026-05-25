@@ -3,6 +3,7 @@
 This module keeps grid movement, reach checks, and opportunity attacks in one
 place so narration can only describe state changes that the server applied.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -294,6 +295,35 @@ def approach_path_to_target(
     return candidates[0][2]
 
 
+def resolve_ai_move_destination(
+    state_data: dict[str, Any],
+    actor_id: str,
+    intent: str,
+    target_id: str,
+    movement_m: float,
+) -> Optional[GridPosition]:
+    """Resolve a semantic AI movement intent into a reachable grid cell."""
+    normalized = str(intent or "").strip().lower()
+    if normalized == "approach":
+        path = approach_path_to_target(
+            state_data,
+            actor_id,
+            target_id,
+            movement_m,
+            CELL_SIZE_M,
+        )
+        return (
+            path[-1]
+            if path
+            else _closest_reachable_cell_to_target(state_data, actor_id, target_id, movement_m)
+        )
+    if normalized == "retreat":
+        return _retreat_destination(state_data, actor_id, target_id, movement_m)
+    if normalized == "flank":
+        return _flank_destination(state_data, actor_id, target_id, movement_m)
+    return None
+
+
 async def apply_tactical_move(
     *,
     session_id: str,
@@ -448,7 +478,7 @@ async def prepare_attack(
     if is_within_reach(state_data, actor_id, effective_target, reach_m=attack_range):
         return TacticalAttackPreparation(effective_target, True)
 
-    if actor_kind != "monster":
+    if actor_kind not in {"monster", "companion"}:
         return TacticalAttackPreparation(
             effective_target,
             False,
@@ -457,9 +487,7 @@ async def prepare_attack(
 
     current = active.turn_manager.current_turn
     economy = (
-        current.action_economy
-        if current is not None and current.combatant_id == actor_id
-        else None
+        current.action_economy if current is not None and current.combatant_id == actor_id else None
     )
     movement_left = float(economy.movement if economy is not None else combatant_speed_m(actor))
     path = approach_path_to_target(
@@ -506,6 +534,228 @@ async def prepare_attack(
     return TacticalAttackPreparation(effective_target, True, moved=move_result)
 
 
+async def prepare_cast_spell(
+    *,
+    session_id: str,
+    active: Any,
+    actor_id: Optional[str],
+    target_id: Optional[str],
+    spell_id: str,
+    actor_kind: str,
+    event_bus: Any,
+    source: str = "tactical_combat",
+) -> TacticalAttackPreparation:
+    if not actor_id:
+        return TacticalAttackPreparation(target_id, False, "Lanceur introuvable.")
+
+    from app.game.action_mechanics import _load_spells  # noqa: PLC0415
+
+    spell = _load_spells().get(spell_id)
+    if not spell:
+        return TacticalAttackPreparation(
+            target_id,
+            False,
+            f"Sort inconnu : '{spell_id}'.",
+        )
+
+    effective_range = _spell_effective_range_m(spell, target_id)
+    if target_id is None or effective_range <= 0:
+        return TacticalAttackPreparation(target_id, True)
+
+    state_data = active.state_data
+    combatants = state_data.get("combatants") or {}
+    actor = combatants.get(actor_id, {})
+    if not isinstance(actor, dict):
+        return TacticalAttackPreparation(target_id, False, "Lanceur introuvable.")
+    if target_id not in combatants:
+        return TacticalAttackPreparation(target_id, False, "Cible invalide.")
+
+    if (
+        grid_position_for(state_data, actor_id) is None
+        or grid_position_for(state_data, target_id) is None
+    ):
+        return TacticalAttackPreparation(target_id, True)
+
+    if is_within_reach(state_data, actor_id, target_id, reach_m=effective_range):
+        return TacticalAttackPreparation(target_id, True)
+
+    if actor_kind not in {"monster", "companion"}:
+        return TacticalAttackPreparation(
+            target_id,
+            False,
+            f"Sort hors de portee ({effective_range:g} m).",
+        )
+
+    current = active.turn_manager.current_turn
+    economy = (
+        current.action_economy if current is not None and current.combatant_id == actor_id else None
+    )
+    movement_left = float(economy.movement if economy is not None else combatant_speed_m(actor))
+    path = approach_path_to_target(
+        state_data,
+        actor_id,
+        target_id,
+        movement_left,
+        effective_range,
+    )
+    if not path:
+        return TacticalAttackPreparation(
+            target_id,
+            False,
+            "Aucun chemin ne permet d'atteindre une cible a portee du sort.",
+        )
+
+    move_result = await apply_tactical_move(
+        session_id=session_id,
+        active=active,
+        mover_id=actor_id,
+        destination=path[-1],
+        event_bus=event_bus,
+        movement_m=movement_left,
+        source=source,
+    )
+    if not move_result.valid:
+        return TacticalAttackPreparation(target_id, False, move_result.reason, move_result)
+    if economy is not None:
+        economy.spend_movement(move_result.movement_used_m)
+    if move_result.interrupted:
+        return TacticalAttackPreparation(
+            target_id,
+            False,
+            "Deplacement interrompu par une attaque d'opportunite.",
+            move_result,
+        )
+    if not is_within_reach(state_data, actor_id, target_id, reach_m=effective_range):
+        return TacticalAttackPreparation(
+            target_id,
+            False,
+            "La cible reste hors de portee du sort apres le deplacement.",
+            move_result,
+        )
+    return TacticalAttackPreparation(target_id, True, moved=move_result)
+
+
+def _spell_effective_range_m(spell: dict[str, Any], target_id: Optional[str]) -> float:
+    range_m = _float_value(spell.get("range_m"), 0.0)
+    attack_type = str(spell.get("attack_type") or "").lower()
+    if range_m == 0 and target_id is None:
+        return 0.0
+    if range_m == 0 or attack_type == "melee_spell" and range_m == 0:
+        return CELL_SIZE_M
+    return range_m
+
+
+def _closest_reachable_cell_to_target(
+    state_data: dict[str, Any],
+    actor_id: str,
+    target_id: str,
+    movement_m: float,
+) -> Optional[GridPosition]:
+    target = grid_position_for(state_data, target_id)
+    if target is None:
+        return None
+    candidates = _reachable_paths(state_data, actor_id, movement_m)
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: (distance_m(item[0], target), item[1]))
+    return candidates[0][0]
+
+
+def _retreat_destination(
+    state_data: dict[str, Any],
+    actor_id: str,
+    target_id: str,
+    movement_m: float,
+) -> Optional[GridPosition]:
+    actor = (state_data.get("combatants") or {}).get(actor_id, {})
+    actor_is_player = bool(actor.get("is_player", True)) if isinstance(actor, dict) else True
+    combatants = state_data.get("combatants") or {}
+    enemy_positions: list[GridPosition] = []
+    for cid, cdata in combatants.items():
+        if cid == actor_id or not isinstance(cdata, dict) or not is_active_combatant(cdata):
+            continue
+        if bool(cdata.get("is_player", True)) == actor_is_player:
+            continue
+        pos = grid_position_for(state_data, str(cid))
+        if pos is not None:
+            enemy_positions.append(pos)
+
+    reference = grid_position_for(state_data, target_id)
+    candidates = _reachable_paths(state_data, actor_id, movement_m)
+    if not candidates:
+        return None
+
+    def score(item: tuple[GridPosition, float, list[GridPosition]]) -> tuple[float, float, float]:
+        pos, cost, _path = item
+        if enemy_positions:
+            nearest_enemy = min(distance_m(pos, enemy) for enemy in enemy_positions)
+            total_enemy_distance = sum(distance_m(pos, enemy) for enemy in enemy_positions)
+        else:
+            nearest_enemy = distance_m(pos, reference) if reference is not None else 0.0
+            total_enemy_distance = nearest_enemy
+        reference_distance = distance_m(pos, reference) if reference is not None else 0.0
+        return (nearest_enemy, total_enemy_distance + reference_distance, -cost)
+
+    candidates.sort(key=score, reverse=True)
+    return candidates[0][0]
+
+
+def _flank_destination(
+    state_data: dict[str, Any],
+    actor_id: str,
+    target_id: str,
+    movement_m: float,
+) -> Optional[GridPosition]:
+    target = grid_position_for(state_data, target_id)
+    if target is None:
+        return None
+    candidates = [
+        item
+        for item in _reachable_paths(state_data, actor_id, movement_m)
+        if 0 < distance_m(item[0], target) <= CELL_SIZE_M
+    ]
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: (item[1], item[0].row, item[0].col))
+    return candidates[0][0]
+
+
+def _reachable_paths(
+    state_data: dict[str, Any],
+    actor_id: str,
+    movement_m: float,
+) -> list[tuple[GridPosition, float, list[GridPosition]]]:
+    start = grid_position_for(state_data, actor_id)
+    if start is None:
+        return []
+
+    grid_cols, grid_rows = grid_dimensions(state_data)
+    blocked = occupied_positions(state_data, exclude=actor_id) + obstacle_positions(state_data)
+    difficult = difficult_positions(state_data)
+    blocked_set = {(pos.col, pos.row) for pos in blocked}
+    candidates: list[tuple[GridPosition, float, list[GridPosition]]] = []
+
+    for row in range(grid_rows):
+        for col in range(grid_cols):
+            candidate = GridPosition(col, row)
+            if candidate == start or (col, row) in blocked_set:
+                continue
+            path = astar_path(start, candidate, grid_cols, grid_rows, blocked, difficult)
+            if not path:
+                continue
+            cost = path_cost_m(path, difficult)
+            if cost <= movement_m:
+                candidates.append((candidate, cost, path))
+    return candidates
+
+
+def _float_value(value: Any, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def calculate_reachable_cells(
     active: Any,
     combatant_id: Optional[str],
@@ -532,10 +782,7 @@ def calculate_reachable_cells(
         economy.movement_max if economy is not None else combatant_speed_m(cdata)
     )
     grid_cols, grid_rows = grid_dimensions(state_data)
-    blocked = (
-        occupied_positions(state_data, exclude=combatant_id)
-        + obstacle_positions(state_data)
-    )
+    blocked = occupied_positions(state_data, exclude=combatant_id) + obstacle_positions(state_data)
     difficult = difficult_positions(state_data)
 
     free: list[dict[str, int]] = []

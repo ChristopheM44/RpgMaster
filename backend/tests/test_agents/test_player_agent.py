@@ -7,6 +7,7 @@ Couvre :
 - roleplay : succès LLM
 - think() : délègue selon la phase de jeu
 """
+
 from __future__ import annotations
 
 import json
@@ -364,7 +365,7 @@ async def test_decide_action_repairs_non_json_response(brave_agent: PlayerAgent)
 async def test_decide_action_recovers_truncated_json_response(brave_agent: PlayerAgent) -> None:
     """Si le JSON est tronqué après des champs utiles, l'agent récupère l'action."""
     raw = (
-        '{\n'
+        "{\n"
         '  "action_type": "talk",\n'
         '  "action_description": "Avertir les compagnons",\n'
         '  "target": "Aria",\n'
@@ -453,6 +454,44 @@ async def test_decide_action_uses_default_combat_action_on_empty_llm_response(
     assert action.llm_error is None
 
 
+def test_compact_combat_state_exposes_ranges_and_distances(brave_agent: PlayerAgent) -> None:
+    state = _game_state(
+        phase="COMBAT",
+        combatants={
+            "thorin_1": {
+                "name": "Thorin",
+                "hp": 20,
+                "hp_max": 20,
+                "is_player": True,
+                "attack_range_m": 6.0,
+                "speed_m": 9.0,
+            },
+            "goblin_1": {
+                "name": "Gobelin",
+                "hp": 7,
+                "hp_max": 7,
+                "is_player": False,
+                "status": "active",
+            },
+        },
+        grid_positions={
+            "thorin_1": {"col": 0, "row": 0},
+            "goblin_1": {"col": 4, "row": 0},
+        },
+    )
+
+    compact = brave_agent._compact_combat_state(state)
+
+    assert compact["self_position"] == {"col": 0, "row": 0}
+    assert compact["self_attack_range_m"] == 6.0
+    assert compact["self_speed_m"] == 9.0
+    assert compact["is_ranged_weapon"] is True
+    enemy = compact["enemies"][0]
+    assert enemy["distance_m"] == 6.0
+    assert enemy["in_range"] is True
+    assert enemy["reachable_with_move"] is True
+
+
 # ---------------------------------------------------------------------------
 # roleplay
 # ---------------------------------------------------------------------------
@@ -502,7 +541,7 @@ async def test_respond_to_player_prompt_requests_actionable_dialogue(
     assert "tavernier" in action.roleplay_text
     prompt = chat.await_args.kwargs["messages"][-1]["content"]
     assert "Ta réponse doit avoir une prise jouable" in prompt
-    assert "Même avec action_type = \"talk\"" in prompt
+    assert 'Même avec action_type = "talk"' in prompt
     assert "Évite les simples commentaires d'ambiance" in prompt
 
 
@@ -515,11 +554,14 @@ async def test_think_combat_phase_delegates_to_decide_action(
     brave_agent: PlayerAgent,
 ) -> None:
     """think() délègue à decide_action() en phase COMBAT."""
-    with patch.object(
-        brave_agent, "decide_action", new=AsyncMock(return_value=_FALLBACK_ACTION)
-    ) as mock_decide, patch.object(
-        brave_agent, "roleplay", new=AsyncMock(return_value=_FALLBACK_ACTION)
-    ) as mock_roleplay:
+    with (
+        patch.object(
+            brave_agent, "decide_action", new=AsyncMock(return_value=_FALLBACK_ACTION)
+        ) as mock_decide,
+        patch.object(
+            brave_agent, "roleplay", new=AsyncMock(return_value=_FALLBACK_ACTION)
+        ) as mock_roleplay,
+    ):
         context = AgentContext(
             session_id="s1",
             game_phase="COMBAT",
@@ -535,11 +577,14 @@ async def test_think_exploration_phase_delegates_to_roleplay(
     brave_agent: PlayerAgent,
 ) -> None:
     """think() délègue à roleplay() en phase EXPLORATION."""
-    with patch.object(
-        brave_agent, "decide_action", new=AsyncMock(return_value=_FALLBACK_ACTION)
-    ) as mock_decide, patch.object(
-        brave_agent, "roleplay", new=AsyncMock(return_value=_FALLBACK_ACTION)
-    ) as mock_roleplay:
+    with (
+        patch.object(
+            brave_agent, "decide_action", new=AsyncMock(return_value=_FALLBACK_ACTION)
+        ) as mock_decide,
+        patch.object(
+            brave_agent, "roleplay", new=AsyncMock(return_value=_FALLBACK_ACTION)
+        ) as mock_roleplay,
+    ):
         context = AgentContext(
             session_id="s1",
             game_phase="EXPLORATION",

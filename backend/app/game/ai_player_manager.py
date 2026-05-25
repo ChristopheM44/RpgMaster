@@ -118,7 +118,7 @@ def record_companion_spotlight(active: ActiveSession, character_id: str) -> None
         if str(existing) in ai_ids and str(existing) != char_id
     ]
     recent.append(char_id)
-    active.state_data[_COMPANION_SPOTLIGHT_KEY] = recent[-max(1, len(ai_ids)):]
+    active.state_data[_COMPANION_SPOTLIGHT_KEY] = recent[-max(1, len(ai_ids)) :]
     active.mark_dirty()
 
 
@@ -352,7 +352,7 @@ class AIPlayerManager:
                 action, spell_id, slot_level = self._normalize_combat_action(
                     action,
                     current.combatant_id,
-                    active.state_data,
+                    active,
                     available_actions,
                 )
 
@@ -431,7 +431,7 @@ class AIPlayerManager:
                 await action_resolver.resolve(
                     session_id=session_id,
                     action_type=action.action_type,
-                    content=self._companion_action_prompt(action, current.name),
+                    content=self._companion_action_content(action, current.name),
                     character_id=current.combatant_id,
                     target_id=action.target,
                     active=active,
@@ -1002,12 +1002,12 @@ class AIPlayerManager:
         character_id: str,
         state_data: dict[str, Any],
     ) -> list[str]:
-        actions = ["attack"]
+        actions = ["attack", "move", "dash"]
         if cls._find_unstable_ally(character_id, state_data) is not None:
             actions.append("stabilize")
         if cls._has_castable_spell(character_id, state_data):
             actions.append("cast_spell")
-        actions.extend(["dodge", "wait"])
+        actions.extend(["disengage", "dodge", "wait"])
         return actions
 
     @classmethod
@@ -1036,9 +1036,10 @@ class AIPlayerManager:
         cls,
         action: PlayerActionChoice,
         character_id: str,
-        state_data: dict[str, Any],
+        active: ActiveSession,
         available_actions: list[str],
     ) -> tuple[PlayerActionChoice, Optional[str], Optional[int]]:
+        state_data = active.state_data
         if action.action_type not in set(available_actions):
             return (
                 cls._build_fallback_combat_action(
@@ -1050,6 +1051,21 @@ class AIPlayerManager:
                 None,
                 None,
             )
+
+        if action.action_type in {"move", "dash", "disengage"}:
+            movement_action = cls._resolve_movement_intent(action, character_id, active)
+            if movement_action is None:
+                return (
+                    cls._build_fallback_combat_action(
+                        character_id,
+                        cls._character_data(character_id, state_data).get("name", character_id),
+                        state_data,
+                        available_actions,
+                    ),
+                    None,
+                    None,
+                )
+            return movement_action, None, None
 
         if action.action_type != "cast_spell":
             return action, None, None
@@ -1073,6 +1089,58 @@ class AIPlayerManager:
         if action.target is None:
             action.target = cls._select_default_enemy_target(character_id, state_data)
         return action, spell_id, slot_level
+
+    @classmethod
+    def _resolve_movement_intent(
+        cls,
+        action: PlayerActionChoice,
+        character_id: str,
+        active: ActiveSession,
+    ) -> Optional[PlayerActionChoice]:
+        intent = str(action.params.get("intent") or "").strip().lower()
+        if intent not in {"approach", "retreat", "flank"}:
+            return None
+
+        state_data = active.state_data
+        target_id = cls._resolve_combatant_reference(
+            action.params.get("target_id") or action.target,
+            state_data,
+        )
+        if target_id is None:
+            target_id = cls._select_default_enemy_target(character_id, state_data)
+        if target_id is None:
+            return None
+
+        combatants = state_data.get("combatants", {})
+        cdata = combatants.get(character_id, {}) if isinstance(combatants, dict) else {}
+        speed_m = float(cdata.get("speed_m", 9.0) if isinstance(cdata, dict) else 9.0)
+        current = active.turn_manager.current_turn
+        economy = (
+            current.action_economy
+            if current is not None and current.combatant_id == character_id
+            else None
+        )
+        movement_m = float(economy.movement if economy is not None else speed_m)
+        if action.action_type == "dash":
+            movement_m += float(economy.movement_max if economy is not None else speed_m)
+
+        from app.game.tactical_combat import resolve_ai_move_destination  # noqa: PLC0415
+
+        destination = resolve_ai_move_destination(
+            state_data,
+            character_id,
+            intent,
+            target_id,
+            movement_m,
+        )
+        if destination is None:
+            return None
+
+        action.target = target_id
+        action.params["intent"] = intent
+        action.params["target_id"] = target_id
+        action.params["destination"] = f"{destination.col},{destination.row}"
+        return action
 
     @classmethod
     def _resolve_spell_choice(
@@ -1297,6 +1365,17 @@ class AIPlayerManager:
             text = f"{character_name} {cls._lowercase_initial(description)}"
         return text if text[-1] in ".!?…" else f"{text}."
 
+    @classmethod
+    def _companion_action_content(
+        cls,
+        action: PlayerActionChoice,
+        character_name: str,
+    ) -> str:
+        destination = action.params.get("destination")
+        if action.action_type in {"move", "dash", "disengage"} and destination:
+            return str(destination)
+        return cls._companion_action_prompt(action, character_name)
+
     @staticmethod
     def _lowercase_initial(text: str) -> str:
         if not text:
@@ -1308,6 +1387,32 @@ class AIPlayerManager:
         normalized = unicodedata.normalize("NFKD", str(value).lower())
         without_accents = "".join(ch for ch in normalized if not unicodedata.combining(ch))
         return re.sub(r"[^a-z0-9_]+", " ", without_accents).strip()
+
+    @classmethod
+    def _resolve_combatant_reference(
+        cls,
+        raw_target: Any,
+        state_data: dict[str, Any],
+    ) -> Optional[str]:
+        if raw_target is None:
+            return None
+        raw = str(raw_target).strip()
+        if not raw:
+            return None
+        combatants = state_data.get("combatants", {})
+        if not isinstance(combatants, dict):
+            return raw
+        if raw in combatants:
+            return raw
+        wanted = cls._normalize_text(raw).replace("_", " ")
+        for cid, cdata in combatants.items():
+            aliases = [str(cid), str(cid).replace("_", " ")]
+            if isinstance(cdata, dict) and cdata.get("name"):
+                aliases.append(str(cdata["name"]))
+            for alias in aliases:
+                if wanted == cls._normalize_text(alias).replace("_", " "):
+                    return str(cid)
+        return raw
 
     @classmethod
     def _choose_slot_level(

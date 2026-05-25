@@ -5,6 +5,7 @@ Trois chemins doivent converger vers le meme contrat visible :
   2. Compagnon IA    → AIPlayerManager.process_ai_turns() → ActionResolver
   3. Monstre         → _handle_ai_turns() (ws_game) → ActionResolver
 """
+
 from __future__ import annotations
 
 import json
@@ -146,20 +147,21 @@ class TestPipelineExecutorUnits:
         bus = _FakeBus()
 
         gm = MagicMock()
-        gm.think = AsyncMock(return_value=AgentResponse(
-            content="Azaka jauge la demande avant de répondre.",
-            actions=[
-                GMAction(
-                    type="roll_request",
-                    target="hero_1",
-                    params={"skill": "persuasion", "dc": 15, "social_target": "azaka"},
-                )
-            ],
-        ))
+        gm.think = AsyncMock(
+            return_value=AgentResponse(
+                content="Azaka jauge la demande avant de répondre.",
+                actions=[
+                    GMAction(
+                        type="roll_request",
+                        target="hero_1",
+                        params={"skill": "persuasion", "dc": 15, "social_target": "azaka"},
+                    )
+                ],
+            )
+        )
 
         pipeline = ActionPipeline(gm, bus, mechanics=ActionResolver(gm_agent=gm))
-        with patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast",
-                   new=AsyncMock()):
+        with patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast", new=AsyncMock()):
             await pipeline.resolve_and_publish(
                 ActionRequest(
                     session_id=SESSION_ID,
@@ -196,18 +198,21 @@ class TestPipelineExecutorUnits:
         bus = _FakeBus()
 
         gm = MagicMock()
-        gm.think = AsyncMock(return_value=AgentResponse(
-            content="Le bandit serre les dents, son cimeterre encore levé.",
-            actions=[],
-        ))
-        gm.narrate_outcome_response = AsyncMock(return_value=GMResponse(
-            narration="Le bandit hésite sous l'ordre lancé.",
-            actions=[],
-        ))
+        gm.think = AsyncMock(
+            return_value=AgentResponse(
+                content="Le bandit serre les dents, son cimeterre encore levé.",
+                actions=[],
+            )
+        )
+        gm.narrate_outcome_response = AsyncMock(
+            return_value=GMResponse(
+                narration="Le bandit hésite sous l'ordre lancé.",
+                actions=[],
+            )
+        )
 
         pipeline = ActionPipeline(gm, bus, mechanics=ActionResolver(gm_agent=gm))
-        with patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast",
-                   new=AsyncMock()):
+        with patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast", new=AsyncMock()):
             await pipeline.resolve_and_publish(
                 ActionRequest(
                     session_id=SESSION_ID,
@@ -225,9 +230,7 @@ class TestPipelineExecutorUnits:
         assert EventType.ROLL_RESULT in event_types
         gm.narrate_outcome_response.assert_awaited_once()
         roll_payload = next(
-            payload
-            for event_type, payload in bus.published
-            if event_type == EventType.ROLL_RESULT
+            payload for event_type, payload in bus.published if event_type == EventType.ROLL_RESULT
         )
         assert roll_payload["character_id"] == "hero_1"
         assert roll_payload["social_target_id"] == "bandit_1"
@@ -238,24 +241,27 @@ class TestPipelineExecutorUnits:
         bus = _FakeBus()
 
         gm = MagicMock()
-        gm.think = AsyncMock(return_value=AgentResponse(
-            content="Aria observe les traces.",
-            actions=[
-                GMAction(
-                    type="roll_request",
-                    target="hero_1",
-                    params={"ability": "wis", "type": "check", "dc": 10},
-                )
-            ],
-        ))
-        gm.narrate_outcome_response = AsyncMock(return_value=GMResponse(
-            narration="Les traces confirment un passage recent.",
-            actions=[],
-        ))
+        gm.think = AsyncMock(
+            return_value=AgentResponse(
+                content="Aria observe les traces.",
+                actions=[
+                    GMAction(
+                        type="roll_request",
+                        target="hero_1",
+                        params={"ability": "wis", "type": "check", "dc": 10},
+                    )
+                ],
+            )
+        )
+        gm.narrate_outcome_response = AsyncMock(
+            return_value=GMResponse(
+                narration="Les traces confirment un passage recent.",
+                actions=[],
+            )
+        )
 
         pipeline = ActionPipeline(gm, bus, mechanics=ActionResolver(gm_agent=gm))
-        with patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast",
-                   new=AsyncMock()):
+        with patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast", new=AsyncMock()):
             await pipeline.resolve_and_publish(
                 ActionRequest(
                     session_id=SESSION_ID,
@@ -566,27 +572,29 @@ class TestPipelineExecutorUnits:
         assert active.state_data["npc_states"]["azaka"]["last_location"] == "scene_auberge"
 
     async def test_executor_scene_layout_sanitizes_poi_interactions(self) -> None:
-        layout = GMResponseExecutor._normalize_scene_layout({
-            "cols": 8,
-            "rows": 8,
-            "pois": [
-                {
-                    "id": "toben",
-                    "name": "Toben",
-                    "kind": "npc",
-                    "position": {"col": 2, "row": 3},
-                    "interactions": [
-                        {
-                            "label": "Négocier",
-                            "intent": "parley",
-                            "prompt": "Je négocie avec Toben.",
-                        },
-                        {"intent": "talk", "prompt": "Sans label"},
-                        "invalid",
-                    ],
-                }
-            ],
-        })
+        layout = GMResponseExecutor._normalize_scene_layout(
+            {
+                "cols": 8,
+                "rows": 8,
+                "pois": [
+                    {
+                        "id": "toben",
+                        "name": "Toben",
+                        "kind": "npc",
+                        "position": {"col": 2, "row": 3},
+                        "interactions": [
+                            {
+                                "label": "Négocier",
+                                "intent": "parley",
+                                "prompt": "Je négocie avec Toben.",
+                            },
+                            {"intent": "talk", "prompt": "Sans label"},
+                            "invalid",
+                        ],
+                    }
+                ],
+            }
+        )
 
         assert layout["pois"][0]["interactions"] == [
             {
@@ -598,36 +606,38 @@ class TestPipelineExecutorUnits:
         ]
 
     async def test_executor_scene_layout_filters_duplicate_exit_pois(self) -> None:
-        layout = GMResponseExecutor._normalize_scene_layout({
-            "cols": 10,
-            "rows": 8,
-            "terrain": "dock_ambush",
-            "pois": [
-                {
-                    "id": "bandit_2",
-                    "name": "Bandit 2",
-                    "kind": "enemy",
-                    "icon": "bandit",
-                    "position": {"col": 7, "row": 1},
-                    "description": "Pres de la porte de quai. Evalue une fuite.",
-                },
-                {
-                    "id": "dock_gate",
-                    "name": "Porte de quai",
-                    "kind": "exit",
-                    "icon": "gate",
-                    "position": {"col": 7, "row": 1},
-                },
-            ],
-            "exits": [
-                {
-                    "id": "dock_gate",
-                    "label": "Porte de quai",
-                    "position": {"col": 7, "row": 1},
-                    "leads_to": "souk_streets",
-                },
-            ],
-        })
+        layout = GMResponseExecutor._normalize_scene_layout(
+            {
+                "cols": 10,
+                "rows": 8,
+                "terrain": "dock_ambush",
+                "pois": [
+                    {
+                        "id": "bandit_2",
+                        "name": "Bandit 2",
+                        "kind": "enemy",
+                        "icon": "bandit",
+                        "position": {"col": 7, "row": 1},
+                        "description": "Pres de la porte de quai. Evalue une fuite.",
+                    },
+                    {
+                        "id": "dock_gate",
+                        "name": "Porte de quai",
+                        "kind": "exit",
+                        "icon": "gate",
+                        "position": {"col": 7, "row": 1},
+                    },
+                ],
+                "exits": [
+                    {
+                        "id": "dock_gate",
+                        "label": "Porte de quai",
+                        "position": {"col": 7, "row": 1},
+                        "leads_to": "souk_streets",
+                    },
+                ],
+            }
+        )
 
         assert [poi["id"] for poi in layout["pois"]] == ["bandit_2"]
 
@@ -698,20 +708,21 @@ class TestPipelineExecutorUnits:
         active = _make_combat_active()
         bus = _FakeBus()
         gm = MagicMock()
-        gm.think = AsyncMock(return_value=AgentResponse(
-            content="Le gobelin chancelle.",
-            actions=[
-                GMAction(
-                    type="damage_apply",
-                    target="goblin_1",
-                    params={"amount": 3},
-                )
-            ],
-        ))
+        gm.think = AsyncMock(
+            return_value=AgentResponse(
+                content="Le gobelin chancelle.",
+                actions=[
+                    GMAction(
+                        type="damage_apply",
+                        target="goblin_1",
+                        params={"amount": 3},
+                    )
+                ],
+            )
+        )
 
         pipeline = ActionPipeline(gm, bus, mechanics=ActionResolver(gm_agent=gm))
-        with patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast",
-                   new=AsyncMock()):
+        with patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast", new=AsyncMock()):
             await pipeline.resolve_and_publish(
                 ActionRequest(
                     session_id=SESSION_ID,
@@ -758,8 +769,7 @@ class TestPipelineExecutorUnits:
         gm.think = AsyncMock(return_value=AgentResponse(content="Le gobelin frappe.", actions=[]))
 
         pipeline = ActionPipeline(gm, bus, mechanics=ActionResolver(gm_agent=gm))
-        with patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast",
-                   new=AsyncMock()):
+        with patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast", new=AsyncMock()):
             resolved = await pipeline.resolve_and_publish(
                 ActionRequest(
                     session_id=SESSION_ID,
@@ -787,9 +797,10 @@ class TestHumanPlayerPipeline:
         resolver = ActionResolver(gm_agent=_mock_gm("Aria frappe le gobelin !"))
         published, capture = _event_collector()
 
-        with patch("app.game.action_resolver.event_bus.publish_to_session", new=capture), \
-             patch("app.game.action_resolver.tts_router.synthesize_and_broadcast",
-                   new=AsyncMock()):
+        with (
+            patch("app.game.action_resolver.event_bus.publish_to_session", new=capture),
+            patch("app.game.action_resolver.tts_router.synthesize_and_broadcast", new=AsyncMock()),
+        ):
             await resolver.resolve(
                 session_id=SESSION_ID,
                 action_type="attack",
@@ -816,9 +827,10 @@ class TestHumanPlayerPipeline:
         resolver = ActionResolver(gm_agent=_mock_gm())
         published, capture = _event_collector()
 
-        with patch("app.game.action_resolver.event_bus.publish_to_session", new=capture), \
-             patch("app.game.action_resolver.tts_router.synthesize_and_broadcast",
-                   new=AsyncMock()):
+        with (
+            patch("app.game.action_resolver.event_bus.publish_to_session", new=capture),
+            patch("app.game.action_resolver.tts_router.synthesize_and_broadcast", new=AsyncMock()),
+        ):
             await resolver.resolve(
                 session_id=SESSION_ID,
                 action_type="attack",
@@ -838,9 +850,10 @@ class TestHumanPlayerPipeline:
         resolver = ActionResolver(gm_agent=_mock_gm("Narration du MJ."))
         published, capture = _event_collector()
 
-        with patch("app.game.action_resolver.event_bus.publish_to_session", new=capture), \
-             patch("app.game.action_resolver.tts_router.synthesize_and_broadcast",
-                   new=AsyncMock()):
+        with (
+            patch("app.game.action_resolver.event_bus.publish_to_session", new=capture),
+            patch("app.game.action_resolver.tts_router.synthesize_and_broadcast", new=AsyncMock()),
+        ):
             await resolver.resolve(
                 session_id=SESSION_ID,
                 action_type="free_text",
@@ -866,9 +879,10 @@ class TestHumanPlayerPipeline:
         resolver = ActionResolver(gm_agent=_mock_gm("La salle revele ses secrets."))
         published, capture = _event_collector()
 
-        with patch("app.game.action_resolver.event_bus.publish_to_session", new=capture), \
-             patch("app.game.action_resolver.tts_router.synthesize_and_broadcast",
-                   new=AsyncMock()):
+        with (
+            patch("app.game.action_resolver.event_bus.publish_to_session", new=capture),
+            patch("app.game.action_resolver.tts_router.synthesize_and_broadcast", new=AsyncMock()),
+        ):
             await resolver.resolve(
                 session_id=SESSION_ID,
                 action_type="free_text",
@@ -892,9 +906,10 @@ class TestHumanPlayerPipeline:
         resolver = ActionResolver(gm_agent=_mock_gm("Ne devrait pas etre appele."))
         published, capture = _event_collector()
 
-        with patch("app.game.action_resolver.event_bus.publish_to_session", new=capture), \
-             patch("app.game.action_resolver.tts_router.synthesize_and_broadcast",
-                   new=AsyncMock()):
+        with (
+            patch("app.game.action_resolver.event_bus.publish_to_session", new=capture),
+            patch("app.game.action_resolver.tts_router.synthesize_and_broadcast", new=AsyncMock()),
+        ):
             await resolver.resolve(
                 session_id=SESSION_ID,
                 action_type="free_text",
@@ -924,9 +939,10 @@ class TestHumanPlayerPipeline:
         bus = _FakeBus()
         pipeline = ActionPipeline(gm, bus, mechanics=ActionResolver(gm_agent=gm))
 
-        with patch("app.llm.budget.get_llm_budget_mode", return_value="sober"), \
-             patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast",
-                   new=AsyncMock()):
+        with (
+            patch("app.llm.budget.get_llm_budget_mode", return_value="sober"),
+            patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast", new=AsyncMock()),
+        ):
             await pipeline.resolve_and_publish(
                 ActionRequest(
                     session_id=SESSION_ID,
@@ -1020,18 +1036,23 @@ class TestAICompanionPipeline:
         manager = AIPlayerManager()
         published, capture = _event_collector()
 
-        attack_json = json.dumps({
-            "action_type": "attack",
-            "action_description": "Thorin attaque le gobelin",
-            "target": "goblin_1",
-            "params": {},
-            "roleplay_text": "Pour la gloire !",
-            "inner_reasoning": "Attaque.",
-        }, ensure_ascii=False)
+        attack_json = json.dumps(
+            {
+                "action_type": "attack",
+                "action_description": "Thorin attaque le gobelin",
+                "target": "goblin_1",
+                "params": {},
+                "roleplay_text": "Pour la gloire !",
+                "inner_reasoning": "Attaque.",
+            },
+            ensure_ascii=False,
+        )
 
         mock_chat = AsyncMock(return_value=attack_json)
-        with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=capture), \
-             patch.object(thorin_agent._client, "chat", new=mock_chat):
+        with (
+            patch("app.game.ai_player_manager.event_bus.publish_to_session", new=capture),
+            patch.object(thorin_agent._client, "chat", new=mock_chat),
+        ):
             await manager.process_ai_turns(SESSION_ID, active, mock_resolver, db=None)
 
         # Le compagnon doit émettre au moins une NARRATION avec son texte de roleplay
@@ -1139,11 +1160,12 @@ class TestAICompanionTurnOrdering:
         published, capture = _event_collector()
         mock_resolve = AsyncMock(side_effect=resolve_side_effect)
 
-        with patch("app.api.ws_game.event_bus.publish_to_session", new=capture), \
-             patch("app.api.ws_game.action_resolver.resolve", new=mock_resolve), \
-             patch("app.api.ws_game.session_manager.save_state", new=AsyncMock()), \
-             patch("app.api.ws_game._build_session_state_payload",
-                   return_value={"phase": "combat"}):
+        with (
+            patch("app.api.ws_game.event_bus.publish_to_session", new=capture),
+            patch("app.api.ws_game.action_resolver.resolve", new=mock_resolve),
+            patch("app.api.ws_game.session_manager.save_state", new=AsyncMock()),
+            patch("app.api.ws_game._build_session_state_payload", return_value={"phase": "combat"}),
+        ):
             await _handle_ai_turns(SESSION_ID, active, None)
 
         turn_starts = [
@@ -1162,15 +1184,11 @@ class TestAICompanionTurnOrdering:
         elara_turn_idx = next(
             idx
             for idx, (event_type, payload) in enumerate(published)
-            if event_type == EventType.TURN_START
-            and payload.get("combatant_id") == "elara_1"
+            if event_type == EventType.TURN_START and payload.get("combatant_id") == "elara_1"
         )
         assert defeated_idx < elara_turn_idx
 
-        resolved_actor_ids = [
-            call.kwargs["character_id"]
-            for call in mock_resolve.await_args_list
-        ]
+        resolved_actor_ids = [call.kwargs["character_id"] for call in mock_resolve.await_args_list]
         assert resolved_actor_ids[:2] == ["shade_1", "elara_1"]
 
 
@@ -1188,15 +1206,14 @@ class TestMonsterPipeline:
         mock_gm_resp = AgentResponse(content="Le gobelin frappe sauvagement !", actions=[])
         mock_gm_think = AsyncMock(return_value=mock_gm_resp)
 
-        with patch("app.api.ws_game.event_bus.publish_to_session", new=capture), \
-             patch("app.api.ws_game.action_resolver._gm.think", new=mock_gm_think), \
-             patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast",
-                   new=AsyncMock()), \
-             patch("app.api.ws_game.session_manager.save_state", new=AsyncMock()), \
-             patch("app.api.ws_game._cleanup_inactive_npcs",
-                   new=AsyncMock(return_value=[])), \
-             patch("app.api.ws_game._build_session_state_payload",
-                   return_value={"phase": "combat"}):
+        with (
+            patch("app.api.ws_game.event_bus.publish_to_session", new=capture),
+            patch("app.api.ws_game.action_resolver._gm.think", new=mock_gm_think),
+            patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast", new=AsyncMock()),
+            patch("app.api.ws_game.session_manager.save_state", new=AsyncMock()),
+            patch("app.api.ws_game._cleanup_inactive_npcs", new=AsyncMock(return_value=[])),
+            patch("app.api.ws_game._build_session_state_payload", return_value={"phase": "combat"}),
+        ):
             active.turn_manager.all_npcs_removed = MagicMock(return_value=False)
             await _handle_ai_turns(SESSION_ID, active, None)
 
@@ -1212,16 +1229,17 @@ class TestMonsterPipeline:
         published, capture = _event_collector()
         mock_gm_resp = AgentResponse(content="Attaque !", actions=[])
 
-        with patch("app.api.ws_game.event_bus.publish_to_session", new=capture), \
-             patch("app.api.ws_game.action_resolver._gm.think",
-                   new=AsyncMock(return_value=mock_gm_resp)), \
-             patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast",
-                   new=AsyncMock()), \
-             patch("app.api.ws_game.session_manager.save_state", new=AsyncMock()), \
-             patch("app.api.ws_game._cleanup_inactive_npcs",
-                   new=AsyncMock(return_value=[])), \
-             patch("app.api.ws_game._build_session_state_payload",
-                   return_value={"phase": "combat"}):
+        with (
+            patch("app.api.ws_game.event_bus.publish_to_session", new=capture),
+            patch(
+                "app.api.ws_game.action_resolver._gm.think",
+                new=AsyncMock(return_value=mock_gm_resp),
+            ),
+            patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast", new=AsyncMock()),
+            patch("app.api.ws_game.session_manager.save_state", new=AsyncMock()),
+            patch("app.api.ws_game._cleanup_inactive_npcs", new=AsyncMock(return_value=[])),
+            patch("app.api.ws_game._build_session_state_payload", return_value={"phase": "combat"}),
+        ):
             active.turn_manager.all_npcs_removed = MagicMock(return_value=False)
             await _handle_ai_turns(SESSION_ID, active, None)
 
@@ -1237,16 +1255,17 @@ class TestMonsterPipeline:
         published, capture = _event_collector()
         mock_gm_resp = AgentResponse(content="Le gobelin attaque !", actions=[])
 
-        with patch("app.api.ws_game.event_bus.publish_to_session", new=capture), \
-             patch("app.api.ws_game.action_resolver._gm.think",
-                   new=AsyncMock(return_value=mock_gm_resp)), \
-             patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast",
-                   new=AsyncMock()), \
-             patch("app.api.ws_game.session_manager.save_state", new=AsyncMock()), \
-             patch("app.api.ws_game._cleanup_inactive_npcs",
-                   new=AsyncMock(return_value=[])), \
-             patch("app.api.ws_game._build_session_state_payload",
-                   return_value={"phase": "combat"}):
+        with (
+            patch("app.api.ws_game.event_bus.publish_to_session", new=capture),
+            patch(
+                "app.api.ws_game.action_resolver._gm.think",
+                new=AsyncMock(return_value=mock_gm_resp),
+            ),
+            patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast", new=AsyncMock()),
+            patch("app.api.ws_game.session_manager.save_state", new=AsyncMock()),
+            patch("app.api.ws_game._cleanup_inactive_npcs", new=AsyncMock(return_value=[])),
+            patch("app.api.ws_game._build_session_state_payload", return_value={"phase": "combat"}),
+        ):
             active.turn_manager.all_npcs_removed = MagicMock(return_value=False)
             await _handle_ai_turns(SESSION_ID, active, None)
 
@@ -1257,7 +1276,11 @@ class TestMonsterPipeline:
 
 class TestTacticalCombatCoherence:
     def _active_with_wolf_between_heroes(self) -> ActiveSession:
-        active = _make_combat_active(hero_id="thorvald", monster_id="wolf_1", monster_turn_first=True)
+        active = _make_combat_active(
+            hero_id="thorvald",
+            monster_id="wolf_1",
+            monster_turn_first=True,
+        )
         active.state_data["characters"] = {
             "thorvald": {"name": "Thorvald", "level": 1, "hp": 20, "hp_max": 20},
             "ardent": {"name": "Ardent", "level": 1, "hp": 20, "hp_max": 20},
@@ -1319,9 +1342,10 @@ class TestTacticalCombatCoherence:
         gm = _mock_gm("Le loup attaque apres s'etre deplace.")
         resolver = ActionResolver(gm_agent=gm, combat_gm_agent=gm)
 
-        with patch("app.game.action_resolver.event_bus.publish_to_session", new=capture), \
-             patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast",
-                   new=AsyncMock()):
+        with (
+            patch("app.game.action_resolver.event_bus.publish_to_session", new=capture),
+            patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast", new=AsyncMock()),
+        ):
             result = await resolver.resolve(
                 session_id=SESSION_ID,
                 action_type="attack",
@@ -1352,9 +1376,10 @@ class TestTacticalCombatCoherence:
         gm = _mock_gm("Le loup se degage et attaque.")
         resolver = ActionResolver(gm_agent=gm, combat_gm_agent=gm)
 
-        with patch("app.game.action_resolver.event_bus.publish_to_session", new=capture), \
-             patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast",
-                   new=AsyncMock()):
+        with (
+            patch("app.game.action_resolver.event_bus.publish_to_session", new=capture),
+            patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast", new=AsyncMock()),
+        ):
             await resolver.resolve(
                 session_id=SESSION_ID,
                 action_type="attack",
@@ -1378,9 +1403,10 @@ class TestTacticalCombatCoherence:
         gm = _mock_gm("Le loup file vers Thorvald.")
         resolver = ActionResolver(gm_agent=gm, combat_gm_agent=gm)
 
-        with patch("app.game.action_resolver.event_bus.publish_to_session", new=capture), \
-             patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast",
-                   new=AsyncMock()):
+        with (
+            patch("app.game.action_resolver.event_bus.publish_to_session", new=capture),
+            patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast", new=AsyncMock()),
+        ):
             await resolver.resolve(
                 session_id=SESSION_ID,
                 action_type="attack",
@@ -1395,6 +1421,211 @@ class TestTacticalCombatCoherence:
         assert active.turn_manager._order[1].action_economy.reaction is True
         assert not [p for et, p in published if et == EventType.OPPORTUNITY_ATTACK_TRIGGERED]
 
+    async def test_companion_ranged_weapon_attacks_without_auto_move(self) -> None:
+        active = _make_combat_active()
+        active.state_data["combatants"]["hero_1"].update(
+            {
+                "is_ai": True,
+                "attack_range_m": 24.0,
+                "reach_m": 1.5,
+            }
+        )
+        active.state_data["grid_config"] = {"cols": 12, "rows": 3, "cell_size_m": 1.5}
+        active.state_data["grid_positions"] = {
+            "hero_1": {"col": 0, "row": 1},
+            "goblin_1": {"col": 10, "row": 1},
+        }
+        published, capture = _event_collector()
+        gm = _mock_gm("Aria tire de loin.")
+        resolver = ActionResolver(gm_agent=gm, combat_gm_agent=gm)
+
+        with (
+            patch("app.game.action_resolver.event_bus.publish_to_session", new=capture),
+            patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast", new=AsyncMock()),
+        ):
+            result = await resolver.resolve(
+                session_id=SESSION_ID,
+                action_type="attack",
+                content=None,
+                character_id="hero_1",
+                target_id="goblin_1",
+                active=active,
+                actor_kind="companion",
+                actor_name="Aria",
+            )
+
+        assert result.mechanics["type"] == "attack"
+        assert result.mechanics["tactical"]["moved"] is False
+        assert not [p for et, p in published if et == EventType.ERROR]
+        assert not [p for et, p in published if et == EventType.COMBATANT_MOVED]
+
+    async def test_companion_thrown_weapon_range_is_accepted(self) -> None:
+        active = _make_combat_active()
+        active.state_data["combatants"]["hero_1"].update(
+            {
+                "is_ai": True,
+                "attack_range_m": 6.0,
+                "reach_m": 1.5,
+            }
+        )
+        active.state_data["grid_config"] = {"cols": 6, "rows": 3, "cell_size_m": 1.5}
+        active.state_data["grid_positions"] = {
+            "hero_1": {"col": 0, "row": 1},
+            "goblin_1": {"col": 4, "row": 1},
+        }
+        published, capture = _event_collector()
+        gm = _mock_gm("Aria lance sa dague.")
+        resolver = ActionResolver(gm_agent=gm, combat_gm_agent=gm)
+
+        with (
+            patch("app.game.action_resolver.event_bus.publish_to_session", new=capture),
+            patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast", new=AsyncMock()),
+        ):
+            result = await resolver.resolve(
+                session_id=SESSION_ID,
+                action_type="attack",
+                content=None,
+                character_id="hero_1",
+                target_id="goblin_1",
+                active=active,
+                actor_kind="companion",
+                actor_name="Aria",
+            )
+
+        assert result.mechanics["type"] == "attack"
+        assert result.mechanics["tactical"]["moved"] is False
+        assert not [p for et, p in published if et == EventType.ERROR]
+
+    async def test_companion_melee_attack_auto_approaches(self) -> None:
+        active = _make_combat_active()
+        active.state_data["combatants"]["hero_1"].update(
+            {
+                "is_ai": True,
+                "attack_range_m": 1.5,
+                "reach_m": 1.5,
+                "speed_m": 9.0,
+            }
+        )
+        active.state_data["grid_config"] = {"cols": 6, "rows": 3, "cell_size_m": 1.5}
+        active.state_data["grid_positions"] = {
+            "hero_1": {"col": 0, "row": 1},
+            "goblin_1": {"col": 4, "row": 1},
+        }
+        published, capture = _event_collector()
+        gm = _mock_gm("Aria rejoint le gobelin.")
+        resolver = ActionResolver(gm_agent=gm, combat_gm_agent=gm)
+
+        with (
+            patch("app.game.action_resolver.event_bus.publish_to_session", new=capture),
+            patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast", new=AsyncMock()),
+        ):
+            result = await resolver.resolve(
+                session_id=SESSION_ID,
+                action_type="attack",
+                content=None,
+                character_id="hero_1",
+                target_id="goblin_1",
+                active=active,
+                actor_kind="companion",
+                actor_name="Aria",
+            )
+
+        assert result.mechanics["type"] == "attack"
+        assert result.mechanics["tactical"]["moved"] is True
+        hero_pos = active.state_data["grid_positions"]["hero_1"]
+        assert max(abs(hero_pos["col"] - 4), abs(hero_pos["row"] - 1)) <= 1
+        assert any(et == EventType.COMBATANT_MOVED for et, _ in published)
+
+    async def test_companion_touch_spell_auto_approaches(self) -> None:
+        active = _make_combat_active(monster_id="ally_1")
+        active.state_data["characters"]["hero_1"].update(
+            {
+                "char_class": "cleric",
+                "ability_scores": {"wis": 16},
+            }
+        )
+        active.state_data["combatants"]["ally_1"].update(
+            {
+                "name": "Allie",
+                "is_player": True,
+                "is_ai": False,
+                "hp": 5,
+                "hp_max": 12,
+            }
+        )
+        active.state_data["grid_config"] = {"cols": 6, "rows": 3, "cell_size_m": 1.5}
+        active.state_data["grid_positions"] = {
+            "hero_1": {"col": 0, "row": 1},
+            "ally_1": {"col": 3, "row": 1},
+        }
+        published, capture = _event_collector()
+        gm = _mock_gm("Aria s'approche pour soigner.")
+        resolver = ActionResolver(gm_agent=gm, combat_gm_agent=gm)
+
+        with (
+            patch("app.game.action_resolver.event_bus.publish_to_session", new=capture),
+            patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast", new=AsyncMock()),
+        ):
+            result = await resolver.resolve(
+                session_id=SESSION_ID,
+                action_type="cast_spell",
+                content=None,
+                character_id="hero_1",
+                target_id="ally_1",
+                active=active,
+                spell_id="cure_wounds",
+                slot_level=1,
+                actor_kind="companion",
+                actor_name="Aria",
+            )
+
+        assert result.mechanics["type"] == "cast_spell"
+        assert result.mechanics["tactical"]["moved"] is True
+        assert any(et == EventType.COMBATANT_MOVED for et, _ in published)
+
+    async def test_player_touch_spell_out_of_range_does_not_consume_slot(self) -> None:
+        active = _make_combat_active(monster_id="ally_1")
+        active.state_data["combatants"]["ally_1"].update(
+            {
+                "name": "Allie",
+                "is_player": True,
+                "hp": 5,
+                "hp_max": 12,
+            }
+        )
+        active.state_data["grid_config"] = {"cols": 6, "rows": 3, "cell_size_m": 1.5}
+        active.state_data["grid_positions"] = {
+            "hero_1": {"col": 0, "row": 1},
+            "ally_1": {"col": 3, "row": 1},
+        }
+        published, capture = _event_collector()
+        gm = _mock_gm("Ne devrait pas etre appele.")
+        resolver = ActionResolver(gm_agent=gm, combat_gm_agent=gm)
+
+        with (
+            patch("app.game.action_resolver.event_bus.publish_to_session", new=capture),
+            patch(
+                "app.game.action_pipeline.spellcasting_service.prepare_cast", new=AsyncMock()
+            ) as prepare_cast,
+            patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast", new=AsyncMock()),
+        ):
+            result = await resolver.resolve(
+                session_id=SESSION_ID,
+                action_type="cast_spell",
+                content=None,
+                character_id="hero_1",
+                target_id="ally_1",
+                active=active,
+                db=object(),
+                spell_id="cure_wounds",
+                slot_level=1,
+            )
+
+        assert result.mechanics["error"] is True
+        assert "hors de portee" in result.mechanics["summary"]
+        prepare_cast.assert_not_awaited()
+        assert [p for et, p in published if et == EventType.ERROR]
+
     async def test_player_melee_attack_out_of_range_is_rejected_without_turn_cost(self) -> None:
         active = _make_combat_active()
         active.state_data["grid_config"] = {"cols": 8, "rows": 6, "cell_size_m": 1.5}
@@ -1406,9 +1637,10 @@ class TestTacticalCombatCoherence:
         gm = _mock_gm("Ne devrait pas etre appele.")
         resolver = ActionResolver(gm_agent=gm, combat_gm_agent=gm)
 
-        with patch("app.game.action_resolver.event_bus.publish_to_session", new=capture), \
-             patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast",
-                   new=AsyncMock()):
+        with (
+            patch("app.game.action_resolver.event_bus.publish_to_session", new=capture),
+            patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast", new=AsyncMock()),
+        ):
             result = await resolver.resolve(
                 session_id=SESSION_ID,
                 action_type="attack",
@@ -1501,8 +1733,7 @@ class TestEncounterIntro:
             },
         }
         active.state_data["grid_positions"] = {
-            cid: {"col": idx, "row": 0}
-            for idx, cid in enumerate(active.state_data["combatants"])
+            cid: {"col": idx, "row": 0} for idx, cid in enumerate(active.state_data["combatants"])
         }
         active.turn_manager._order = [
             TurnEntry("bandit_3", "Bandit 3", 19, False, True),
@@ -1535,9 +1766,11 @@ class TestEncounterIntro:
         mock_resolver = MagicMock()
         mock_resolver._gm.run_encounter_intro = AsyncMock(side_effect=run_encounter_intro)
 
-        with patch("app.api.ws_game.action_resolver", mock_resolver), \
-             patch("app.api.ws_game.event_bus.publish_to_session", new=capture), \
-             patch("app.api.ws_game.load_recent_messages", new=AsyncMock(return_value=[])):
+        with (
+            patch("app.api.ws_game.action_resolver", mock_resolver),
+            patch("app.api.ws_game.event_bus.publish_to_session", new=capture),
+            patch("app.api.ws_game.load_recent_messages", new=AsyncMock(return_value=[])),
+        ):
             intro = await ws_game._generate_encounter_intro(
                 SESSION_ID,
                 active,
@@ -1559,33 +1792,37 @@ class TestEncounterIntro:
         published, capture = _event_collector()
 
         mock_resolver = MagicMock()
-        mock_resolver._gm.run_encounter_intro = AsyncMock(return_value=GMResponse(
-            narration="Une cave basse s'ouvre autour d'un brasero.",
-            actions=[
-                GMAction(
-                    type="scene_layout",
-                    params={
-                        "cols": 7,
-                        "rows": 6,
-                        "terrain": "cellar",
-                        "pois": [
-                            {
-                                "id": "brazier",
-                                "name": "Brasero",
-                                "kind": "light",
-                                "position": {"col": 3, "row": 2},
-                            }
-                        ],
-                        "exits": [],
-                        "party_positions": {"hero_1": {"col": 1, "row": 3}},
-                    },
-                )
-            ],
-        ))
+        mock_resolver._gm.run_encounter_intro = AsyncMock(
+            return_value=GMResponse(
+                narration="Une cave basse s'ouvre autour d'un brasero.",
+                actions=[
+                    GMAction(
+                        type="scene_layout",
+                        params={
+                            "cols": 7,
+                            "rows": 6,
+                            "terrain": "cellar",
+                            "pois": [
+                                {
+                                    "id": "brazier",
+                                    "name": "Brasero",
+                                    "kind": "light",
+                                    "position": {"col": 3, "row": 2},
+                                }
+                            ],
+                            "exits": [],
+                            "party_positions": {"hero_1": {"col": 1, "row": 3}},
+                        },
+                    )
+                ],
+            )
+        )
 
-        with patch("app.api.ws_game.action_resolver", mock_resolver), \
-             patch("app.api.ws_game.event_bus.publish_to_session", new=capture), \
-             patch("app.api.ws_game.load_recent_messages", new=AsyncMock(return_value=[])):
+        with (
+            patch("app.api.ws_game.action_resolver", mock_resolver),
+            patch("app.api.ws_game.event_bus.publish_to_session", new=capture),
+            patch("app.api.ws_game.load_recent_messages", new=AsyncMock(return_value=[])),
+        ):
             intro = await ws_game._generate_encounter_intro(
                 SESSION_ID,
                 active,
@@ -1610,20 +1847,25 @@ class TestEncounterIntro:
         published, capture = _event_collector()
 
         mock_resolver = MagicMock()
-        mock_resolver._gm.run_encounter_intro = AsyncMock(return_value=GMResponse(
-            narration="Le bandit lève sa lame : « Pas un pas de plus. »",
-            actions=[],
-        ))
+        mock_resolver._gm.run_encounter_intro = AsyncMock(
+            return_value=GMResponse(
+                narration="Le bandit lève sa lame : « Pas un pas de plus. »",
+                actions=[],
+            )
+        )
 
-        with patch("app.api.ws_game.action_resolver", mock_resolver), \
-             patch("app.api.ws_game.event_bus.publish_to_session", new=capture), \
-             patch("app.api.ws_game._sync_ai_control_from_db",
-                   new=AsyncMock(return_value=False)), \
-             patch("app.api.ws_game.session_manager.save_state", new=AsyncMock()), \
-             patch("app.api.ws_game.load_recent_messages", new=AsyncMock(return_value=[])), \
-             patch("app.api.ws_game.persist_narration", new=AsyncMock()), \
-             patch("app.api.ws_game._build_session_state_payload",
-                   return_value={"phase": "encounter_start"}):
+        with (
+            patch("app.api.ws_game.action_resolver", mock_resolver),
+            patch("app.api.ws_game.event_bus.publish_to_session", new=capture),
+            patch("app.api.ws_game._sync_ai_control_from_db", new=AsyncMock(return_value=False)),
+            patch("app.api.ws_game.session_manager.save_state", new=AsyncMock()),
+            patch("app.api.ws_game.load_recent_messages", new=AsyncMock(return_value=[])),
+            patch("app.api.ws_game.persist_narration", new=AsyncMock()),
+            patch(
+                "app.api.ws_game._build_session_state_payload",
+                return_value={"phase": "encounter_start"},
+            ),
+        ):
             await ws_game._handle_start_combat(SESSION_ID, active, None)
 
         event_types = [event_type for event_type, _ in published]
@@ -1646,22 +1888,24 @@ class TestEncounterIntro:
         published, capture = _event_collector()
 
         mock_resolver = MagicMock()
-        mock_resolver._gm.run_encounter_intro = AsyncMock(return_value=GMResponse(
-            narration="Le bandit crie : « Pas un pas de plus ! » puis charge.",
-            actions=[],
-            start_mode="combat",
-        ))
+        mock_resolver._gm.run_encounter_intro = AsyncMock(
+            return_value=GMResponse(
+                narration="Le bandit crie : « Pas un pas de plus ! » puis charge.",
+                actions=[],
+                start_mode="combat",
+            )
+        )
 
-        with patch("app.api.ws_game.action_resolver", mock_resolver), \
-             patch("app.api.ws_game.event_bus.publish_to_session", new=capture), \
-             patch("app.api.ws_game._sync_ai_control_from_db",
-                   new=AsyncMock(return_value=False)), \
-             patch("app.api.ws_game._handle_ai_turns", new=AsyncMock()), \
-             patch("app.api.ws_game.session_manager.save_state", new=AsyncMock()), \
-             patch("app.api.ws_game.load_recent_messages", new=AsyncMock(return_value=[])), \
-             patch("app.api.ws_game.persist_narration", new=AsyncMock()), \
-             patch("app.api.ws_game._build_session_state_payload",
-                   return_value={"phase": "combat"}):
+        with (
+            patch("app.api.ws_game.action_resolver", mock_resolver),
+            patch("app.api.ws_game.event_bus.publish_to_session", new=capture),
+            patch("app.api.ws_game._sync_ai_control_from_db", new=AsyncMock(return_value=False)),
+            patch("app.api.ws_game._handle_ai_turns", new=AsyncMock()),
+            patch("app.api.ws_game.session_manager.save_state", new=AsyncMock()),
+            patch("app.api.ws_game.load_recent_messages", new=AsyncMock(return_value=[])),
+            patch("app.api.ws_game.persist_narration", new=AsyncMock()),
+            patch("app.api.ws_game._build_session_state_payload", return_value={"phase": "combat"}),
+        ):
             await ws_game._handle_start_combat(SESSION_ID, active, None)
 
         event_types = [event_type for event_type, _ in published]
@@ -1686,15 +1930,15 @@ class TestEncounterIntro:
         mock_resolver = MagicMock()
         mock_resolver._gm.run_encounter_intro = AsyncMock()
 
-        with patch("app.api.ws_game.action_resolver", mock_resolver), \
-             patch("app.api.ws_game.event_bus.publish_to_session", new=capture), \
-             patch("app.api.ws_game._sync_ai_control_from_db",
-                   new=AsyncMock(return_value=False)), \
-             patch("app.api.ws_game._handle_ai_turns", new=AsyncMock()), \
-             patch("app.api.ws_game.session_manager.save_state", new=AsyncMock()), \
-             patch("app.api.ws_game.persist_narration", new=AsyncMock()), \
-             patch("app.api.ws_game._build_session_state_payload",
-                   return_value={"phase": "combat"}):
+        with (
+            patch("app.api.ws_game.action_resolver", mock_resolver),
+            patch("app.api.ws_game.event_bus.publish_to_session", new=capture),
+            patch("app.api.ws_game._sync_ai_control_from_db", new=AsyncMock(return_value=False)),
+            patch("app.api.ws_game._handle_ai_turns", new=AsyncMock()),
+            patch("app.api.ws_game.session_manager.save_state", new=AsyncMock()),
+            patch("app.api.ws_game.persist_narration", new=AsyncMock()),
+            patch("app.api.ws_game._build_session_state_payload", return_value={"phase": "combat"}),
+        ):
             await ws_game._handle_start_combat(SESSION_ID, active, None, force=True)
 
         event_types = [event_type for event_type, _ in published]
@@ -1708,32 +1952,34 @@ class TestEncounterIntro:
         from app.api import ws_game
 
         active = _make_combat_active(monster_id="bandit_1")
-        active.state_data["combatants"].update({
-            "bandit_2": {
-                "name": "Bandit 2",
-                "hp": 5,
-                "hp_max": 11,
-                "is_player": False,
-                "status": "fled",
-                "monster_id": "bandit",
-            },
-            "bandit_3": {
-                "name": "Bandit 3",
-                "hp": 7,
-                "hp_max": 11,
-                "is_player": False,
-                "status": "surrendered",
-                "monster_id": "bandit",
-            },
-            "emissary": {
-                "name": "Emissaire Zhentarim",
-                "hp": 18,
-                "hp_max": 18,
-                "is_player": False,
-                "status": "active",
-                "monster_id": "bandit",
-            },
-        })
+        active.state_data["combatants"].update(
+            {
+                "bandit_2": {
+                    "name": "Bandit 2",
+                    "hp": 5,
+                    "hp_max": 11,
+                    "is_player": False,
+                    "status": "fled",
+                    "monster_id": "bandit",
+                },
+                "bandit_3": {
+                    "name": "Bandit 3",
+                    "hp": 7,
+                    "hp_max": 11,
+                    "is_player": False,
+                    "status": "surrendered",
+                    "monster_id": "bandit",
+                },
+                "emissary": {
+                    "name": "Emissaire Zhentarim",
+                    "hp": 18,
+                    "hp_max": 18,
+                    "is_player": False,
+                    "status": "active",
+                    "monster_id": "bandit",
+                },
+            }
+        )
         active.state_data["combatants"]["bandit_1"]["hp"] = 0
         active.state_data["combatants"]["bandit_1"]["status"] = "active"
         active.state_data["grid_positions"] = {
@@ -1771,47 +2017,51 @@ class TestEncounterIntro:
         published, capture = _event_collector()
 
         mock_resolver = MagicMock()
-        mock_resolver._gm.run_encounter_end = AsyncMock(return_value=GMResponse(
-            narration="Le silence retombe sur le quai.",
-            actions=[
-                GMAction(
-                    type="damage_apply",
-                    target="hero_1",
-                    params={"amount": 99, "target": "hero_1"},
-                ),
-                GMAction(
-                    type="state_transition",
-                    params={"new_phase": "COMBAT"},
-                ),
-                GMAction(
-                    type="scene_layout",
-                    params={
-                        "cols": 6,
-                        "rows": 6,
-                        "terrain": "dock_aftermath",
-                        "pois": [
-                            {
-                                "id": "fallen_bandit",
-                                "name": "Bandit au sol",
-                                "kind": "corpse",
-                                "icon": "ruins",
-                                "position": {"col": 3, "row": 2},
-                            }
-                        ],
-                        "exits": [],
-                        "party_positions": {},
-                    },
-                ),
-                GMAction(
-                    type="journal_update",
-                    params={"location_place": "Quai silencieux"},
-                ),
-            ],
-        ))
+        mock_resolver._gm.run_encounter_end = AsyncMock(
+            return_value=GMResponse(
+                narration="Le silence retombe sur le quai.",
+                actions=[
+                    GMAction(
+                        type="damage_apply",
+                        target="hero_1",
+                        params={"amount": 99, "target": "hero_1"},
+                    ),
+                    GMAction(
+                        type="state_transition",
+                        params={"new_phase": "COMBAT"},
+                    ),
+                    GMAction(
+                        type="scene_layout",
+                        params={
+                            "cols": 6,
+                            "rows": 6,
+                            "terrain": "dock_aftermath",
+                            "pois": [
+                                {
+                                    "id": "fallen_bandit",
+                                    "name": "Bandit au sol",
+                                    "kind": "corpse",
+                                    "icon": "ruins",
+                                    "position": {"col": 3, "row": 2},
+                                }
+                            ],
+                            "exits": [],
+                            "party_positions": {},
+                        },
+                    ),
+                    GMAction(
+                        type="journal_update",
+                        params={"location_place": "Quai silencieux"},
+                    ),
+                ],
+            )
+        )
 
-        with patch("app.api.ws_game.action_resolver", mock_resolver), \
-             patch("app.api.ws_game.event_bus.publish_to_session", new=capture), \
-             patch("app.api.ws_game.load_recent_messages", new=AsyncMock(return_value=[])):
+        with (
+            patch("app.api.ws_game.action_resolver", mock_resolver),
+            patch("app.api.ws_game.event_bus.publish_to_session", new=capture),
+            patch("app.api.ws_game.load_recent_messages", new=AsyncMock(return_value=[])),
+        ):
             narration, scene_applied = await ws_game._generate_encounter_end(
                 SESSION_ID,
                 active,
@@ -1879,14 +2129,20 @@ class TestEncounterIntro:
         mock_resolver = MagicMock()
         mock_resolver._gm = object()
 
-        with patch("app.api.ws_game.action_resolver", mock_resolver), \
-             patch("app.api.ws_game.event_bus.publish_to_session", new=capture), \
-             patch("app.api.ws_game.session_manager.save_state", new=AsyncMock()), \
-             patch("app.api.ws_game.persist_narration", new=AsyncMock()), \
-             patch("app.api.ws_game._build_session_state_payload",
-                   return_value={"phase": "exploration"}), \
-             patch("app.services.campaign_dossier_service.synthesize_canon_for_session",
-                   new=AsyncMock()):
+        with (
+            patch("app.api.ws_game.action_resolver", mock_resolver),
+            patch("app.api.ws_game.event_bus.publish_to_session", new=capture),
+            patch("app.api.ws_game.session_manager.save_state", new=AsyncMock()),
+            patch("app.api.ws_game.persist_narration", new=AsyncMock()),
+            patch(
+                "app.api.ws_game._build_session_state_payload",
+                return_value={"phase": "exploration"},
+            ),
+            patch(
+                "app.services.campaign_dossier_service.synthesize_canon_for_session",
+                new=AsyncMock(),
+            ),
+        ):
             await ws_game._handle_combat_end(
                 SESSION_ID,
                 active,
@@ -1938,10 +2194,10 @@ class TestThreeActorsNarrationFormat:
         active_h = _make_combat_active()
         resolver_h = ActionResolver(gm_agent=_mock_gm("Narration humain"))
         published_h, capture_h = _event_collector()
-        with patch("app.game.action_resolver.event_bus.publish_to_session",
-                   new=capture_h), \
-             patch("app.game.action_resolver.tts_router.synthesize_and_broadcast",
-                   new=AsyncMock()):
+        with (
+            patch("app.game.action_resolver.event_bus.publish_to_session", new=capture_h),
+            patch("app.game.action_resolver.tts_router.synthesize_and_broadcast", new=AsyncMock()),
+        ):
             await resolver_h.resolve(
                 session_id=SESSION_ID,
                 action_type="free_text",
@@ -1955,19 +2211,21 @@ class TestThreeActorsNarrationFormat:
 
         # --- Monstre ---
         from app.api.ws_game import _handle_ai_turns
+
         active_m = _make_combat_active(monster_turn_first=True)
         published_m, capture_m = _event_collector()
         mock_gm_resp = AgentResponse(content="Narration monstre", actions=[])
-        with patch("app.api.ws_game.event_bus.publish_to_session", new=capture_m), \
-             patch("app.api.ws_game.action_resolver._gm.think",
-                   new=AsyncMock(return_value=mock_gm_resp)), \
-             patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast",
-                   new=AsyncMock()), \
-             patch("app.api.ws_game.session_manager.save_state", new=AsyncMock()), \
-             patch("app.api.ws_game._cleanup_inactive_npcs",
-                   new=AsyncMock(return_value=[])), \
-             patch("app.api.ws_game._build_session_state_payload",
-                   return_value={"phase": "combat"}):
+        with (
+            patch("app.api.ws_game.event_bus.publish_to_session", new=capture_m),
+            patch(
+                "app.api.ws_game.action_resolver._gm.think",
+                new=AsyncMock(return_value=mock_gm_resp),
+            ),
+            patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast", new=AsyncMock()),
+            patch("app.api.ws_game.session_manager.save_state", new=AsyncMock()),
+            patch("app.api.ws_game._cleanup_inactive_npcs", new=AsyncMock(return_value=[])),
+            patch("app.api.ws_game._build_session_state_payload", return_value={"phase": "combat"}),
+        ):
             active_m.turn_manager.all_npcs_removed = MagicMock(return_value=False)
             await _handle_ai_turns(SESSION_ID, active_m, None)
         assert _narrations(published_m), "Monstre doit émettre NARRATION"
@@ -1977,10 +2235,10 @@ class TestThreeActorsNarrationFormat:
         # --- Joueur humain ---
         active_h = _make_combat_active()
         published_h, capture_h = _event_collector()
-        with patch("app.game.action_resolver.event_bus.publish_to_session",
-                   new=capture_h), \
-             patch("app.game.action_resolver.tts_router.synthesize_and_broadcast",
-                   new=AsyncMock()):
+        with (
+            patch("app.game.action_resolver.event_bus.publish_to_session", new=capture_h),
+            patch("app.game.action_resolver.tts_router.synthesize_and_broadcast", new=AsyncMock()),
+        ):
             await ActionResolver(gm_agent=_mock_gm("Narration")).resolve(
                 session_id=SESSION_ID,
                 action_type="free_text",
@@ -1994,19 +2252,21 @@ class TestThreeActorsNarrationFormat:
 
         # --- Monstre ---
         from app.api.ws_game import _handle_ai_turns
+
         active_m = _make_combat_active(monster_turn_first=True)
         published_m, capture_m = _event_collector()
         mock_gm_resp = AgentResponse(content="Narration", actions=[])
-        with patch("app.api.ws_game.event_bus.publish_to_session", new=capture_m), \
-             patch("app.api.ws_game.action_resolver._gm.think",
-                   new=AsyncMock(return_value=mock_gm_resp)), \
-             patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast",
-                   new=AsyncMock()), \
-             patch("app.api.ws_game.session_manager.save_state", new=AsyncMock()), \
-             patch("app.api.ws_game._cleanup_inactive_npcs",
-                   new=AsyncMock(return_value=[])), \
-             patch("app.api.ws_game._build_session_state_payload",
-                   return_value={"phase": "combat"}):
+        with (
+            patch("app.api.ws_game.event_bus.publish_to_session", new=capture_m),
+            patch(
+                "app.api.ws_game.action_resolver._gm.think",
+                new=AsyncMock(return_value=mock_gm_resp),
+            ),
+            patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast", new=AsyncMock()),
+            patch("app.api.ws_game.session_manager.save_state", new=AsyncMock()),
+            patch("app.api.ws_game._cleanup_inactive_npcs", new=AsyncMock(return_value=[])),
+            patch("app.api.ws_game._build_session_state_payload", return_value={"phase": "combat"}),
+        ):
             active_m.turn_manager.all_npcs_removed = MagicMock(return_value=False)
             await _handle_ai_turns(SESSION_ID, active_m, None)
         monster_speaker = _narrations(published_m)[-1].get("speaker")
@@ -2034,8 +2294,7 @@ class TestDetectNpcTargetByDescription:
                         "kind": "npc",
                         "known_to_party": False,
                         "description": (
-                            "Un cartographe excentrique en chapeau à plumes, "
-                            "tenant un carnet."
+                            "Un cartographe excentrique en chapeau à plumes, tenant un carnet."
                         ),
                     },
                     {
@@ -2052,8 +2311,7 @@ class TestDetectNpcTargetByDescription:
                     "attitude": "friendly",
                     "known_to_party": False,
                     "description": (
-                        "Un cartographe excentrique en chapeau à plumes, "
-                        "tenant un carnet."
+                        "Un cartographe excentrique en chapeau à plumes, tenant un carnet."
                     ),
                 }
             },
@@ -2062,10 +2320,7 @@ class TestDetectNpcTargetByDescription:
     def test_descriptive_approach_matches_anonymous_npc(self) -> None:
         from app.game.action_pipeline import resolve_npc_target_id
 
-        text = (
-            "Je m'approche de l'homme au chapeau à plumes et le salue d'un geste "
-            "désinvolte."
-        )
+        text = "Je m'approche de l'homme au chapeau à plumes et le salue d'un geste désinvolte."
         npc_id = resolve_npc_target_id(text, self._state_with_anonymous_npc())
         assert npc_id == "volothamp"
 

@@ -1,11 +1,12 @@
 """Payload builders shared by the game WebSocket facade."""
+
 from __future__ import annotations
 
 import re
 from typing import Any
 
-from app.game.constants import ARMOR_CATEGORIES, MONSTER_TYPE_COLORS
 from app.engine.xp import xp_to_next_level
+from app.game.constants import ARMOR_CATEGORIES, MONSTER_TYPE_COLORS
 from app.game.tactical_combat import (
     calculate_reachable_cells,
     combatant_attack_range_m,
@@ -93,16 +94,14 @@ def compute_ac_from_equipment(equipment: list, dex_mod: int) -> int:
     """Calcule l'AC à partir de l'équipement équipé."""
     armor = next(
         (
-            item for item in equipment
+            item
+            for item in equipment
             if item.get("equipped") and item.get("category") in ARMOR_CATEGORIES
         ),
         None,
     )
     shield = next(
-        (
-            item for item in equipment
-            if item.get("equipped") and item.get("category") == "shield"
-        ),
+        (item for item in equipment if item.get("equipped") and item.get("category") == "shield"),
         None,
     )
     shield_bonus = 2 if shield else 0
@@ -155,16 +154,18 @@ def monster_color(monster_type: str | None) -> str:
 def format_monster_actions(actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
     formatted: list[dict[str, Any]] = []
     for action in actions:
-        formatted.append({
-            "name": action.get("name_fr") or action.get("name") or "Action",
-            "type": action.get("type"),
-            "attack_bonus": action.get("attack_bonus"),
-            "damage_dice": action.get("damage_dice"),
-            "damage_type": action.get("damage_type"),
-            "reach_m": action.get("reach_m"),
-            "range_m": action.get("range_m"),
-            "description": action.get("description") or action.get("description_fr"),
-        })
+        formatted.append(
+            {
+                "name": action.get("name_fr") or action.get("name") or "Action",
+                "type": action.get("type"),
+                "attack_bonus": action.get("attack_bonus"),
+                "damage_dice": action.get("damage_dice"),
+                "damage_type": action.get("damage_type"),
+                "reach_m": action.get("reach_m"),
+                "range_m": action.get("range_m"),
+                "description": action.get("description") or action.get("description_fr"),
+            }
+        )
     return formatted
 
 
@@ -184,6 +185,7 @@ def character_snapshot(char: Character) -> dict[str, Any]:
             int(getattr(char, "level", 1)),
         ),
         "is_ai": char.is_ai,
+        "char_class": char.char_class,
         "level": char.level,
         "ability_scores": dict(char.ability_scores),
         "skill_proficiencies": list(char.proficiencies.get("skills", [])),
@@ -246,52 +248,51 @@ def build_combat_start_payload(
             ),
             "attack_range_m": (
                 info.get("attack_range_m", combatant_attack_range_m(info))
-                if isinstance(info, dict) else 1.5
+                if isinstance(info, dict)
+                else 1.5
             ),
             "action_economy": entry.get("action_economy"),
         }
         if not is_player:
             base_id = info.get("monster_id") or monster_base_id(cid)
-            monster_data = (
-                encounter_monsters.get(base_id)
-                or encounter_catalog._monsters_by_id.get(base_id, {})
+            monster_data = encounter_monsters.get(base_id) or encounter_catalog._monsters_by_id.get(
+                base_id, {}
             )
             monster_name = (
-                monster_data.get("name_fr")
-                or monster_data.get("name")
-                or payload["name"]
+                monster_data.get("name_fr") or monster_data.get("name") or payload["name"]
             )
-            payload.update({
-                "species": monster_data.get("type"),
-                "cr": monster_data.get("cr"),
-                "token": info.get("token")
-                or monster_token_for_combatant(monster_name, cid, str(payload["name"])),
-                "color": info.get("color") or monster_color(monster_data.get("type")),
-                "ability_scores": monster_data.get("ability_scores", {}),
-                "actions": info.get("actions") or format_monster_actions(monster_data.get("actions", [])),
-                "traits": info.get("traits") or monster_data.get("traits", []),
-                "damage_resistances": (
-                    info.get("damage_resistances")
-                    or monster_data.get("damage_resistances", [])
-                ),
-                "damage_immunities": (
-                    info.get("damage_immunities")
-                    or monster_data.get("damage_immunities", [])
-                ),
-                "damage_vulnerabilities": (
-                    info.get("damage_vulnerabilities")
-                    or monster_data.get("damage_vulnerabilities", [])
-                ),
-                "condition_immunities": (
-                    info.get("condition_immunities")
-                    or monster_data.get("condition_immunities", [])
-                ),
-                "description": (
-                    info.get("description")
-                    or monster_data.get("description")
-                    or monster_data.get("alignment")
-                ),
-            })
+            payload.update(
+                {
+                    "species": monster_data.get("type"),
+                    "cr": monster_data.get("cr"),
+                    "token": info.get("token")
+                    or monster_token_for_combatant(monster_name, cid, str(payload["name"])),
+                    "color": info.get("color") or monster_color(monster_data.get("type")),
+                    "ability_scores": monster_data.get("ability_scores", {}),
+                    "actions": info.get("actions")
+                    or format_monster_actions(monster_data.get("actions", [])),
+                    "traits": info.get("traits") or monster_data.get("traits", []),
+                    "damage_resistances": (
+                        info.get("damage_resistances") or monster_data.get("damage_resistances", [])
+                    ),
+                    "damage_immunities": (
+                        info.get("damage_immunities") or monster_data.get("damage_immunities", [])
+                    ),
+                    "damage_vulnerabilities": (
+                        info.get("damage_vulnerabilities")
+                        or monster_data.get("damage_vulnerabilities", [])
+                    ),
+                    "condition_immunities": (
+                        info.get("condition_immunities")
+                        or monster_data.get("condition_immunities", [])
+                    ),
+                    "description": (
+                        info.get("description")
+                        or monster_data.get("description")
+                        or monster_data.get("alignment")
+                    ),
+                }
+            )
         combat_combatants.append(payload)
 
     order = turn_data.get("order", [])

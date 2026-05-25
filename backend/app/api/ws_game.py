@@ -31,6 +31,7 @@ Connection lifecycle
 3. Client sends ``action`` messages → dispatched to the game layer → results broadcast.
 4. Client disconnects: ``player_left`` broadcast, session closed if no more clients.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -97,10 +98,12 @@ from app.engine.tactical_grid import GridPosition, initialize_positions
 from app.engine.xp import level_from_xp
 from app.game.action_resolver import ActionResolver
 from app.game.async_tasks import create_logged_task
+from app.game.combat_stats import build_combatant_combat_stats
 from app.game.combat_triggers import prime_combat_from_aggressive_action
 from app.game.constants import INACTIVE_STATUSES
 from app.game.event_bus import BACKPRESSURE_ERROR_CODE, EventType, GameEvent, event_bus
 from app.game.runtime import rest_service, session_manager
+from app.game.session_manager import ActiveSession
 from app.game.state_sync import sync_character_state
 from app.game.tactical_combat import apply_tactical_move, calculate_reachable_cells
 from app.game.turn_manager import CombatantInfo
@@ -531,8 +534,7 @@ def _fallback_poi_for_enemy(
             "icon": "ruins",
             "position": position,
             "description": (
-                "Le combat a laisse ici un corps, des armes tombees "
-                "et des traces visibles."
+                "Le combat a laisse ici un corps, des armes tombees et des traces visibles."
             ),
             "action_hint": "Examiner les restes ou recuperer ce qui peut servir.",
         }
@@ -582,9 +584,7 @@ def _build_fallback_aftermath_scene(
     aftermath_enemies.extend(
         ("surrendered", enemy) for enemy in combat_summary.get("enemies_surrendered", [])
     )
-    aftermath_enemies.extend(
-        ("fled", enemy) for enemy in combat_summary.get("enemies_fled", [])
-    )
+    aftermath_enemies.extend(("fled", enemy) for enemy in combat_summary.get("enemies_fled", []))
     aftermath_enemies.extend(
         ("unresolved", enemy) for enemy in combat_summary.get("enemies_unresolved", [])
     )
@@ -612,9 +612,7 @@ def _build_fallback_aftermath_scene(
     return {
         "cols": cols,
         "rows": rows,
-        "cell_size_m": base_scene.get("cell_size_m")
-        or grid_config.get("cell_size_m")
-        or 1.5,
+        "cell_size_m": base_scene.get("cell_size_m") or grid_config.get("cell_size_m") or 1.5,
         "terrain": base_scene.get("terrain") or "battlefield_aftermath",
         "pois": pois,
         "exits": deepcopy(base_scene.get("exits", []) or []),
@@ -745,12 +743,14 @@ def _suggested_xp(combat_summary: dict[str, Any]) -> dict[str, Any]:
 
 
 def _suggested_loot(combat_summary: dict[str, Any]) -> dict[str, Any]:
-    rng_seed = repr((
-        combat_summary.get("battlefield_location"),
-        combat_summary.get("round_number"),
-        combat_summary.get("total_monster_xp"),
-        combat_summary.get("total_cr"),
-    ))
+    rng_seed = repr(
+        (
+            combat_summary.get("battlefield_location"),
+            combat_summary.get("round_number"),
+            combat_summary.get("total_monster_xp"),
+            combat_summary.get("total_cr"),
+        )
+    )
     loot = loot_for_encounter(
         total_cr=float(combat_summary.get("total_cr") or 0),
         monster_xp=int(combat_summary.get("total_monster_xp") or 0),
@@ -947,10 +947,7 @@ async def _cleanup_inactive_npcs(session_id: str, active: Any) -> list[dict[str,
             removed_entries.append(removed_entry)
             resolved_npcs = active.state_data.setdefault("resolved_npcs", [])
             existing_idx = next(
-                (
-                    idx for idx, item in enumerate(resolved_npcs)
-                    if item.get("combatant_id") == cid
-                ),
+                (idx for idx, item in enumerate(resolved_npcs) if item.get("combatant_id") == cid),
                 -1,
             )
             if existing_idx >= 0:
@@ -1016,9 +1013,7 @@ async def _handle_level_up_phase_if_needed(
             active=active,
         )
         if applied.applied:
-            leveled_names.append(
-                f"{applied.character.name} niveau {applied.result.new_level}"
-            )
+            leveled_names.append(f"{applied.character.name} niveau {applied.result.new_level}")
 
     if leveled_names:
         await event_bus.publish_to_session(
@@ -1214,12 +1209,14 @@ async def _handle_start_combat(
     for char_id, cdata in characters_data.items():
         dex = int(cdata.get("dex", 10))
         dex_mod = (dex - 10) // 2
+        combat_stats = build_combatant_combat_stats(cdata)
         combatants_list.append(
             CombatantInfo(
                 combatant_id=char_id,
                 name=cdata["name"],
                 dex_score=dex,
                 is_player=True,
+                speed=float(combat_stats.get("speed_m", 9.0)),
                 is_ai_controlled=bool(cdata.get("is_ai", False)),
             )
         )
@@ -1232,11 +1229,7 @@ async def _handle_start_combat(
             "is_ai": bool(cdata.get("is_ai", False)),
             "status": "active",
             "ac": _compute_ac_from_equipment(char_equipment, dex_mod),
-            "attack_bonus": 3,
-            "damage_notation": "1d6+2",
-            "speed_m": 9.0,
-            "reach_m": 1.5,
-            "attack_range_m": 1.5,
+            **combat_stats,
         }
 
     # Add NPC combatants from the built encounter
@@ -1245,10 +1238,9 @@ async def _handle_start_combat(
         cid = npc["combatant_id"]
         encounter_service._ensure_loaded()
         monster_id_base = "_".join(cid.rsplit("_", 1)[:-1]) if "_" in cid else cid
-        monster_data = (
-            encounter_monsters.get(monster_id_base)
-            or encounter_service._monsters_by_id.get(monster_id_base, {})
-        )
+        monster_data = encounter_monsters.get(
+            monster_id_base
+        ) or encounter_service._monsters_by_id.get(monster_id_base, {})
         first_action = next(
             (a for a in monster_data.get("actions", []) if a.get("attack_bonus") is not None),
             {},
@@ -1301,9 +1293,7 @@ async def _handle_start_combat(
             "description": monster_data.get("description"),
             "color": _monster_color(monster_data.get("type")),
             "token": _monster_token_for_combatant(
-                monster_data.get("name_fr")
-                or monster_data.get("name")
-                or npc["name"],
+                monster_data.get("name_fr") or monster_data.get("name") or npc["name"],
                 cid,
                 npc["name"],
             ),
@@ -1313,6 +1303,7 @@ async def _handle_start_combat(
     # Enregistrer les PlayerAgent pour les compagnons IA (personnages avec is_ai=True).
     # Idempotent : ne recrée pas les agents déjà présents (déjà restaurés par open_session).
     from app.game.ai_player_manager import register_ai_player
+
     for char_id, cdata in characters_data.items():
         register_ai_player(active, char_id, cdata)
 
@@ -1332,9 +1323,7 @@ async def _handle_start_combat(
     active.state_data["grid_positions"] = {
         cid: pos.to_dict() for cid, pos in grid_positions.items()
     }
-    active.state_data["grid_config"] = {
-        "cols": grid_cols, "rows": grid_rows, "cell_size_m": 1.5
-    }
+    active.state_data["grid_config"] = {"cols": grid_cols, "rows": grid_rows, "cell_size_m": 1.5}
 
     if should_generate_intro:
         generated_intro = await _generate_encounter_intro(
@@ -1393,8 +1382,7 @@ async def _handle_start_combat(
         enemy_list = ", ".join(npc_names) if npc_names else "des ennemis"
         verb = "surgissent" if len(npc_names) > 1 else "surgit"
         intro_text = (
-            f"{enemy_list} {verb} devant vous ! "
-            "L'initiative est lancée — le combat commence !"
+            f"{enemy_list} {verb} devant vous ! L'initiative est lancée — le combat commence !"
         )
     await event_bus.publish_to_session(
         session_id,
@@ -1500,9 +1488,7 @@ async def _handle_reset_combat(session_id: str, active: Any, db: AsyncSession) -
         cdata["hp"] = cdata.get("hp_max", cdata.get("hp", 10))
 
     # Persist to DB
-    result = await db.execute(
-        select(Character).where(Character.session_id == session_id)
-    )
+    result = await db.execute(select(Character).where(Character.session_id == session_id))
     chars = result.scalars().all()
     for char in chars:
         char.hp_current = char.hp_max
@@ -1550,7 +1536,8 @@ async def _handle_equip_item(
     character_id = action.character_id
     if not item_id or not character_id:
         await event_bus.publish_to_session(
-            session_id, EventType.ERROR,
+            session_id,
+            EventType.ERROR,
             {"message": "item_id et character_id requis pour équiper un objet."},
             source="ws_game",
         )
@@ -1565,26 +1552,30 @@ async def _handle_equip_item(
         )
     except CharacterNotFoundError:
         await event_bus.publish_to_session(
-            session_id, EventType.ERROR,
+            session_id,
+            EventType.ERROR,
             {"message": "Personnage introuvable."},
             source="ws_game",
         )
         return
     except ItemNotFoundError:
         await event_bus.publish_to_session(
-            session_id, EventType.ERROR,
+            session_id,
+            EventType.ERROR,
             {"message": f"Objet '{item_id}' introuvable dans l'inventaire."},
             source="ws_game",
         )
         return
 
     await event_bus.publish_to_session(
-        session_id, EventType.EQUIPMENT_UPDATED,
+        session_id,
+        EventType.EQUIPMENT_UPDATED,
         {"character_id": character_id, "equipment": result.equipment},
         source="ws_game",
     )
     await event_bus.publish_to_session(
-        session_id, EventType.NARRATION,
+        session_id,
+        EventType.NARRATION,
         {"text": result.narration, "speaker": "Maître du Jeu"},
         source="ws_game",
     )
@@ -1601,7 +1592,8 @@ async def _handle_use_item(
     character_id = action.character_id
     if not item_id or not character_id:
         await event_bus.publish_to_session(
-            session_id, EventType.ERROR,
+            session_id,
+            EventType.ERROR,
             {"message": "item_id et character_id requis pour utiliser un objet."},
             source="ws_game",
         )
@@ -1616,14 +1608,16 @@ async def _handle_use_item(
         )
     except CharacterNotFoundError:
         await event_bus.publish_to_session(
-            session_id, EventType.ERROR,
+            session_id,
+            EventType.ERROR,
             {"message": "Personnage introuvable."},
             source="ws_game",
         )
         return
     except ItemNotFoundError:
         await event_bus.publish_to_session(
-            session_id, EventType.ERROR,
+            session_id,
+            EventType.ERROR,
             {"message": f"Objet '{item_id}' introuvable dans l'inventaire."},
             source="ws_game",
         )
@@ -1631,19 +1625,22 @@ async def _handle_use_item(
 
     if result.hp is not None:
         await event_bus.publish_to_session(
-            session_id, EventType.HP_CHANGED,
+            session_id,
+            EventType.HP_CHANGED,
             {"combatant_id": character_id, "delta": result.hp_delta, "hp": result.hp},
             source="ws_game",
         )
 
     await event_bus.publish_to_session(
-        session_id, EventType.EQUIPMENT_UPDATED,
+        session_id,
+        EventType.EQUIPMENT_UPDATED,
         {"character_id": character_id, "equipment": result.equipment},
         source="ws_game",
     )
 
     await event_bus.publish_to_session(
-        session_id, EventType.NARRATION,
+        session_id,
+        EventType.NARRATION,
         {"text": result.narration, "speaker": "Maître du Jeu"},
         source="ws_game",
     )
@@ -1660,7 +1657,8 @@ async def _handle_drop_item(
     character_id = action.character_id
     if not item_id or not character_id:
         await event_bus.publish_to_session(
-            session_id, EventType.ERROR,
+            session_id,
+            EventType.ERROR,
             {"message": "item_id et character_id requis pour lâcher un objet."},
             source="ws_game",
         )
@@ -1675,7 +1673,8 @@ async def _handle_drop_item(
         )
     except CharacterNotFoundError:
         await event_bus.publish_to_session(
-            session_id, EventType.ERROR,
+            session_id,
+            EventType.ERROR,
             {"message": "Personnage introuvable."},
             source="ws_game",
         )
@@ -1684,12 +1683,14 @@ async def _handle_drop_item(
         return
 
     await event_bus.publish_to_session(
-        session_id, EventType.EQUIPMENT_UPDATED,
+        session_id,
+        EventType.EQUIPMENT_UPDATED,
         {"character_id": character_id, "equipment": result.equipment},
         source="ws_game",
     )
     await event_bus.publish_to_session(
-        session_id, EventType.NARRATION,
+        session_id,
+        EventType.NARRATION,
         {"text": result.narration, "speaker": "Maître du Jeu"},
         source="ws_game",
     )
@@ -2042,14 +2043,10 @@ async def _handle_move(
     mover_data = combatants_info.get(mover_id, {})
     current = active.turn_manager.current_turn
     turn_economy = (
-        current.action_economy
-        if current is not None and current.combatant_id == mover_id
-        else None
+        current.action_economy if current is not None and current.combatant_id == mover_id else None
     )
     speed_m = float(
-        turn_economy.movement
-        if turn_economy is not None
-        else mover_data.get("speed_m", 9.0)
+        turn_economy.movement if turn_economy is not None else mover_data.get("speed_m", 9.0)
     )
 
     move_result = await apply_tactical_move(
@@ -2104,9 +2101,8 @@ async def _handle_move(
 async def _send_welcome_narration(session_id: str, active: Any, db: AsyncSession) -> None:
     """Demande au GMAgent de décrire la scène courante quand un joueur rejoint en exploration."""
     # Guard d'idempotence : atomique en asyncio (pas d'await avant cette ligne)
-    if (
-        active.state_data.get("welcome_narration_sent")
-        or active.state_data.get("_opening_narration_in_progress")
+    if active.state_data.get("welcome_narration_sent") or active.state_data.get(
+        "_opening_narration_in_progress"
     ):
         return
     active.state_data["welcome_narration_sent"] = True
@@ -2122,8 +2118,10 @@ async def _send_welcome_narration(session_id: str, active: Any, db: AsyncSession
             game_state=active.state_data,
             player_action=None,
         )
-        welcome_text = gm_response.narration if gm_response else (
-            "Bienvenue dans l'aventure ! Décrivez votre action pour commencer."
+        welcome_text = (
+            gm_response.narration
+            if gm_response
+            else ("Bienvenue dans l'aventure ! Décrivez votre action pour commencer.")
         )
     except Exception as exc:
         logger.warning("_send_welcome_narration: GMAgent failed: %s", exc)
@@ -2218,6 +2216,7 @@ async def _handle_toggle_ai_control(
 
     # --- PlayerAgent registry ------------------------------------------
     from app.game.ai_player_manager import register_ai_player, unregister_ai_player
+
     if next_is_ai:
         register_ai_player(active, character_id, cdata)
     else:
@@ -2240,6 +2239,7 @@ async def _handle_toggle_ai_control(
             await _handle_ai_turns(session_id, active, db)
         else:
             from app.game.ai_player_manager import AIPlayerManager
+
             try:
                 await AIPlayerManager().run_exploration_reactions(
                     session_id, active, action_resolver, trigger_character_id=None, db=db
@@ -2277,6 +2277,7 @@ async def _handle_trigger_ai_reactions(
 
     # Exploration: let each AI companion react once.
     from app.game.ai_player_manager import AIPlayerManager
+
     await AIPlayerManager().run_exploration_reactions(
         session_id,
         active,
@@ -2338,14 +2339,14 @@ async def _dispatch_action(
         )
         return
 
-    if (
-        active.phase in (SessionStatus.EXPLORATION, SessionStatus.ENCOUNTER_START)
-        and prime_combat_from_aggressive_action(
-            active,
-            action_type=action.action_type,
-            content=action.content,
-            target_id=action.target_id,
-        )
+    if active.phase in (
+        SessionStatus.EXPLORATION,
+        SessionStatus.ENCOUNTER_START,
+    ) and prime_combat_from_aggressive_action(
+        active,
+        action_type=action.action_type,
+        content=action.content,
+        target_id=action.target_id,
     ):
         await _consume_pending_combat_transition(session_id, active, db, force=True)
         return
@@ -2353,11 +2354,7 @@ async def _dispatch_action(
     if active.phase == SessionStatus.COMBAT:
         await _sync_ai_control_from_db(session_id, active, db)
         current = active.turn_manager.current_turn
-        if (
-            action.action_type == "end_turn"
-            and current is not None
-            and current.is_ai_controlled
-        ):
+        if action.action_type == "end_turn" and current is not None and current.is_ai_controlled:
             await _handle_ai_turns(session_id, active, db)
             return
         if await _reject_out_of_turn_action(session_id, action, active):
@@ -2473,10 +2470,10 @@ async def _dispatch_action(
         )
 
         if await _consume_pending_combat_transition(
-                session_id,
-                active,
-                db,
-                force=active.phase == SessionStatus.ENCOUNTER_START,
+            session_id,
+            active,
+            db,
+            force=active.phase == SessionStatus.ENCOUNTER_START,
         ):
             return
 
@@ -2496,10 +2493,10 @@ async def _dispatch_action(
     )
 
     if await _consume_pending_combat_transition(
-            session_id,
-            active,
-            db,
-            force=True,
+        session_id,
+        active,
+        db,
+        force=True,
     ):
         return
 
@@ -2580,11 +2577,13 @@ async def game_websocket(
         async with db_session_factory() as db:
             await session_manager.open_session(session_id, db)
     except KeyError:
-        await websocket.send_json({
-            "event_type": EventType.ERROR,
-            "session_id": session_id,
-            "payload": {"message": f"Session '{session_id}' not found."},
-        })
+        await websocket.send_json(
+            {
+                "event_type": EventType.ERROR,
+                "session_id": session_id,
+                "payload": {"message": f"Session '{session_id}' not found."},
+            }
+        )
         await websocket.close(code=4404)
         return
 
@@ -2601,11 +2600,13 @@ async def game_websocket(
     # ------------------------------------------------------------------
     async with db_session_factory() as db:
         initial_payload = await _build_session_state_payload_with_maps(session_id, db)
-    await websocket.send_json({
-        "event_type": EventType.SESSION_STATE,
-        "session_id": session_id,
-        "payload": initial_payload,
-    })
+    await websocket.send_json(
+        {
+            "event_type": EventType.SESSION_STATE,
+            "session_id": session_id,
+            "payload": initial_payload,
+        }
+    )
 
     character_id: Optional[str] = None
 
@@ -2619,11 +2620,13 @@ async def game_websocket(
             except Exception:
                 break
             if not isinstance(raw, dict):
-                await websocket.send_json({
-                    "event_type": EventType.ERROR,
-                    "session_id": session_id,
-                    "payload": {"message": "Message WebSocket invalide."},
-                })
+                await websocket.send_json(
+                    {
+                        "event_type": EventType.ERROR,
+                        "session_id": session_id,
+                        "payload": {"message": "Message WebSocket invalide."},
+                    }
+                )
                 continue
 
             msg_type = raw.get("type", "")
@@ -2677,21 +2680,25 @@ async def game_websocket(
                             asyncio.create_task(_run_welcome_bg(session_id, db_session_factory))
                         elif active_on_join and active_on_join.phase == SessionStatus.COMBAT:
                             # Rejouer l'état de combat pour ce client qui se (re)connecte
-                            await websocket.send_json({
-                                "event_type": "combat_start",
-                                "session_id": session_id,
-                                "payload": _build_combat_start_payload(active_on_join),
-                            })
+                            await websocket.send_json(
+                                {
+                                    "event_type": "combat_start",
+                                    "session_id": session_id,
+                                    "payload": _build_combat_start_payload(active_on_join),
+                                }
+                            )
                             current = active_on_join.turn_manager.current_turn
                             if current:
-                                await websocket.send_json({
-                                    "event_type": EventType.TURN_START,
-                                    "session_id": session_id,
-                                    "payload": {
-                                        "combatant_id": current.combatant_id,
-                                        "combatant_name": current.name,
-                                    },
-                                })
+                                await websocket.send_json(
+                                    {
+                                        "event_type": EventType.TURN_START,
+                                        "session_id": session_id,
+                                        "payload": {
+                                            "combatant_id": current.combatant_id,
+                                            "combatant_name": current.name,
+                                        },
+                                    }
+                                )
                                 if current.is_ai_controlled:
                                     await _handle_ai_turns(session_id, active_on_join, db)
                 continue
@@ -2722,9 +2729,7 @@ async def game_websocket(
                 except ValidationError:
                     await send_ws_error(websocket, session_id, VALIDATION_ERROR_MESSAGE)
                 except Exception as exc:
-                    logger.error(
-                        "Unhandled error in toggle_ai_control: %s", exc, exc_info=True
-                    )
+                    logger.error("Unhandled error in toggle_ai_control: %s", exc, exc_info=True)
                     await event_bus.publish_to_session(
                         session_id,
                         EventType.ERROR,
@@ -2747,9 +2752,7 @@ async def game_websocket(
                 except ValidationError:
                     await send_ws_error(websocket, session_id, VALIDATION_ERROR_MESSAGE)
                 except Exception as exc:
-                    logger.error(
-                        "Unhandled error in trigger_ai_reactions: %s", exc, exc_info=True
-                    )
+                    logger.error("Unhandled error in trigger_ai_reactions: %s", exc, exc_info=True)
                     await event_bus.publish_to_session(
                         session_id,
                         EventType.ERROR,
@@ -2759,11 +2762,13 @@ async def game_websocket(
                 continue
 
             # --- unknown type -------------------------------------------
-            await websocket.send_json({
-                "event_type": EventType.ERROR,
-                "session_id": session_id,
-                "payload": {"message": f"Unknown message type: '{msg_type}'."},
-            })
+            await websocket.send_json(
+                {
+                    "event_type": EventType.ERROR,
+                    "session_id": session_id,
+                    "payload": {"message": f"Unknown message type: '{msg_type}'."},
+                }
+            )
 
     except WebSocketDisconnect:
         pass
@@ -2791,8 +2796,6 @@ async def game_websocket(
                     async with session_manager.session_lock(session_id):
                         await session_manager.close_session(session_id, db)
             except Exception as exc:
-                logger.warning(
-                    "Error closing session %s on last disconnect: %s", session_id, exc
-                )
+                logger.warning("Error closing session %s on last disconnect: %s", session_id, exc)
 
         logger.info("WS closed: session=%s character=%s", session_id, character_id)

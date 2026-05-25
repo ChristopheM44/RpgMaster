@@ -13,6 +13,7 @@ Ce test vérifie :
 3. Les actions IA sont validées puis dispatché via ActionResolver
 4. Un scénario complet : humain agit → 2 IA agissent → gobelins → round suivant
 """
+
 from __future__ import annotations
 
 import json
@@ -20,7 +21,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.agents.player_agent import PlayerAgent
-from app.agents.schemas import AgentResponse, PlayerPersonality
+from app.agents.schemas import AgentResponse, PlayerActionChoice, PlayerPersonality
 from app.game.action_resolver import ActionResolver
 from app.game.ai_player_manager import AIPlayerManager
 from app.game.session_manager import ActiveSession
@@ -33,25 +34,31 @@ from app.models.session import SessionStatus
 
 
 def _attack_json(character_name: str, target: str = "goblin_1") -> str:
-    return json.dumps({
-        "action_type": "attack",
-        "action_description": f"{character_name} attaque",
-        "target": target,
-        "params": {"weapon": "épée"},
-        "roleplay_text": f"{character_name} frappe le gobelin avec détermination !",
-        "inner_reasoning": "Attaque le gobelin le plus proche.",
-    }, ensure_ascii=False)
+    return json.dumps(
+        {
+            "action_type": "attack",
+            "action_description": f"{character_name} attaque",
+            "target": target,
+            "params": {"weapon": "épée"},
+            "roleplay_text": f"{character_name} frappe le gobelin avec détermination !",
+            "inner_reasoning": "Attaque le gobelin le plus proche.",
+        },
+        ensure_ascii=False,
+    )
 
 
 def _wait_json(character_name: str) -> str:
-    return json.dumps({
-        "action_type": "wait",
-        "action_description": "Attend",
-        "target": None,
-        "params": {},
-        "roleplay_text": f"{character_name} observe la situation.",
-        "inner_reasoning": "Conserve les ressources.",
-    }, ensure_ascii=False)
+    return json.dumps(
+        {
+            "action_type": "wait",
+            "action_description": "Attend",
+            "target": None,
+            "params": {},
+            "roleplay_text": f"{character_name} observe la situation.",
+            "inner_reasoning": "Conserve les ressources.",
+        },
+        ensure_ascii=False,
+    )
 
 
 def _build_game_state() -> dict[str, Any]:
@@ -189,6 +196,71 @@ def test_setup_combat_full_serialization() -> None:
         assert orig.is_ai_controlled == restored.is_ai_controlled
 
 
+def test_ai_movement_intents_resolve_to_coordinates() -> None:
+    from app.engine.tactical_grid import GridPosition, distance_m
+    from app.game.turn_manager import TurnEntry
+
+    active = ActiveSession(
+        session_id="intent-session",
+        phase=SessionStatus.COMBAT,
+        state_data={
+            "phase": "COMBAT",
+            "characters": {"thorin_1": {"name": "Thorin"}},
+            "combatants": {
+                "thorin_1": {
+                    "name": "Thorin",
+                    "hp": 10,
+                    "hp_max": 20,
+                    "is_player": True,
+                    "is_ai": True,
+                    "speed_m": 9.0,
+                    "status": "active",
+                },
+                "goblin_1": {
+                    "name": "Gobelin",
+                    "hp": 7,
+                    "hp_max": 7,
+                    "is_player": False,
+                    "status": "active",
+                },
+            },
+            "grid_config": {"cols": 5, "rows": 5, "cell_size_m": 1.5},
+            "grid_positions": {
+                "thorin_1": {"col": 2, "row": 2},
+                "goblin_1": {"col": 2, "row": 3},
+            },
+        },
+    )
+    active.turn_manager._order = [TurnEntry("thorin_1", "Thorin", 12, True, True)]
+    active.turn_manager._index = 0
+    active.turn_manager._mode = "combat"
+
+    start = GridPosition(2, 2)
+    enemy = GridPosition(2, 3)
+    for action_type in ("move", "dash", "disengage"):
+        action = PlayerActionChoice(
+            action_type=action_type,
+            action_description="Se replie",
+            target=None,
+            params={"intent": "retreat", "target_id": "goblin_1"},
+            roleplay_text="Thorin recule prudemment.",
+        )
+
+        normalized, spell_id, slot_level = AIPlayerManager._normalize_combat_action(
+            action,
+            "thorin_1",
+            active,
+            ["attack", "move", "dash", "disengage", "wait"],
+        )
+
+        assert spell_id is None
+        assert slot_level is None
+        assert normalized.action_type == action_type
+        col, row = [int(part) for part in normalized.params["destination"].split(",")]
+        destination = GridPosition(col, row)
+        assert distance_m(destination, enemy) > distance_m(start, enemy)
+
+
 # ---------------------------------------------------------------------------
 # AIPlayerManager.process_ai_turns
 # ---------------------------------------------------------------------------
@@ -298,11 +370,16 @@ async def test_process_ai_turns_multiple_consecutive_ai() -> None:
     ]
     active.turn_manager._index = 0
 
-    with patch.object(thorin_agent._client, "chat", new=AsyncMock(
-        return_value=_attack_json("Thorin")
-    )), patch.object(elara_agent._client, "chat", new=AsyncMock(
-        return_value=_attack_json("Elara", target="goblin_2")
-    )):
+    with (
+        patch.object(
+            thorin_agent._client, "chat", new=AsyncMock(return_value=_attack_json("Thorin"))
+        ),
+        patch.object(
+            elara_agent._client,
+            "chat",
+            new=AsyncMock(return_value=_attack_json("Elara", target="goblin_2")),
+        ),
+    ):
         resolver = MagicMock()
         resolver.resolve = AsyncMock()
 
@@ -346,9 +423,9 @@ async def test_process_ai_turns_validates_and_falls_back_to_wait() -> None:
     active.turn_manager._index = 0
 
     # LLM says 'attack', but validate_action should reject it
-    with patch.object(thorin_agent._client, "chat", new=AsyncMock(
-        return_value=_attack_json("Thorin")
-    )):
+    with patch.object(
+        thorin_agent._client, "chat", new=AsyncMock(return_value=_attack_json("Thorin"))
+    ):
         resolver = MagicMock()
         resolver.resolve = AsyncMock()
 
@@ -382,13 +459,16 @@ async def test_process_ai_turns_invalid_spell_falls_back_to_attack() -> None:
     ]
     active.turn_manager._index = 0
 
-    invalid_spell = json.dumps({
-        "action_type": "cast_spell",
-        "action_description": "Elara lance un sort vague",
-        "target": "goblin_1",
-        "params": {},
-        "roleplay_text": "Elara murmure une formule confuse.",
-    }, ensure_ascii=False)
+    invalid_spell = json.dumps(
+        {
+            "action_type": "cast_spell",
+            "action_description": "Elara lance un sort vague",
+            "target": "goblin_1",
+            "params": {},
+            "roleplay_text": "Elara murmure une formule confuse.",
+        },
+        ensure_ascii=False,
+    )
     with patch.object(elara_agent._client, "chat", new=AsyncMock(return_value=invalid_spell)):
         resolver = MagicMock()
         resolver.resolve = AsyncMock()
@@ -426,15 +506,20 @@ async def test_process_ai_turns_valid_known_spell_dispatches_cast_spell() -> Non
     ]
     active.turn_manager._index = 0
 
-    spell_json = json.dumps({
-        "action_type": "cast_spell",
-        "action_description": "Elara lance projectile magique",
-        "target": "goblin_1",
-        "params": {"spell_name": "Projectile magique", "slot_level": 1},
-        "roleplay_text": "Elara trace trois traits lumineux.",
-    }, ensure_ascii=False)
-    with patch.object(elara_agent._client, "chat", new=AsyncMock(return_value=spell_json)), \
-         patch("app.game.ai_player_manager.is_sober_mode", return_value=False):
+    spell_json = json.dumps(
+        {
+            "action_type": "cast_spell",
+            "action_description": "Elara lance projectile magique",
+            "target": "goblin_1",
+            "params": {"spell_name": "Projectile magique", "slot_level": 1},
+            "roleplay_text": "Elara trace trois traits lumineux.",
+        },
+        ensure_ascii=False,
+    )
+    with (
+        patch.object(elara_agent._client, "chat", new=AsyncMock(return_value=spell_json)),
+        patch("app.game.ai_player_manager.is_sober_mode", return_value=False),
+    ):
         resolver = MagicMock()
         resolver.resolve = AsyncMock()
 
@@ -484,20 +569,23 @@ async def test_process_ai_turns_persists_ai_combat_action(db_session) -> None:
     ]
     active.turn_manager._index = 0
 
-    with patch.object(thorin_agent._client, "chat", new=AsyncMock(
-        return_value=_attack_json("Thorin")
-    )):
+    with patch.object(
+        thorin_agent._client, "chat", new=AsyncMock(return_value=_attack_json("Thorin"))
+    ):
         mock_gm = MagicMock()
-        mock_gm.think = AsyncMock(return_value=AgentResponse(
-            content="Thorin force le gobelin a reculer.",
-            actions=[],
-        ))
+        mock_gm.think = AsyncMock(
+            return_value=AgentResponse(
+                content="Thorin force le gobelin a reculer.",
+                actions=[],
+            )
+        )
         resolver = ActionResolver(gm_agent=mock_gm)
 
         publish = AsyncMock()
-        with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=publish), \
-             patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast",
-                   new=AsyncMock()):
+        with (
+            patch("app.game.ai_player_manager.event_bus.publish_to_session", new=publish),
+            patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast", new=AsyncMock()),
+        ):
             ai_manager = AIPlayerManager()
             triggered = await ai_manager.process_ai_turns(
                 session.id,
@@ -508,10 +596,10 @@ async def test_process_ai_turns_persists_ai_combat_action(db_session) -> None:
 
     assert triggered == 1
     rows = (
-        await db_session.execute(
-            select(Message).where(Message.session_id == session.id)
-        )
-    ).scalars().all()
+        (await db_session.execute(select(Message).where(Message.session_id == session.id)))
+        .scalars()
+        .all()
+    )
     ai_messages = [
         row
         for row in rows
@@ -524,13 +612,8 @@ async def test_process_ai_turns_persists_ai_combat_action(db_session) -> None:
     assert ai_messages[0].content.startswith("Thorin attaque")
     assert "frappe le gobelin" not in ai_messages[0].content
     assert (ai_messages[0].metadata_ or {}).get("action_type") == "attack"
-    narration_calls = [
-        call for call in publish.await_args_list if call.args[1] == "narration"
-    ]
-    assert any(
-        call.args[2]["text"].startswith("Thorin attaque")
-        for call in narration_calls
-    )
+    narration_calls = [call for call in publish.await_args_list if call.args[1] == "narration"]
+    assert any(call.args[2]["text"].startswith("Thorin attaque") for call in narration_calls)
 
 
 async def test_cleanup_after_ai_kill_skips_dead_next_monster() -> None:
@@ -585,7 +668,7 @@ async def test_process_ai_turns_no_agent_registered_skips_entry() -> None:
 
     active.turn_manager._order = [
         TurnEntry("thorin_1", "Thorin", 18, True, True),  # AI but no agent registered
-        TurnEntry("aria_1", "Aria", 12, True, False),      # human
+        TurnEntry("aria_1", "Aria", 12, True, False),  # human
     ]
     active.turn_manager._index = 0
 
@@ -690,19 +773,24 @@ async def test_full_combat_round_human_then_ai_then_monsters() -> None:
     assert active.turn_manager.current_turn.combatant_id == "thorin_1"
 
     # --- Step 2 : AI companions act ---
-    with patch.object(thorin_agent._client, "chat", new=AsyncMock(
-        return_value=_attack_json("Thorin", target="goblin_1")
-    )), patch.object(elara_agent._client, "chat", new=AsyncMock(
-        return_value=_attack_json("Elara", target="goblin_2")
-    )):
+    with (
+        patch.object(
+            thorin_agent._client,
+            "chat",
+            new=AsyncMock(return_value=_attack_json("Thorin", target="goblin_1")),
+        ),
+        patch.object(
+            elara_agent._client,
+            "chat",
+            new=AsyncMock(return_value=_attack_json("Elara", target="goblin_2")),
+        ),
+    ):
         resolver = MagicMock()
         resolver.resolve = AsyncMock()
 
         with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=AsyncMock()):
             ai_manager = AIPlayerManager()
-            triggered = await ai_manager.process_ai_turns(
-                "full_combat_session", active, resolver
-            )
+            triggered = await ai_manager.process_ai_turns("full_combat_session", active, resolver)
 
     assert triggered == 2, "Thorin et Elara doivent avoir agi"
     assert resolver.resolve.call_count == 2

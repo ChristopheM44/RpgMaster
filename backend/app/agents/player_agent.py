@@ -757,6 +757,15 @@ class PlayerAgent(BaseAgent):
         character_ids = set(characters) if isinstance(characters, dict) else set()
         allies: list[dict[str, Any]] = []
         enemies: list[dict[str, Any]] = []
+        my_combatant = combatants.get(self._character_id, {})
+        if not isinstance(my_combatant, dict):
+            my_combatant = {}
+        my_range = float(my_combatant.get("attack_range_m", 1.5) or 1.5)
+        my_speed = float(my_combatant.get("speed_m", 9.0) or 9.0)
+
+        from app.game.tactical_combat import distance_m, grid_position_for  # noqa: PLC0415
+
+        my_pos = grid_position_for(game_state, self._character_id)
 
         for cid, cdata in combatants.items():
             if not isinstance(cdata, dict):
@@ -775,6 +784,14 @@ class PlayerAgent(BaseAgent):
                 "status": status,
                 "conditions": cdata.get("conditions", []),
             }
+            entry_pos = grid_position_for(game_state, str(cid))
+            if entry_pos is not None:
+                entry["position"] = entry_pos.to_dict()
+            if my_pos is not None and entry_pos is not None:
+                distance = distance_m(my_pos, entry_pos)
+                entry["distance_m"] = round(distance, 1)
+                entry["in_range"] = distance <= my_range
+                entry["reachable_with_move"] = distance <= (my_range + my_speed)
             if cdata.get("is_player") is True or cid in character_ids:
                 allies.append(entry)
             elif hp > 0 and status not in INACTIVE_STATUSES:
@@ -784,6 +801,10 @@ class PlayerAgent(BaseAgent):
             "phase": game_state.get("phase", "COMBAT"),
             "round": game_state.get("round_number"),
             "self_id": self._character_id,
+            "self_position": my_pos.to_dict() if my_pos else None,
+            "self_attack_range_m": my_range,
+            "self_speed_m": my_speed,
+            "is_ranged_weapon": my_range > 1.5,
             "allies": allies,
             "enemies": enemies,
         }

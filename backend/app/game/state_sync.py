@@ -1,8 +1,10 @@
 """Small helpers for keeping active character snapshots aligned."""
+
 from __future__ import annotations
 
 from typing import Any, Optional
 
+from app.game.combat_stats import build_combatant_combat_stats
 from app.game.session_manager import ActiveSession
 
 
@@ -55,6 +57,17 @@ def sync_character_state(
         changed = _set_if_provided(combatant, "hp_max", hp_max) or changed
         changed = _set_if_provided(combatant, "level", level) or changed
         changed = _set_if_provided(combatant, "conditions", conditions) or changed
+        if equipment is not None and _is_combat_phase(active):
+            source = cdata if isinstance(cdata, dict) else {"equipment": equipment}
+            combat_stats = build_combatant_combat_stats(source)
+            for key in (
+                "attack_bonus",
+                "damage_notation",
+                "reach_m",
+                "attack_range_m",
+                "speed_m",
+            ):
+                changed = _set_if_provided(combatant, key, combat_stats.get(key)) or changed
 
     if changed:
         active.mark_dirty()
@@ -68,3 +81,9 @@ def _set_if_provided(target: dict[str, Any], key: str, value: Any) -> bool:
         return False
     target[key] = value
     return True
+
+
+def _is_combat_phase(active: ActiveSession) -> bool:
+    phase = active.phase
+    value = phase.value if hasattr(phase, "value") else str(phase)
+    return str(value).lower() == "combat"
