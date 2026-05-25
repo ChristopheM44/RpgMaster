@@ -263,10 +263,16 @@ export function useWebSocket(sessionId: string) {
         if (isCombatActionPayload(msg.payload)) gameStore.addCombatAction(msg.payload)
         break
       case 'combatant_moved':
-        if (isCombatantMovedPayload(msg.payload)) gameStore.moveCombatant(msg.payload)
+        if (isCombatantMovedPayload(msg.payload)) {
+          gameStore.moveCombatant(msg.payload)
+          gameStore.setProcessing(false)
+        }
         break
       case 'action_economy_changed':
-        if (isActionEconomyChangedPayload(msg.payload)) gameStore.applyActionEconomyChanged(msg.payload)
+        if (isActionEconomyChangedPayload(msg.payload)) {
+          gameStore.applyActionEconomyChanged(msg.payload)
+          gameStore.setProcessing(false)
+        }
         break
       case 'opportunity_attack_triggered':
         if (isOpportunityAttackTriggeredPayload(msg.payload)) {

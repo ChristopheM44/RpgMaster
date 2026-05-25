@@ -177,6 +177,66 @@ describe('useWebSocket', () => {
     vi.unstubAllGlobals()
   })
 
+  it('clears processing when a movement acknowledgement arrives', () => {
+    const socket = useWebSocket('session-1')
+    const gameStore = useGameStore()
+
+    socket.connect('hero-1')
+    WebSocketMock.instances[0]!.open()
+
+    socket.sendAction('move', '2,3', 'hero-1')
+    expect(gameStore.isProcessing).toBe(true)
+
+    WebSocketMock.instances[0]!.onmessage?.({
+      data: JSON.stringify({
+        event_type: 'combatant_moved',
+        payload: {
+          combatant_id: 'hero-1',
+          position: { col: 2, row: 3 },
+          movement_used_m: 4.5,
+        },
+      }),
+    })
+
+    expect(gameStore.isProcessing).toBe(false)
+
+    socket.disconnect()
+    vi.unstubAllGlobals()
+  })
+
+  it('clears processing when an action economy update arrives', () => {
+    const socket = useWebSocket('session-1')
+    const gameStore = useGameStore()
+
+    socket.connect('hero-1')
+    WebSocketMock.instances[0]!.open()
+
+    socket.sendAction('dash', undefined, 'hero-1')
+    expect(gameStore.isProcessing).toBe(true)
+
+    WebSocketMock.instances[0]!.onmessage?.({
+      data: JSON.stringify({
+        event_type: 'action_economy_changed',
+        payload: {
+          combatant_id: 'hero-1',
+          action_economy: {
+            action: false,
+            bonus_action: true,
+            reaction: true,
+            movement: 18,
+            movement_max: 9,
+            has_dashed: true,
+          },
+        },
+      }),
+    })
+
+    expect(gameStore.isProcessing).toBe(false)
+
+    socket.disconnect()
+    vi.unstubAllGlobals()
+  })
+
   it('resets local state when the campaign reset event arrives', () => {
     const socket = useWebSocket('session-1')
     const gameStore = useGameStore()
