@@ -32,6 +32,7 @@ node_modules/
 frontend/dist/
 frontend/.vite/
 *.local
+frontend/design_handoff_combat_redesign/
 
 # OS
 .DS_Store
