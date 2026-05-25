@@ -6,6 +6,11 @@ from typing import Any
 
 from app.game.constants import ARMOR_CATEGORIES, MONSTER_TYPE_COLORS
 from app.engine.xp import xp_to_next_level
+from app.game.tactical_combat import (
+    calculate_reachable_cells,
+    combatant_attack_range_m,
+    combatant_reach_m,
+)
 from app.models.character import Character
 from app.services.encounter_service import encounter_service
 from app.services.rest_service import normalize_character_hit_dice
@@ -152,9 +157,12 @@ def format_monster_actions(actions: list[dict[str, Any]]) -> list[dict[str, Any]
     for action in actions:
         formatted.append({
             "name": action.get("name_fr") or action.get("name") or "Action",
+            "type": action.get("type"),
             "attack_bonus": action.get("attack_bonus"),
             "damage_dice": action.get("damage_dice"),
             "damage_type": action.get("damage_type"),
+            "reach_m": action.get("reach_m"),
+            "range_m": action.get("range_m"),
             "description": action.get("description") or action.get("description_fr"),
         })
     return formatted
@@ -231,6 +239,15 @@ def build_combat_start_payload(
             "ac": info.get("ac", 10),
             "attack_bonus": info.get("attack_bonus"),
             "damage_notation": info.get("damage_notation"),
+            "speed_m": info.get("speed_m", 9.0),
+            "reach_m": info.get(
+                "reach_m",
+                combatant_reach_m(info) if isinstance(info, dict) else 1.5,
+            ),
+            "attack_range_m": (
+                info.get("attack_range_m", combatant_attack_range_m(info))
+                if isinstance(info, dict) else 1.5
+            ),
             "action_economy": entry.get("action_economy"),
         }
         if not is_player:
@@ -277,8 +294,19 @@ def build_combat_start_payload(
             })
         combat_combatants.append(payload)
 
+    order = turn_data.get("order", [])
+    current_id = None
+    if order and 0 <= current_idx < len(order):
+        current_id = order[current_idx].get("combatant_id")
+    reachable_cells = {}
+    if current_id:
+        reachable = calculate_reachable_cells(active, current_id)
+        if reachable is not None:
+            reachable_cells[current_id] = reachable
+
     return {
         "combatants": combat_combatants,
         "grid_config": grid_cfg,
         "grid_decoration": active.state_data.get("grid_decoration"),
+        "reachable_cells": reachable_cells,
     }

@@ -6,6 +6,7 @@ import type {
   DeathSaves,
   GridConfig,
   CombatantMovedPayload,
+  ActionEconomyChangedPayload,
   SessionStatePayload,
   NarrationPayload,
   RollResultPayload,
@@ -25,6 +26,7 @@ import type {
   RegionMapUpdatedPayload,
   CityMapUpdatedPayload,
   NodeStatus,
+  ReachableCells,
 } from '../types'
 
 function escapeRegExp(value: string): string {
@@ -74,6 +76,7 @@ export const useGameStore = defineStore('game', () => {
   const selectedCombatantId = ref<string | null>(null)
   const gridConfig = ref<GridConfig | null>(null)
   const gridDecoration = ref<GridDecoration | null>(null)
+  const reachableCells = ref<Record<string, ReachableCells>>({})
 
   // ─── Connection ─────────────────────────────────────────────────────────────
   const connected = ref(false)
@@ -177,6 +180,7 @@ export const useGameStore = defineStore('game', () => {
     if (payload.combatants) setCombatants(payload.combatants)
     if (payload.grid_config) gridConfig.value = payload.grid_config
     if ('grid_decoration' in payload) gridDecoration.value = payload.grid_decoration ?? null
+    if ('reachable_cells' in payload) reachableCells.value = payload.reachable_cells ?? {}
 
     if (payload.turn_order.length > 0) {
       const idx = payload.current_turn_index
@@ -278,6 +282,7 @@ export const useGameStore = defineStore('game', () => {
       combatants.value = []
       selectedCombatantId.value = null
       gridDecoration.value = null
+      reachableCells.value = {}
     }
     addSystemEntry(`Phase changée → ${newPhase}`)
   }
@@ -310,6 +315,20 @@ export const useGameStore = defineStore('game', () => {
     gridDecoration.value = decoration ?? null
   }
 
+  function setReachableCells(cells: Record<string, ReachableCells> | null | undefined) {
+    reachableCells.value = cells ?? {}
+  }
+
+  function setReachableCellsFor(combatantId: string, cells: ReachableCells | null | undefined) {
+    if (!cells) {
+      const next = { ...reachableCells.value }
+      delete next[combatantId]
+      reachableCells.value = next
+      return
+    }
+    reachableCells.value = { ...reachableCells.value, [combatantId]: cells }
+  }
+
   function moveCombatant(payload: CombatantMovedPayload) {
     const idx = combatants.value.findIndex((c) => c.id === payload.combatant_id)
     if (idx !== -1) {
@@ -317,8 +336,11 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
-  function applyActionEconomyChanged(payload: { combatant_id: string; action_economy: NonNullable<CombatantState['action_economy']> }) {
+  function applyActionEconomyChanged(payload: ActionEconomyChangedPayload) {
     updateCombatant(payload.combatant_id, { action_economy: payload.action_economy })
+    if ('reachable_cells' in payload) {
+      setReachableCellsFor(payload.combatant_id, payload.reachable_cells)
+    }
   }
 
   function applyCombatantStatusChanged(payload: CombatantStatusChangedPayload) {
@@ -489,6 +511,7 @@ export const useGameStore = defineStore('game', () => {
     selectedCombatantId.value = null
     gridConfig.value = null
     gridDecoration.value = null
+    reachableCells.value = {}
     phase.value = 'lobby'
     currentTurnId.value = null
     connected.value = false
@@ -519,6 +542,7 @@ export const useGameStore = defineStore('game', () => {
     selectedCombatantId,
     gridConfig,
     gridDecoration,
+    reachableCells,
     adventureJournal,
     quests,
     chronicle,
@@ -555,6 +579,8 @@ export const useGameStore = defineStore('game', () => {
     setSelectedCombatant,
     setGridConfig,
     setGridDecoration,
+    setReachableCells,
+    setReachableCellsFor,
     moveCombatant,
     applyActionEconomyChanged,
     applyCombatantStatusChanged,

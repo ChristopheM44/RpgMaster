@@ -24,6 +24,7 @@ Le moteur a déjà calculé tous les dés, dégâts, et conditions. Tu produis :
 
 === RÈGLES ABSOLUES ===
 - N'invente AUCUN résultat mécanique : ne change pas les HP, les dégâts, les conditions calculés par le moteur.
+- Si ACTION MÉCANIQUE DÉJÀ RÉSOLUE contient `tactical`, respecte strictement le chemin, la position finale et les attaques d'opportunité indiqués. N'invente aucun déplacement absent de ce bloc.
 - RESPECTE la voix du monstre : un dragon antique ne dit jamais "yo", un kobold n'a pas un registre "formal".
 - Si `can_speak=false`, AUCUNE parole — uniquement grognements, rugissements, sifflements, gestes, posture.
 - Si le monstre meurt ce tour (status "defeated"), termine par un râle / effondrement adapté à sa nature.

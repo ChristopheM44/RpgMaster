@@ -41,19 +41,9 @@ const myPos = computed((): GridPosition | null => {
 })
 
 const reachableCells = computed((): Set<string> => {
-  if (!props.isMyTurn || !myPos.value) return new Set()
-  const maxCells = Math.floor((props.speedM ?? 9) / cellSizeM.value)
-  const result = new Set<string>()
-  const p = myPos.value
-  for (let r = 0; r < rows.value; r++) {
-    for (let c = 0; c < cols.value; c++) {
-      const key = `${c},${r}`
-      if (cellMap.value[key]) continue
-      const dist = Math.max(Math.abs(c - p.col), Math.abs(r - p.row))
-      if (dist > 0 && dist <= maxCells) result.add(key)
-    }
-  }
-  return result
+  if (!props.isMyTurn || !props.myCharacterId) return new Set()
+  const reachable = gameStore.reachableCells[props.myCharacterId]
+  return new Set((reachable?.free ?? []).map((pos) => `${pos.col},${pos.row}`))
 })
 
 // Build rows x cols grid as array of arrays for template iteration

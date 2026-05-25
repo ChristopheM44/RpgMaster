@@ -1255,6 +1255,201 @@ class TestMonsterPipeline:
         assert narrs[-1].get("speaker") == "Maître du Jeu"
 
 
+class TestTacticalCombatCoherence:
+    def _active_with_wolf_between_heroes(self) -> ActiveSession:
+        active = _make_combat_active(hero_id="thorvald", monster_id="wolf_1", monster_turn_first=True)
+        active.state_data["characters"] = {
+            "thorvald": {"name": "Thorvald", "level": 1, "hp": 20, "hp_max": 20},
+            "ardent": {"name": "Ardent", "level": 1, "hp": 20, "hp_max": 20},
+        }
+        active.state_data["combatants"] = {
+            "thorvald": {
+                "name": "Thorvald",
+                "hp": 20,
+                "hp_max": 20,
+                "is_player": True,
+                "is_ai": False,
+                "ac": 16,
+                "attack_bonus": 5,
+                "damage_notation": "1d8+3",
+                "status": "active",
+            },
+            "ardent": {
+                "name": "Ardent",
+                "hp": 20,
+                "hp_max": 20,
+                "is_player": True,
+                "is_ai": False,
+                "ac": 14,
+                "attack_bonus": 20,
+                "damage_notation": "1",
+                "status": "active",
+            },
+            "wolf_1": {
+                "name": "Loup",
+                "hp": 30,
+                "hp_max": 30,
+                "is_player": False,
+                "is_ai": True,
+                "ac": 13,
+                "attack_bonus": 4,
+                "damage_notation": "2d4+2",
+                "speed_m": 12,
+                "reach_m": 1.5,
+                "status": "active",
+            },
+        }
+        active.state_data["grid_config"] = {"cols": 8, "rows": 6, "cell_size_m": 1.5}
+        active.state_data["grid_positions"] = {
+            "wolf_1": {"col": 1, "row": 1},
+            "ardent": {"col": 1, "row": 2},
+            "thorvald": {"col": 5, "row": 1},
+        }
+        active.turn_manager._order = [
+            TurnEntry("wolf_1", "Loup", 18, False, True),
+            TurnEntry("ardent", "Ardent", 12, True, False),
+            TurnEntry("thorvald", "Thorvald", 10, True, False),
+        ]
+        active.turn_manager._index = 0
+        return active
+
+    async def test_monster_explicit_far_target_moves_and_triggers_opportunity_attack(self) -> None:
+        active = self._active_with_wolf_between_heroes()
+        published, capture = _event_collector()
+        gm = _mock_gm("Le loup attaque apres s'etre deplace.")
+        resolver = ActionResolver(gm_agent=gm, combat_gm_agent=gm)
+
+        with patch("app.game.action_resolver.event_bus.publish_to_session", new=capture), \
+             patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast",
+                   new=AsyncMock()):
+            result = await resolver.resolve(
+                session_id=SESSION_ID,
+                action_type="attack",
+                content=None,
+                character_id="wolf_1",
+                target_id="thorvald",
+                active=active,
+                actor_kind="monster",
+                actor_name="Loup",
+            )
+
+        assert result.target_id == "thorvald"
+        wolf_pos = active.state_data["grid_positions"]["wolf_1"]
+        assert max(abs(wolf_pos["col"] - 5), abs(wolf_pos["row"] - 1)) <= 1
+        assert active.turn_manager._order[1].action_economy.reaction is False
+        assert any(et == EventType.COMBATANT_MOVED for et, _ in published)
+        oa_events = [p for et, p in published if et == EventType.OPPORTUNITY_ATTACK_TRIGGERED]
+        assert len(oa_events) == 1
+        assert oa_events[0]["attacker_id"] == "ardent"
+        assert oa_events[0]["target_id"] == "wolf_1"
+        assert "attacker_name" in oa_events[0]
+        assert "attack_total" in oa_events[0]
+
+    async def test_disengage_prevents_opportunity_attack_on_monster_move(self) -> None:
+        active = self._active_with_wolf_between_heroes()
+        active.turn_manager.current_turn.action_economy.has_disengaged = True
+        published, capture = _event_collector()
+        gm = _mock_gm("Le loup se degage et attaque.")
+        resolver = ActionResolver(gm_agent=gm, combat_gm_agent=gm)
+
+        with patch("app.game.action_resolver.event_bus.publish_to_session", new=capture), \
+             patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast",
+                   new=AsyncMock()):
+            await resolver.resolve(
+                session_id=SESSION_ID,
+                action_type="attack",
+                content=None,
+                character_id="wolf_1",
+                target_id="thorvald",
+                active=active,
+                actor_kind="monster",
+                actor_name="Loup",
+            )
+
+        wolf_pos = active.state_data["grid_positions"]["wolf_1"]
+        assert max(abs(wolf_pos["col"] - 5), abs(wolf_pos["row"] - 1)) <= 1
+        assert active.turn_manager._order[1].action_economy.reaction is True
+        assert not [p for et, p in published if et == EventType.OPPORTUNITY_ATTACK_TRIGGERED]
+
+    async def test_creature_without_reaction_cannot_make_opportunity_attack(self) -> None:
+        active = self._active_with_wolf_between_heroes()
+        active.state_data["combatants"]["ardent"]["conditions"] = ["incapacitated"]
+        published, capture = _event_collector()
+        gm = _mock_gm("Le loup file vers Thorvald.")
+        resolver = ActionResolver(gm_agent=gm, combat_gm_agent=gm)
+
+        with patch("app.game.action_resolver.event_bus.publish_to_session", new=capture), \
+             patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast",
+                   new=AsyncMock()):
+            await resolver.resolve(
+                session_id=SESSION_ID,
+                action_type="attack",
+                content=None,
+                character_id="wolf_1",
+                target_id="thorvald",
+                active=active,
+                actor_kind="monster",
+                actor_name="Loup",
+            )
+
+        assert active.turn_manager._order[1].action_economy.reaction is True
+        assert not [p for et, p in published if et == EventType.OPPORTUNITY_ATTACK_TRIGGERED]
+
+    async def test_player_melee_attack_out_of_range_is_rejected_without_turn_cost(self) -> None:
+        active = _make_combat_active()
+        active.state_data["grid_config"] = {"cols": 8, "rows": 6, "cell_size_m": 1.5}
+        active.state_data["grid_positions"] = {
+            "hero_1": {"col": 0, "row": 0},
+            "goblin_1": {"col": 4, "row": 0},
+        }
+        published, capture = _event_collector()
+        gm = _mock_gm("Ne devrait pas etre appele.")
+        resolver = ActionResolver(gm_agent=gm, combat_gm_agent=gm)
+
+        with patch("app.game.action_resolver.event_bus.publish_to_session", new=capture), \
+             patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast",
+                   new=AsyncMock()):
+            result = await resolver.resolve(
+                session_id=SESSION_ID,
+                action_type="attack",
+                content=None,
+                character_id="hero_1",
+                target_id="goblin_1",
+                active=active,
+            )
+
+        assert result.mechanics["error"] is True
+        assert active.state_data["combatants"]["goblin_1"]["hp"] == 7
+        assert [p for et, p in published if et == EventType.ERROR]
+        assert not [p for et, p in published if et == EventType.ROLL_RESULT]
+
+    async def test_move_rejects_destination_without_path(self) -> None:
+        from app.api import ws_game
+        from app.api.ws_schemas import PlayerActionMessage
+
+        active = _make_combat_active()
+        active.state_data["grid_config"] = {"cols": 4, "rows": 1, "cell_size_m": 1.5}
+        active.state_data["grid_positions"] = {
+            "hero_1": {"col": 0, "row": 0},
+            "goblin_1": {"col": 3, "row": 0},
+        }
+        active.state_data["grid_decoration"] = {"obstacles": [{"col": 1, "row": 0}]}
+        action = PlayerActionMessage(
+            type="action",
+            action_type="move",
+            content="2,0",
+            character_id="hero_1",
+        )
+        published, capture = _event_collector()
+
+        with patch("app.api.ws_game.event_bus.publish_to_session", new=capture):
+            await ws_game._handle_move(SESSION_ID, action, active, db=None)
+
+        assert active.state_data["grid_positions"]["hero_1"] == {"col": 0, "row": 0}
+        assert [p for et, p in published if et == EventType.ERROR]
+        assert not [p for et, p in published if et == EventType.COMBATANT_MOVED]
+
+
 # ---------------------------------------------------------------------------
 # 4. Encounter intro
 # ---------------------------------------------------------------------------

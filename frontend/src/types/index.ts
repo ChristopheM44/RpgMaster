@@ -551,6 +551,7 @@ export interface SessionStatePayload {
   combatants?: CombatantState[]
   grid_config?: GridConfig
   grid_decoration?: GridDecoration | null
+  reachable_cells?: Record<string, ReachableCells>
   adventure_journal?: AdventureJournal
   quests?: Quest[]
   chronicle?: ChronicleEntry[]
@@ -694,25 +695,44 @@ export interface GridConfig {
 
 export interface GridDecoration {
   obstacles?: GridPosition[]
+  difficult?: GridPosition[]
   zones?: Array<{ id: string; name: string; cells: GridPosition[]; kind?: string; icon?: string; type?: string }>
+}
+
+export interface ReachableCells {
+  free: GridPosition[]
+  with_dash: GridPosition[]
+  blocked_by_zoc: GridPosition[]
+  paths?: Record<string, GridPosition[]>
 }
 
 export interface CombatantMovedPayload {
   combatant_id: string
   position: GridPosition
   movement_used_m: number
+  path?: GridPosition[]
+  interrupted?: boolean
+  reason?: string
 }
 
 export interface ActionEconomyChangedPayload {
   combatant_id: string
   action_economy: NonNullable<CombatantState['action_economy']>
+  reachable_cells?: ReachableCells
 }
 
 export interface OpportunityAttackTriggeredPayload {
   attacker_id: string
+  attacker_name?: string
   target_id: string
+  target_name?: string
   hit: boolean
+  critical?: boolean
+  d20?: number
+  attack_total?: number
+  target_ac?: number
   damage: number
+  damage_notation?: string
 }
 
 export interface CombatantStatusChangedPayload {
@@ -756,10 +776,17 @@ export interface CombatantState {
   token?: string
   color?: string
   ability_scores?: Record<string, number>
+  speed_m?: number
+  reach_m?: number
+  attack_range_m?: number
   actions?: Array<{
     name: string
+    type?: string
     attack_bonus?: number
     damage_dice?: string
+    damage_type?: string
+    reach_m?: number
+    range_m?: number
     description?: string
   }>
   description?: string
@@ -806,6 +833,7 @@ export interface CombatStartPayload {
   combatants: CombatantState[]
   grid_config?: GridConfig
   grid_decoration?: GridDecoration | null
+  reachable_cells?: Record<string, ReachableCells>
 }
 
 export interface CombatActionPayload {

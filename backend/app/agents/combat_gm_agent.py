@@ -58,5 +58,8 @@ class CombatGMAgent(GMAgent):
             "phase": game_state.get("phase", "COMBAT"),
             "round_number": game_state.get("round_number"),
             "combatants": compact_combatants,
+            "grid_positions": game_state.get("grid_positions", {}),
+            "grid_config": game_state.get("grid_config", {}),
+            "grid_decoration": game_state.get("grid_decoration", {}),
             "turn_manager": game_state.get("turn_manager", {}),
         }

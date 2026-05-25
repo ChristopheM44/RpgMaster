@@ -166,19 +166,9 @@ const myPos = computed((): GridPosition | null => {
 })
 
 const reachableCells = computed((): Set<string> => {
-  if (isExploration.value || !props.isMyTurn || !myPos.value) return new Set()
-  const maxCells = Math.floor((props.speedM ?? 9) / cellSizeM.value)
-  const result = new Set<string>()
-  for (let row = 0; row < rows.value; row++) {
-    for (let col = 0; col < cols.value; col++) {
-      const position = { col, row }
-      const key = positionKey(position)
-      if (cellMap.value[key] || obstacleSet.value.has(key)) continue
-      const dist = distanceCells(myPos.value, position)
-      if (dist > 0 && dist <= maxCells) result.add(key)
-    }
-  }
-  return result
+  if (isExploration.value || !props.isMyTurn || !props.myCharacterId) return new Set()
+  const reachable = gameStore.reachableCells[props.myCharacterId]
+  return new Set((reachable?.free ?? []).map(positionKey))
 })
 
 const gridCells = computed(() =>

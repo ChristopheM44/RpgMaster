@@ -92,9 +92,8 @@ from app.api.ws_schemas import (
 )
 from app.config import settings
 from app.db.database import async_session
-from app.engine.combat import roll_attack, roll_damage
 from app.engine.loot import loot_for_encounter
-from app.engine.tactical_grid import GridPosition, initialize_positions, validate_move
+from app.engine.tactical_grid import GridPosition, initialize_positions
 from app.engine.xp import level_from_xp
 from app.game.action_resolver import ActionResolver
 from app.game.async_tasks import create_logged_task
@@ -103,6 +102,7 @@ from app.game.constants import INACTIVE_STATUSES
 from app.game.event_bus import BACKPRESSURE_ERROR_CODE, EventType, GameEvent, event_bus
 from app.game.runtime import rest_service, session_manager
 from app.game.state_sync import sync_character_state
+from app.game.tactical_combat import apply_tactical_move, calculate_reachable_cells
 from app.game.turn_manager import CombatantInfo
 from app.models.character import Character
 from app.models.session import SessionStatus
@@ -1234,6 +1234,9 @@ async def _handle_start_combat(
             "ac": _compute_ac_from_equipment(char_equipment, dex_mod),
             "attack_bonus": 3,
             "damage_notation": "1d6+2",
+            "speed_m": 9.0,
+            "reach_m": 1.5,
+            "attack_range_m": 1.5,
         }
 
     # Add NPC combatants from the built encounter
@@ -1245,6 +1248,20 @@ async def _handle_start_combat(
         monster_data = (
             encounter_monsters.get(monster_id_base)
             or encounter_service._monsters_by_id.get(monster_id_base, {})
+        )
+        first_action = next(
+            (a for a in monster_data.get("actions", []) if a.get("attack_bonus") is not None),
+            {},
+        )
+        first_action_type = str(first_action.get("type") or "").lower()
+        first_action_range = first_action.get("range_m")
+        if isinstance(first_action_range, list):
+            first_action_range = first_action_range[0] if first_action_range else None
+        attack_range_m = (
+            first_action_range
+            if first_action_type in {"ranged_attack", "melee_or_ranged_attack"}
+            and isinstance(first_action_range, (int, float))
+            else first_action.get("reach_m", 1.5)
         )
         dex = int(monster_data.get("ability_scores", {}).get("dexterity", 10))
         combatants_list.append(
@@ -1268,6 +1285,9 @@ async def _handle_start_combat(
             "ac": npc["ac"],
             "attack_bonus": npc["attack_bonus"],
             "damage_notation": npc["damage_notation"],
+            "speed_m": (monster_data.get("speed") or {}).get("walk", 9.0),
+            "reach_m": first_action.get("reach_m", 1.5),
+            "attack_range_m": attack_range_m,
             "species": monster_data.get("type"),
             "cr": monster_data.get("cr"),
             "xp": monster_data.get("xp", npc.get("xp", 0)),
@@ -1906,14 +1926,20 @@ async def _publish_action_economy(
     session_id: str,
     combatant_id: str,
     action_economy: Any,
+    active: Any | None = None,
 ) -> None:
+    payload: dict[str, Any] = {
+        "combatant_id": combatant_id,
+        "action_economy": getattr(action_economy, "__dict__", action_economy),
+    }
+    if active is not None:
+        reachable = calculate_reachable_cells(active, combatant_id)
+        if reachable is not None:
+            payload["reachable_cells"] = reachable
     await event_bus.publish_to_session(
         session_id,
         EventType.ACTION_ECONOMY_CHANGED,
-        {
-            "combatant_id": combatant_id,
-            "action_economy": getattr(action_economy, "__dict__", action_economy),
-        },
+        payload,
         source="ws_game",
     )
 
@@ -1940,7 +1966,7 @@ async def _handle_dash(
     economy.movement += economy.movement_max
     economy.has_dashed = True
     active.mark_dirty()
-    await _publish_action_economy(session_id, current.combatant_id, economy)
+    await _publish_action_economy(session_id, current.combatant_id, economy, active)
 
 
 async def _handle_disengage(
@@ -1964,84 +1990,7 @@ async def _handle_disengage(
         return
     economy.has_disengaged = True
     active.mark_dirty()
-    await _publish_action_economy(session_id, current.combatant_id, economy)
-
-
-async def _maybe_trigger_opportunity_attack(
-    session_id: str,
-    active: Any,
-    mover_id: str,
-    from_pos: GridPosition,
-    to_pos: GridPosition,
-) -> None:
-    current = active.turn_manager.current_turn
-    if current is not None and current.combatant_id == mover_id:
-        if getattr(current.action_economy, "has_disengaged", False):
-            return
-
-    combatants_info: dict[str, Any] = active.state_data.get("combatants", {})
-    grid_positions: dict[str, Any] = active.state_data.get("grid_positions", {})
-    mover = combatants_info.get(mover_id, {})
-    mover_is_player = bool(mover.get("is_player", True))
-
-    for entry in active.turn_manager._order:
-        attacker_id = entry.combatant_id
-        if attacker_id == mover_id or not entry.action_economy.reaction:
-            continue
-        attacker = combatants_info.get(attacker_id, {})
-        if bool(attacker.get("is_player", True)) == mover_is_player:
-            continue
-        attacker_pos_data = grid_positions.get(attacker_id)
-        if not attacker_pos_data:
-            continue
-        attacker_pos = GridPosition.from_dict(attacker_pos_data)
-        was_adjacent = (
-            max(abs(attacker_pos.col - from_pos.col), abs(attacker_pos.row - from_pos.row))
-            <= 1
-        )
-        remains_adjacent = (
-            max(abs(attacker_pos.col - to_pos.col), abs(attacker_pos.row - to_pos.row))
-            <= 1
-        )
-        if not was_adjacent or remains_adjacent:
-            continue
-
-        entry.action_economy.use_reaction()
-        attack = roll_attack(
-            int(attacker.get("attack_bonus", 3) or 3),
-            int(mover.get("ac", 10) or 10),
-        )
-        damage_amount = 0
-        if attack.hit:
-            damage = roll_damage(
-                str(attacker.get("damage_notation") or "1d6+1"),
-                critical=attack.critical,
-            )
-            damage_amount = int(damage.total)
-            old_hp = int(mover.get("hp", 0))
-            new_hp = max(0, old_hp - damage_amount)
-            mover["hp"] = new_hp
-            sync_character_state(active, mover_id, hp=new_hp)
-            await event_bus.publish_to_session(
-                session_id,
-                EventType.HP_CHANGED,
-                {"combatant_id": mover_id, "delta": -damage_amount, "hp": new_hp},
-                source="ws_game",
-            )
-        await event_bus.publish_to_session(
-            session_id,
-            EventType.OPPORTUNITY_ATTACK_TRIGGERED,
-            {
-                "attacker_id": attacker_id,
-                "target_id": mover_id,
-                "hit": bool(attack.hit),
-                "damage": damage_amount,
-            },
-            source="ws_game",
-        )
-        await _publish_action_economy(session_id, attacker_id, entry.action_economy)
-        active.mark_dirty()
-        return
+    await _publish_action_economy(session_id, current.combatant_id, economy, active)
 
 
 async def _handle_move(
@@ -2077,13 +2026,8 @@ async def _handle_move(
     if not mover_id:
         return
 
-    grid_positions: dict[str, Any] = active.state_data.get("grid_positions", {})
-    grid_config: dict[str, Any] = active.state_data.get("grid_config", {"cols": 10, "rows": 8})
-    grid_cols = int(grid_config.get("cols", 10))
-    grid_rows = int(grid_config.get("rows", 8))
-
-    from_data = grid_positions.get(mover_id)
-    if from_data is None:
+    from_pos = active.state_data.get("grid_positions", {}).get(mover_id)
+    if from_pos is None:
         await event_bus.publish_to_session(
             session_id,
             EventType.ERROR,
@@ -2092,7 +2036,6 @@ async def _handle_move(
         )
         return
 
-    from_pos = GridPosition.from_dict(from_data)
     to_pos = GridPosition(col=target_col, row=target_row)
 
     combatants_info: dict[str, Any] = active.state_data.get("combatants", {})
@@ -2109,26 +2052,25 @@ async def _handle_move(
         else mover_data.get("speed_m", 9.0)
     )
 
-    # Occupied positions (excluding mover)
-    occupied = [
-        GridPosition.from_dict(v)
-        for cid, v in grid_positions.items()
-        if cid != mover_id
-    ]
-
-    valid, reason = validate_move(from_pos, to_pos, speed_m, grid_cols, grid_rows, occupied)
-    if not valid:
+    move_result = await apply_tactical_move(
+        session_id=session_id,
+        active=active,
+        mover_id=mover_id,
+        destination=to_pos,
+        event_bus=event_bus,
+        movement_m=speed_m,
+        source="ws_game",
+    )
+    if not move_result.valid:
         await event_bus.publish_to_session(
             session_id,
             EventType.ERROR,
-            {"message": f"Déplacement invalide : {reason}"},
+            {"message": f"Déplacement invalide : {move_result.reason}"},
             source="ws_game",
         )
         return
 
-    from app.engine.tactical_grid import distance_m as grid_distance_m
-    dist = grid_distance_m(from_pos, to_pos)
-    if turn_economy is not None and not turn_economy.spend_movement(dist):
+    if turn_economy is not None and not turn_economy.spend_movement(move_result.movement_used_m):
         await event_bus.publish_to_session(
             session_id,
             EventType.ERROR,
@@ -2137,24 +2079,21 @@ async def _handle_move(
         )
         return
 
-    await _maybe_trigger_opportunity_attack(session_id, active, mover_id, from_pos, to_pos)
-
-    # Update position in state
-    grid_positions[mover_id] = to_pos.to_dict()
-    active.mark_dirty()
-
     await event_bus.publish_to_session(
         session_id,
         EventType.COMBATANT_MOVED,
         {
             "combatant_id": mover_id,
-            "position": to_pos.to_dict(),
-            "movement_used_m": dist,
+            "position": (move_result.final_position or to_pos).to_dict(),
+            "movement_used_m": move_result.movement_used_m,
+            "path": [step.to_dict() for step in move_result.path],
+            "interrupted": move_result.interrupted,
+            "reason": move_result.reason,
         },
         source="ws_game",
     )
     if turn_economy is not None:
-        await _publish_action_economy(session_id, mover_id, turn_economy)
+        await _publish_action_economy(session_id, mover_id, turn_economy, active)
 
 
 # ---------------------------------------------------------------------------
@@ -2544,7 +2483,7 @@ async def _dispatch_action(
         await session_manager.save_state(session_id, db)
         return
 
-    await action_resolver.resolve(
+    resolved_action = await action_resolver.resolve(
         session_id=session_id,
         action_type=action.action_type,
         content=action.content,
@@ -2566,6 +2505,9 @@ async def _dispatch_action(
 
     # After resolution: check for inactive NPC combatants
     if active.phase == SessionStatus.COMBAT:
+        if getattr(resolved_action, "mechanics", {}).get("error"):
+            await session_manager.save_state(session_id, db)
+            return
         removed_npcs = await _cleanup_inactive_npcs(session_id, active)
         if active.turn_manager.all_npcs_removed():
             await _handle_combat_end(

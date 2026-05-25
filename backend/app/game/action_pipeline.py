@@ -20,6 +20,11 @@ from app.game.constants import INACTIVE_STATUSES
 from app.game.event_bus import EventType, event_bus
 from app.game.gm_response_executor import GMResponseExecutor
 from app.game.session_manager import ActiveSession
+from app.game.tactical_combat import (
+    calculate_reachable_cells,
+    choose_attack_target,
+    prepare_attack,
+)
 from app.llm.budget import (
     begin_llm_call_scope,
     end_llm_call_scope,
@@ -441,20 +446,81 @@ class ActionPipeline:
         target_id = request.target_id or self._default_target_id(request, active.state_data)
         target_name = self._combatant_name(active.state_data, target_id)
         display_text = self._display_text(request, actor_name, target_name)
+        phase_value = self._phase_value(active).upper()
 
         roll_results: Optional[dict[str, Any]] = None
         roll_events: list[dict[str, Any]] = []
         executed_actions: list[dict[str, Any]] = []
         canon_dirty = False
+        tactical: Any = None
 
         # 1. Resolution mecanique pure.
         mechanics = self._get_mechanics()
         if request.action_type == "attack":
+            if phase_value == "COMBAT":
+                tactical = await prepare_attack(
+                    session_id=request.session_id,
+                    active=active,
+                    actor_id=request.actor_id,
+                    target_id=target_id,
+                    actor_kind=request.actor_kind,
+                    event_bus=self._event_bus,
+                    source=self._source,
+                )
+                target_id = tactical.target_id
+                target_name = self._combatant_name(active.state_data, target_id)
+                if tactical.moved is not None:
+                    await self._publish_tactical_move_result(
+                        request.session_id,
+                        request.actor_id,
+                        tactical.moved,
+                        active,
+                    )
+                if not tactical.allowed:
+                    message = tactical.reason or "Action tactique impossible."
+                    if request.actor_kind == "monster":
+                        narration = f"{actor_name} cherche une ouverture, mais {message.lower()}"
+                        await self._publish_gm_narration(request.session_id, narration, actual_db)
+                    else:
+                        await self._event_bus.publish_to_session(
+                            request.session_id,
+                            EventType.ERROR,
+                            {"message": message},
+                            source=self._source,
+                        )
+                        narration = ""
+                    return ResolvedAction(
+                        actor_id=request.actor_id,
+                        actor_name=actor_name,
+                        actor_kind=request.actor_kind,
+                        action_type=request.action_type,
+                        target_id=target_id,
+                        mechanics={"error": True, "summary": message},
+                        roll_events=[],
+                        narration=narration,
+                        gm_actions=[],
+                        canon_dirty=False,
+                    )
             roll_results = mechanics._resolve_attack(
                 request.actor_id,
                 target_id,
                 active.state_data,
             )
+            if tactical is not None:
+                roll_results["tactical"] = {
+                    "target_id": target_id,
+                    "moved": bool(tactical.moved),
+                    "movement_used_m": (
+                        tactical.moved.movement_used_m if tactical.moved else 0
+                    ),
+                    "path": (
+                        [step.to_dict() for step in tactical.moved.path]
+                        if tactical.moved else []
+                    ),
+                    "opportunity_attacks": [
+                        attack.__dict__ for attack in tactical.moved.opportunity_attacks
+                    ] if tactical.moved else [],
+                }
             if roll_results and roll_results.get("hit") and target_id:
                 damage_amount = int(roll_results.get("damage", {}).get("total", 0))
                 if damage_amount > 0:
@@ -567,7 +633,6 @@ class ActionPipeline:
             target_name,
             roll_results,
         )
-        phase_value = self._phase_value(active).upper()
         use_gm = should_use_gm_for_action(
             phase=phase_value,
             action_type=request.action_type,
@@ -885,6 +950,48 @@ class ActionPipeline:
 
     async def _publish_ai_thinking(self, session_id: str, thinking: bool) -> None:
         await self._orchestrator.publish_ai_thinking(session_id, thinking)
+
+    async def _publish_tactical_move_result(
+        self,
+        session_id: str,
+        combatant_id: Optional[str],
+        move_result: Any,
+        active: ActiveSession,
+    ) -> None:
+        if not combatant_id or not move_result.valid or move_result.final_position is None:
+            return
+        await self._event_bus.publish_to_session(
+            session_id,
+            EventType.COMBATANT_MOVED,
+            {
+                "combatant_id": combatant_id,
+                "position": move_result.final_position.to_dict(),
+                "movement_used_m": move_result.movement_used_m,
+                "path": [step.to_dict() for step in move_result.path],
+                "interrupted": move_result.interrupted,
+                "reason": move_result.reason,
+            },
+            source=self._source,
+        )
+        current = active.turn_manager.current_turn
+        if current is not None and current.combatant_id == combatant_id:
+            payload: dict[str, Any] = {
+                "combatant_id": combatant_id,
+                "action_economy": getattr(
+                    current.action_economy,
+                    "__dict__",
+                    current.action_economy,
+                ),
+            }
+            reachable = calculate_reachable_cells(active, combatant_id)
+            if reachable is not None:
+                payload["reachable_cells"] = reachable
+            await self._event_bus.publish_to_session(
+                session_id,
+                EventType.ACTION_ECONOMY_CHANGED,
+                payload,
+                source=self._source,
+            )
 
     async def _publish_gm_narration(
         self,
@@ -1223,17 +1330,11 @@ class ActionPipeline:
         if request.actor_kind != "monster" or request.action_type != "attack":
             return None
 
-        for combatant_id, cdata in combatants.items():
-            if not isinstance(cdata, dict):
-                continue
-            status = str(cdata.get("status", "active")).lower()
-            try:
-                hp = int(cdata.get("hp", 0))
-            except (TypeError, ValueError):
-                hp = 0
-            if cdata.get("is_player", False) and hp > 0 and status not in INACTIVE_STATUSES:
-                return combatant_id
-        return None
+        return choose_attack_target(
+            state_data,
+            request.actor_id,
+            actor_is_player=False,
+        )
 
     @staticmethod
     def _actor_name(

@@ -187,6 +187,7 @@ export function useWebSocket(sessionId: string) {
           gameStore.setCombatants(p.combatants)
           if (p.grid_config) gameStore.setGridConfig(p.grid_config)
           gameStore.setGridDecoration(p.grid_decoration)
+          gameStore.setReachableCells(p.reachable_cells)
         }
         break
       }
@@ -278,19 +279,19 @@ export function useWebSocket(sessionId: string) {
         if (isOpportunityAttackTriggeredPayload(msg.payload)) {
           gameStore.addCombatAction({
             attacker_id: msg.payload.attacker_id,
-            attacker_name: msg.payload.attacker_id,
+            attacker_name: msg.payload.attacker_name ?? msg.payload.attacker_id,
             target_id: msg.payload.target_id,
-            target_name: msg.payload.target_id,
+            target_name: msg.payload.target_name ?? msg.payload.target_id,
             action_type: 'attack',
             action_name: "Attaque d'opportunité",
-            d20: 0,
-            attack_roll: 0,
+            d20: msg.payload.d20 ?? 0,
+            attack_roll: msg.payload.attack_total ?? 0,
             attack_bonus: 0,
-            target_ac: 0,
+            target_ac: msg.payload.target_ac ?? 0,
             hit: msg.payload.hit,
-            critical: false,
+            critical: msg.payload.critical ?? false,
             damage: msg.payload.damage,
-            damage_notation: '',
+            damage_notation: msg.payload.damage_notation ?? '',
           })
         }
         break

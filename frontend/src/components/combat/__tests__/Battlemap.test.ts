@@ -296,6 +296,14 @@ describe('Battlemap', () => {
       obstacles: [{ col: 2, row: 2 }],
       zones: [{ id: 'fire', name: 'Brasier', kind: 'hazard', cells: [{ col: 1, row: 2 }] }],
     })
+    gameStore.setReachableCells({
+      hero: {
+        free: [{ col: 1, row: 0 }],
+        with_dash: [],
+        blocked_by_zoc: [],
+        paths: { '1,0': [{ col: 0, row: 0 }, { col: 1, row: 0 }] },
+      },
+    })
 
     const wrapper = mount(Battlemap, {
       props: {
