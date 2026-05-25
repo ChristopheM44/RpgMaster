@@ -119,7 +119,15 @@ const gmDossierRaw = computed(() => {
 const forgeProgressPercent = computed(() => {
   if (!forgeJob.value) return 0
   const total = Math.max(forgeJob.value.total_steps || 1, 1)
-  return Math.min(100, Math.round(((forgeJob.value.current_step || 0) / total) * 100))
+  const current = Math.min(total, Math.max(forgeJob.value.current_step || 0, 0))
+  return Math.round((current / total) * 100)
+})
+
+const forgeProgressLabel = computed(() => {
+  if (!forgeJob.value) return ''
+  const total = Math.max(forgeJob.value.total_steps || 1, 1)
+  const current = Math.min(total, Math.max(forgeJob.value.current_step || 0, 0))
+  return `Global ${current} / ${total}`
 })
 
 const forgeRetryEvents = computed(() =>
@@ -1087,8 +1095,8 @@ function cloneContract(contract: CampaignPlayerContract): CampaignPlayerContract
               </p>
               <div v-if="forgeJob" class="mx-auto mt-4 max-w-md rounded-lg border border-border bg-black/25 p-3 text-left">
                 <div class="flex items-center justify-between gap-3 font-mono text-[10px] uppercase tracking-wider text-text-muted">
-                  <span>{{ forgeJob.message || 'Forge en cours...' }}</span>
-                  <span>{{ forgeJob.current_step }} / {{ forgeJob.total_steps }}</span>
+                  <span class="min-w-0 truncate">{{ forgeJob.message || 'Forge en cours...' }}</span>
+                  <span class="shrink-0 text-right text-gold">{{ forgeProgressLabel }}</span>
                 </div>
                 <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-raised">
                   <div
