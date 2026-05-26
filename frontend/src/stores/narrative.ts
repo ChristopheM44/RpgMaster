@@ -12,7 +12,22 @@ import type { ExNarrativeEntry } from '../fixtures/exploration'
 function adapt(entry: BackendNarrativeEntry, idx: number): ExNarrativeEntry | null {
   const id = idx + 1
 
-  if (entry.type === 'combat_action') return null
+  // ── combat_action → combat ──────────────────────────────────────────────────
+  if (entry.type === 'combat_action' && entry.combatAction) {
+    const ca = entry.combatAction
+    return {
+      id,
+      type: 'combat',
+      attacker: ca.attacker_name,
+      target: ca.target_name,
+      d20: ca.d20,
+      attackRoll: ca.attack_roll,
+      targetAc: ca.target_ac,
+      hit: ca.hit,
+      damage: ca.damage,
+      critical: ca.critical,
+    }
+  }
 
   if (entry.type === 'system') {
     return { id, type: 'divider', text: entry.text ?? '' }
@@ -44,12 +59,14 @@ function adapt(entry: BackendNarrativeEntry, idx: number): ExNarrativeEntry | nu
     }
   }
 
+  // ── dialogue → type dédié avec speakerKind ──────────────────────────────────
   if (entry.type === 'dialogue') {
     return {
       id,
-      type: 'player',
+      type: 'dialogue',
       who: entry.speaker ?? '',
       text: entry.text ?? '',
+      speakerKind: entry.speaker_kind === 'companion' ? 'companion' : 'npc',
     }
   }
 

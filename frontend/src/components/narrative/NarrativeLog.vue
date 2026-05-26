@@ -1,18 +1,21 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick } from 'vue'
 import { useGameStore } from '../../stores/game'
+import { useNarrativeStore } from '../../stores/narrative'
 import { useSessionStore } from '../../stores/session'
 import DiceRollResult from './DiceRollResult.vue'
+import NarrativeEntry from '../exploration/NarrativeEntry.vue'
 
 withDefaults(defineProps<{
   /**
    * 'full'   — the standalone exploration layout (default, unchanged)
-   * 'drawer' — compact V2 combat drawer: slim header + compact entries
+   * 'drawer' — compact V2 combat drawer: slim header + NarrativeEntry partagé
    */
   variant?: 'full' | 'drawer'
 }>(), { variant: 'full' })
 
 const gameStore = useGameStore()
+const narrativeStore = useNarrativeStore()
 const sessionStore = useSessionStore()
 const logEl = ref<HTMLElement | null>(null)
 const hasThinkingEntry = computed(() =>
@@ -25,7 +28,7 @@ const thinkingLabel = computed(() =>
 )
 
 watch(
-  () => gameStore.narrativeLog.length + (hasThinkingEntry.value ? 1 : 0),
+  () => narrativeStore.entries.length + gameStore.narrativeLog.length + (hasThinkingEntry.value ? 1 : 0),
   async () => {
     await nextTick()
     if (logEl.value) {
@@ -51,51 +54,25 @@ watch(
       >▶</button>
     </div>
 
-    <!-- Compact log -->
+    <!-- Log compact — NarrativeEntry partagé avec l'exploration -->
     <div ref="logEl" class="recit-drawer-log">
-      <p v-if="gameStore.narrativeLog.length === 0" class="recit-empty">
+      <p v-if="narrativeStore.entries.length === 0" class="recit-empty">
         En attente…
       </p>
 
-      <template v-for="entry in gameStore.narrativeLog" :key="entry.id">
-        <div v-if="entry.type === 'narration'" class="recit-entry recit-narration">
-          <div class="recit-speaker">✦ {{ entry.speaker ?? 'MJ' }}</div>
-          <p class="recit-text">{{ entry.text }}</p>
-        </div>
+      <NarrativeEntry
+        v-for="entry in narrativeStore.entries"
+        :key="entry.id"
+        :entry="entry"
+        :compact="true"
+      />
 
-        <div v-else-if="entry.type === 'dialogue'" class="recit-entry recit-dialogue">
-          <span class="recit-speaker" :style="{ color: entry.speaker_kind === 'companion' ? 'var(--color-arcane)' : 'var(--color-gold)' }">
-            {{ entry.speaker }}
-          </span>
-          <span class="recit-text">{{ entry.text }}</span>
-        </div>
-
-        <div v-else-if="entry.type === 'player'" class="recit-entry recit-player">
-          <span class="recit-speaker" style="color: var(--color-ember)">{{ entry.speaker }}</span>
-          <span class="recit-text">{{ entry.text }}</span>
-        </div>
-
-        <div v-else-if="entry.type === 'roll' && entry.roll" class="recit-entry">
-          <DiceRollResult :roll="entry.roll" />
-        </div>
-
-        <div v-else-if="entry.type === 'combat_action' && entry.combatAction" class="recit-entry recit-combat">
-          ⚔ <strong>{{ entry.combatAction.attacker_name }}</strong>
-          → {{ entry.combatAction.target_name }}
-          <span v-if="entry.combatAction.hit" style="color: var(--color-blood)"> {{ entry.combatAction.damage }}dmg</span>
-          <span v-else style="color: var(--color-text-dim)"> raté</span>
-        </div>
-
-        <div v-else-if="entry.type === 'system'" class="recit-entry recit-system">
-          ── {{ entry.text }} ──
-        </div>
-      </template>
-
-      <div v-if="hasThinkingEntry" class="recit-entry recit-thinking">
-        <span>{{ thinkingLabel }}</span>
-        <span class="flex gap-1 ml-2">
-          <span v-for="d in ['0ms','150ms','300ms']" :key="d"
-            class="inline-block h-1.5 w-1.5 rounded-full bg-gold/60 animate-bounce"
+      <!-- Indicateur "réfléchit" — état live hors ExNarrativeEntry -->
+      <div v-if="hasThinkingEntry" class="recit-thinking">
+        <span class="recit-thinking-label">{{ thinkingLabel }}</span>
+        <span class="recit-thinking-dots">
+          <span v-for="d in ['0ms', '150ms', '300ms']" :key="d"
+            class="recit-thinking-dot"
             :style="{ animationDelay: d }" />
         </span>
       </div>
@@ -292,68 +269,38 @@ watch(
   margin-top: 16px;
 }
 
-.recit-entry {
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.recit-narration {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.recit-speaker {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: var(--color-text-muted);
-}
-
-.recit-text {
-  font-family: var(--font-serif);
-  color: var(--color-parchment-dark);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.recit-dialogue,
-.recit-player {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: 5px 10px;
-  border-left: 2px solid var(--color-border-strong);
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 0 4px 4px 0;
-}
-
-.recit-dialogue .recit-speaker { font-family: var(--font-display); }
-
-.recit-combat {
-  color: var(--color-text-muted);
-  font-size: 11px;
-  font-family: var(--font-mono);
-  padding: 4px 8px;
-  background: rgba(232, 69, 69, 0.06);
-  border-radius: 4px;
-  border: 1px solid rgba(232, 69, 69, 0.15);
-}
-
-.recit-system {
-  color: var(--color-text-dim);
-  font-size: 10px;
-  text-align: center;
-}
-
+/* Indicateur "réfléchit" */
 .recit-thinking {
   display: flex;
   align-items: center;
-  color: var(--color-gold);
+  gap: 8px;
+  padding: 8px 0 4px;
+}
+
+.recit-thinking-label {
   font-family: var(--font-serif);
   font-style: italic;
   font-size: 11px;
+  color: var(--color-gold);
   opacity: 0.7;
+}
+
+.recit-thinking-dots {
+  display: flex;
+  gap: 4px;
+}
+
+.recit-thinking-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(240, 199, 100, 0.6);
+  animation: bounce 1s infinite;
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-4px); }
 }
 </style>

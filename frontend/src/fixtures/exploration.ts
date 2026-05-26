@@ -57,8 +57,15 @@ export type ExNarrativeEntry =
   | { id: number; type: 'divider'; text: string }
   | { id: number; type: 'gm'; text: string; refs?: string[] }
   | { id: number; type: 'player'; who: string; text: string; refs?: string[] }
+  | { id: number; type: 'dialogue'; who: string; text: string; speakerKind?: 'companion' | 'npc' }
   | { id: number; type: 'roll'; who: string; what: string; rolls: ExRoll[]; result?: string; detail?: string }
   | { id: number; type: 'decision'; who: string; text: string; options: ExDecisionOption[] }
+  | {
+      id: number; type: 'combat'
+      attacker: string; target: string
+      d20: number; attackRoll: number; targetAc: number
+      hit: boolean; damage: number | null; critical?: boolean
+    }
 
 export interface ExQuest {
   id: string
