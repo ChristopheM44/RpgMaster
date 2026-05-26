@@ -37,6 +37,22 @@ SOURCE_NOTE_CHUNK_CHARS = 60_000
 FORGE_PHASE_MAX_ATTEMPTS = 3
 FORGE_PHASE_RETRY_BASE_DELAY = 1.0
 FORGE_JOB_EVENT_LIMIT = 80
+
+# Sliding window pour la mémoire canon long terme
+MAX_CANON_LIST_SIZE      = 200   # hard-cap finale pour toutes les listes canon (était 50)
+SLIDING_WINDOW_THRESHOLD = 150   # déclenche la compression LLM au-delà de cette taille
+SLIDING_WINDOW_KEEP      = 100   # entrées récentes conservées après compression
+ROLLING_SUMMARY_MAX_LEN  = 4000  # taille max du résumé glissant (était 2000)
+
+# Champs narratifs à traiter par la fenêtre glissante (contenu temporel/chronologique)
+_SLIDING_WINDOW_FIELDS: tuple[str, ...] = (
+    "established_facts",
+    "player_decisions",
+    "npc_relationships",
+    "revealed_secrets",
+    "plan_changes",
+)
+
 _SYNTHESIS_IN_FLIGHT: set[str] = set()
 _MISSING = object()
 
@@ -385,6 +401,50 @@ async def public_summary(campaign: Campaign, db: AsyncSession) -> dict[str, Any]
     return _summary_from_contract(campaign, dossier, character_count=character_count)
 
 
+def _needs_compression(canon: dict[str, Any]) -> bool:
+    """Vérifie si au moins un champ narratif dépasse le seuil de la fenêtre glissante."""
+    return any(
+        isinstance(canon.get(f), list) and len(canon[f]) > SLIDING_WINDOW_THRESHOLD
+        for f in _SLIDING_WINDOW_FIELDS
+    )
+
+
+async def _compress_overflowing_lists(
+    canon: dict[str, Any],
+    forge_agent: CampaignForgeAgent,
+) -> dict[str, Any]:
+    """Compresse les listes trop longues en ajoutant un résumé au rolling_summary.
+
+    Pour chaque champ de ``_SLIDING_WINDOW_FIELDS`` dépassant
+    ``SLIDING_WINDOW_THRESHOLD`` entrées, les plus anciennes sont condensées
+    via LLM et annexées à ``rolling_summary``. Seules les
+    ``SLIDING_WINDOW_KEEP`` entrées les plus récentes sont conservées.
+    L'erreur LLM est absorbée silencieusement : on tronque sans résumé plutôt
+    que de bloquer la synthèse.
+    """
+    canon = dict(canon)
+    existing_summary = str(canon.get("rolling_summary") or "")
+    for field in _SLIDING_WINDOW_FIELDS:
+        entries = canon.get(field)
+        if not isinstance(entries, list) or len(entries) <= SLIDING_WINDOW_THRESHOLD:
+            continue
+        old_entries = entries[:-SLIDING_WINDOW_KEEP]
+        canon[field] = entries[-SLIDING_WINDOW_KEEP:]
+        existing_summary = await forge_agent.compress_canon_entries(
+            field,
+            old_entries,
+            existing_summary,
+            max_len=ROLLING_SUMMARY_MAX_LEN,
+        )
+        logger.info(
+            "Sliding window applied on '%s': %d entries compressed into rolling_summary",
+            field,
+            len(old_entries),
+        )
+    canon["rolling_summary"] = existing_summary
+    return canon
+
+
 async def synthesize_canon(
     campaign_id: str,
     game_state: dict[str, Any],
@@ -394,9 +454,16 @@ async def synthesize_canon(
 ) -> CampaignDossier:
     campaign = await _get_campaign_or_raise(campaign_id, db)
     dossier = await get_or_create_dossier(campaign.id, db)
-    current_canon = sanitize_played_canon(dossier.played_canon or {})
+    forge_agent = agent or CampaignForgeAgent()
+
+    # Fenêtre glissante : compresser les listes trop longues AVANT la sanitisation
+    # pour ne pas perdre les entrées 50–149 qui seraient sinon silencieusement jetées.
+    raw_canon = dossier.played_canon or {}
+    if _needs_compression(raw_canon):
+        raw_canon = await _compress_overflowing_lists(raw_canon, forge_agent)
+
+    current_canon = sanitize_played_canon(raw_canon)
     try:
-        forge_agent = agent or CampaignForgeAgent()
         next_canon = await forge_agent.synthesize_canon(
             player_contract=dossier.player_contract or {},
             gm_dossier=dossier.gm_dossier or {},
@@ -1356,7 +1423,7 @@ def sanitize_played_canon(data: dict[str, Any]) -> dict[str, Any]:
         "chapter_progression",
     ):
         canon[key] = _generic_list(data.get(key))
-    canon["rolling_summary"] = _text(data.get("rolling_summary") or "", 2000)
+    canon["rolling_summary"] = _text(data.get("rolling_summary") or "", ROLLING_SUMMARY_MAX_LEN)
     canon["npc_personas"] = _sanitize_persona_dict(data.get("npc_personas"), expected_type="npc")
     canon["granted_unique_items"] = _content_id_list(data.get("granted_unique_items"), 100)
     return canon
@@ -1932,7 +1999,7 @@ def _content_id_list(value: Any, max_items: int = 20) -> list[str]:
 def _generic_list(value: Any) -> list[Any]:
     if not isinstance(value, list):
         return []
-    return value[:50]
+    return value[:MAX_CANON_LIST_SIZE]
 
 
 def _sanitize_custom_items(value: Any, cap: int = 50) -> list[dict[str, Any]]:

@@ -172,6 +172,43 @@ class CampaignForgeAgent(BaseAgent):
         )
         return await self._call_json(prompt, max_tokens=get_forge_source_note_max_tokens())
 
+    async def compress_canon_entries(
+        self,
+        field_name: str,
+        old_entries: list[Any],
+        existing_summary: str = "",
+        max_len: int = 4000,
+    ) -> str:
+        """Condense des entrées de canon obsolètes en un paragraphe de résumé narratif.
+
+        Utilisé par la fenêtre glissante dans ``campaign_dossier_service`` pour
+        éviter la troncature brutale des listes longues.
+        Retourne ``existing_summary`` inchangé en cas d'erreur LLM (fallback silencieux).
+        """
+        prompt = self._render_prompt(
+            "gm_compress_canon.txt",
+            {"field_name": field_name, "old_entries": old_entries},
+        )
+        try:
+            raw = await self._client.chat(
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=600,
+            )
+            compressed = (raw or "").strip()
+            if not compressed:
+                return existing_summary
+            separator = "\n\n" if existing_summary else ""
+            combined = existing_summary + separator + compressed
+            return combined[:max_len]
+        except Exception as exc:
+            logger.warning(
+                "compress_canon_entries(%s): compression échouée, résumé existant conservé — %s",
+                field_name,
+                exc,
+            )
+            return existing_summary
+
     async def _call_json(self, prompt: str, max_tokens: int) -> dict[str, Any]:
         raw = await self._client.chat(
             messages=[

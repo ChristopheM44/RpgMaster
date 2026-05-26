@@ -1,0 +1,9 @@
+Tu es archiviste de campagne. Condense les entrées suivantes en un court paragraphe (3 à 5 phrases, maximum 400 mots) qui préserve les faits narratifs essentiels, sans en inventer.
+
+Champ : {{ field_name }}
+Entrées à condenser :
+{% for e in old_entries %}
+- {{ e }}
+{% endfor %}
+
+Résumé condensé (texte brut uniquement, sans markdown ni titre) :
