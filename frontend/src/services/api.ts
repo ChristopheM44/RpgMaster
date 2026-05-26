@@ -172,7 +172,14 @@ export const gameApi = {
 
   start: (
     sessionId: string,
-    body?: { adventure_script?: string; auto_generate?: boolean },
+    body?: {
+      adventure_script?: string
+      auto_generate?: boolean
+      adventure_preset?: string
+      biome?: string
+      weather?: string
+      tone?: string
+    },
   ) =>
     request<{ status: string; phase: string; session_id: string; characters?: number }>(
       `/game/${sessionId}/start`,

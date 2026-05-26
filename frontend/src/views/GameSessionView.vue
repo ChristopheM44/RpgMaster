@@ -60,6 +60,10 @@ async function initSession() {
     }
   }
 
+  if (sessionStore.currentSession) {
+    gameStore.phase = sessionStore.currentSession.status
+  }
+
   await charStore.loadSessionCharacters(sessionId)
 
   const humanChar = charStore.sessionCharacters.find((c) => !c.is_ai)
@@ -72,6 +76,11 @@ async function initSession() {
     }
   } catch {
     // optional
+  }
+
+  if (['lobby', 'character_creation'].includes(gameStore.phase) && !routeStartPending.value) {
+    router.replace({ name: 'character-setup', params: { id: sessionId } })
+    return
   }
 
   connect(charStore.myCharacter?.id)
@@ -131,7 +140,16 @@ function handleAction(
   sendAction(actionType, content, charId, resolvedTargetId, extra)
 }
 
-async function handleStartConfirm(mode: 'libre' | 'script' | 'auto', script?: string) {
+async function handleStartConfirm(
+  mode: 'libre' | 'script' | 'auto',
+  script?: string,
+  options?: {
+    adventure_preset?: string
+    biome?: string
+    weather?: string
+    tone?: string
+  }
+) {
   showStartModal.value = false
   startingGame.value = true
   gameStore.setProcessing(true)
@@ -139,9 +157,13 @@ async function handleStartConfirm(mode: 'libre' | 'script' | 'auto', script?: st
     const body =
       mode === 'script' && script
         ? { adventure_script: script }
-        : mode === 'auto'
-          ? { auto_generate: true }
-          : undefined
+        : {
+            auto_generate: mode === 'auto',
+            adventure_preset: options?.adventure_preset,
+            biome: options?.biome,
+            weather: options?.weather,
+            tone: options?.tone,
+          }
     const result = await gameApi.start(sessionId, body)
     if (result.status === 'already_started') {
       gameStore.setProcessing(false)
@@ -158,15 +180,48 @@ async function startPendingRouteSession() {
   routeStartPending.value = false
   gameStore.setProcessing(true)
   try {
-    const result = await gameApi.start(sessionId)
-    if (result.status === 'already_started') {
-      gameStore.setProcessing(false)
+    const mode = route.query.mode as string
+    const script = route.query.script as string
+    const adventure_preset = route.query.adventure_preset as string
+    const biome = route.query.biome as string
+    const weather = route.query.weather as string
+    const tone = route.query.tone as string
+
+    const body =
+      mode === 'script' && script
+        ? { adventure_script: script }
+        : {
+            auto_generate: mode === 'auto',
+            adventure_preset: adventure_preset || undefined,
+            biome: biome || undefined,
+            weather: weather || undefined,
+            tone: tone || undefined,
+          }
+    await gameApi.start(sessionId, body)
+
+    // Fetch state and history after game starting to guarantee UI synchronization
+    // regardless of any WebSocket delays or missed events.
+    const state = await gameApi.getState(sessionId)
+    gameStore.applySessionState(state)
+
+    const history = await gameApi.getHistory(sessionId)
+    if (history.messages.length > 0) {
+      gameStore.restoreHistory(history.messages)
     }
+
+    gameStore.setProcessing(false)
   } catch {
     gameStore.setError('Impossible de démarrer la partie.')
+    gameStore.setProcessing(false)
   } finally {
     const nextQuery = { ...route.query }
     delete nextQuery.start
+    delete nextQuery.mode
+    delete nextQuery.script
+    delete nextQuery.adventure_preset
+    delete nextQuery.biome
+    delete nextQuery.weather
+    delete nextQuery.tone
     await router.replace({ name: 'game-session', params: { id: sessionId }, query: nextQuery })
   }
 }
@@ -262,17 +317,43 @@ const PHASE_STYLES: Record<string, PhaseStyle> = {
 
 const phaseStyle = computed<PhaseStyle>(() => PHASE_STYLES[gameStore.phase] ?? PHASE_STYLES.lobby!)
 
-// ── Métadonnées contextuelles (lieu · jour · météo) — TODO: brancher backend
+// ── Métadonnées contextuelles (lieu · jour · météo) ──
 const contextLocation = computed(() => {
-  // TODO: brancher backend — viendra de gameStore.currentScene.scene_id
-  if (gameStore.phase === 'exploration') return 'Triboar Trail'
+  const journal = gameStore.adventureJournal
+  if (journal?.location_place) return journal.location_place
+
+  if (gameStore.regionMap) {
+    const currentNode = gameStore.regionMap.nodes.find(
+      (node) => node.id === gameStore.regionMap?.current_node_id
+    )
+    if (currentNode?.name) return currentNode.name
+  }
   return null
 })
 const contextMeta = computed(() => {
-  // TODO: brancher backend — viendra de gameStore.adventureJournal (day, weather, time-of-day)
-  if (gameStore.phase === 'exploration') return 'Jour 1 · matin · humide'
-  return null
+  const journal = gameStore.adventureJournal
+  if (!journal) return null
+
+  const TIME_LABEL: Record<string, string> = {
+    dawn: 'aube',
+    morning: 'matin',
+    noon: 'midi',
+    afternoon: 'après-midi',
+    dusk: 'crépuscule',
+    night: 'nuit',
+  }
+  const time = TIME_LABEL[journal.time_of_day] ?? journal.time_of_day
+
+  const parts = [
+    `Jour ${journal.day_number}`,
+    time,
+    journal.weather
+  ].filter(Boolean)
+
+  return parts.join(' · ')
 })
+
+const showLoader = computed(() => !gameStore.currentScene)
 
 onMounted(initSession)
 onUnmounted(() => { disconnect() })
@@ -429,19 +510,41 @@ onUnmounted(() => { disconnect() })
       @action="handleAction"
     />
 
-    <!-- ─── Desktop layouts (md+) ─────────────────────────────────────────── -->
-    <CombatLayout
-      v-if="gameStore.isInCombat"
-      @action="handleAction"
-      @end-combat="confirmEndCombat"
-      @open-sheet="openSheet"
-    />
-    <ExplorationLayout
-      v-else
-      class="hidden md:flex"
-      @action="handleAction"
-      @open-sheet="openSheet"
-    />
+    <!-- ─── Cinematic Loader ─── -->
+    <div v-if="showLoader" class="flex-1 flex flex-col justify-center items-center p-8 text-center bg-[#0e0d14] relative z-20">
+      <div class="loader-wrap flex flex-col items-center">
+        <!-- Animated visual spinner -->
+        <div class="relative w-24 h-24 mb-8 flex items-center justify-center">
+          <div class="absolute inset-0 rounded-full border border-[#f0c764]/10 animate-[spin_6s_linear_infinite]" />
+          <div class="absolute inset-2 rounded-full border-t-2 border-r-2 border-[#ff8247] animate-[spin_1.5s_linear_infinite]" />
+          <div class="absolute inset-4 rounded-full border-b-2 border-l-2 border-[#c090ff] animate-[spin_2s_linear_infinite] opacity-60" />
+          <span class="text-2xl animate-[pulse_1.5s_ease-in-out_infinite] text-[#f0c764]">✦</span>
+        </div>
+
+        <h2 class="font-display text-xl md:text-2xl font-bold text-[#f0c764] tracking-widest uppercase mb-4 animate-[pulse_2s_ease-in-out_infinite]">
+          Le Maître du Jeu IA prépare la scène...
+        </h2>
+        <p class="font-serif text-sm md:text-base italic text-[rgba(247,236,208,0.75)] max-w-md leading-relaxed">
+          Tissage de l'intrigue, placement des décors tactiques et des personnages dans l'espace physique...
+        </p>
+      </div>
+    </div>
+
+    <!-- ─── Game Session Layouts ─── -->
+    <template v-else>
+      <!-- ─── Desktop layouts (md+) ─────────────────────────────────────────── -->
+      <CombatLayout
+        v-if="gameStore.isInCombat"
+        @action="handleAction"
+        @end-combat="confirmEndCombat"
+        @open-sheet="openSheet"
+      />
+      <ExplorationLayout
+        v-else
+        class="hidden md:flex"
+        @action="handleAction"
+        @open-sheet="openSheet"
+      />
 
     <LootNotification />
 
@@ -495,6 +598,8 @@ onUnmounted(() => { disconnect() })
         @map-mode="(mode) => { mobileMapMode = mode }"
       />
     </div>
+
+    </template>
 
     <!-- Adventure start modal -->
     <AdventureStartModal
