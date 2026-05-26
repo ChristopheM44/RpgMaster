@@ -586,7 +586,7 @@ def _party_positions(active: Any) -> dict[str, dict[str, int]]:
         return {}
     positions: dict[str, dict[str, int]] = {}
     for index, char_id in enumerate(characters):
-        positions[str(char_id)] = {"col": 1 + index % 3, "row": 4 + index // 3}
+        positions[str(char_id)] = {"col": 5 + index % 3, "row": 6 + index // 3}
     return positions
 
 
@@ -815,13 +815,37 @@ def _opening_response(
         else _free_opening_text(active, script, auto_generate)
     )
 
+    # Guess scene_theme based on keywords in physical_place and description
+    text_to_check = f"{physical_place} {scene_brief}".lower()
+    guessed_theme = "forest"
+    if any(k in text_to_check for k in ["beach", "plage", "sand", "sable"]):
+        guessed_theme = "beach"
+    elif any(k in text_to_check for k in ["coast", "rivage", "mer", "shore", "ocean", "sea", "tempete", "tempête"]):
+        guessed_theme = "coastal"
+    elif any(k in text_to_check for k in ["dungeon", "donjon", "chamber", "chambre", "salle", "crypt"]):
+        guessed_theme = "dungeon"
+    elif any(k in text_to_check for k in ["cave", "grotte", "cavern"]):
+        guessed_theme = "cave"
+    elif any(k in text_to_check for k in ["swamp", "marais", "mud", "boue"]):
+        guessed_theme = "swamp"
+    elif any(k in text_to_check for k in ["desert", "dune"]):
+        guessed_theme = "desert"
+    elif any(k in text_to_check for k in ["mountain", "montagne", "peak"]):
+        guessed_theme = "mountain"
+    elif any(k in text_to_check for k in ["rock", "roche", "cliff", "falaise"]):
+        guessed_theme = "rocky"
+    elif any(k in text_to_check for k in ["city", "ville", "street", "rue", "place", "town"]):
+        guessed_theme = "city"
+    elif any(k in text_to_check for k in ["plain", "plaine", "grass", "herbe", "field"]):
+        guessed_theme = "plains"
+
     pois: list[dict[str, Any]] = []
     main_description = scene_brief or "Les premiers détails concrets de la scène."
     pois.append({
         "id": "ambiance_initiale",
         "name": location if location and location != "un lieu de départ" else "Situation immédiate",
         "kind": "clue",
-        "position": {"col": 3, "row": 3},
+        "position": {"col": 3, "row": 4},
         "icon": "clue",
         "description": main_description[:200],
         "action_hint": "Observer avant de décider.",
@@ -846,7 +870,7 @@ def _opening_response(
                 "id": clue_id,
                 "name": (clue_name[:48].rstrip() + "…") if len(clue_name) > 48 else clue_name,
                 "kind": "clue",
-                "position": {"col": 5 + index, "row": 3},
+                "position": {"col": 4 + index, "row": 4},
                 "icon": "clue",
                 "description": clue_text[:200],
                 "action_hint": clue_action_hint[:160],
@@ -876,7 +900,7 @@ def _opening_response(
             "id": npc_id,
             "name": npc_name,
             "kind": "npc",
-            "position": {"col": 4 + index, "row": 5},
+            "position": {"col": 5 + index, "row": 5},
             "icon": "npc",
             "description": npc_description,
             "action_hint": npc_action_hint[:160],
@@ -898,7 +922,7 @@ def _opening_response(
             {
                 "id": "explorer_environs",
                 "label": "Explorer les environs",
-                "position": {"col": 7, "row": 4},
+                "position": {"col": 10, "row": 5},
                 "leads_to": "environs",
                 "description": "Quitter le point de départ pour observer le terrain proche.",
             }
@@ -907,7 +931,7 @@ def _opening_response(
         exits.append({
             "id": "prendre_route_objectif",
             "label": "Prendre la route",
-            "position": {"col": 7, "row": 6},
+            "position": {"col": 10, "row": 7},
             "leads_to": objective_id or "objectif",
             "description": f"Se diriger vers : {objective}",
         })
@@ -924,10 +948,11 @@ def _opening_response(
 
     scene_params: dict[str, Any] = {
         "scene_id": f"scene_{location_id}",
-        "cols": 8,
-        "rows": 8,
+        "cols": 12,
+        "rows": 12,
         "cell_size_m": 1.5,
         "terrain": region_kind,
+        "scene_theme": guessed_theme,
         "pois": pois[:5],
         "exits": exits[:3],
         "party_positions": _party_positions(active),

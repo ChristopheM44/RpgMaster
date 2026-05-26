@@ -147,11 +147,13 @@ def initialize_positions(
     npc_ids: list[str],
     grid_cols: int = 10,
     grid_rows: int = 8,
+    exploration_positions: Optional[dict[str, Any]] = None,
 ) -> dict[str, GridPosition]:
     """Assign starting grid positions for all combatants.
 
-    Players start in the bottom two rows; NPCs start in the top two rows.
-    Spreads combatants evenly across the columns.
+    Players start at their exploration coordinates if valid. Otherwise, they start
+    near the bottom two rows. NPCs start in the top two rows.
+    Spreads remaining combatants evenly across the columns.
     """
     positions: dict[str, GridPosition] = {}
 
@@ -168,7 +170,27 @@ def initialize_positions(
             row = min(row, grid_rows - 1)
             positions[cid] = GridPosition(col=col, row=row)
 
-    spread(player_ids, grid_rows - 2)   # players near bottom
-    spread(npc_ids, 0)                   # NPCs near top
+    # 1. Place players using exploration positions if available and valid
+    fallback_players = []
+    for pid in player_ids:
+        pos_data = (exploration_positions or {}).get(pid)
+        # Handle dict or other structures containing col and row
+        if isinstance(pos_data, dict) and "col" in pos_data and "row" in pos_data:
+            try:
+                col = int(pos_data["col"])
+                row = int(pos_data["row"])
+                if 0 <= col < grid_cols and 0 <= row < grid_rows:
+                    positions[pid] = GridPosition(col=col, row=row)
+                    continue
+            except (ValueError, TypeError):
+                pass
+        fallback_players.append(pid)
+
+    # 2. Spread players who have no valid exploration position near bottom
+    if fallback_players:
+        spread(fallback_players, grid_rows - 2)
+
+    # 3. Spread NPCs near top
+    spread(npc_ids, 0)
 
     return positions

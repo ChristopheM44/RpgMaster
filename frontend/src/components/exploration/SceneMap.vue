@@ -238,16 +238,150 @@ const torchPositions: Array<{ cx: number; cy: number }> = [
 
 // ── Piste ──────────────────────────────────────────────────────────────────
 
-function pathTrack() {
-  const c = props.cell
-  const trackRow = Math.max(0, Math.min(rows.value - 1, Math.floor(rows.value / 2)))
-  return `M 0 ${(trackRow + 0.5) * c} Q ${3 * c} ${(trackRow - 1) * c} ${5 * c} ${trackRow * c} T ${cols.value * c} ${(trackRow + 0.5) * c}`
+interface TrackVisual {
+  outerColor: string
+  outerWidthPct: number // width as percentage of cell size (e.g. 0.6)
+  innerColor: string
+  innerDash: string
+  innerWidthPct: number
+  strokeLinecap?: 'round' | 'butt' | 'square'
 }
 
-// Pas de piste pour mer/eau, donjon sans piste naturelle
-const showTrack = computed(() =>
-  !['dungeon', 'cave', 'beach', 'coastal'].includes(theme.value)
-)
+const TRACK_VISUALS: Record<SceneTheme, TrackVisual> = {
+  forest: {
+    outerColor: 'rgba(247,236,208,0.08)',
+    outerWidthPct: 0.75,
+    innerColor: 'rgba(139,90,43,0.3)',
+    innerDash: '4 6',
+    innerWidthPct: 0.15,
+  },
+  plains: {
+    outerColor: 'rgba(247,236,208,0.10)',
+    outerWidthPct: 0.7,
+    innerColor: 'rgba(111,217,111,0.2)',
+    innerDash: '5 5',
+    innerWidthPct: 0.15,
+  },
+  desert: {
+    outerColor: 'rgba(240,199,100,0.12)',
+    outerWidthPct: 0.8,
+    innerColor: 'rgba(240,199,100,0.4)',
+    innerDash: '10 8',
+    innerWidthPct: 0.18,
+  },
+  dungeon: {
+    outerColor: 'rgba(90,90,95,0.22)',
+    outerWidthPct: 0.85,
+    innerColor: 'rgba(160,160,170,0.35)',
+    innerDash: '14 3', // simulates flagstone blocks
+    innerWidthPct: 0.75, // wide flagstones
+    strokeLinecap: 'butt',
+  },
+  cave: {
+    outerColor: 'rgba(70,65,60,0.25)',
+    outerWidthPct: 0.8,
+    innerColor: 'rgba(140,130,120,0.3)',
+    innerDash: '8 6',
+    innerWidthPct: 0.65,
+    strokeLinecap: 'round',
+  },
+  beach: {
+    outerColor: 'rgba(79,216,192,0.10)',
+    outerWidthPct: 0.75,
+    innerColor: 'rgba(79,216,192,0.35)',
+    innerDash: '18 4', // wooden planks
+    innerWidthPct: 0.5,
+    strokeLinecap: 'butt',
+  },
+  coastal: {
+    outerColor: 'rgba(79,216,192,0.08)',
+    outerWidthPct: 0.7,
+    innerColor: 'rgba(247,236,208,0.25)',
+    innerDash: '20 5', // wooden dock boards
+    innerWidthPct: 0.45,
+    strokeLinecap: 'butt',
+  },
+  swamp: {
+    outerColor: 'rgba(40,30,20,0.35)',
+    outerWidthPct: 0.8,
+    innerColor: 'rgba(100,80,60,0.4)',
+    innerDash: '12 8', // uneven wooden footbridge planks
+    innerWidthPct: 0.55,
+    strokeLinecap: 'butt',
+  },
+  mountain: {
+    outerColor: 'rgba(100,100,105,0.18)',
+    outerWidthPct: 0.7,
+    innerColor: 'rgba(200,200,205,0.25)',
+    innerDash: '3 9', // gravel stones
+    innerWidthPct: 0.25,
+    strokeLinecap: 'round',
+  },
+  rocky: {
+    outerColor: 'rgba(110,100,90,0.18)',
+    outerWidthPct: 0.75,
+    innerColor: 'rgba(180,170,160,0.3)',
+    innerDash: '4 8',
+    innerWidthPct: 0.2,
+    strokeLinecap: 'round',
+  },
+  city: {
+    outerColor: 'rgba(120,110,100,0.2)',
+    outerWidthPct: 0.9,
+    innerColor: 'rgba(240,199,100,0.25)',
+    innerDash: '16 4', // paved cobblestone street
+    innerWidthPct: 0.8,
+    strokeLinecap: 'butt',
+  },
+}
+
+function pathTrack() {
+  const c = props.cell
+  const sceneExits = (gameStore.currentScene?.exits ?? []).filter(e => e.position)
+  
+  if (sceneExits.length < 2) {
+    // Fallback to middle horizontal serpentine if less than 2 exits
+    const trackRow = Math.max(0, Math.min(rows.value - 1, Math.floor(rows.value / 2)))
+    return `M 0 ${(trackRow + 0.5) * c} Q ${3 * c} ${(trackRow - 1) * c} ${5 * c} ${trackRow * c} T ${cols.value * c} ${(trackRow + 0.5) * c}`
+  }
+  
+  // Sort exits by column to go left-to-right (or by row if it's more vertical than horizontal)
+  const sorted = [...sceneExits].sort((a, b) => (a.position?.col ?? 0) - (b.position?.col ?? 0))
+  const start = sorted[0]?.position
+  const end = sorted[sorted.length - 1]?.position
+  
+  if (!start || !end) {
+    const trackRow = Math.max(0, Math.min(rows.value - 1, Math.floor(rows.value / 2)))
+    return `M 0 ${(trackRow + 0.5) * c} Q ${3 * c} ${(trackRow - 1) * c} ${5 * c} ${trackRow * c} T ${cols.value * c} ${(trackRow + 0.5) * c}`
+  }
+  
+  const x1 = (start.col + 0.5) * c
+  const y1 = (start.row + 0.5) * c
+  const x2 = (end.col + 0.5) * c
+  const y2 = (end.row + 0.5) * c
+  
+  const dx = x2 - x1
+  const dy = y2 - y1
+  
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    // Horizontal serpentine: S-curve via cubic bezier
+    const cx1 = x1 + dx * 0.35
+    const cy1 = y1 - c * 1.5
+    const cx2 = x1 + dx * 0.65
+    const cy2 = y2 + c * 1.5
+    return `M ${x1} ${y1} C ${cx1} ${cy1} ${cx2} ${cy2} ${x2} ${y2}`
+  } else {
+    // Vertical serpentine
+    const cy1 = y1 + dy * 0.35
+    const cx1 = x1 - c * 1.5
+    const cy2 = y1 + dy * 0.65
+    const cx2 = x2 + c * 1.5
+    return `M ${x1} ${y1} C ${cx1} ${cy1} ${cx2} ${cy2} ${x2} ${y2}`
+  }
+}
+
+const showTrack = computed(() => true)
+const trackVisual = computed(() => TRACK_VISUALS[theme.value] ?? TRACK_VISUALS.forest)
 
 // ── Grille ─────────────────────────────────────────────────────────────────
 
@@ -406,16 +540,17 @@ function onClick(id: string) { sessionStore.selectEntity(id) }
       <path
         :d="pathTrack()"
         fill="none"
-        :stroke="biome.trackColor"
-        :stroke-width="cell * 0.6"
-        stroke-linecap="round"
+        :stroke="trackVisual.outerColor"
+        :stroke-width="cell * trackVisual.outerWidthPct"
+        :stroke-linecap="trackVisual.strokeLinecap ?? 'round'"
       />
       <path
         :d="pathTrack()"
         fill="none"
-        stroke="rgba(247,236,208,0.18)"
-        stroke-width="1"
-        stroke-dasharray="4 6"
+        :stroke="trackVisual.innerColor"
+        :stroke-width="cell * trackVisual.innerWidthPct"
+        :stroke-dasharray="trackVisual.innerDash"
+        :stroke-linecap="trackVisual.strokeLinecap ?? 'round'"
       />
     </svg>
 
@@ -488,6 +623,13 @@ function onClick(id: string) { sessionStore.selectEntity(id) }
   position: absolute;
   inset: 0;
   pointer-events: none;
+  animation: fog-slow-pulse 8s ease-in-out infinite alternate;
+}
+
+@keyframes fog-slow-pulse {
+  0% { opacity: 0.82; transform: scale(1.0); }
+  50% { opacity: 0.95; transform: scale(1.04); }
+  100% { opacity: 0.78; transform: scale(0.98); }
 }
 
 .scene-map-layer {

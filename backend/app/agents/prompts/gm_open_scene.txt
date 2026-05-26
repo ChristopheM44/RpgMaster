@@ -27,7 +27,10 @@ Instructions :
 - Garde les affordances dans les actions structurées (`scene_layout`, cartes, journal) plutôt que sous forme de menu dans la prose.
 - Donne au moins trois affordances jouables visibles : un PNJ à qui parler, un indice/objet à examiner, une sortie/route à prendre, une rumeur à suivre ou une ressource à négocier.
 - Émets toujours un journal_update avec lieu/moment si absent.
-- Émets toujours un scene_layout cohérent avec 2 à 5 POI, 1 à 3 sorties et les positions approximatives du groupe.
+- Émets toujours un scene_layout cohérent de 12x12 cases (cols=12, rows=12) avec les consignes strictes suivantes :
+  * Exits (sorties) : Si la scène comporte un sentier ou une piste traversante horizontale, place OBLIGATOIREMENT les sorties d'exploration aux extrémités exactes de la piste pour qu'elles s'alignent visuellement sur le chemin dessiné : place la sortie Ouest en (col=0, row=7) et la sortie Est en (col=11, row=7).
+  * Party (positions du groupe) : Regroupe TOUJOURS le groupe de joueurs (VOUS et les compagnons IA) dans un cluster serré de 2 cases maximum au centre ou sur la piste (ex: autour de col=5, row=6). Ne les disperse jamais sur toute la carte.
+  * Couverts et Dangers tactiques : Génère SYSTÉMATIQUEMENT 2 à 4 points d'intérêt jouables représentant des obstacles de combat : des couverts (kind "cover", icon "c-half-cover" comme des rochers ou des troncs d'arbres couchés) et des dangers (kind "hazard", icon "trap-danger" comme des zones de ronces ou des crevasses) pour enrichir la battlemap.
 - Si un lieu régional, une ville, un quartier ou une destination est connu, émets region_map_update et/ou city_map_update par patch incrémental.
   Si c'est la PREMIÈRE FOIS que cette région/ville est introduite (absent de world_maps), inclus le champ "decor" dans le patch :
   forêts (cercles dispersés), montagnes si région montagnarde, côte/mer si zone côtière, rivière si traversante.

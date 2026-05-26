@@ -1229,19 +1229,47 @@ class GMResponseExecutor:
         if not isinstance(raw, dict):
             return {}
 
-        cols = cls._clamp_int(raw.get("cols"), default=8, minimum=3, maximum=24)
-        rows = cls._clamp_int(raw.get("rows"), default=8, minimum=3, maximum=24)
+        cols = cls._clamp_int(raw.get("cols"), default=12, minimum=3, maximum=24)
+        rows = cls._clamp_int(raw.get("rows"), default=12, minimum=3, maximum=24)
         try:
             cell_size_m = float(raw.get("cell_size_m", 1.5))
         except (TypeError, ValueError):
             cell_size_m = 1.5
         cell_size_m = max(0.5, min(cell_size_m, 6.0))
 
+        # Extract and sanitize scene_theme
+        scene_theme = str(raw.get("scene_theme") or "").strip().lower()
+        if scene_theme not in {"forest", "beach", "coastal", "rocky", "mountain", "dungeon", "cave", "city", "plains", "swamp", "desert"}:
+            terrain_lower = str(raw.get("terrain") or "").lower()
+            if any(k in terrain_lower for k in ["beach", "plage", "sand", "sable"]):
+                scene_theme = "beach"
+            elif any(k in terrain_lower for k in ["coast", "rivage", "mer", "shore", "ocean", "sea"]):
+                scene_theme = "coastal"
+            elif any(k in terrain_lower for k in ["dungeon", "donjon", "chamber", "chambre", "salle", "crypt"]):
+                scene_theme = "dungeon"
+            elif any(k in terrain_lower for k in ["cave", "grotte", "cavern"]):
+                scene_theme = "cave"
+            elif any(k in terrain_lower for k in ["swamp", "marais", "mud", "boue"]):
+                scene_theme = "swamp"
+            elif any(k in terrain_lower for k in ["desert", "dune"]):
+                scene_theme = "desert"
+            elif any(k in terrain_lower for k in ["mountain", "montagne", "peak"]):
+                scene_theme = "mountain"
+            elif any(k in terrain_lower for k in ["rock", "roche", "cliff", "falaise"]):
+                scene_theme = "rocky"
+            elif any(k in terrain_lower for k in ["city", "ville", "street", "rue", "place", "town"]):
+                scene_theme = "city"
+            elif any(k in terrain_lower for k in ["plain", "plaine", "grass", "herbe", "field"]):
+                scene_theme = "plains"
+            else:
+                scene_theme = "forest"
+
         layout: dict[str, Any] = {
             "cols": cols,
             "rows": rows,
             "cell_size_m": cell_size_m,
             "terrain": str(raw.get("terrain") or "unknown"),
+            "scene_theme": scene_theme,
             "pois": [],
             "exits": [],
             "party_positions": {},

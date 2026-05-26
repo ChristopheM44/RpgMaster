@@ -1315,15 +1315,54 @@ async def _handle_start_combat(
     else:
         active.state_data.pop("encounter_monsters", None)
 
-    # Initialize tactical grid positions
+    # Initialize tactical grid positions and configuration from active scene
+    scene = active.state_data.get("current_scene") or {}
+    grid_cols = int(scene.get("cols", 12))
+    grid_rows = int(scene.get("rows", 12))
+    cell_size_m = float(scene.get("cell_size_m", 1.5))
+    scene_theme = scene.get("scene_theme") or scene.get("terrain") or "forest"
+    exploration_positions = scene.get("party_positions") or {}
+
     player_ids = [cid for cid, c in combatants_info.items() if c["is_player"]]
     npc_ids = [cid for cid, c in combatants_info.items() if not c["is_player"]]
-    grid_cols, grid_rows = 10, 8
-    grid_positions = initialize_positions(player_ids, npc_ids, grid_cols, grid_rows)
+    
+    grid_positions = initialize_positions(
+        player_ids,
+        npc_ids,
+        grid_cols,
+        grid_rows,
+        exploration_positions=exploration_positions,
+    )
     active.state_data["grid_positions"] = {
         cid: pos.to_dict() for cid, pos in grid_positions.items()
     }
-    active.state_data["grid_config"] = {"cols": grid_cols, "rows": grid_rows, "cell_size_m": 1.5}
+
+    # Extract cover/hazard POIs to populate tactical grid decoration (obstacles/difficult terrain)
+    grid_decor = active.state_data.get("grid_decoration") or {}
+    obstacles_list = list(grid_decor.get("obstacles", []))
+    difficult_list = list(grid_decor.get("difficult", []))
+    
+    for poi in scene.get("pois", []):
+        kind = str(poi.get("kind", "")).lower()
+        pos = poi.get("position")
+        if isinstance(pos, dict) and "col" in pos and "row" in pos:
+            if kind == "cover" and pos not in obstacles_list:
+                obstacles_list.append(pos)
+            elif kind == "hazard" and pos not in difficult_list:
+                difficult_list.append(pos)
+
+    active.state_data["grid_decoration"] = {
+        "obstacles": obstacles_list,
+        "difficult": difficult_list,
+        "zones": grid_decor.get("zones", []),
+    }
+    
+    active.state_data["grid_config"] = {
+        "cols": grid_cols,
+        "rows": grid_rows,
+        "cell_size_m": cell_size_m,
+        "scene_theme": scene_theme,
+    }
 
     if should_generate_intro:
         generated_intro = await _generate_encounter_intro(
@@ -1523,6 +1562,125 @@ async def _handle_reset_combat(session_id: str, active: Any, db: AsyncSession) -
         _build_session_state_payload(session_id),
         source="ws_game",
     )
+
+
+async def _handle_flee(
+    session_id: str,
+    action: PlayerActionMessage,
+    active: Any,
+    db: AsyncSession,
+) -> None:
+    """Make a player character flee the combat if they are standing on an exit tile."""
+    if active.phase != SessionStatus.COMBAT:
+        return
+
+    char_id = action.character_id
+    if not char_id:
+        return
+
+    combatants: dict[str, Any] = active.state_data.setdefault("combatants", {})
+    if char_id not in combatants:
+        return
+
+    cdata = combatants[char_id]
+    name = cdata.get("name", char_id)
+
+    # Get player position
+    pos = grid_position_for(active.state_data, char_id)
+    if not pos:
+        return
+
+    # Check if the player is standing on an exit cell
+    scene = active.state_data.get("current_scene") or {}
+    exits = scene.get("exits", [])
+    on_exit = False
+    exit_label = "la sortie"
+
+    for exit_data in exits:
+        exit_pos = exit_data.get("position")
+        if isinstance(exit_pos, dict) and "col" in exit_pos and "row" in exit_pos:
+            if int(exit_pos["col"]) == pos.col and int(exit_pos["row"]) == pos.row:
+                on_exit = True
+                exit_label = exit_data.get("label") or exit_data.get("id") or exit_label
+                break
+
+    if not on_exit:
+        logger.warning(
+            "_handle_flee: Le personnage '%s' a tenté de fuir mais n'est pas sur une case de sortie (pos=%s).",
+            name,
+            pos,
+        )
+        return
+
+    # Set status to fled and clean up position
+    cdata["status"] = "fled"
+    
+    grid_positions = active.state_data.setdefault("grid_positions", {})
+    grid_positions.pop(char_id, None)
+    
+    active.turn_manager.remove_combatant(char_id)
+    active.mark_dirty()
+
+    # Broadcast fleeing notifications
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.COMBATANT_STATUS_CHANGED,
+        {
+            "combatant_id": char_id,
+            "combatant_name": name,
+            "status": "fled",
+            "reason": "escaped",
+        },
+        source="ws_game",
+    )
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.COMBATANT_REMOVED,
+        {
+            "combatant_id": char_id,
+            "combatant_name": name,
+            "status": "fled",
+        },
+        source="ws_game",
+    )
+
+    flee_text = f"{name} s'enfuit de la bataille par {exit_label} !"
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.NARRATION,
+        {"text": flee_text, "speaker": "Maître du Jeu"},
+        source="ws_game",
+    )
+    await persist_narration(session_id, flee_text, "Maître du Jeu", db)
+
+    # Check if any player characters remain active
+    active_pcs = [
+        cid for cid, c in combatants.items()
+        if c.get("is_player") and c.get("status") == "active"
+    ]
+
+    if not active_pcs:
+        # All PCs fled or defeated! End combat with retreat reason.
+        await _handle_combat_end(
+            session_id,
+            active,
+            db,
+            reason="fled",
+        )
+        return
+
+    # If it was fleeing character's turn, advance to next turn
+    current = active.turn_manager.current_turn
+    if current is None or current.combatant_id == char_id:
+        await _handle_end_turn(session_id, active, db)
+    else:
+        # Otherwise just broadcast updated state
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.SESSION_STATE,
+            _build_session_state_payload(session_id),
+            source="ws_game",
+        )
 
 
 async def _handle_equip_item(
@@ -2384,6 +2542,10 @@ async def _dispatch_action(
     # ----------------------------------------------------------------
     # Route special action types directly (bypass GM agent)
     # ----------------------------------------------------------------
+    if action.action_type == "flee":
+        await _handle_flee(session_id, action, active, db)
+        return
+
     if action.action_type == "move":
         await _handle_move(session_id, action, active, db)
         return

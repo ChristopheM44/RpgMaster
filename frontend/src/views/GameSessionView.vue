@@ -477,6 +477,7 @@ onUnmounted(() => { disconnect() })
           @move="handleMobileMapMove"
           @target="handleMobileMapTarget"
           @mode-change="(mode) => { mobileMapMode = mode }"
+          @flee="(exitId) => handleAction('flee', exitId)"
         />
       </div>
       <NarrativeLog />

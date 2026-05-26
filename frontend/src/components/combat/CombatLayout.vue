@@ -71,6 +71,12 @@ function handleMapTarget(targetId: string, mode: MapInteractionMode) {
   }
 }
 
+function handleMapFlee(exitId: string) {
+  emit('action', 'flee', exitId)
+  mapMode.value = 'inspect'
+}
+
+
 function handleHotSeatAction(
   actionType: string,
   content?: string,
@@ -149,6 +155,7 @@ function rerollInit() { emit('action', 'reroll_initiative') }
           @move="handleMapMove"
           @target="handleMapTarget"
           @mode-change="handleMapMode"
+          @flee="handleMapFlee"
         />
 
         <!-- Token inspector (absolute overlay, top-right) -->

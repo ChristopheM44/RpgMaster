@@ -39,12 +39,13 @@ TYPES D'ACTIONS :
                     N'invente jamais de slug de monstre et n'utilise pas de mapping approximatif.
                     IMPORTANT : encounter_setup doit TOUJOURS précéder state_transition dans le tableau actions.
 - scene_layout    : fournir un schéma compact du lieu actuel pour l'interface d'exploration
-                    (params: {"cols":8,"rows":8,"cell_size_m":1.5,"terrain":"stone_chamber",
+                    (params: {"cols":12,"rows":12,"cell_size_m":1.5,"terrain":"plage_sauvage",
                     "scene_theme":"beach",
-                    "pois":[{"id":"well","name":"Puits scellé","kind":"hazard","position":{"col":4,"row":4},"icon":"mist","description":"Brume froide et margelle instable.","action_hint":"Examiner avant de s'approcher."},
-                    {"id":"toben","name":"Toben","kind":"npc","position":{"col":2,"row":3},"icon":"npc","description":"Vieil habitué nerveux.","interactions":[{"label":"Parler","intent":"talk","prompt":"Je m'approche de Toben et lui demande ce qu'il sait."}]}],
-                    "exits":[{"id":"door","label":"Porte de chêne","position":{"col":7,"row":4},"leads_to":"bandit_room","description":"Issue solide vers une pièce voisine."}],
-                    "party_positions":{"thorvald":{"col":1,"row":4}}})
+                    "pois":[{"id":"epave","name":"Épave de chaloupe","kind":"cover","position":{"col":4,"row":6},"icon":"c-half-cover","description":"Des planches de bois échouées et couvertes d'algues.","action_hint":"S'abriter ou fouiller."},
+                    {"id":"brume","name":"Brume marine","kind":"hazard","position":{"col":8,"row":8},"icon":"trap-danger","description":"Nappe de brume dense et aveuglante.","action_hint":"Éviter cette zone."}],
+                    "exits":[{"id":"exit_west","label":"Dunes Ouest","position":{"col":0,"row":7},"leads_to":"rocky_cliffs","description":"Le rivage de sable s'étend à l'Ouest."},
+                    {"id":"exit_east","label":"Sentier Est","position":{"col":11,"row":7},"leads_to":"inland_forest","description":"Un sentier monte vers les terres à l'Est."}],
+                    "party_positions":{"thorvald":{"col":5,"row":6}}})
                     CHAMP scene_theme (OBLIGATOIRE) : choisis la valeur qui correspond le mieux au biome physique de la scène.
                     Valeurs autorisées : forest | beach | coastal | rocky | mountain | dungeon | cave | city | plains | swamp | desert
                     Exemples : rivage/sable/mer → "beach" ; falaises/rochers/île rocailleuse → "rocky" ; intérieur souterrain → "dungeon" ; grotte → "cave" ; prairie ouverte → "plains" ; forêt/bois → "forest" ; marécage/marais → "swamp" ; désert/sable brûlant → "desert" ; zone urbaine/rue/place → "city".
