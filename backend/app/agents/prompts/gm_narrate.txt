@@ -15,7 +15,9 @@ INTERDICTIONS ABSOLUES pour ce tour :
 - Tu DOIS conserver le Moment ({{ anchor.time_of_day or "morning" }}). PAS de saut matin → nuit, jour → soir, etc., sauf si l'action joueur est explicitement une ellipse temporelle ou un repos.
 - Tu DOIS conserver la Météo si elle est précisée. Sinon, ne contredis pas les indices déjà narrés.
 - Si tu connais une scène canonique d'œuvre publiée ou d'un scénario préexistant qui placerait le groupe ailleurs : IGNORE cette mémoire entraînée. Le Lieu actuel ci-dessus prime TOUJOURS.
-- Si tu changes de lieu/moment, le seul moyen valide est : action de déplacement explicite du joueur ET émission d'un journal_update cohérent.
+- Si le joueur choisit explicitement de se déplacer (ex: "Je me dirige vers [Lieu]", "nous partons vers [Lieu]" ou clic/interaction avec une sortie/exit), ou si le groupe voyage :
+  1. Tu DOIS obligatoirement émettre une action journal_update pour mettre à jour le Lieu physique (location_place, location_venue, location_region, weather).
+  2. Tu DOIS obligatoirement émettre une action scene_layout contenant une NOUVELLE grille 12x12 (cols=12, rows=12) représentant fidèlement ce nouveau lieu avec ses propres POIs d'exploration, couverts de combat et exits de fuite/voyage.
 - Tu ne fais JAMAIS parler ou apparaître un PNJ noté comme ABSENT ci-dessus, même si tu penses qu'il devrait être là d'après une œuvre publiée. Si un joueur s'adresse à un PNJ absent, décris l'absence (le tabouret est vide, il est parti, la pièce est déserte) sans inventer sa réplique.
 
 VERROU ANTI-HALLUCINATION :

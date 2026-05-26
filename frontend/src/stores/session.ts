@@ -9,13 +9,13 @@ const LS_MAP_SCOPE = 'rpg.exploration.mapScope'
 const LS_CARNET_OPEN = 'rpg.exploration.carnetOpen'
 
 function readScope(): MapScope {
-  if (typeof localStorage === 'undefined') return 'scene'
+  if (typeof localStorage === 'undefined' || typeof localStorage.getItem !== 'function') return 'scene'
   const stored = localStorage.getItem(LS_MAP_SCOPE)
   return stored === 'ville' || stored === 'region' ? stored : 'scene'
 }
 
 function readCarnetOpen(): boolean {
-  if (typeof localStorage === 'undefined') return false
+  if (typeof localStorage === 'undefined' || typeof localStorage.getItem !== 'function') return false
   return localStorage.getItem(LS_CARNET_OPEN) === '1'
 }
 
@@ -35,10 +35,14 @@ export const useSessionStore = defineStore('session', () => {
   const recitOpen = ref(true)
 
   watch(mapScope, (v) => {
-    if (typeof localStorage !== 'undefined') localStorage.setItem(LS_MAP_SCOPE, v)
+    if (typeof localStorage !== 'undefined' && typeof localStorage.setItem === 'function') {
+      localStorage.setItem(LS_MAP_SCOPE, v)
+    }
   })
   watch(carnetOpen, (v) => {
-    if (typeof localStorage !== 'undefined') localStorage.setItem(LS_CARNET_OPEN, v ? '1' : '0')
+    if (typeof localStorage !== 'undefined' && typeof localStorage.setItem === 'function') {
+      localStorage.setItem(LS_CARNET_OPEN, v ? '1' : '0')
+    }
   })
 
   // Changer de scope vide la sélection (un POI de scène n'existe pas en région).
