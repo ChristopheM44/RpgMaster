@@ -66,17 +66,89 @@ _MECHANICAL_ACTION_TYPES = (
 )
 
 
+# Mots-clés de scène → classes/traits affinitaires
+# Format : {keyword_normalized: {class_slug, ...}}
+_SPECIALTY_AFFINITY: dict[str, set[str]] = {
+    # Arcane / magie
+    "magique": {"wizard", "mage", "sorcerer", "magicien", "ensorceleur", "bard", "barde"},
+    "rune": {"wizard", "mage", "magicien", "ensorceleur"},
+    "arcane": {"wizard", "mage", "magicien", "ensorceleur", "sorcerer"},
+    "sort": {"wizard", "mage", "sorcerer", "magicien", "ensorceleur", "bard", "barde"},
+    "incantation": {"wizard", "mage", "sorcerer", "magicien"},
+    "cristal": {"wizard", "mage", "sorcerer", "magicien"},
+    "enchantement": {"wizard", "mage", "sorcerer", "bard", "barde"},
+    # Divine / soin
+    "sacre": {"cleric", "clerc", "paladin"},
+    "divin": {"cleric", "clerc", "paladin"},
+    "temple": {"cleric", "clerc", "paladin"},
+    "sanctuaire": {"cleric", "clerc", "paladin"},
+    "beni": {"cleric", "clerc", "paladin"},
+    "maledi": {"cleric", "clerc", "paladin"},
+    # Nature / plantes
+    "plante": {"ranger", "rodeur", "druid", "druide"},
+    "herbe": {"ranger", "rodeur", "druid", "druide"},
+    "foret": {"ranger", "rodeur", "druid", "druide"},
+    "bete": {"ranger", "rodeur", "druid", "druide"},
+    "animal": {"ranger", "rodeur", "druid", "druide"},
+    # Discrétion / pièges / serrures
+    "serrure": {"rogue", "roublard", "ranger", "rodeur"},
+    "piege": {"rogue", "roublard", "ranger", "rodeur"},
+    "secret": {"rogue", "roublard"},
+    "cache": {"rogue", "roublard"},
+    "passage": {"rogue", "roublard", "ranger", "rodeur"},
+    "mecanisme": {"rogue", "roublard"},
+}
+
+
+def _companion_specialty_score(char_id: str, state_data: dict[str, Any], action_text: str) -> int:
+    """Retourne un score de pertinence pour un compagnon face au contexte d'action.
+
+    Score 0 = pas de correspondance. Score positif = affinité détectée.
+    """
+    normalized_text = unicodedata.normalize("NFKD", action_text.lower())
+    normalized_text = "".join(ch for ch in normalized_text if not unicodedata.combining(ch))
+
+    cdata = (state_data.get("characters") or {}).get(char_id, {})
+    cls_raw = str(cdata.get("class", cdata.get("cls", ""))).lower()
+    cls_norm = unicodedata.normalize("NFKD", cls_raw)
+    cls_norm = "".join(ch for ch in cls_norm if not unicodedata.combining(ch))
+
+    traits = cdata.get("personality", cdata.get("traits", [])) or []
+    traits_norm = {
+        "".join(
+            ch
+            for ch in unicodedata.normalize("NFKD", str(t).lower())
+            if not unicodedata.combining(ch)
+        )
+        for t in traits
+        if t
+    }
+
+    score = 0
+    for keyword, affine_classes in _SPECIALTY_AFFINITY.items():
+        if keyword not in normalized_text:
+            continue
+        if cls_norm in affine_classes or traits_norm & affine_classes:
+            score += 1
+
+    return score
+
+
 def order_companion_spotlight(
     active: ActiveSession,
     candidate_ids: list[str],
     *,
     trigger_character_id: Optional[str] = None,
     max_count: Optional[int] = None,
+    action_text: Optional[str] = None,
 ) -> list[str]:
     """Prefer companions who have not had the recent spotlight.
 
     This keeps table chatter varied without forcing every companion to speak.
     The list stored in state_data is ordered oldest → newest.
+
+    Si ``action_text`` est fourni, les compagnons dont la classe ou les traits
+    correspondent aux mots-clés de la scène sont prioritaires (biais spécialité).
     """
     seen: set[str] = set()
     available: list[str] = []
@@ -94,11 +166,25 @@ def order_companion_spotlight(
     recent = [str(char_id) for char_id in raw_recent if str(char_id) in available]
     recent_rank = {char_id: index for index, char_id in enumerate(recent)}
     original_rank = {char_id: index for index, char_id in enumerate(available)}
+
+    # Calcul du score spécialité si un contexte d'action est fourni
+    specialty_scores: dict[str, int] = {}
+    if action_text:
+        specialty_scores = {
+            char_id: _companion_specialty_score(char_id, active.state_data, action_text)
+            for char_id in available
+        }
+    max_specialty = max(specialty_scores.values(), default=0)
+
     ordered = sorted(
         available,
         key=lambda char_id: (
+            # 1. Spécialité : compagnons affinitaires en premier (si détectée)
+            -(specialty_scores.get(char_id, 0) if max_specialty > 0 else 0),
+            # 2. Pas de surexposition récente
             char_id in recent_rank,
             recent_rank.get(char_id, -1),
+            # 3. Ordre original (stabilité)
             original_rank[char_id],
         ),
     )
@@ -462,6 +548,7 @@ class AIPlayerManager:
         trigger_character_id: Optional[str] = None,
         db: Optional[AsyncSession] = None,
         max_reactors: Optional[int] = None,
+        action_text: Optional[str] = None,
     ) -> tuple[int, list[dict[str, str]]]:
         """Fait réagir une fois chaque compagnon IA en exploration.
 
@@ -526,6 +613,7 @@ class AIPlayerManager:
             active,
             iterable,
             trigger_character_id=trigger_character_id,
+            action_text=action_text,
         )
 
         for char_id in iterable:

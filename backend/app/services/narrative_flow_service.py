@@ -294,6 +294,7 @@ class NarrativeFlowService:
                     action_resolver=action_resolver,
                     trigger_character_id=getattr(action, "character_id", None),
                     db=db,
+                    action_text=text,
                 )
             exchange.gm_arbitrated = True
             return exchange
@@ -599,6 +600,7 @@ class NarrativeFlowService:
         action_resolver: Any,
         trigger_character_id: Optional[str],
         db: Optional[AsyncSession],
+        action_text: Optional[str] = None,
     ) -> None:
         """Laisse un compagnon IA réagir après une action monde arbitrée par le MJ.
 
@@ -606,6 +608,10 @@ class NarrativeFlowService:
         zone ou interagit avec l'environnement — à condition qu'il y ait au moins
         un compagnon IA actif. Le cap à 1 évite de saturer le flux narratif après
         chaque action. Silencieux en cas d'erreur pour ne pas bloquer la session.
+
+        ``action_text`` est transmis à ``run_exploration_reactions`` pour activer
+        le biais de spécialité : le mage réagit en priorité aux POI magiques,
+        le roublard aux pièges, etc.
         """
         if not active.ai_players:
             return
@@ -619,6 +625,7 @@ class NarrativeFlowService:
                 trigger_character_id=trigger_character_id,
                 db=db,
                 max_reactors=1,
+                action_text=action_text,
             )
         except Exception as exc:
             logger.error(

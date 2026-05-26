@@ -64,6 +64,73 @@ _SPELL_BLOCK_TEMPLATES = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# Garde-fou hors-combat : actions improvisées risquées sans roll_request GM
+# ---------------------------------------------------------------------------
+# Verbes qui signalent une action physiquement risquée ou à efficacité incertaine.
+# Le pattern est volontairement conservateur pour éviter les faux positifs.
+_RISKY_ACTION_PATTERN = re.compile(
+    r"""
+    (?:
+        (?:trancher|couper|taillader|frapper|poignarder)\s+(?:avec|la|le|son|l'|les)
+        |
+        (?:enflammer|enflammer|mettre\s+le\s+feu|faire\s+prendre\s+feu|allumer)
+        |
+        (?:enfoncer|plonger|insérer|glisser)\s+(?:mon|ma|mes|son|sa|l'|la|le)
+        |
+        (?:escalader|grimper|traverser\s+en\s+courant)
+        |
+        (?:sauter|bondir|me\s+lancer)\s+(?:par[\s-]dessus|dans|sur)
+        |
+        (?:crocheter|forcer|fracturer|défoncer)\s+(?:la|le|les)
+        |
+        (?:toucher|saisir|attraper|empoigner)\s+(?:la|le|les|l')\s+\w*(?:électr|ardent|brûl|corros|poison)
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+# Skills par défaut selon le type de risque détecté (conservateur)
+_RISKY_SKILL_DEFAULTS = {
+    "trancher": ("Athletics", "str", 13),
+    "enflammer": ("Arcana", "int", 12),
+    "enfoncer": ("Acrobatics", "dex", 13),
+    "escalader": ("Athletics", "str", 12),
+    "grimper": ("Athletics", "str", 12),
+    "sauter": ("Athletics", "str", 12),
+    "bondir": ("Athletics", "str", 12),
+    "crocheter": ("SleightOfHand", "dex", 15),
+    "forcer": ("Athletics", "str", 14),
+    "fracturer": ("Athletics", "str", 14),
+}
+
+
+def _infer_risky_roll_request(content: str) -> Optional[dict[str, Any]]:
+    """Si l'action free_text contient un verbe risqué, retourne un roll_request minimal.
+
+    Conservateur : ne tire pas sur les verbes ambigus ni les descriptions passives.
+    Retourne None si aucun pattern ne correspond.
+    """
+    if not content or len(content) < 10:
+        return None
+    normalized = content.lower()
+    # Cherche le premier verbe déclencheur pour adapter le skill
+    for keyword, (skill, ability, dc) in _RISKY_SKILL_DEFAULTS.items():
+        if keyword in normalized:
+            if _RISKY_ACTION_PATTERN.search(content):
+                return {
+                    "type": "roll_request",
+                    "target": None,
+                    "params": {
+                        "skill": skill,
+                        "ability": ability,
+                        "dc": dc,
+                        "reason": "action_risquee_libre",
+                    },
+                }
+    return None
+
+
 def _tactical_block_narration(actor_name: str, action_type: str) -> str:
     """Retourne une phrase variée non-technique décrivant un blocage tactique.
 
@@ -1027,6 +1094,33 @@ class ActionPipeline:
             gm_response
             and any(gm_action.type == "roll_request" for gm_action in gm_response.actions)
         )
+
+        # Garde-fou hors-combat : si le MJ n'a pas émis de roll_request pour une
+        # action libre contenant un verbe risqué (et qu'aucun résultat mécanique
+        # n'existe déjà), on injecte un roll_request minimal de sauvegarde.
+        # Conservateur : ne s'applique qu'en exploration, sur free_text humain.
+        if (
+            not has_gm_roll_request
+            and not roll_results
+            and phase_value == "EXPLORATION"
+            and request.action_type == "free_text"
+            and request.actor_kind == "player"
+        ):
+            fallback_roll = _infer_risky_roll_request(request.content or "")
+            if fallback_roll and gm_response is not None:
+                gm_response.actions.append(
+                    GMAction(
+                        type=fallback_roll["type"],
+                        target=fallback_roll.get("target"),
+                        params=fallback_roll.get("params", {}),
+                    )
+                )
+                has_gm_roll_request = True
+                logger.debug(
+                    "ActionPipeline : roll_request fallback injecte pour action risquee : %r",
+                    request.content,
+                )
+
         if gm_response and phase_value == "COMBAT":
             gm_response = self._without_combat_damage_actions(gm_response)
 
