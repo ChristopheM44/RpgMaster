@@ -189,22 +189,17 @@ async function toggleCharacterAi(char: Character) {
 async function startGame(mode: 'libre' | 'script' | 'auto', script?: string) {
   if (!canStart.value) return
   showStartModal.value = false
-  startingGame.value = true
   errorMsg.value = null
-  try {
-    const body =
-      mode === 'script' && script
-        ? { adventure_script: script }
-        : mode === 'auto'
-          ? { auto_generate: true }
-          : undefined
-    await gameApi.start(sessionId, body)
-    router.push({ name: 'game-session', params: { id: sessionId } })
-  } catch {
-    errorMsg.value = 'Impossible de lancer la partie. Vérifiez que le backend est démarré.'
-  } finally {
-    startingGame.value = false
-  }
+  
+  router.push({
+    name: 'game-session',
+    params: { id: sessionId },
+    query: {
+      start: '1',
+      mode,
+      ...(mode === 'script' && script ? { script } : {}),
+    },
+  })
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

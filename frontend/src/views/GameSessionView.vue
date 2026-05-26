@@ -74,6 +74,11 @@ async function initSession() {
     // optional
   }
 
+  if (['lobby', 'character_creation'].includes(gameStore.phase) && !routeStartPending.value) {
+    router.replace({ name: 'character-setup', params: { id: sessionId } })
+    return
+  }
+
   connect(charStore.myCharacter?.id)
   await startPendingRouteSession()
 }
@@ -158,15 +163,35 @@ async function startPendingRouteSession() {
   routeStartPending.value = false
   gameStore.setProcessing(true)
   try {
-    const result = await gameApi.start(sessionId)
-    if (result.status === 'already_started') {
-      gameStore.setProcessing(false)
+    const mode = route.query.mode as string
+    const script = route.query.script as string
+    const body =
+      mode === 'script' && script
+        ? { adventure_script: script }
+        : mode === 'auto'
+          ? { auto_generate: true }
+          : undefined
+    await gameApi.start(sessionId, body)
+
+    // Fetch state and history after game starting to guarantee UI synchronization
+    // regardless of any WebSocket delays or missed events.
+    const state = await gameApi.getState(sessionId)
+    gameStore.applySessionState(state)
+
+    const history = await gameApi.getHistory(sessionId)
+    if (history.messages.length > 0) {
+      gameStore.restoreHistory(history.messages)
     }
+
+    gameStore.setProcessing(false)
   } catch {
     gameStore.setError('Impossible de démarrer la partie.')
+    gameStore.setProcessing(false)
   } finally {
     const nextQuery = { ...route.query }
     delete nextQuery.start
+    delete nextQuery.mode
+    delete nextQuery.script
     await router.replace({ name: 'game-session', params: { id: sessionId }, query: nextQuery })
   }
 }
@@ -274,8 +299,7 @@ const contextMeta = computed(() => {
   return null
 })
 
-const showPrepLobby = computed(() => needsStart.value && !startingGame.value && !gameStore.isProcessing)
-const showLoader = computed(() => (startingGame.value || gameStore.isProcessing) && !gameStore.currentScene)
+const showLoader = computed(() => !gameStore.currentScene)
 
 onMounted(initSession)
 onUnmounted(() => { disconnect() })
@@ -432,57 +456,8 @@ onUnmounted(() => { disconnect() })
       @action="handleAction"
     />
 
-    <!-- ─── Lobby de Préparation ─── -->
-    <div v-if="showPrepLobby" class="flex-1 flex flex-col justify-center items-center p-6 md:p-12 overflow-y-auto bg-[#0e0d14]">
-      <div class="rpg-card max-w-2xl w-full p-8 bg-[#181623] border border-[rgba(255,235,180,0.15)] relative z-10 shadow-2xl flex flex-col items-center text-center">
-        <div class="rpg-sparkle text-3xl mb-4 text-[#ff8247]">✦</div>
-        <h2 class="font-display text-2xl md:text-3xl font-bold text-[#f0c764] tracking-wider mb-2">LOBBY DE PRÉPARATION</h2>
-        <p class="font-serif text-sm md:text-base italic text-[rgba(247,236,208,0.75)] max-w-md mb-8">
-          Votre groupe de héros est prêt à braver les dangers. Le Maître du Jeu IA attend votre signal pour lancer l'aventure.
-        </p>
-
-        <!-- Characters List -->
-        <div class="w-full text-left mb-8">
-          <div class="rpg-eyebrow mb-4 text-[#f0c764]">✦ Groupe d'aventuriers</div>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div
-              v-for="ch in charStore.sessionCharacters"
-              :key="ch.id"
-              class="rpg-card p-4 flex items-center gap-3 bg-[#1f1c2e]/40 hover:bg-[#1f1c2e]/80 transition-colors border border-[rgba(255,235,180,0.07)]"
-            >
-              <div
-                class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg font-display text-base font-bold shadow-md"
-                :class="ch.is_ai ? 'bg-[#c090ff]/20 text-[#c090ff] border border-[#c090ff]/30' : 'bg-[#ff8247]/20 text-[#ff8247] border border-[#ff8247]/30'"
-              >
-                {{ ch.name.charAt(0).toUpperCase() }}
-              </div>
-              <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-1.5">
-                  <span class="rpg-text-main font-semibold truncate text-sm text-[#f7ecd0]">{{ ch.name }}</span>
-                  <span v-if="ch.is_ai" class="rpg-chip tone-arcane !text-[8px] !px-1.5 !py-0.5 shrink-0 bg-[#c090ff]/20 text-[#c090ff] border border-[#c090ff]/30 rounded uppercase font-mono">IA</span>
-                  <span v-else class="rpg-chip tone-ember !text-[8px] !px-1.5 !py-0.5 shrink-0 bg-[#ff8247]/20 text-[#ff8247] border border-[#ff8247]/30 rounded uppercase font-mono">VOUS</span>
-                </div>
-                <div class="rpg-text-muted text-xs mt-0.5 font-serif italic text-[rgba(247,236,208,0.50)]">
-                  Niv. {{ ch.level }} · {{ ch.char_class }}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Start CTA -->
-        <button
-          :disabled="startingGame || !gameStore.connected"
-          class="rpg-btn-primary !px-8 !py-3 !text-xs tracking-widest font-display shadow-lg shadow-[#ff8247]/20 hover:scale-[1.03] transition-transform duration-150 cursor-pointer"
-          @click="showStartModal = true"
-        >
-          {{ startingGame ? 'PRÉPARATION…' : 'COMMENCER L\'AVENTURE ⚔' }}
-        </button>
-      </div>
-    </div>
-
     <!-- ─── Cinematic Loader ─── -->
-    <div v-else-if="showLoader" class="flex-1 flex flex-col justify-center items-center p-8 text-center bg-[#0e0d14] relative z-20">
+    <div v-if="showLoader" class="flex-1 flex flex-col justify-center items-center p-8 text-center bg-[#0e0d14] relative z-20">
       <div class="loader-wrap flex flex-col items-center">
         <!-- Animated visual spinner -->
         <div class="relative w-24 h-24 mb-8 flex items-center justify-center">

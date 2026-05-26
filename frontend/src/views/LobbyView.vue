@@ -126,7 +126,7 @@ function formatDate(dateStr: string): string {
         <div class="relative flex-1 min-w-0">
           <div class="rpg-text-main font-display text-lg font-bold">Nouvelle Partie</div>
           <div class="rpg-text-muted text-xs">
-            Donnez un nom à votre campagne. Le MJ se chargera du reste.
+            Donnez un nom à votre aventure. Le MJ se chargera du reste.
           </div>
         </div>
 
@@ -135,7 +135,7 @@ function formatDate(dateStr: string): string {
             v-model="newSessionName"
             type="text"
             maxlength="100"
-            placeholder="Nom de la campagne…"
+            placeholder="Nom de l'aventure…"
             class="rpg-input w-[260px]"
           />
           <button
@@ -151,7 +151,7 @@ function formatDate(dateStr: string): string {
         <h2 class="rpg-section-title shrink-0">Sessions sauvegardées</h2>
         <div class="rpg-divider flex-1 h-px" />
         <span class="rpg-text-dim font-mono text-[11px]">
-          {{ sessionStore.sessions.length }} campagne{{ sessionStore.sessions.length > 1 ? 's' : '' }}
+          {{ sessionStore.sessions.length }} aventure{{ sessionStore.sessions.length > 1 ? 's' : '' }}
         </span>
       </div>
 

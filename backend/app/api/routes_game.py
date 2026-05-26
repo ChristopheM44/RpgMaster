@@ -1153,8 +1153,70 @@ async def _send_free_opening_narration(
     script: Optional[str] = None,
     auto_generate: bool = False,
 ) -> None:
-    response = _opening_response(active, script=script, auto_generate=auto_generate)
-    await _publish_opening_scene(session_id, active, db, response, quest_changed=False)
+    baseline = _opening_response(active, script=script, auto_generate=auto_generate)
+    response = baseline
+
+    # If it is auto-generated or has a script, let's run the LLM to make it fully dynamic and immersive!
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.AI_THINKING,
+        {"agent_kind": "gm", "thinking": True},
+        source="routes_game",
+    )
+    try:
+        if script:
+            opening_brief = f"Script de départ fourni par le joueur : {script}. Tisse la scène de départ en te basant fidèlement sur ces consignes."
+        elif auto_generate:
+            opening_brief = "Génération automatique d'aventure. Improvise une situation de départ active et captivante (un hook dramatique, un mystère immédiat, une rumeur pressante) adaptée au niveau et à la composition des personnages."
+        else:
+            opening_brief = "Improvisation libre. Improvise une scène de départ calme et ouverte, un point d'ancrage neutre (ex: une taverne paisible, un campement de voyage au réveil, les portes d'une ville calme) où le groupe est réuni et libre de choisir son orientation sans urgence immédiate."
+
+        llm_response = await GMAgent().open_scene(
+            game_state=active.state_data,
+            opening_brief=_build_opening_brief(active.state_data) + f"\n\n## INSTRUCTIONS DE DÉPART\n{opening_brief}",
+            messages=None,
+        )
+        llm_narration = str(getattr(llm_response, "narration", "") or "").strip()
+        if llm_narration and llm_narration != _FALLBACK_NARRATION:
+            actions = list(llm_response.actions) if llm_response.actions else list(baseline.actions)
+            # Garantir qu'une action scene_layout est toujours présente pour éviter de bloquer le loader
+            if not any(act.type == "scene_layout" for act in actions):
+                baseline_scene_layout = next(
+                    (act for act in baseline.actions if act.type == "scene_layout"),
+                    None,
+                )
+                if baseline_scene_layout:
+                    actions.append(baseline_scene_layout)
+            # Garantir qu'une action region_map_update est toujours présente
+            if not any(act.type == "region_map_update" for act in actions):
+                baseline_region_map = next(
+                    (act for act in baseline.actions if act.type == "region_map_update"),
+                    None,
+                )
+                if baseline_region_map:
+                    actions.append(baseline_region_map)
+            response = GMResponse(
+                narration=llm_narration,
+                actions=actions,
+                mood=getattr(llm_response, "mood", None) or baseline.mood,
+            )
+    except Exception as exc:
+        logger.warning("Free opening scene LLM failed; falling back to deterministic opening: %s", exc)
+    finally:
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.AI_THINKING,
+            {"agent_kind": "gm", "thinking": False},
+            source="routes_game",
+        )
+
+    await _publish_opening_scene(
+        session_id,
+        active,
+        db,
+        response,
+        quest_changed=False,
+    )
 
 
 async def _publish_opening_scene(

@@ -324,10 +324,7 @@ export interface SrdEquipmentItem {
 
 // ─── Game State ───────────────────────────────────────────────────────────────
 
-export interface GameStateResponse {
-  session_id: string
-  phase: string
-}
+// GameStateResponse est défini plus bas après SessionStatePayload
 
 // ─── Campaign Maps ───────────────────────────────────────────────────────────
 
@@ -611,6 +608,8 @@ export interface SessionStatePayload {
   city_maps?: Record<string, CityMap>
   active_city_id?: string | null
 }
+
+export interface GameStateResponse extends SessionStatePayload {}
 
 export interface TurnEntry {
   id: string
