@@ -65,7 +65,7 @@ async function handleCreate() {
 
 function handleJoin(session: Session) {
   sessionStore.setCurrentSession(session)
-  router.push({ name: 'game-session', params: { id: session.id } })
+  router.push({ name: 'character-setup', params: { id: session.id } })
 }
 
 function handleAddCharacter(session: Session) {

@@ -348,10 +348,12 @@ class GMAgent(BaseAgent):
         context_manager: Optional[ContextManager] = None,
         opening_brief: Optional[str] = None,
         messages: Optional[list] = None,
+        is_lobby: bool = False,
     ) -> GMResponse:
         """Cadre la toute première scène jouable d'une session."""
+        template_name = "gm_open_scene_lobby.txt" if is_lobby else "gm_open_scene.txt"
         user_prompt = self._render_prompt(
-            "gm_open_scene.txt",
+            template_name,
             {
                 "active_quest_brief": _extract_active_quest_brief(game_state),
                 "game_state": json.dumps(game_state, ensure_ascii=False, indent=2),

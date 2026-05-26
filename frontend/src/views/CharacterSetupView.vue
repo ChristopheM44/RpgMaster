@@ -36,6 +36,9 @@ const pregenError = ref<string | null>(null)
 
 const canStart = computed(() => characters.value.length > 0)
 const isLoading = computed(() => loadingSession.value || loadingChars.value || loadingPregens.value)
+const isInitialized = computed(() => {
+  return session.value && !['lobby', 'character_creation'].includes(session.value.status)
+})
 
 const CLASS_ICONS: Record<string, string> = {
   fighter: '⚔',
@@ -186,7 +189,16 @@ async function toggleCharacterAi(char: Character) {
 
 // ─── Start game ───────────────────────────────────────────────────────────────
 
-async function startGame(mode: 'libre' | 'script' | 'auto', script?: string) {
+async function startGame(
+  mode: 'libre' | 'script' | 'auto',
+  script?: string,
+  options?: {
+    adventure_preset?: string
+    biome?: string
+    weather?: string
+    tone?: string
+  }
+) {
   if (!canStart.value) return
   showStartModal.value = false
   errorMsg.value = null
@@ -198,8 +210,31 @@ async function startGame(mode: 'libre' | 'script' | 'auto', script?: string) {
       start: '1',
       mode,
       ...(mode === 'script' && script ? { script } : {}),
+      ...(options?.adventure_preset ? { adventure_preset: options.adventure_preset } : {}),
+      ...(options?.biome ? { biome: options.biome } : {}),
+      ...(options?.weather ? { weather: options.weather } : {}),
+      ...(options?.tone ? { tone: options.tone } : {}),
     },
   })
+}
+
+async function handleLaunchClick() {
+  if (!canStart.value) return
+  
+  if (isInitialized.value) {
+    // Go directly to the session without generating a new seed or showing options modal
+    router.push({
+      name: 'game-session',
+      params: { id: sessionId },
+    })
+  } else {
+    // Show the starting modal for adventure forge options
+    if (backRoute === 'campaigns') {
+      await startGame('libre')
+    } else {
+      showStartModal.value = true
+    }
+  }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -346,10 +381,11 @@ function classIcon(classId: string): string {
         <button
           :disabled="!canStart || startingGame"
           class="w-full rounded-lg bg-blood py-4 text-xl font-bold text-parchment transition hover:bg-blood-light disabled:cursor-not-allowed disabled:opacity-40"
-          @click="backRoute === 'campaigns' ? startGame('libre') : showStartModal = true"
+          @click="handleLaunchClick"
         >
           <span v-if="startingGame">Démarrage en cours...</span>
           <span v-else-if="!canStart">Ajoutez au moins un personnage pour commencer</span>
+          <span v-else-if="isInitialized">⚔ Rejoindre la Partie</span>
           <span v-else>⚔ Lancer la Partie</span>
         </button>
       </section>

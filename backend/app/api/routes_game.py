@@ -36,6 +36,10 @@ logger = logging.getLogger(__name__)
 class StartGameBody(BaseModel):
     adventure_script: Optional[str] = None
     auto_generate: bool = False
+    adventure_preset: Optional[str] = None
+    biome: Optional[str] = None
+    weather: Optional[str] = None
+    tone: Optional[str] = None
 
 
 class SaveSlotCreate(BaseModel):
@@ -794,10 +798,22 @@ def _opening_response(
     auto_generate: bool = False,
 ) -> GMResponse:
     opening_scene = _opening_scene(campaign_context)
-    location = _opening_scene_location_label(opening_scene)
-    physical_place = str(opening_scene.get("place") or "un lieu de départ").strip()
+    
+    # Fall back to dynamic adventure_journal values for lobby-generated games
+    journal = active.state_data.get("adventure_journal") or {}
+    physical_place = str(opening_scene.get("place") or "").strip()
+    if not physical_place or physical_place == "un lieu de départ":
+        physical_place = str(journal.get("location_place") or "un lieu de départ").strip()
+        
     physical_region = str(opening_scene.get("region") or "").strip() or None
-    physical_venue = opening_scene.get("venue")
+    if not physical_region:
+        physical_region = str(journal.get("location_region") or "").strip() or None
+        
+    physical_venue = opening_scene.get("venue") or journal.get("location_venue")
+    location = physical_place
+    if physical_region:
+        location = f"{physical_place} ({physical_region})"
+        
     objective = _opening_objective(campaign_context)
     location_id = _safe_id(str(physical_venue or physical_place), "lieu_depart")
     objective_id = _safe_id(objective, "objectif_rumeur") if objective else ""
@@ -807,37 +823,38 @@ def _opening_response(
     scene_brief = str(opening_scene.get("description") or "").strip()
     clues = list(opening_scene.get("visible_clues") or [])[:2]
     present_npcs = list(opening_scene.get("present_npcs") or [])[:2]
-    time_of_day = str(opening_scene.get("time_of_day") or "morning")
-    weather = opening_scene.get("weather")
+    time_of_day = str(journal.get("time_of_day") or opening_scene.get("time_of_day") or "morning")
+    weather = journal.get("weather") or opening_scene.get("weather")
     narration = (
         _campaign_opening_text(campaign_context)
         if campaign_context is not None
         else _free_opening_text(active, script, auto_generate)
     )
 
-    # Guess scene_theme based on keywords in physical_place and description
+    # Guess scene_theme based on keywords in physical_place and description, or use seed value
     text_to_check = f"{physical_place} {scene_brief}".lower()
-    guessed_theme = "forest"
-    if any(k in text_to_check for k in ["beach", "plage", "sand", "sable"]):
-        guessed_theme = "beach"
-    elif any(k in text_to_check for k in ["coast", "rivage", "mer", "shore", "ocean", "sea", "tempete", "tempête"]):
-        guessed_theme = "coastal"
-    elif any(k in text_to_check for k in ["dungeon", "donjon", "chamber", "chambre", "salle", "crypt"]):
-        guessed_theme = "dungeon"
-    elif any(k in text_to_check for k in ["cave", "grotte", "cavern"]):
-        guessed_theme = "cave"
-    elif any(k in text_to_check for k in ["swamp", "marais", "mud", "boue"]):
-        guessed_theme = "swamp"
-    elif any(k in text_to_check for k in ["desert", "dune"]):
-        guessed_theme = "desert"
-    elif any(k in text_to_check for k in ["mountain", "montagne", "peak"]):
-        guessed_theme = "mountain"
-    elif any(k in text_to_check for k in ["rock", "roche", "cliff", "falaise"]):
-        guessed_theme = "rocky"
-    elif any(k in text_to_check for k in ["city", "ville", "street", "rue", "place", "town"]):
-        guessed_theme = "city"
-    elif any(k in text_to_check for k in ["plain", "plaine", "grass", "herbe", "field"]):
-        guessed_theme = "plains"
+    guessed_theme = journal.get("scene_theme") or "forest"
+    if not journal.get("scene_theme"):
+        if any(k in text_to_check for k in ["beach", "plage", "sand", "sable"]):
+            guessed_theme = "beach"
+        elif any(k in text_to_check for k in ["coast", "rivage", "mer", "shore", "ocean", "sea", "tempete", "tempête"]):
+            guessed_theme = "coastal"
+        elif any(k in text_to_check for k in ["dungeon", "donjon", "chamber", "chambre", "salle", "crypt"]):
+            guessed_theme = "dungeon"
+        elif any(k in text_to_check for k in ["cave", "grotte", "cavern"]):
+            guessed_theme = "cave"
+        elif any(k in text_to_check for k in ["swamp", "marais", "mud", "boue"]):
+            guessed_theme = "swamp"
+        elif any(k in text_to_check for k in ["desert", "dune"]):
+            guessed_theme = "desert"
+        elif any(k in text_to_check for k in ["mountain", "montagne", "peak"]):
+            guessed_theme = "mountain"
+        elif any(k in text_to_check for k in ["rock", "roche", "cliff", "falaise"]):
+            guessed_theme = "rocky"
+        elif any(k in text_to_check for k in ["city", "ville", "street", "rue", "place", "town"]):
+            guessed_theme = "city"
+        elif any(k in text_to_check for k in ["plain", "plaine", "grass", "herbe", "field"]):
+            guessed_theme = "plains"
 
     pois: list[dict[str, Any]] = []
     main_description = scene_brief or "Les premiers détails concrets de la scène."
@@ -1152,7 +1169,35 @@ async def _send_free_opening_narration(
     *,
     script: Optional[str] = None,
     auto_generate: bool = False,
+    preset: Optional[str] = None,
+    biome: Optional[str] = None,
+    weather: Optional[str] = None,
+    tone: Optional[str] = None,
 ) -> None:
+    # Generate seed if not using custom script
+    seed = None
+    if not script:
+        from app.engine.adventure_seeds import generate_adventure_context
+        seed = generate_adventure_context(
+            preset_id=preset,
+            biome_id=biome,
+            weather=weather,
+            tone=tone,
+        )
+        
+        # Inject seed into active state_data
+        active.state_data["adventure_journal"] = {
+            "location_region": seed["location_region"],
+            "location_place": seed["location_place"],
+            "location_venue": None,
+            "time_of_day": "morning",
+            "day_number": 1,
+            "calendar_date": None,
+            "weather": seed["weather"],
+            "scene_theme": seed["scene_theme"],
+        }
+        active.mark_dirty()
+
     baseline = _opening_response(active, script=script, auto_generate=auto_generate)
     response = baseline
 
@@ -1166,6 +1211,8 @@ async def _send_free_opening_narration(
     try:
         if script:
             opening_brief = f"Script de départ fourni par le joueur : {script}. Tisse la scène de départ en te basant fidèlement sur ces consignes."
+        elif seed:
+            opening_brief = seed["opening_brief"]
         elif auto_generate:
             opening_brief = "Génération automatique d'aventure. Improvise une situation de départ active et captivante (un hook dramatique, un mystère immédiat, une rumeur pressante) adaptée au niveau et à la composition des personnages."
         else:
@@ -1175,6 +1222,7 @@ async def _send_free_opening_narration(
             game_state=active.state_data,
             opening_brief=_build_opening_brief(active.state_data) + f"\n\n## INSTRUCTIONS DE DÉPART\n{opening_brief}",
             messages=None,
+            is_lobby=True,
         )
         llm_narration = str(getattr(llm_response, "narration", "") or "").strip()
         if llm_narration and llm_narration != _FALLBACK_NARRATION:
@@ -1405,18 +1453,16 @@ async def start_game(
                 campaign_context,
                 db,
             )
-        elif body.auto_generate:
-            await _send_free_opening_narration(
-                session_id,
-                active,
-                db,
-                auto_generate=True,
-            )
         else:
             await _send_free_opening_narration(
                 session_id,
                 active,
                 db,
+                auto_generate=body.auto_generate,
+                preset=body.adventure_preset,
+                biome=body.biome,
+                weather=body.weather,
+                tone=body.tone,
             )
     except Exception:
         active.state_data.pop(_OPENING_NARRATION_IN_PROGRESS, None)

@@ -1,16 +1,56 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useSessionStore } from '../../stores/session'
+import { useGameStore } from '../../stores/game'
 import CarnetGroupSection from './CarnetGroupSection.vue'
 import CarnetQuestsSection from './CarnetQuestsSection.vue'
 import CarnetMemorySection from './CarnetMemorySection.vue'
 
 const sessionStore = useSessionStore()
+const gameStore = useGameStore()
 
 const emit = defineEmits<{ openSheet: [id: string] }>()
 
 function close() {
   sessionStore.toggleCarnet(false)
 }
+
+const journal = computed(() => gameStore.adventureJournal)
+
+const campaignTitle = computed(() => {
+  const region = journal.value?.location_region || 'Côte des Épées'
+
+  let place = journal.value?.location_place
+  if (!place && gameStore.regionMap) {
+    const currentNode = gameStore.regionMap.nodes.find(
+      (node) => node.id === gameStore.regionMap?.current_node_id
+    )
+    if (currentNode?.name) place = currentNode.name
+  }
+  if (!place) {
+    place = sessionStore.currentSession?.name || 'Triboar Trail'
+  }
+
+  return `${region} · ${place}`
+})
+
+const campaignSub = computed(() => {
+  const TIME_LABEL: Record<string, string> = {
+    dawn: 'Aube',
+    morning: 'Matin',
+    noon: 'Midi',
+    afternoon: 'Après-midi',
+    dusk: 'Crépuscule',
+    night: 'Nuit',
+  }
+  
+  const time = journal.value ? (TIME_LABEL[journal.value.time_of_day] ?? journal.value.time_of_day) : 'Matin'
+  const day = journal.value ? `Jour ${journal.value.day_number}` : 'Jour 1'
+  const weather = journal.value?.weather || 'humide'
+
+  const parts = [time, day, weather].filter(Boolean)
+  return `✦ ${parts.join(' · ')}`
+})
 </script>
 
 <template>
@@ -24,8 +64,8 @@ function close() {
 
     <div class="carnet-body">
       <div class="carnet-campaign rpg-card">
-        <div class="carnet-campaign-title">Côte des Épées · Triboar Trail</div>
-        <div class="carnet-campaign-sub">✦ Matin · Jour 1 · humide</div>
+        <div class="carnet-campaign-title">{{ campaignTitle }}</div>
+        <div class="carnet-campaign-sub">{{ campaignSub }}</div>
       </div>
 
       <CarnetGroupSection @open-sheet="(id) => emit('openSheet', id)" />
