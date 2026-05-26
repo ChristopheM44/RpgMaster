@@ -363,6 +363,41 @@ export interface MapEdge {
   hidden?: boolean
 }
 
+// ── Décor visuel (set-once, émis par le MJ) ──────────────────────────────────
+export type CoastlineSide = 'west' | 'east' | 'north' | 'south'
+
+export interface ForestSpot {
+  x: number
+  y: number
+  radius?: number   // default 3.0
+  opacity?: number  // default 0.4
+}
+
+export interface MountainSpot {
+  x: number
+  y: number
+  height?: number   // default 5.0
+}
+
+export interface Coastline {
+  side: CoastlineSide
+  points: MapNodePosition[]
+}
+
+export interface RiverPath {
+  path: string      // SVG path en coords 0..100
+  width?: number    // default 1.5
+}
+
+export interface MapDecor {
+  forests?: ForestSpot[]
+  mountains?: MountainSpot[]
+  coastline?: Coastline
+  river?: RiverPath
+  decorative_roads?: string[]  // paths SVG décoratifs
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 export interface RegionMap {
   id: string
   name: string
@@ -370,6 +405,7 @@ export interface RegionMap {
   nodes: MapNode[]
   edges: MapEdge[]
   background_seed?: string
+  decor?: MapDecor
   updated_at: string
 }
 
@@ -381,6 +417,7 @@ export interface CityMap {
   nodes: MapNode[]
   edges: MapEdge[]
   background_seed?: string
+  decor?: MapDecor
   updated_at: string
 }
 
@@ -523,11 +560,25 @@ export interface SceneExit {
   type?: string
 }
 
+export type SceneTheme =
+  | 'forest'
+  | 'beach'
+  | 'coastal'
+  | 'rocky'
+  | 'mountain'
+  | 'dungeon'
+  | 'cave'
+  | 'city'
+  | 'plains'
+  | 'swamp'
+  | 'desert'
+
 export interface SceneLayout {
   cols: number
   rows: number
   cell_size_m: number
   terrain?: string
+  scene_theme?: SceneTheme
   pois: PointOfInterest[]
   exits: SceneExit[]
   party_positions: Record<string, GridPosition>

@@ -2,9 +2,10 @@
 import { computed } from 'vue'
 import { useSessionStore } from '../../stores/session'
 import { useGameStore } from '../../stores/game'
-import type { MapNode, NodeStatus, CityNodeKind } from '../../types'
+import { resolveMapDecor } from '../../composables/useMapDecor'
+import type { MapNode, NodeStatus, CityNodeKind, MapDecor } from '../../types'
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   width?: number
   height?: number
 }>(), {
@@ -23,6 +24,33 @@ const city = computed(() => {
 const nodes = computed<MapNode[]>(() => city.value?.nodes ?? [])
 const edges = computed(() => city.value?.edges ?? [])
 const currentNodeId = computed(() => city.value?.current_node_id)
+
+// Décor : backend ou fallback procédural
+const decor = computed<MapDecor>(() =>
+  resolveMapDecor(
+    city.value?.decor,
+    city.value?.background_seed ?? city.value?.id ?? 'city',
+    'city',
+  )
+)
+
+// ── Dimensions bâtiment selon le kind ────────────────────────────────────────
+// Coordonnées exprimées en unités viewBox 0..100.
+// w×h sont des demi-dimensions : le rect est centré sur position.
+function buildingSize(kind: string): { w: number; h: number } {
+  switch (kind as CityNodeKind) {
+    case 'palace':   return { w: 8, h: 5 }
+    case 'district': return { w: 10, h: 7 }
+    case 'tavern':   return { w: 7, h: 4 }
+    case 'temple':   return { w: 5, h: 3 }
+    case 'shop':     return { w: 4, h: 2.5 }
+    case 'docks':    return { w: 9, h: 3.5 }
+    case 'gate':     return { w: 3, h: 5 }
+    case 'square':   return { w: 6, h: 6 }
+    case 'building': return { w: 6, h: 3.5 }
+    default:          return { w: 5, h: 3 }
+  }
+}
 
 function toneByStatus(status: NodeStatus): string {
   switch (status) {
@@ -55,8 +83,26 @@ function edgePath(fromId: string, toId: string): string | null {
   return `M ${a.position.x} ${a.position.y} L ${b.position.x} ${b.position.y}`
 }
 
-function pinByKind(kind: CityNodeKind): string {
-  switch (kind) {
+function isSelected(id: string) { return sessionStore.selectedId === id }
+function isHighlighted(id: string) { return sessionStore.highlightedIds.includes(id) }
+
+function onClick(id: string) { sessionStore.selectEntity(id) }
+
+function nodeFill(n: MapNode) {
+  const tone = toneByStatus(n.status)
+  if (isSelected(n.id)) return `${tone}40`
+  if (isHighlighted(n.id)) return `${tone}25`
+  return 'rgba(40,32,24,0.7)'
+}
+
+function nodeStroke(n: MapNode) {
+  if (isSelected(n.id)) return 'var(--color-gold)'
+  if (isHighlighted(n.id)) return 'var(--color-ember)'
+  return toneByStatus(n.status)
+}
+
+function pinByKind(kind: string): string {
+  switch (kind as CityNodeKind) {
     case 'tavern':   return '★'
     case 'shop':     return '✦'
     case 'temple':   return '✺'
@@ -69,22 +115,16 @@ function pinByKind(kind: CityNodeKind): string {
   }
 }
 
-function isSelected(id: string) { return sessionStore.selectedId === id }
-function isHighlighted(id: string) { return sessionStore.highlightedIds.includes(id) }
-
-function onClick(id: string) { sessionStore.selectEntity(id) }
-
-function nodeFill(n: MapNode) {
-  if (isSelected(n.id)) return `${toneByStatus(n.status)}40`
-  if (isHighlighted(n.id)) return `${toneByStatus(n.status)}25`
-  return 'rgba(40,32,24,0.7)'
-}
-
-function nodeStroke(n: MapNode) {
-  if (isSelected(n.id)) return 'var(--color-gold)'
-  if (isHighlighted(n.id)) return 'var(--color-ember)'
-  return toneByStatus(n.status)
-}
+// Position HTML du marqueur "Vous" = node courante
+const youPosition = computed(() => {
+  if (!currentNodeId.value) return null
+  const n = nodeById(currentNodeId.value)
+  if (!n) return null
+  return {
+    left: `${n.position.x / 100 * props.width}px`,
+    top: `${n.position.y / 100 * props.height - 28}px`,
+  }
+})
 </script>
 
 <template>
@@ -108,19 +148,53 @@ function nodeStroke(n: MapNode) {
       </defs>
       <rect x="0" y="0" width="100" height="100" fill="url(#townBg)" />
 
-      <!-- Edges (routes / chemins) -->
+      <!-- ── Décor de fond ── -->
+
+      <!-- Forêts périphériques -->
+      <circle
+        v-for="(f, i) in (decor.forests ?? [])"
+        :key="`f${i}`"
+        :cx="f.x"
+        :cy="f.y"
+        :r="f.radius ?? 3"
+        :fill="`rgba(58,90,58,${f.opacity ?? 0.4})`"
+      />
+
+      <!-- Rivière -->
+      <path
+        v-if="decor.river"
+        :d="decor.river.path"
+        :stroke-width="decor.river.width ?? 1.5"
+        stroke="rgba(79,216,192,0.25)"
+        fill="none"
+        stroke-linecap="round"
+      />
+
+      <!-- Routes décoratives (arrière-plan, sous les edges réels) -->
+      <path
+        v-for="(d, i) in (decor.decorative_roads ?? [])"
+        :key="`dr${i}`"
+        :d="d"
+        stroke="rgba(247,236,208,0.12)"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        fill="none"
+        stroke-dasharray="0.5 1.5"
+      />
+
+      <!-- ── Edges (rues/chemins réels) ── -->
       <path
         v-for="e in edges"
         :key="e.id"
         :d="edgePath(e.from, e.to) ?? ''"
-        stroke="rgba(247,236,208,0.18)"
-        stroke-width="0.5"
+        stroke="rgba(247,236,208,0.22)"
+        stroke-width="1.2"
         fill="none"
         stroke-dasharray="0.5 1.5"
         stroke-linecap="round"
       />
 
-      <!-- Nodes (bâtiments / places) -->
+      <!-- ── Bâtiments ── -->
       <g
         v-for="n in nodes"
         :key="n.id"
@@ -128,10 +202,10 @@ function nodeStroke(n: MapNode) {
         @click="onClick(n.id)"
       >
         <rect
-          :x="n.position.x - 5"
-          :y="n.position.y - 3"
-          width="10"
-          height="6"
+          :x="n.position.x - buildingSize(n.kind).w / 2"
+          :y="n.position.y - buildingSize(n.kind).h / 2"
+          :width="buildingSize(n.kind).w"
+          :height="buildingSize(n.kind).h"
           rx="0.6"
           :fill="nodeFill(n)"
           :stroke="nodeStroke(n)"
@@ -145,7 +219,7 @@ function nodeStroke(n: MapNode) {
           font-size="2.2"
           font-family="Cinzel, serif"
           font-weight="700"
-        >{{ n.icon ?? pinByKind(n.kind as CityNodeKind) }}</text>
+        >{{ n.icon ?? pinByKind(n.kind) }}</text>
       </g>
     </svg>
 
@@ -161,14 +235,14 @@ function nodeStroke(n: MapNode) {
       :key="n.id"
       class="town-map-label"
       :style="{
-        left: `${n.position.x}%`,
-        top: `calc(${n.position.y + 3}% + 4px)`,
+        left: `${n.position.x / 100 * width}px`,
+        top: `${(n.position.y + buildingSize(n.kind).h / 2) / 100 * height + 4}px`,
         color: isSelected(n.id) ? 'var(--color-gold)' : toneColor(n.status),
       }"
     >{{ n.short_label ?? n.name }}</div>
 
-    <!-- Position du groupe -->
-    <div v-if="currentNodeId" class="town-map-here">
+    <!-- Position du groupe (sur la node courante) -->
+    <div v-if="youPosition" class="town-map-here" :style="youPosition">
       <span class="town-map-here-icon">👥</span>
       <span class="town-map-here-label">Vous</span>
     </div>
@@ -223,12 +297,12 @@ function nodeStroke(n: MapNode) {
 
 .town-map-here {
   position: absolute;
-  left: 8%;
-  top: 60%;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 2px;
+  transform: translate(-50%, 0);
+  pointer-events: none;
 }
 
 .town-map-here-icon {

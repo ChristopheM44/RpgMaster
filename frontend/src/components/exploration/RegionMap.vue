@@ -2,7 +2,8 @@
 import { computed } from 'vue'
 import { useSessionStore } from '../../stores/session'
 import { useGameStore } from '../../stores/game'
-import type { MapNode, NodeStatus } from '../../types'
+import { resolveMapDecor } from '../../composables/useMapDecor'
+import type { MapNode, NodeStatus, MapDecor, Coastline } from '../../types'
 
 withDefaults(defineProps<{
   width?: number
@@ -20,11 +21,33 @@ const nodes = computed<MapNode[]>(() => region.value?.nodes ?? [])
 const edges = computed(() => region.value?.edges ?? [])
 const currentNodeId = computed(() => region.value?.current_node_id)
 
+// Corpus pour la détection de biome : IDs + noms de tous les nœuds
+const nodeCorpus = computed(() =>
+  nodes.value.map(n => `${n.id} ${n.name}`).join(' ')
+)
+
+// Décor : depuis le backend ou fallback procédural seedé + biome inféré
+const decor = computed<MapDecor>(() =>
+  resolveMapDecor(
+    region.value?.decor,
+    region.value?.background_seed ?? region.value?.id ?? 'region',
+    'region',
+    nodeCorpus.value,
+  )
+)
+
+// Polygone fermé de la côte (côté gauche/droite/haut)
+function coastPolygon(coast: Coastline): string {
+  if (!coast.points.length) return ''
+  const pts = coast.points.map(p => `${p.x},${p.y}`).join(' ')
+  return pts
+}
+
 function toneByStatus(status: NodeStatus): string {
   switch (status) {
-    case 'visited':  return '#6fd96f'   // green
-    case 'current':  return '#f0c764'   // gold
-    case 'rumored':  return '#c090ff'   // arcane
+    case 'visited':  return '#6fd96f'
+    case 'current':  return '#f0c764'
+    case 'rumored':  return '#c090ff'
     case 'known':    return 'rgba(247,236,208,0.55)'
     default:          return 'rgba(247,236,208,0.55)'
   }
@@ -48,7 +71,6 @@ function edgePath(fromId: string, toId: string): string | null {
   const a = nodeById(fromId)
   const b = nodeById(toId)
   if (!a || !b) return null
-  // Courbe quadratique douce entre les deux pins.
   const midX = (a.position.x + b.position.x) / 2
   const midY = (a.position.y + b.position.y) / 2 - 4
   return `M ${a.position.x} ${a.position.y} Q ${midX} ${midY} ${b.position.x} ${b.position.y}`
@@ -62,6 +84,12 @@ function onClick(id: string) { sessionStore.selectEntity(id) }
 function pinRadius(n: MapNode) {
   if (isSelected(n.id) || isHighlighted(n.id)) return 2
   return 1.5
+}
+
+// Triangles montagne : génère les points SVG (dans le viewBox 0..100)
+function mountainPoints(x: number, y: number, h: number): string {
+  const half = h * 0.6
+  return `${x},${y + half} ${x - half * 0.7},${y + half} ${x},${y - half * 0.5}`
 }
 </script>
 
@@ -78,29 +106,82 @@ function pinRadius(n: MapNode) {
       preserveAspectRatio="none"
       class="region-map-svg"
     >
-      <!-- Fond décor (mer ouest stylisée + couvert forestier subtil) -->
-      <path d="M 0 0 L 18 0 L 12 30 L 6 60 L 10 90 L 0 100 Z" fill="rgba(40,80,100,0.3)" />
-      <path d="M 0 0 L 18 0 L 12 30 L 6 60 L 10 90 L 0 100 Z" stroke="rgba(79,216,192,0.25)" stroke-width="0.3" fill="none" />
+      <!-- ── Décor de fond ── -->
 
-      <!-- Edges -->
+      <!-- Côte / mer -->
+      <polygon
+        v-if="decor.coastline && decor.coastline.points.length"
+        :points="coastPolygon(decor.coastline)"
+        fill="rgba(40,80,100,0.30)"
+      />
+      <polyline
+        v-if="decor.coastline && decor.coastline.points.length"
+        :points="coastPolygon(decor.coastline)"
+        fill="none"
+        stroke="rgba(79,216,192,0.25)"
+        stroke-width="0.3"
+      />
+
+      <!-- Forêts -->
+      <circle
+        v-for="(f, i) in (decor.forests ?? [])"
+        :key="`f${i}`"
+        :cx="f.x"
+        :cy="f.y"
+        :r="f.radius ?? 3"
+        :fill="`rgba(58,90,58,${f.opacity ?? 0.4})`"
+      />
+
+      <!-- Montagnes -->
+      <polygon
+        v-for="(m, i) in (decor.mountains ?? [])"
+        :key="`m${i}`"
+        :points="mountainPoints(m.x, m.y, m.height ?? 5)"
+        fill="rgba(120,108,90,0.5)"
+      />
+
+      <!-- Routes décoratives -->
+      <path
+        v-for="(d, i) in (decor.decorative_roads ?? [])"
+        :key="`dr${i}`"
+        :d="d"
+        stroke="rgba(247,236,208,0.12)"
+        stroke-width="0.4"
+        fill="none"
+        stroke-dasharray="0.8 1.6"
+        stroke-linecap="round"
+      />
+
+      <!-- Rivière -->
+      <path
+        v-if="decor.river"
+        :d="decor.river.path"
+        :stroke-width="decor.river.width ?? 1.5"
+        stroke="rgba(79,216,192,0.30)"
+        fill="none"
+        stroke-linecap="round"
+      />
+
+      <!-- ── Edges (connexions réelles du graph) ── -->
       <path
         v-for="e in edges"
         :key="e.id"
         :d="edgePath(e.from, e.to) ?? ''"
-        stroke="rgba(247,236,208,0.18)"
+        stroke="rgba(247,236,208,0.22)"
         stroke-width="0.5"
         fill="none"
         stroke-dasharray="0.8 1.6"
         stroke-linecap="round"
       />
 
-      <!-- Pins -->
+      <!-- ── Pins (nodes) ── -->
       <g
         v-for="n in nodes"
         :key="n.id"
         style="cursor: pointer"
         @click="onClick(n.id)"
       >
+        <!-- Halo "vous êtes ici" -->
         <circle
           v-if="n.id === currentNodeId"
           :cx="n.position.x"
@@ -111,6 +192,7 @@ function pinRadius(n: MapNode) {
           stroke-width="0.4"
           opacity="0.4"
         />
+        <!-- Pin principal -->
         <circle
           :cx="n.position.x"
           :cy="n.position.y"
@@ -119,6 +201,7 @@ function pinRadius(n: MapNode) {
           :stroke="isSelected(n.id) ? 'var(--color-gold)' : 'rgba(0,0,0,0.6)'"
           stroke-width="0.4"
         />
+        <!-- Halo destination (dashed) -->
         <circle
           v-if="n.status === 'rumored'"
           :cx="n.position.x"
@@ -144,8 +227,8 @@ function pinRadius(n: MapNode) {
       :key="n.id"
       class="region-map-label"
       :style="{
-        left: `${n.position.x}%`,
-        top: `calc(${n.position.y}% + 8px)`,
+        left: `${n.position.x / 100 * width}px`,
+        top: `${n.position.y / 100 * height + 8}px`,
         color: isSelected(n.id) ? 'var(--color-gold)' : toneColor(n.status),
       }"
     >
