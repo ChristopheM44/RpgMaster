@@ -1,13 +1,10 @@
 // Composable Exploration V2 — adapte les vraies données de session (characterStore +
 // currentScene.party_positions) au shape `ExHero` attendu par les composants V2
 // (HeroToken, MapLegend, SelectionInspector, RefChip, CarnetGroupSection).
-//
-// Fallback : si la session n'a pas encore chargé ses personnages, on retombe sur la
-// fixture `EX_PARTY` pour que la démo reste affichable.
 import { computed } from 'vue'
 import { useCharacterStore } from '../stores/character'
 import { useGameStore } from '../stores/game'
-import { EX_PARTY, type ExHero } from '../fixtures/exploration'
+import type { ExHero } from '../fixtures/exploration'
 import type { Character, GridPosition } from '../types'
 
 const CLASS_FR: Record<string, string> = {
@@ -77,18 +74,23 @@ export function useExplorationParty() {
 
   const party = computed<ExHero[]>(() => {
     const chars = charStore.sessionCharacters
-    if (!chars.length) return EX_PARTY
+    if (!chars.length) return []
 
     const positions = gameStore.currentScene?.party_positions ?? {}
     const myId = charStore.myCharacter?.id
 
-    // Fallback : ligne horizontale centrée autour de F7 (col 5, row 6).
-    // Si la scène a des positions, on les utilise par-dessus.
+    // Positions issues de la scène si présentes ; sinon ligne horizontale au
+    // milieu de la grille (fallback purement visuel le temps que la scène
+    // pousse ses positions).
+    const scene = gameStore.currentScene
+    const fallbackRow = scene ? Math.floor(scene.rows / 2) : 6
+    const startCol = scene ? Math.max(0, Math.floor((scene.cols - chars.length) / 2)) : 3
+
     return chars.map((c, idx) => {
       const fromScene = positions[c.id]
       const fallback: GridPosition = fromScene ?? {
-        col: 3 + idx,
-        row: 6,
+        col: startCol + idx,
+        row: fallbackRow,
       }
       return characterToHero(c, fallback, myId)
     })

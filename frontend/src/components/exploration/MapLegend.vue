@@ -2,14 +2,15 @@
 import { computed } from 'vue'
 import { useSessionStore } from '../../stores/session'
 import { useExplorationParty } from '../../composables/useExplorationParty'
-import { EX_LEGEND } from '../../fixtures/exploration'
+import { useExplorationPois } from '../../composables/useExplorationPois'
 
 const sessionStore = useSessionStore()
 const { party } = useExplorationParty()
+const { reperes, sorties } = useExplorationPois()
 
 const heroes = computed(() => party.value)
-const pois = computed(() => EX_LEGEND.filter((l) => l.kind === 'poi'))
-const exits = computed(() => EX_LEGEND.filter((l) => l.kind === 'exit'))
+const pois = computed(() => reperes.value)
+const exits = computed(() => sorties.value)
 
 function isHighlighted(id: string) {
   return sessionStore.highlightedIds.includes(id)
@@ -52,36 +53,36 @@ function onClick(id: string) {
     <span class="map-legend-divider" />
 
     <!-- POIs -->
-    <div class="map-legend-group">
+    <div v-if="pois.length" class="map-legend-group">
       <div
         v-for="p in pois"
         :key="p.id"
         class="map-legend-chip"
         :class="{ 'is-highlighted': isHighlighted(p.id) }"
-        :title="p.label"
+        :title="p.title"
         @mouseenter="onHover(p.id)"
         @mouseleave="onHover(null)"
         @click="onClick(p.id)"
-      >🔍 {{ p.ref }}</div>
+      >🔍 {{ p.label }}</div>
     </div>
 
-    <span class="map-legend-divider" />
+    <span v-if="pois.length" class="map-legend-divider" />
 
     <!-- Exits -->
-    <div class="map-legend-group">
+    <div v-if="exits.length" class="map-legend-group">
       <div
         v-for="e in exits"
         :key="e.id"
         class="map-legend-chip"
         :class="{
           'is-highlighted': isHighlighted(e.id),
-          'is-active': e.id === 'H6',
+          'is-active': e.active,
         }"
-        :title="e.label"
+        :title="e.title"
         @mouseenter="onHover(e.id)"
         @mouseleave="onHover(null)"
         @click="onClick(e.id)"
-      >↦ {{ e.ref }}</div>
+      >↦ {{ e.label }}</div>
     </div>
   </div>
 </template>

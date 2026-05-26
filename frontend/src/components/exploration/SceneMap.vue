@@ -1,40 +1,44 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useSessionStore } from '../../stores/session'
+import { useGameStore } from '../../stores/game'
 import { useExplorationParty } from '../../composables/useExplorationParty'
+import { useExplorationPois } from '../../composables/useExplorationPois'
 import HeroToken from './HeroToken.vue'
 import PoiToken from './PoiToken.vue'
-import { EX_POIS } from '../../fixtures/exploration'
 
 const props = withDefaults(defineProps<{
   cell?: number
-  cols?: number
-  rows?: number
 }>(), {
   cell: 44,
-  cols: 12,
-  rows: 12,
 })
 
 const sessionStore = useSessionStore()
+const gameStore = useGameStore()
 const { party } = useExplorationParty()
+const { pois } = useExplorationPois()
 
-const widthPx = computed(() => props.cols * props.cell)
-const heightPx = computed(() => props.rows * props.cell)
+// Dimensions de la scène : pilotées par le backend, fallback 12×12 si pas chargé.
+const cols = computed(() => gameStore.currentScene?.cols ?? 12)
+const rows = computed(() => gameStore.currentScene?.rows ?? 12)
+
+const widthPx = computed(() => cols.value * props.cell)
+const heightPx = computed(() => rows.value * props.cell)
 
 const canopyCircles: Array<[number, number]> = [
   [1, 1], [3, 5], [8, 1], [10, 4], [2, 9], [8, 9], [10, 10], [6, 6],
 ]
 
 const grid = computed(() => {
-  const v = Array.from({ length: props.cols + 1 }, (_, i) => i * props.cell)
-  const h = Array.from({ length: props.rows + 1 }, (_, i) => i * props.cell)
+  const v = Array.from({ length: cols.value + 1 }, (_, i) => i * props.cell)
+  const h = Array.from({ length: rows.value + 1 }, (_, i) => i * props.cell)
   return { v, h }
 })
 
 function pathTrack() {
   const c = props.cell
-  return `M 0 ${7.5 * c} Q ${3 * c} ${6 * c} ${5 * c} ${7 * c} T ${props.cols * c} ${7.5 * c}`
+  const trackRow = Math.max(0, Math.min(rows.value - 1, Math.floor(rows.value / 2)))
+  return `M 0 ${(trackRow + 0.5) * c} Q ${3 * c} ${(trackRow - 1) * c} ${5 * c} ${trackRow * c} T ${cols.value * c} ${(trackRow + 0.5) * c}`
 }
 
 function isSelected(id: string) {
@@ -127,11 +131,11 @@ function onClick(id: string) {
 
     <!-- Coords -->
     <div class="scene-map-coord top-left">A1</div>
-    <div class="scene-map-coord bottom-right">L{{ rows }} · {{ cols }}×{{ rows }} m</div>
+    <div class="scene-map-coord bottom-right">{{ String.fromCharCode(64 + cols) }}{{ rows }} · {{ cols }}×{{ rows }} m</div>
 
     <!-- POI tokens -->
     <PoiToken
-      v-for="poi in EX_POIS"
+      v-for="poi in pois"
       :key="poi.id"
       :poi="poi"
       :cell="cell"

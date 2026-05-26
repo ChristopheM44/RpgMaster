@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useSessionStore } from '../../stores/session'
 import { useExplorationParty } from '../../composables/useExplorationParty'
-import { EX_POIS } from '../../fixtures/exploration'
+import { useExplorationPois } from '../../composables/useExplorationPois'
 
 const props = defineProps<{
   refId: string
@@ -15,9 +15,10 @@ const emit = defineEmits<{
 
 const sessionStore = useSessionStore()
 const { findHero } = useExplorationParty()
+const { findPoi } = useExplorationPois()
 
 const hero = computed(() => findHero(props.refId))
-const poi = computed(() => EX_POIS.find((p) => p.id === props.refId))
+const poi = computed(() => findPoi(props.refId))
 
 const isHero = computed(() => !!hero.value)
 const isPoi = computed(() => !!poi.value)

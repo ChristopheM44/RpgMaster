@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useSessionStore } from '../../stores/session'
+import { useGameStore } from '../../stores/game'
 import { useQuestStore } from '../../stores/quest'
 import { useExplorationParty } from '../../composables/useExplorationParty'
-import { EX_POIS } from '../../fixtures/exploration'
+import { useExplorationPois } from '../../composables/useExplorationPois'
 import ScopeTabs from './ScopeTabs.vue'
 import SceneMap from './SceneMap.vue'
 import TownMap from './TownMap.vue'
@@ -18,22 +19,40 @@ const emit = defineEmits<{
 }>()
 
 const sessionStore = useSessionStore()
+const gameStore = useGameStore()
 const questStore = useQuestStore()
 const { party } = useExplorationParty()
+const { reperes, sorties } = useExplorationPois()
+
+const activeCity = computed(() => {
+  const id = gameStore.activeCityId
+  if (!id) return undefined
+  return gameStore.cityMaps[id]
+})
 
 const titleByScope = computed(() => {
   switch (sessionStore.mapScope) {
-    case 'ville':  return 'Phandalin'
-    case 'region': return 'Côte des Épées'
-    default:        return 'Triboar Trail'
+    case 'ville':  return activeCity.value?.name ?? '—'
+    case 'region': return gameStore.regionMap?.name ?? '—'
+    default:        return gameStore.adventureJournal?.location_place ?? gameStore.currentScene?.scene_id ?? 'Scène'
   }
 })
 
 const metaByScope = computed(() => {
   switch (sessionStore.mapScope) {
-    case 'ville':  return '7 bâtiments'
-    case 'region': return '6 lieux'
-    default:        return `12 × 12 m · ${party.value.length} héros · ${EX_POIS.filter(p => p.kind === 'repere').length} repères · ${EX_POIS.filter(p => p.kind === 'sortie').length} sorties`
+    case 'ville': {
+      const n = activeCity.value?.nodes.length ?? 0
+      return `${n} bâtiment${n > 1 ? 's' : ''}`
+    }
+    case 'region': {
+      const n = gameStore.regionMap?.nodes.length ?? 0
+      return `${n} lieu${n > 1 ? 'x' : ''}`
+    }
+    default: {
+      const scene = gameStore.currentScene
+      const dims = scene ? `${scene.cols} × ${scene.rows} m` : '—'
+      return `${dims} · ${party.value.length} héros · ${reperes.value.length} repère${reperes.value.length > 1 ? 's' : ''} · ${sorties.value.length} sortie${sorties.value.length > 1 ? 's' : ''}`
+    }
   }
 })
 

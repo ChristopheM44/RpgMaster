@@ -2,20 +2,18 @@
 import { computed } from 'vue'
 import { useSessionStore } from '../../stores/session'
 import { useExplorationParty } from '../../composables/useExplorationParty'
-import { EX_POIS } from '../../fixtures/exploration'
+import { useExplorationPois } from '../../composables/useExplorationPois'
 
 const sessionStore = useSessionStore()
 const { findHero } = useExplorationParty()
+const { findPoi } = useExplorationPois()
 
 const emit = defineEmits<{
   act: [id: string]
 }>()
 
 const hero = computed(() => findHero(sessionStore.selectedId))
-
-const poi = computed(() =>
-  sessionStore.selectedId ? EX_POIS.find((p) => p.id === sessionStore.selectedId) : undefined,
-)
+const poi = computed(() => findPoi(sessionStore.selectedId))
 
 const isHero = computed(() => !!hero.value)
 const isSortie = computed(() => poi.value?.kind === 'sortie')

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useSessionStore } from '../../stores/session'
-import { EX_TOWN, type ExTownBuilding } from '../../fixtures/exploration'
+import { useGameStore } from '../../stores/game'
+import type { MapNode, NodeStatus, CityNodeKind } from '../../types'
 
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
   width?: number
   height?: number
 }>(), {
@@ -12,58 +13,78 @@ const props = withDefaults(defineProps<{
 })
 
 const sessionStore = useSessionStore()
+const gameStore = useGameStore()
 
-const forestCircles: Array<[number, number]> = [
-  [80, 8], [88, 12], [92, 22], [82, 18], [8, 8], [16, 12], [6, 20],
-  [14, 86], [8, 92], [22, 90],
-]
+const city = computed(() => {
+  const id = gameStore.activeCityId
+  return id ? gameStore.cityMaps[id] : undefined
+})
 
-function toneColor(tag: ExTownBuilding['tag']): string {
-  switch (tag) {
-    case 'sûr':      return 'var(--color-green)'
-    case 'objectif': return 'var(--color-gold)'
-    case 'danger':   return 'var(--color-blood)'
+const nodes = computed<MapNode[]>(() => city.value?.nodes ?? [])
+const edges = computed(() => city.value?.edges ?? [])
+const currentNodeId = computed(() => city.value?.current_node_id)
+
+function toneByStatus(status: NodeStatus): string {
+  switch (status) {
+    case 'visited':  return '#6fd96f'
+    case 'current':  return '#f0c764'
+    case 'rumored':  return '#c090ff'
+    case 'known':    return 'rgba(247,236,208,0.55)'
+    default:          return 'rgba(247,236,208,0.55)'
+  }
+}
+
+function toneColor(status: NodeStatus): string {
+  switch (status) {
+    case 'visited':  return 'var(--color-green)'
+    case 'current':  return 'var(--color-gold)'
+    case 'rumored':  return 'var(--color-arcane)'
+    case 'known':    return 'var(--color-parchment-dark)'
     default:          return 'var(--color-parchment-dark)'
   }
 }
 
-function toneHex(tag: ExTownBuilding['tag']): string {
-  switch (tag) {
-    case 'sûr':      return '#6fd96f'
-    case 'objectif': return '#f0c764'
-    case 'danger':   return '#e84545'
-    default:          return '#f7ecd0'
+function nodeById(id: string): MapNode | undefined {
+  return nodes.value.find((n) => n.id === id)
+}
+
+function edgePath(fromId: string, toId: string): string | null {
+  const a = nodeById(fromId)
+  const b = nodeById(toId)
+  if (!a || !b) return null
+  return `M ${a.position.x} ${a.position.y} L ${b.position.x} ${b.position.y}`
+}
+
+function pinByKind(kind: CityNodeKind): string {
+  switch (kind) {
+    case 'tavern':   return '★'
+    case 'shop':     return '✦'
+    case 'temple':   return '✺'
+    case 'palace':   return '◇'
+    case 'docks':    return '◈'
+    case 'gate':     return '◊'
+    case 'square':   return '◉'
+    case 'building': return '◇'
+    default:          return '◆'
   }
 }
 
 function isSelected(id: string) { return sessionStore.selectedId === id }
 function isHighlighted(id: string) { return sessionStore.highlightedIds.includes(id) }
 
-function onClick(id: string) {
-  sessionStore.selectEntity(id)
-}
+function onClick(id: string) { sessionStore.selectEntity(id) }
 
-function rectFill(b: ExTownBuilding) {
-  if (isSelected(b.id)) return `${toneHex(b.tag)}40`
-  if (isHighlighted(b.id)) return `${toneHex(b.tag)}25`
+function nodeFill(n: MapNode) {
+  if (isSelected(n.id)) return `${toneByStatus(n.status)}40`
+  if (isHighlighted(n.id)) return `${toneByStatus(n.status)}25`
   return 'rgba(40,32,24,0.7)'
 }
 
-function rectStroke(b: ExTownBuilding) {
-  if (isSelected(b.id)) return 'var(--color-gold)'
-  if (isHighlighted(b.id)) return 'var(--color-ember)'
-  return toneHex(b.tag)
+function nodeStroke(n: MapNode) {
+  if (isSelected(n.id)) return 'var(--color-gold)'
+  if (isHighlighted(n.id)) return 'var(--color-ember)'
+  return toneByStatus(n.status)
 }
-
-const labels = computed(() =>
-  EX_TOWN.buildings.map((b) => ({
-    id: b.id,
-    label: b.label,
-    color: isSelected(b.id) ? 'var(--color-gold)' : toneColor(b.tag),
-    leftPct: (b.x + b.w / 2),
-    topPct: (b.y + b.h) + (4 / props.height) * 100,
-  })),
-)
 </script>
 
 <template>
@@ -72,6 +93,7 @@ const labels = computed(() =>
     :style="{ width: `${width}px`, height: `${height}px` }"
   >
     <svg
+      v-if="city"
       viewBox="0 0 100 100"
       :width="width"
       :height="height"
@@ -86,80 +108,73 @@ const labels = computed(() =>
       </defs>
       <rect x="0" y="0" width="100" height="100" fill="url(#townBg)" />
 
-      <!-- Rivière -->
-      <path d="M 0 76 Q 30 80 60 78 T 100 80" stroke="rgba(79,216,192,0.25)" stroke-width="1.5" fill="none" />
-
-      <!-- Routes -->
+      <!-- Edges (routes / chemins) -->
       <path
-        v-for="(d, i) in EX_TOWN.roads"
-        :key="`r${i}`"
-        :d="d"
+        v-for="e in edges"
+        :key="e.id"
+        :d="edgePath(e.from, e.to) ?? ''"
         stroke="rgba(247,236,208,0.18)"
-        stroke-width="2.5"
-        stroke-linecap="round"
+        stroke-width="0.5"
         fill="none"
         stroke-dasharray="0.5 1.5"
+        stroke-linecap="round"
       />
 
-      <!-- Forêts -->
-      <circle
-        v-for="([x, y], i) in forestCircles"
-        :key="`f${i}`"
-        :cx="x"
-        :cy="y"
-        r="3"
-        fill="rgba(58,90,58,0.4)"
-      />
-
-      <!-- Bâtiments -->
+      <!-- Nodes (bâtiments / places) -->
       <g
-        v-for="b in EX_TOWN.buildings"
-        :key="b.id"
+        v-for="n in nodes"
+        :key="n.id"
         style="cursor: pointer"
-        @click="onClick(b.id)"
+        @click="onClick(n.id)"
       >
         <rect
-          :x="b.x"
-          :y="b.y"
-          :width="b.w"
-          :height="b.h"
+          :x="n.position.x - 5"
+          :y="n.position.y - 3"
+          width="10"
+          height="6"
           rx="0.6"
-          :fill="rectFill(b)"
-          :stroke="rectStroke(b)"
-          :stroke-width="isSelected(b.id) ? 0.5 : 0.25"
+          :fill="nodeFill(n)"
+          :stroke="nodeStroke(n)"
+          :stroke-width="isSelected(n.id) ? 0.5 : 0.25"
         />
         <text
-          :x="b.x + b.w / 2"
-          :y="b.y + b.h / 2 + 0.4"
+          :x="n.position.x"
+          :y="n.position.y + 0.4"
           text-anchor="middle"
-          :fill="toneHex(b.tag)"
+          :fill="toneByStatus(n.status)"
           font-size="2.2"
           font-family="Cinzel, serif"
           font-weight="700"
-        >{{ b.pin }}</text>
+        >{{ n.icon ?? pinByKind(n.kind as CityNodeKind) }}</text>
       </g>
     </svg>
 
+    <!-- Empty state -->
+    <div v-if="!city" class="town-map-empty">
+      <span class="rpg-eyebrow">✦ Ville</span>
+      <p>Aucune carte de ville chargée pour cette session.</p>
+    </div>
+
     <!-- Labels HTML overlay -->
     <div
-      v-for="l in labels"
-      :key="l.id"
+      v-for="n in nodes"
+      :key="n.id"
       class="town-map-label"
       :style="{
-        left: `${l.leftPct}%`,
-        top: `${l.topPct}%`,
-        color: l.color,
+        left: `${n.position.x}%`,
+        top: `calc(${n.position.y + 3}% + 4px)`,
+        color: isSelected(n.id) ? 'var(--color-gold)' : toneColor(n.status),
       }"
-    >{{ l.label }}</div>
+    >{{ n.short_label ?? n.name }}</div>
 
     <!-- Position du groupe -->
-    <div class="town-map-here">
+    <div v-if="currentNodeId" class="town-map-here">
       <span class="town-map-here-icon">👥</span>
       <span class="town-map-here-label">Vous</span>
     </div>
 
     <!-- Coords overlay -->
-    <div class="town-map-coord">Phandalin · plan</div>
+    <div v-if="city" class="town-map-coord">{{ city.name }} · plan</div>
   </div>
 </template>
 
@@ -177,6 +192,20 @@ const labels = computed(() =>
 .town-map-svg {
   position: absolute;
   inset: 0;
+}
+
+.town-map-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--color-text-muted);
+  font-family: var(--font-serif);
+  font-size: 13px;
+  font-style: italic;
 }
 
 .town-map-label {

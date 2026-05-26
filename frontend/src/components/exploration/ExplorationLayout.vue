@@ -3,7 +3,7 @@
 // Carnet ouvert via bouton dans la top bar de la map.
 import { onMounted, onUnmounted } from 'vue'
 import { useSessionStore } from '../../stores/session'
-import { EX_POIS } from '../../fixtures/exploration'
+import { useExplorationPois } from '../../composables/useExplorationPois'
 import MapColumn from './MapColumn.vue'
 import NarrativeColumn from './NarrativeColumn.vue'
 import BottomBar from './BottomBar.vue'
@@ -14,20 +14,22 @@ const emit = defineEmits<{
 }>()
 
 const sessionStore = useSessionStore()
+const { findPoi } = useExplorationPois()
 
 function onAct(id: string) {
-  const poi = EX_POIS.find((p) => p.id === id)
+  const poi = findPoi(id)
   if (!poi) return
   if (poi.kind === 'sortie') {
     sessionStore.moveParty(poi.dest ?? poi.id)
     emit('action', 'free_text', `Je me dirige vers ${poi.title}.`)
   } else {
-    emit('action', 'free_text', `J'examine : ${poi.title} (${poi.skill} DD ${poi.dc}).`)
+    const skillPart = poi.skill ? ` (${poi.skill}${poi.dc ? ` DD ${poi.dc}` : ''})` : ''
+    emit('action', 'free_text', `J'examine : ${poi.title}${skillPart}.`)
   }
 }
 
 function onDecide(optionId: string) {
-  const poi = EX_POIS.find((p) => p.id === optionId)
+  const poi = findPoi(optionId)
   if (!poi) return
   sessionStore.moveParty(poi.dest ?? poi.id)
   emit('action', 'free_text', `Le groupe décide : ${poi.title}.`)
