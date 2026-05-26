@@ -897,6 +897,11 @@ class TestHumanPlayerPipeline:
         assert _narrations(published)
 
     async def test_social_prompt_skips_gm_and_sets_party_intent(self) -> None:
+        """En mode sober, un prompt social pur vers les compagnons doit bypasser le MJ.
+
+        Ce test valide l'optimisation budget en mode sober. En mode full (défaut),
+        le MJ est appelé pour enrichir la réponse — comportement intentionnel.
+        """
         active = ActiveSession(
             session_id=SESSION_ID,
             phase=SessionStatus.EXPLORATION,
@@ -909,6 +914,8 @@ class TestHumanPlayerPipeline:
         with (
             patch("app.game.action_resolver.event_bus.publish_to_session", new=capture),
             patch("app.game.action_resolver.tts_router.synthesize_and_broadcast", new=AsyncMock()),
+            # Force sober mode : c'est ce mode qui désactive le MJ pour les prompts sociaux purs.
+            patch("app.llm.budget.get_llm_budget_mode", return_value="sober"),
         ):
             await resolver.resolve(
                 session_id=SESSION_ID,
@@ -1052,6 +1059,9 @@ class TestAICompanionPipeline:
         with (
             patch("app.game.ai_player_manager.event_bus.publish_to_session", new=capture),
             patch.object(thorin_agent._client, "chat", new=mock_chat),
+            # Force sober mode : ce test valide le chemin déterministe (sans appel LLM).
+            # En mode full (défaut), le LLM est appelé — comportement intentionnel.
+            patch("app.game.ai_player_manager.is_sober_mode", return_value=True),
         ):
             await manager.process_ai_turns(SESSION_ID, active, mock_resolver, db=None)
 
@@ -1061,6 +1071,7 @@ class TestAICompanionPipeline:
         assert any(n.get("text") for n in narrs)
         # L'action_resolver doit avoir été appelé (pipeline mécanique + GM)
         mock_resolver.resolve.assert_called_once()
+        # En mode sober, le chemin déterministe est utilisé — LLM non appelé
         mock_chat.assert_not_called()
 
 
@@ -1165,6 +1176,10 @@ class TestAICompanionTurnOrdering:
             patch("app.api.ws_game.action_resolver.resolve", new=mock_resolve),
             patch("app.api.ws_game.session_manager.save_state", new=AsyncMock()),
             patch("app.api.ws_game._build_session_state_payload", return_value={"phase": "combat"}),
+            # Les agents utilisent MagicMock comme client — forcer sober pour le chemin
+            # déterministe (sans appel LLM). Ce test valide l'ordonnancement des tours,
+            # pas la qualité des décisions IA.
+            patch("app.game.ai_player_manager.is_sober_mode", return_value=True),
         ):
             await _handle_ai_turns(SESSION_ID, active, None)
 

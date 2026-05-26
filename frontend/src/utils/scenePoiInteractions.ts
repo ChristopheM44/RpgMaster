@@ -45,6 +45,12 @@ export function resolveScenePoiInteractions(poi: PointOfInterest): ResolvedScene
   return merged
 }
 
+/**
+ * Génère des prompts naturalistes variés selon l'intention et le nom du POI.
+ * Les variantes gardent le registre à la première personne du singulier,
+ * avec suffisamment de détails pour que le MJ comprenne l'intention sans
+ * que la phrase ressemble à une commande de jeu textuel.
+ */
 export function buildScenePoiInteractionPrompt(
   poiName: string,
   interaction?: ScenePoiInteraction,
@@ -53,21 +59,21 @@ export function buildScenePoiInteractionPrompt(
 
   switch (interaction?.intent) {
     case 'approach':
-      return `Je me dirige vers ${poiName}.`
+      return `Je m'approche de ${poiName} pour mieux voir ce qu'il y a là-bas.`
     case 'talk':
-      return `Je m'approche de ${poiName} et lui adresse la parole.`
+      return `Je m'avance vers ${poiName} et lui adresse la parole.`
     case 'listen':
-      return `J'écoute ce que ${poiName} dit ou laisse paraître.`
+      return `Je tends l'oreille vers ${poiName}, cherchant à saisir ce qui s'y dit ou s'y passe.`
     case 'search':
-      return `Je fouille autour de ${poiName}.`
+      return `Je fouille méthodiquement les alentours de ${poiName} à la recherche d'indices.`
     case 'use':
-      return `J'interagis avec ${poiName}.`
+      return `J'essaie d'interagir avec ${poiName}.`
     case 'examine':
-      return `J'examine ${poiName}.`
+      return `Je m'arrête devant ${poiName} et l'examine attentivement.`
     case 'custom':
       return `${interaction.label} : ${poiName}.`
     default:
-      return `J'examine ${poiName}.`
+      return `Je m'arrête devant ${poiName} et l'examine attentivement.`
   }
 }
 

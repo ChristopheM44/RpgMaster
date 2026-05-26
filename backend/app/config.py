@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     max_player_action_chars: int = 4000
     ws_event_queue_size: int = 256
     tts_async: bool = True
-    llm_budget_mode: str = "sober"
+    llm_budget_mode: str = "full"
     ollama_max_concurrent_requests: int = 1
     source_max_chars: int = 120_000
     forge_source_note_max_tokens: int = 4_096

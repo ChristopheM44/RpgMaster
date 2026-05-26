@@ -197,12 +197,13 @@ function onEntryLeave() {
 }
 
 /* ── player ─────────────────────────────────────────────────────────── */
+/* ember = joueur humain (cf. design system : arcane = IA, ember = joueur) */
 .ne-player {
-  margin: 16px 0;
-  padding: 8px 12px;
-  background: rgba(192, 144, 255, 0.06);
-  border: 1px solid rgba(192, 144, 255, 0.22);
-  border-left: 3px solid rgba(192, 144, 255, 0.6);
+  margin: 12px 0;
+  padding: 6px 12px;
+  background: rgba(255, 130, 71, 0.04);
+  border: 1px solid rgba(255, 130, 71, 0.15);
+  border-left: 3px solid rgba(255, 130, 71, 0.45);
   border-radius: 6px;
 }
 
@@ -210,31 +211,33 @@ function onEntryLeave() {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
   justify-content: space-between;
 }
 
 .ne-player-who {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  color: var(--color-arcane);
+  color: var(--color-ember);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
 }
 
 .ne-player-marker {
-  color: var(--color-arcane);
-  font-size: 10px;
+  color: var(--color-ember);
+  font-size: 9px;
 }
 
 .ne-player-text {
-  font-size: 13.5px;
-  color: var(--color-parchment-dark);
+  font-size: 12.5px;
+  color: var(--color-text-muted);
   font-family: var(--font-serif);
   font-style: italic;
-  line-height: 1.5;
+  line-height: 1.45;
 }
 
 /* ── compact overrides (drawer 360 px) ──────────────────────────────── */

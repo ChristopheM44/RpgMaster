@@ -135,17 +135,22 @@ watch(
           </div>
         </div>
 
-        <!-- Action joueur -->
+        <!-- Action joueur — ember (joueur humain), ton discret/italique -->
         <div
           v-else-if="entry.type === 'player'"
-          class="rpg-player-entry flex gap-3 rounded-lg border-l-2 py-2.5 pl-4 pr-3"
+          class="rpg-player-entry flex gap-3 rounded-lg border-l-2 py-2 pl-4 pr-3"
+          style="border-color: rgba(255,130,71,0.35); background: rgba(255,130,71,0.03);"
         >
           <div class="min-w-0 flex-1">
             <span
               v-if="entry.speaker"
-              class="rpg-text-arcane mr-2 text-sm font-display font-semibold"
+              class="mr-2 text-[10px] font-display font-bold tracking-wide uppercase"
+              style="color: var(--color-ember);"
             >{{ entry.speaker }} </span>
-            <span class="rpg-text-main text-sm">{{ entry.text }}</span>
+            <span
+              class="text-[12.5px] font-serif italic"
+              style="color: var(--color-text-muted);"
+            >« {{ entry.text }} »</span>
           </div>
         </div>
 

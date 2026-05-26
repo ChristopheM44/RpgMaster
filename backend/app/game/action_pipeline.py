@@ -7,6 +7,7 @@ Il ne choisit pas les actions et ne fait pas avancer les tours.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 from typing import Any, Literal, Optional
@@ -42,6 +43,37 @@ from app.services import campaign_dossier_service
 from app.services.spellcasting_service import SpellcastingService, SpellcastingServiceError
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Narrations variées pour les blocages tactiques (portée / chemin absent)
+# ---------------------------------------------------------------------------
+_ATTACK_BLOCK_TEMPLATES = [
+    "{name} cherche un angle d'attaque, mais n'est pas à portée.",
+    "{name} marque une pause — aucune cible accessible depuis cette position.",
+    "{name} pivote, guettant une ouverture qui ne vient pas.",
+    "{name} retient son élan : les combattants sont trop éloignés pour frapper.",
+    "{name} observe les lignes de mêlée, mais l'angle est fermé.",
+    "{name} se repositionne lentement, sans prise immédiate.",
+]
+_SPELL_BLOCK_TEMPLATES = [
+    "{name} amorce un geste runique, mais sa cible est hors de portée.",
+    "{name} suspend son incantation — aucune cible dans le rayon d'action.",
+    "{name} retient son sort : l'angle magique est trop précaire.",
+    "{name} concentre son énergie, cherchant une ligne de vue qui n'existe pas.",
+    "{name} murmure les mots du sort, puis les laisse s'éteindre, faute d'ouverture.",
+]
+
+
+def _tactical_block_narration(actor_name: str, action_type: str) -> str:
+    """Retourne une phrase variée non-technique décrivant un blocage tactique.
+
+    Le choix est déterministe par (actor_name, action_type) pour éviter les
+    changements aléatoires entre appels, tout en variant selon les acteurs.
+    """
+    templates = _SPELL_BLOCK_TEMPLATES if action_type == "cast_spell" else _ATTACK_BLOCK_TEMPLATES
+    seed = int(hashlib.md5(f"{actor_name}:{action_type}".encode()).hexdigest()[:8], 16)
+    template = templates[seed % len(templates)]
+    return template.format(name=actor_name)
 
 _FALLBACK_NARRATION = (
     "Le Maître du Jeu hésite… (Le LLM n'a pas répondu correctement — "
@@ -557,7 +589,7 @@ class ActionPipeline:
                 if not tactical.allowed:
                     message = tactical.reason or "Action tactique impossible."
                     if request.actor_kind in {"monster", "companion"}:
-                        narration = f"{actor_name} cherche une ouverture, mais {message.lower()}"
+                        narration = _tactical_block_narration(actor_name, "attack")
                         await self._publish_gm_narration(request.session_id, narration, actual_db)
                     else:
                         await self._event_bus.publish_to_session(
@@ -795,9 +827,7 @@ class ActionPipeline:
                     if not tactical.allowed:
                         message = tactical.reason or "Sort tactique impossible."
                         if request.actor_kind in {"monster", "companion"}:
-                            narration = (
-                                f"{actor_name} cherche une ouverture, mais {message.lower()}"
-                            )
+                            narration = _tactical_block_narration(actor_name, "cast_spell")
                             await self._publish_gm_narration(
                                 request.session_id,
                                 narration,
