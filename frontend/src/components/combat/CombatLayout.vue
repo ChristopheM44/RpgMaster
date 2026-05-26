@@ -17,6 +17,7 @@
 import { computed, ref } from 'vue'
 import { useGameStore } from '../../stores/game'
 import { useCharacterStore } from '../../stores/character'
+import { useSessionStore } from '../../stores/session'
 import InitiativeTimeline from './InitiativeTimeline.vue'
 import Battlemap from './Battlemap.vue'
 import TokenInspector from './TokenInspector.vue'
@@ -31,6 +32,7 @@ const emit = defineEmits<{
 
 const gameStore = useGameStore()
 const charStore = useCharacterStore()
+const sessionStore = useSessionStore()
 
 const isMyTurn = computed(() => gameStore.currentTurnId === charStore.myCharacter?.id)
 const speedM = computed(() => {
@@ -159,16 +161,16 @@ function rerollInit() { emit('action', 'reroll_initiative') }
         <!-- Récit re-open tab (visible only when drawer is closed) -->
         <Transition name="recit-tab">
           <button
-            v-if="!gameStore.recitOpen"
+            v-if="!sessionStore.recitOpen"
             class="recit-reopen-tab"
-            @click="gameStore.recitOpen = true"
+            @click="sessionStore.recitOpen = true"
           >◀ Récit</button>
         </Transition>
       </section>
 
       <!-- Récit drawer -->
       <Transition name="recit-drawer">
-        <aside v-if="gameStore.recitOpen" class="recit-drawer">
+        <aside v-if="sessionStore.recitOpen" class="recit-drawer">
           <NarrativeLog variant="drawer" />
         </aside>
       </Transition>

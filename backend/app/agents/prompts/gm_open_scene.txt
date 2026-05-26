@@ -29,6 +29,10 @@ Instructions :
 - Émets toujours un journal_update avec lieu/moment si absent.
 - Émets toujours un scene_layout cohérent avec 2 à 5 POI, 1 à 3 sorties et les positions approximatives du groupe.
 - Si un lieu régional, une ville, un quartier ou une destination est connu, émets region_map_update et/ou city_map_update par patch incrémental.
+  Si c'est la PREMIÈRE FOIS que cette région/ville est introduite (absent de world_maps), inclus le champ "decor" dans le patch :
+  forêts (cercles dispersés), montagnes si région montagnarde, côte/mer si zone côtière, rivière si traversante.
+  Les coordonnées sont en 0..100 (viewBox SVG). Exemple pour une région forestière avec côte ouest :
+  "decor": {"forests":[{"x":24,"y":18,"radius":3,"opacity":0.4},{"x":68,"y":22,"radius":2.5,"opacity":0.35}],"coastline":{"side":"west","points":[{"x":0,"y":0},{"x":16,"y":0},{"x":12,"y":50},{"x":10,"y":100},{"x":0,"y":100}]},"decorative_roads":["M 16 50 Q 32 45 48 58"]}
 - Les PNJ ne doivent apparaître sur la scène QUE s'ils sont présents dans la description du lieu physique. Un PNJ mentionné uniquement dans le contexte narratif n'est PAS dans la scène.
 - La narration doit être interactive : 2 à 4 courts paragraphes, puis une question courte d'action immédiate. Termine de préférence par "Que faites-vous ?".
 - N'utilise PAS une conclusion de trajet comme "Quel chemin souhaitez-vous prendre ?", "Quelle route prenez-vous ?", "Quelle direction choisissez-vous ?" sauf si la scène visible est explicitement un carrefour, une croisée ou un embranchement avec plusieurs routes physiquement présentes.

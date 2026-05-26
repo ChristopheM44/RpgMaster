@@ -307,27 +307,6 @@ function buildAddressingPayload(text: string): Record<string, unknown> | undefin
     </div>
 
     <!-- Textarea + Envoyer -->
-    <div
-      v-if="!gameStore.isInCombat && aiCompanions.length > 0"
-      class="mb-2 flex flex-wrap items-center gap-2"
-    >
-      <span class="rpg-text-muted text-[11px] font-semibold uppercase tracking-[0.14em]">Parler à</span>
-      <button
-        v-for="companion in aiCompanions"
-        :key="companion.id"
-        class="rpg-companion-chip rounded border px-2.5 py-1 text-xs font-semibold"
-        :class="{ 'is-selected': addressedTo === companion.id }"
-        type="button"
-        @click="addressCompanion(companion.id, companion.name)"
-      >@{{ companion.name }}</button>
-      <button
-        v-if="addressedTo"
-        class="rpg-text-muted text-xs"
-        type="button"
-        @click="addressedTo = null"
-      >Tous</button>
-    </div>
-
     <div class="flex items-end gap-3">
       <textarea
         v-model="input"

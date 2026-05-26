@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick } from 'vue'
 import { useGameStore } from '../../stores/game'
+import { useSessionStore } from '../../stores/session'
 import DiceRollResult from './DiceRollResult.vue'
 
 withDefaults(defineProps<{
@@ -12,6 +13,7 @@ withDefaults(defineProps<{
 }>(), { variant: 'full' })
 
 const gameStore = useGameStore()
+const sessionStore = useSessionStore()
 const logEl = ref<HTMLElement | null>(null)
 const hasThinkingEntry = computed(() =>
   gameStore.isProcessing || gameStore.isGmThinking || gameStore.isPlayerAiThinking,
@@ -45,7 +47,7 @@ watch(
       <button
         class="recit-collapse-btn"
         title="Replier"
-        @click="gameStore.recitOpen = false"
+        @click="sessionStore.recitOpen = false"
       >▶</button>
     </div>
 

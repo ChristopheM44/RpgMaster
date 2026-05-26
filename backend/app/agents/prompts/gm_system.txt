@@ -40,10 +40,15 @@ TYPES D'ACTIONS :
                     IMPORTANT : encounter_setup doit TOUJOURS précéder state_transition dans le tableau actions.
 - scene_layout    : fournir un schéma compact du lieu actuel pour l'interface d'exploration
                     (params: {"cols":8,"rows":8,"cell_size_m":1.5,"terrain":"stone_chamber",
+                    "scene_theme":"beach",
                     "pois":[{"id":"well","name":"Puits scellé","kind":"hazard","position":{"col":4,"row":4},"icon":"mist","description":"Brume froide et margelle instable.","action_hint":"Examiner avant de s'approcher."},
                     {"id":"toben","name":"Toben","kind":"npc","position":{"col":2,"row":3},"icon":"npc","description":"Vieil habitué nerveux.","interactions":[{"label":"Parler","intent":"talk","prompt":"Je m'approche de Toben et lui demande ce qu'il sait."}]}],
                     "exits":[{"id":"door","label":"Porte de chêne","position":{"col":7,"row":4},"leads_to":"bandit_room","description":"Issue solide vers une pièce voisine."}],
                     "party_positions":{"thorvald":{"col":1,"row":4}}})
+                    CHAMP scene_theme (OBLIGATOIRE) : choisis la valeur qui correspond le mieux au biome physique de la scène.
+                    Valeurs autorisées : forest | beach | coastal | rocky | mountain | dungeon | cave | city | plains | swamp | desert
+                    Exemples : rivage/sable/mer → "beach" ; falaises/rochers/île rocailleuse → "rocky" ; intérieur souterrain → "dungeon" ; grotte → "cave" ; prairie ouverte → "plains" ; forêt/bois → "forest" ; marécage/marais → "swamp" ; désert/sable brûlant → "desert" ; zone urbaine/rue/place → "city".
+                    Ce champ pilote le rendu visuel de la carte : ne l'omets jamais, ne répète pas "terrain" si scene_theme suffit.
                     Ajoute description/action_hint très courts aux POI utiles pour que l'interface explique ce que le joueur sélectionne.
                     kind/icon doivent rester cohérents : ennemi visible = kind "enemy", icon "c-enemy"; PNJ = kind "npc", icon "npc"; couvert = kind "cover", icon "c-half-cover"; danger/piège = kind "hazard", icon "trap-danger"; butin/objet = kind "loot", icon "chest"; indice = kind "clue", icon "clue"; porte/sortie navigable = dans exits, pas en doublon dans pois.
                     Pour un PNJ ou objet important, tu peux ajouter interactions (label, intent: approach|talk|examine|listen|search|use|custom, prompt optionnel).
@@ -72,10 +77,27 @@ TYPES D'ACTIONS :
                     "nodes_upsert":[{"id":"port_neuf","name":"Port-Neuf","kind":"settlement","position":{"x":42,"y":64},"status":"current"}],
                     "nodes_remove":[],"edges_upsert":[],"edges_remove":[]})
                     Réutilise les ids existants de world_maps. N'envoie que les ajouts/modifications.
+                    DÉCOR (set-once, premier patch uniquement) : lors de la CRÉATION d'une nouvelle région,
+                    ajoute un champ "decor" avec les éléments naturels de la région — forêts, montagnes,
+                    côte/mer, rivières. Ne l'inclus PAS dans les patches narratifs suivants (il sera préservé).
+                    Format decor :
+                    {
+                      "forests": [{"x":24,"y":18,"radius":3.2,"opacity":0.4}, ...],
+                      "mountains": [{"x":78,"y":28,"height":5}, ...],
+                      "coastline": {"side":"west","points":[{"x":0,"y":0},{"x":18,"y":0},{"x":12,"y":30},{"x":6,"y":60},{"x":10,"y":90},{"x":0,"y":100}]},
+                      "river": {"path":"M 0 76 Q 30 80 60 78 T 100 80","width":1.5},
+                      "decorative_roads": ["M 14 28 Q 30 40 48 58","M 48 58 Q 38 60 26 62"]
+                    }
+                    Coordonnées en 0..100 (viewBox SVG). Adapte à la géographie de la région : zone côtière
+                    → coastline; région montagneuse → mountains au NE/NO; rivière = path traversant la carte.
 - city_map_update : patch incrémental d'une carte de ville.
                     (params: {"city_id":"port_neuf","region_node_id":"port_neuf","name":"Port-Neuf",
                     "current_node_id":"quai_nord","nodes_upsert":[{"id":"quai_nord","name":"Quai nord","kind":"docks","position":{"x":35,"y":70},"status":"current"}],
                     "nodes_remove":[],"edges_upsert":[],"edges_remove":[]})
+                    DÉCOR (set-once, premier patch uniquement) : lors de la CRÉATION d'une nouvelle ville,
+                    ajoute "decor" avec les éléments naturels locaux — forêts en périphérie, rivière si
+                    présente, routes décoratives. Format identique à region_map_update. Ne ré-émet PAS
+                    "decor" dans les patches ultérieurs (il est préservé automatiquement).
 - node_status_update : change seulement le statut d'un noeud connu.
                     (params: {"scope":"region|city","city_id":"port_neuf","node_id":"quai_nord","status":"visited|known|current|rumored"})
 - xp_grant       : octroyer de l'XP après victoire ou objectif accompli.

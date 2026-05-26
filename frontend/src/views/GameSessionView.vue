@@ -7,7 +7,7 @@ import { useSessionStore } from '../stores/session'
 import { useWebSocket } from '../composables/useWebSocket'
 import { gameApi } from '../services/api'
 import NarrativeLog from '../components/narrative/NarrativeLog.vue'
-import ExplorationLayout from '../components/character/ExplorationLayout.vue'
+import ExplorationLayout from '../components/exploration/ExplorationLayout.vue'
 import CombatLayout from '../components/combat/CombatLayout.vue'
 import Battlemap from '../components/combat/Battlemap.vue'
 import MapTabs from '../components/map/MapTabs.vue'
@@ -29,7 +29,7 @@ const gameStore = useGameStore()
 const charStore = useCharacterStore()
 const sessionStore = useSessionStore()
 
-const { connect, disconnect, reconnect, sendAction, toggleAiControl, triggerAiReactions, reconnectCount, isReconnecting, isDisconnected } = useWebSocket(sessionId)
+const { connect, disconnect, reconnect, sendAction, triggerAiReactions, reconnectCount, isReconnecting, isDisconnected } = useWebSocket(sessionId)
 
 const startingGame = ref(false)
 const showSaveLoad = ref(false)
@@ -108,6 +108,9 @@ const startCombatLabel = computed(() =>
 )
 const canRest = computed(() =>
   ['exploration', 'encounter_end'].includes(gameStore.phase),
+)
+const hasAiCompanions = computed(() =>
+  charStore.sessionCharacters.some((c) => c.is_ai),
 )
 
 function handleAction(
@@ -242,41 +245,41 @@ watch(() => gameStore.connected, (connected) => {
   if (connected) void startPendingRouteSession()
 })
 
-const PHASE_LABELS: Record<string, string> = {
-  lobby: 'Salle d\'attente',
-  character_creation: 'Création',
-  exploration: 'Exploration',
-  encounter_start: 'Rencontre',
-  combat: 'Combat',
-  encounter_end: 'Fin rencontre',
-  rest: 'Repos',
-  level_up: 'Montée',
-  session_end: 'Terminée',
+// ── Pill couleur & label par phase ────────────────────────────────────────
+type PhaseStyle = { label: string; color: string; bg: string; border: string }
+
+const PHASE_STYLES: Record<string, PhaseStyle> = {
+  lobby:               { label: "Salle d'attente",  color: 'var(--color-text-muted)',     bg: 'rgba(247,236,208,0.05)', border: 'var(--color-border)' },
+  character_creation:  { label: 'Création',         color: 'var(--color-arcane)',         bg: 'rgba(192,144,255,0.12)', border: 'rgba(192,144,255,0.4)' },
+  exploration:         { label: 'Exploration',      color: 'var(--color-green)',          bg: 'linear-gradient(135deg, rgba(111,217,111,0.18), rgba(111,217,111,0.04))', border: 'rgba(111,217,111,0.4)' },
+  encounter_start:     { label: 'Rencontre',        color: 'var(--color-blood)',          bg: 'rgba(232,69,69,0.12)',   border: 'rgba(232,69,69,0.4)' },
+  combat:              { label: 'Combat',           color: 'var(--color-blood)',          bg: 'rgba(232,69,69,0.12)',   border: 'rgba(232,69,69,0.4)' },
+  encounter_end:       { label: 'Fin rencontre',    color: 'var(--color-gold)',           bg: 'rgba(240,199,100,0.12)', border: 'rgba(240,199,100,0.4)' },
+  rest:                { label: 'Repos',            color: 'var(--color-arcane)',         bg: 'rgba(192,144,255,0.18)', border: 'rgba(192,144,255,0.4)' },
+  level_up:            { label: 'Montée',           color: 'var(--color-gold)',           bg: 'rgba(240,199,100,0.18)', border: 'rgba(240,199,100,0.4)' },
+  session_end:         { label: 'Terminée',         color: 'var(--color-text-dim)',       bg: 'rgba(247,236,208,0.03)', border: 'var(--color-border)' },
 }
 
-const PHASE_TONES: Record<string, string> = {
-  lobby: 'rpg-tone-muted',
-  character_creation: 'rpg-tone-arcane',
-  exploration: 'rpg-tone-green',
-  encounter_start: 'rpg-tone-blood',
-  combat: 'rpg-tone-blood',
-  encounter_end: 'rpg-tone-gold',
-  rest: 'rpg-tone-teal',
-  level_up: 'rpg-tone-gold',
-  session_end: 'rpg-tone-dim',
-}
+const phaseStyle = computed<PhaseStyle>(() => PHASE_STYLES[gameStore.phase] ?? PHASE_STYLES.lobby!)
 
-const phaseLabel = computed(() => PHASE_LABELS[gameStore.phase] ?? gameStore.phase)
-const phaseTone = computed(() => PHASE_TONES[gameStore.phase] ?? 'rpg-tone-muted')
+// ── Métadonnées contextuelles (lieu · jour · météo) — TODO: brancher backend
+const contextLocation = computed(() => {
+  // TODO: brancher backend — viendra de gameStore.currentScene.scene_id
+  if (gameStore.phase === 'exploration') return 'Triboar Trail'
+  return null
+})
+const contextMeta = computed(() => {
+  // TODO: brancher backend — viendra de gameStore.adventureJournal (day, weather, time-of-day)
+  if (gameStore.phase === 'exploration') return 'Jour 1 · matin · humide'
+  return null
+})
 
 onMounted(initSession)
 onUnmounted(() => { disconnect() })
 </script>
 
 <template>
-  <div
-    class="rpg-game-root flex h-full flex-col overflow-hidden"
-  >
+  <div class="rpg-game-root flex h-full flex-col overflow-hidden">
     <!-- ─── Error / reconnect banners ─────────────────────────────────────── -->
     <div
       v-if="gameStore.error"
@@ -300,58 +303,58 @@ onUnmounted(() => { disconnect() })
       <button class="rpg-btn-tonal tone-blood !py-1 !px-3 !text-[10px]" @click="reconnect">Reconnecter</button>
     </div>
 
-    <!-- ─── Standalone header ─────────────────────────────────────────────── -->
-    <header
-      class="rpg-game-header flex h-14 shrink-0 items-center gap-6 border-b px-6"
-    >
-      <!-- Left: logo + session name -->
-      <div class="flex shrink-0 items-center gap-3">
-        <div
-          class="rpg-brand-mark flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-bold"
-        >⚔</div>
-        <div>
-          <div class="font-display text-[15px] font-bold tracking-[0.1em]">RPGMASTER</div>
-          <div
-            class="rpg-text-dim text-[10px] font-semibold uppercase tracking-[0.2em] leading-none"
-          >{{ sessionStore.currentSession?.name ?? '—' }}</div>
+    <!-- ─── V2 Header (56px) — logo + pill phase + actions ──────────────── -->
+    <header class="exploration-header">
+      <!-- Brand block -->
+      <div class="exph-brand">
+        <div class="exph-logo">⚔</div>
+        <div class="exph-brand-meta">
+          <div class="exph-brand-title">RPGMASTER</div>
+          <div class="exph-brand-sub">{{ sessionStore.currentSession?.name ?? '—' }}</div>
         </div>
       </div>
 
-      <!-- Centre: phase + actions -->
-      <div class="flex flex-1 items-center justify-center gap-2">
-        <!-- Combat: compact single chip -->
-        <template v-if="gameStore.isInCombat">
-          <div class="flex items-center gap-2 rounded-full border border-blood/40 bg-blood/10 px-3 py-1">
-            <span class="text-blood text-[11px]">⚔</span>
-            <span class="font-display text-[11px] font-bold tracking-[0.12em] uppercase text-parchment">COMBAT</span>
-            <span class="text-text-dim text-[10px]">·</span>
-            <span class="font-mono text-[11px] font-bold text-gold">R{{ gameStore.roundNumber || 1 }}</span>
-            <template v-if="gameStore.isGmThinking || gameStore.isAnyAiThinking">
-              <span class="text-text-dim text-[10px]">·</span>
-              <span class="rpg-text-gold rpg-pulse text-[10px]">{{ gameStore.isGmThinking ? 'MJ' : 'IA' }}</span>
-            </template>
-          </div>
-        </template>
+      <!-- Phase pill -->
+      <div class="exph-pill-wrap">
+        <div
+          class="exph-pill"
+          :style="{ background: phaseStyle.bg, borderColor: phaseStyle.border }"
+        >
+          <span
+            class="exph-pill-dot"
+            :style="{
+              background: phaseStyle.color,
+              boxShadow: `0 0 8px ${phaseStyle.color}`,
+            }"
+          />
+          <span
+            class="exph-pill-label"
+            :style="{ color: phaseStyle.color }"
+          >{{ phaseStyle.label }}</span>
 
-        <!-- Non-combat: full phase info -->
-        <template v-else>
-          <div class="rpg-text-muted flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em]">
-            <span>Phase</span>
-            <span class="font-display font-bold" :class="[phaseTone, 'rpg-tone-text']">{{ phaseLabel }}</span>
-            <template v-if="gameStore.isGmThinking">
-              <span class="rpg-text-dim">·</span>
-              <span class="rpg-text-gold rpg-pulse">MJ</span>
-            </template>
-            <template v-else-if="gameStore.isAnyAiThinking">
-              <span class="rpg-text-dim">·</span>
-              <span class="rpg-text-gold rpg-pulse">IA</span>
-            </template>
-          </div>
-        </template>
+          <template v-if="contextLocation">
+            <span class="exph-pill-sep">·</span>
+            <span class="exph-pill-loc">{{ contextLocation }}</span>
+          </template>
+          <template v-if="contextMeta">
+            <span class="exph-pill-sep">·</span>
+            <span class="exph-pill-meta">{{ contextMeta }}</span>
+          </template>
+          <template v-if="gameStore.isInCombat">
+            <span class="exph-pill-sep">·</span>
+            <span class="exph-pill-round">R{{ gameStore.roundNumber || 1 }}</span>
+          </template>
+          <template v-if="gameStore.isGmThinking || gameStore.isAnyAiThinking">
+            <span class="exph-pill-sep">·</span>
+            <span class="exph-pill-thinking">{{ gameStore.isGmThinking ? 'MJ' : 'IA' }}</span>
+          </template>
+        </div>
+      </div>
 
-        <div class="rpg-divider-vertical h-4 w-px mx-1" />
+      <div style="flex: 1" />
 
-        <!-- Action buttons -->
+      <!-- Right cluster -->
+      <div class="exph-actions">
         <button
           v-if="needsStart"
           :disabled="startingGame || !gameStore.connected"
@@ -377,38 +380,36 @@ onUnmounted(() => { disconnect() })
           @click="confirmEndCombat"
         >✕ Fin de combat</button>
 
-        <!-- AI reactions (exploration only) -->
         <button
-          v-if="gameStore.phase === 'exploration' && charStore.sessionCharacters.some(c => c.is_ai)"
+          v-if="gameStore.phase === 'exploration' && hasAiCompanions"
           class="rpg-btn-tonal tone-arcane !py-1.5 !text-[11px]"
           title="Demander aux compagnons IA de réagir maintenant"
           @click="handleTriggerAi"
         >🤖 IA réagit</button>
 
-        <!-- Save -->
         <button
           class="rpg-btn-secondary !py-1.5 !px-4 !text-[11px]"
           @click="showSaveLoad = !showSaveLoad"
         >💾 Sauvegarder</button>
-      </div>
 
-      <!-- Right: Lobby + connection status -->
-      <div class="flex shrink-0 items-center gap-3">
-        <button
-          class="rpg-btn-secondary !py-1 !px-3 !text-[11px] shrink-0"
-          @click="requestGoToLobby"
-        >← Lobby</button>
-        <div class="rpg-text-muted flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em]">
+        <div class="exph-divider" />
+
+        <div class="exph-online">
           <span
-            class="h-2 w-2 rounded-full"
+            class="exph-online-dot"
             :class="{ 'rpg-pulse': isReconnecting }"
             :style="{
               background: gameStore.connected ? 'var(--color-green)' : isReconnecting ? 'var(--color-arcane)' : 'var(--color-blood)',
-              boxShadow: gameStore.connected ? '0 0 6px var(--color-green)' : 'none',
+              boxShadow: gameStore.connected ? '0 0 8px var(--color-green)' : 'none',
             }"
           />
           <span class="hidden md:inline">{{ gameStore.connected ? 'En ligne' : 'Hors ligne' }}</span>
         </div>
+
+        <button
+          class="rpg-btn-secondary !py-1.5 !px-4 !text-[11px] shrink-0"
+          @click="requestGoToLobby"
+        >← Lobby</button>
       </div>
     </header>
 
@@ -421,12 +422,14 @@ onUnmounted(() => { disconnect() })
       <SaveLoadPanel :session-id="sessionId" @load-complete="handleLoadComplete" />
     </div>
 
+    <!-- MapTabs (legacy) : caché en exploration V2 — le scope est piloté par ScopeTabs dans MapColumn. -->
     <MapTabs
-      v-if="gameStore.regionMap || Object.keys(gameStore.cityMaps).length > 0"
+      v-if="gameStore.phase !== 'exploration' && (gameStore.regionMap || Object.keys(gameStore.cityMaps).length > 0)"
       :session-id="sessionId"
       @action="handleAction"
     />
 
+    <!-- ─── Desktop layouts (md+) ─────────────────────────────────────────── -->
     <CombatLayout
       v-if="gameStore.isInCombat"
       @action="handleAction"
@@ -435,8 +438,8 @@ onUnmounted(() => { disconnect() })
     />
     <ExplorationLayout
       v-else
+      class="hidden md:flex"
       @action="handleAction"
-      @start-combat="startCombat"
       @open-sheet="openSheet"
     />
 
@@ -448,7 +451,7 @@ onUnmounted(() => { disconnect() })
       @asi-choice="handleAsiChoice"
     />
 
-    <!-- ─── Mobile layout ────────────────────────────────────────────────── -->
+    <!-- ─── Mobile layout (V1, V2 desktop-only) ────────────────────────── -->
     <div class="flex min-h-0 flex-1 flex-col overflow-hidden md:hidden">
       <div
         v-if="!gameStore.isInCombat && gameStore.currentScene"
@@ -479,10 +482,14 @@ onUnmounted(() => { disconnect() })
       <NarrativeLog />
     </div>
 
-    <!-- ─── ActionBar ─────────────────────────────────────────────────────── -->
-    <ActionBar v-if="!gameStore.isInCombat" @action="handleAction" />
-    <div v-else class="md:hidden">
+    <!-- ─── ActionBar (mobile only) ─────────────────────────────────────── -->
+    <div class="md:hidden">
       <ActionBar
+        v-if="!gameStore.isInCombat"
+        @action="handleAction"
+      />
+      <ActionBar
+        v-else
         @action="handleAction"
         @map-mode="(mode) => { mobileMapMode = mode }"
       />
@@ -503,7 +510,6 @@ onUnmounted(() => { disconnect() })
       @cancel="showRestDialog = false"
     />
 
-    <!-- Quitter la session -->
     <ConfirmDialog
       v-if="showLobbyConfirm"
       title="Quitter la session ?"
@@ -527,3 +533,150 @@ onUnmounted(() => { disconnect() })
     />
   </div>
 </template>
+
+<style scoped>
+/* ─ V2 Header (56px) ────────────────────────────────────────────────── */
+.exploration-header {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 14px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--color-border);
+  background: linear-gradient(180deg, var(--color-bg-elev), transparent);
+  position: relative;
+  z-index: 3;
+}
+
+.exph-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.exph-logo {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, var(--color-ember), var(--color-gold));
+  color: var(--color-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 700;
+  box-shadow: 0 0 16px rgba(255, 130, 71, 0.3);
+}
+
+.exph-brand-meta { line-height: 1.15; }
+
+.exph-brand-title {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--color-parchment);
+}
+
+.exph-brand-sub {
+  font-size: 9px;
+  color: var(--color-text-dim);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* Pill wrapper */
+.exph-pill-wrap {
+  display: flex;
+  align-items: center;
+  padding-left: 14px;
+  margin-left: 6px;
+  border-left: 1px solid var(--color-border);
+}
+
+.exph-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+
+.exph-pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 4px;
+}
+
+.exph-pill-label {
+  font-weight: 700;
+  letter-spacing: 1px;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.exph-pill-sep {
+  color: rgba(247, 236, 208, 0.5);
+}
+
+.exph-pill-loc {
+  font-family: var(--font-serif);
+  font-style: italic;
+  color: var(--color-parchment-dark);
+  font-size: 11px;
+}
+
+.exph-pill-meta {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+
+.exph-pill-round {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--color-gold);
+  font-size: 11px;
+}
+
+.exph-pill-thinking {
+  font-size: 10px;
+  color: var(--color-gold);
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+/* Actions */
+.exph-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.exph-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--color-border);
+  margin: 0 4px;
+}
+
+.exph-online {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--color-green);
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.exph-online-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 4px;
+}
+</style>
