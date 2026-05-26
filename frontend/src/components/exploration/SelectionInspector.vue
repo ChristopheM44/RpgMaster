@@ -10,6 +10,7 @@ const { findPoi } = useExplorationPois()
 
 const emit = defineEmits<{
   act: [id: string]
+  openSheet: [id: string]
 }>()
 
 const hero = computed(() => findHero(sessionStore.selectedId))
@@ -130,7 +131,11 @@ function act() {
     <!-- Actions -->
     <div class="inspector-actions">
       <template v-if="hero?.isMe">
-        <button class="inspector-btn-primary" :style="{ background: `linear-gradient(135deg, var(--color-ember), #ff8247aa)` }">
+        <button
+          class="inspector-btn-primary"
+          :style="{ background: `linear-gradient(135deg, var(--color-ember), #ff8247aa)` }"
+          @click="emit('openSheet', hero.id)"
+        >
           👤 Fiche
         </button>
       </template>
@@ -138,12 +143,20 @@ function act() {
         <button class="inspector-btn-outline" :style="{ color: 'var(--color-arcane)', borderColor: 'rgba(192,144,255,0.4)', background: 'rgba(192,144,255,0.14)' }">
           🤖 Faire réagir
         </button>
-        <button class="inspector-btn-outline" :style="{ color: 'var(--color-gold)', borderColor: 'rgba(240,199,100,0.4)', background: 'rgba(240,199,100,0.14)' }">
+        <button
+          class="inspector-btn-outline"
+          :style="{ color: 'var(--color-gold)', borderColor: 'rgba(240,199,100,0.4)', background: 'rgba(240,199,100,0.14)' }"
+          @click="emit('openSheet', hero.id)"
+        >
           👁 Fiche
         </button>
       </template>
       <template v-else-if="hero">
-        <button class="inspector-btn-outline" :style="{ color: 'var(--color-teal)', borderColor: 'rgba(79,216,192,0.4)', background: 'rgba(79,216,192,0.14)' }">
+        <button
+          class="inspector-btn-outline"
+          :style="{ color: 'var(--color-teal)', borderColor: 'rgba(79,216,192,0.4)', background: 'rgba(79,216,192,0.14)' }"
+          @click="emit('openSheet', hero.id)"
+        >
           👁 Fiche
         </button>
       </template>

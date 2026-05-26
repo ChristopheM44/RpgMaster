@@ -98,6 +98,7 @@ function toggleCarnet() {
       <SelectionInspector
         v-if="sessionStore.selectedId"
         @act="(id: string) => emit('act', id)"
+        @open-sheet="(id) => emit('openSheet', id)"
       />
 
       <!-- Carnet popover -->

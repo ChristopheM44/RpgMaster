@@ -49,15 +49,12 @@ async function initSession() {
   }
   disconnect()
 
-  const session = sessionStore.currentSession
-  if (!session) {
-    try {
-      const loaded = await import('../services/api').then(m => m.sessionApi.get(sessionId))
-      sessionStore.setCurrentSession(loaded)
-    } catch {
-      router.push({ name: 'lobby' })
-      return
-    }
+  try {
+    const loaded = await import('../services/api').then(m => m.sessionApi.get(sessionId))
+    sessionStore.setCurrentSession(loaded)
+  } catch {
+    router.push({ name: 'lobby' })
+    return
   }
 
   if (sessionStore.currentSession) {
