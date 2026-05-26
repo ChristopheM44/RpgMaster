@@ -17,6 +17,9 @@ from app.llm.openai_compatible_client import OpenAICompatibleError
 
 logger = logging.getLogger(__name__)
 
+# Limite de longueur pour le brief de scène injecté dans le contexte MJ
+_SCENE_BRIEF_MAX_LEN = 600  # était 280
+
 _FALLBACK_NARRATION = (
     "Le Maître du Jeu réfléchit… "
     "(Le système LLM est temporairement indisponible. Veuillez réessayer dans un instant.)"
@@ -36,7 +39,7 @@ def _first_key_location(chapter: dict[str, Any]) -> str:
 def _scene_brief_for_anchor(chapter: dict[str, Any], scene: dict[str, Any]) -> str:
     description = str(scene.get("description") or "").strip()
     if description:
-        return description[:280]
+        return description[:_SCENE_BRIEF_MAX_LEN]
     return ""
 
 

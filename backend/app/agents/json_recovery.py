@@ -10,6 +10,9 @@ logger = logging.getLogger(__name__)
 
 ELLIPSIS_ONLY_RESPONSES = {"...", "…"}
 
+# Limite de longueur pour les textes de roleplay dans les chemins de récupération JSON
+_ROLEPLAY_TEXT_MAX_LEN = 1200  # était 500
+
 
 def recover_partial_json_response(
     raw: str,
@@ -63,7 +66,7 @@ def recover_partial_json_response(
         "action_description": action_description or "Le personnage réagit prudemment.",
         "target": None if target in (None, "null") else target,
         "params": {},
-        "roleplay_text": roleplay_source.strip()[:500],
+        "roleplay_text": roleplay_source.strip()[:_ROLEPLAY_TEXT_MAX_LEN],
         "inner_reasoning": inner_reasoning,
     }
 
@@ -100,7 +103,7 @@ def recover_structured_text_response(raw: str) -> Optional[dict[str, Any]]:
         "action_description": action_description or "Le personnage réagit prudemment.",
         "target": None if target in (None, "null") else target,
         "params": {},
-        "roleplay_text": (roleplay_text or action_description or stripped)[:500],
+        "roleplay_text": (roleplay_text or action_description or stripped)[:_ROLEPLAY_TEXT_MAX_LEN],
         "inner_reasoning": reasoning,
     }
 
@@ -167,7 +170,7 @@ def recover_prose_action_response(
         "action_description": description,
         "target": target,
         "params": params,
-        "roleplay_text": stripped[:500],
+        "roleplay_text": stripped[:_ROLEPLAY_TEXT_MAX_LEN],
         "inner_reasoning": "Action récupérée depuis une réponse non-JSON du LLM.",
     }
 
@@ -189,7 +192,7 @@ def build_default_combat_action(
 
     if target and "attack" in available:
         roleplay_text = (
-            stripped[:500]
+            stripped[:_ROLEPLAY_TEXT_MAX_LEN]
             if stripped and stripped not in ELLIPSIS_ONLY_RESPONSES
             else f"{character_name} reprend l'initiative et attaque {target_name}."
         )
@@ -216,7 +219,7 @@ def build_default_combat_action(
                 "target": None,
                 "params": {},
                 "roleplay_text": (
-                    stripped[:500]
+                    stripped[:_ROLEPLAY_TEXT_MAX_LEN]
                     if stripped and stripped not in ELLIPSIS_ONLY_RESPONSES
                     else f"{character_name} se remet en garde."
                 ),
@@ -230,7 +233,7 @@ def build_default_combat_action(
             "action_description": f"Action de secours : {action_type}",
             "target": None,
             "params": {},
-            "roleplay_text": stripped[:500] or f"{character_name} agit prudemment.",
+            "roleplay_text": stripped[:_ROLEPLAY_TEXT_MAX_LEN] or f"{character_name} agit prudemment.",
             "inner_reasoning": "Fallback combat : première action disponible.",
         }
 

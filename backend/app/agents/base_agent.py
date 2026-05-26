@@ -14,7 +14,7 @@ from app.agents.schemas import AgentContext, AgentResponse
 logger = logging.getLogger(__name__)
 
 _PROMPTS_DIR = Path(__file__).parent / "prompts"
-_FORMAT_MESSAGES_WINDOW = 10
+_FORMAT_MESSAGES_WINDOW = 25  # Portée conversationnelle élargie (était 10)
 
 
 class BaseAgent(ABC):

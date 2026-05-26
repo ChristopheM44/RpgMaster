@@ -104,11 +104,12 @@ class TestFormatMessages:
         assert "[Aria] J'entre prudemment." in result
         assert result.index("[MJ]") < result.index("[Aria]")
 
-    def test_window_keeps_last_10_only(self, agent: _StubAgent) -> None:
-        msgs = [MagicMock(speaker="P", content=f"msg{i:03d}") for i in range(15)]
+    def test_window_keeps_last_25_only(self, agent: _StubAgent) -> None:
+        # Fenêtre = 25 messages — on en génère 30 : seuls les 25 derniers sont inclus.
+        msgs = [MagicMock(speaker="P", content=f"msg{i:03d}") for i in range(30)]
         result = agent._format_messages(msgs)
-        # Les 10 derniers (indices 5–14) sont inclus ; les 5 premiers non.
-        for i in range(5, 15):
+        # Les 25 derniers (indices 5–29) sont inclus ; les 5 premiers non.
+        for i in range(5, 30):
             assert f"msg{i:03d}" in result
         for i in range(0, 5):
             assert f"msg{i:03d}" not in result

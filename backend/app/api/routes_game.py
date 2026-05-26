@@ -32,6 +32,12 @@ from app.models.session import Session, SessionStatus
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# Limites de contenu pour la scène d'ouverture
+_OPENING_CLUES_MAX = 5   # indices visibles initiaux (était 2)
+_OPENING_NPCS_MAX  = 5   # PNJ présents en ouverture (était 2)
+_OPENING_POIS_MAX  = 8   # points d'intérêt (était 5)
+_OPENING_EXITS_MAX = 5   # sorties disponibles (était 3)
+
 
 class StartGameBody(BaseModel):
     adventure_script: Optional[str] = None
@@ -821,8 +827,8 @@ def _opening_response(
         objective_id = ""
     region_kind = _region_kind_for_location(physical_place)
     scene_brief = str(opening_scene.get("description") or "").strip()
-    clues = list(opening_scene.get("visible_clues") or [])[:2]
-    present_npcs = list(opening_scene.get("present_npcs") or [])[:2]
+    clues = list(opening_scene.get("visible_clues") or [])[:_OPENING_CLUES_MAX]
+    present_npcs = list(opening_scene.get("present_npcs") or [])[:_OPENING_NPCS_MAX]
     time_of_day = str(journal.get("time_of_day") or opening_scene.get("time_of_day") or "morning")
     weather = journal.get("weather") or opening_scene.get("weather")
     narration = (
@@ -970,8 +976,8 @@ def _opening_response(
         "cell_size_m": 1.5,
         "terrain": region_kind,
         "scene_theme": guessed_theme,
-        "pois": pois[:5],
-        "exits": exits[:3],
+        "pois": pois[:_OPENING_POIS_MAX],
+        "exits": exits[:_OPENING_EXITS_MAX],
         "party_positions": _party_positions(active),
     }
     if scene_brief:

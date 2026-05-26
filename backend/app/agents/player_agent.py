@@ -36,6 +36,12 @@ _NON_JSON_LLM_ERROR = "Réponse LLM non parsable (JSON manquant)."
 
 _ELLIPSIS_ONLY_RESPONSES = {"...", "…"}
 
+# Limites de longueur et de tokens pour les chemins de décision et de récupération
+_FALLBACK_ROLEPLAY_MAX_LEN = 600   # roleplay fallback texte (était 300)
+_INFERRED_ACTION_MAX_LEN   = 300   # description action déduite (était 160)
+_MAX_TOKENS_PLAYER_DECIDE  = 1500  # tokens output décision joueur (était 1024)
+_MAX_TOKENS_PLAYER_REPAIR  = 1000  # tokens output réparation JSON (était 600)
+
 _ACTION_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "attack",
@@ -429,7 +435,7 @@ class PlayerAgent(BaseAgent):
 
         try:
             record_llm_call("player")
-            raw = await self._client.chat(messages=messages, temperature=0.6, max_tokens=1024)
+            raw = await self._client.chat(messages=messages, temperature=0.6, max_tokens=_MAX_TOKENS_PLAYER_DECIDE)
         except (OllamaError, OpenAICompatibleError) as exc:
             logger.error("PlayerAgent[%s] : appel LLM échoué : %s", self._character_name, exc)
             return _fallback_action(error=f"{type(exc).__name__}: {exc}")
@@ -466,7 +472,7 @@ class PlayerAgent(BaseAgent):
             return PlayerActionChoice(
                 action_type="wait",
                 action_description="Le personnage hésite.",
-                roleplay_text=raw.strip()[:300],
+                roleplay_text=raw.strip()[:_FALLBACK_ROLEPLAY_MAX_LEN],
                 llm_error=_NON_JSON_LLM_ERROR,
             )
 
@@ -517,7 +523,7 @@ class PlayerAgent(BaseAgent):
             repaired = await self._client.chat(
                 messages=repair_messages,
                 temperature=0.0,
-                max_tokens=600,
+                max_tokens=_MAX_TOKENS_PLAYER_REPAIR,
             )
         except (OllamaError, OpenAICompatibleError) as exc:
             logger.warning(
@@ -745,7 +751,7 @@ class PlayerAgent(BaseAgent):
             return f"Lance un sort sur {target_name}"
         if action_type in {"shove", "help"}:
             return f"{action_type} {target_name}"
-        return raw.strip()[:160] or f"Action {action_type}"
+        return raw.strip()[:_INFERRED_ACTION_MAX_LEN] or f"Action {action_type}"
 
     def _compact_combat_state(self, game_state: dict[str, Any]) -> dict[str, Any]:
         """Return a small combat prompt state while preserving full state for parsing."""
@@ -855,7 +861,7 @@ class PlayerAgent(BaseAgent):
                 action_description=str(data.get("action_description", "")),
                 target=target,
                 params=params,
-                roleplay_text=str(data.get("roleplay_text", raw.strip()[:300])),
+                roleplay_text=str(data.get("roleplay_text", raw.strip()[:_FALLBACK_ROLEPLAY_MAX_LEN])),
                 inner_reasoning=data.get("inner_reasoning"),
             )
         except Exception as exc:

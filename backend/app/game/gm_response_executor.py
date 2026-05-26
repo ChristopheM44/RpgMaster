@@ -32,6 +32,11 @@ from app.services.xp_service import xp_service
 
 logger = logging.getLogger(__name__)
 
+# Limites de longueur de texte pour la normalisation des scènes MJ
+_SCENE_DESCRIPTION_MAX_LEN = 1500  # description principale d'une scène (était 320)
+_POI_ACTION_HINT_MAX_LEN   = 300   # hint d'action d'un POI (était 140)
+_POI_PROMPT_MAX_LEN        = 400   # prompt d'une interaction POI (était 180)
+
 CANON_DIRTY_ACTIONS = {
     "journal_update",
     "quest_add",
@@ -1277,7 +1282,7 @@ class GMResponseExecutor:
         raw_scene_id = cls._clean_optional_text(raw.get("scene_id"), max_len=80)
         if raw_scene_id:
             layout["scene_id"] = raw_scene_id
-        raw_description = cls._clean_optional_text(raw.get("description"), max_len=320)
+        raw_description = cls._clean_optional_text(raw.get("description"), max_len=_SCENE_DESCRIPTION_MAX_LEN)
         if raw_description:
             layout["description"] = raw_description
 
@@ -1296,7 +1301,7 @@ class GMResponseExecutor:
                 "icon": str(poi.get("icon") or "marker"),
             }
             description = cls._clean_optional_text(poi.get("description"))
-            action_hint = cls._clean_optional_text(poi.get("action_hint"), max_len=140)
+            action_hint = cls._clean_optional_text(poi.get("action_hint"), max_len=_POI_ACTION_HINT_MAX_LEN)
             if description:
                 normalized_poi["description"] = description
             if action_hint:
@@ -1375,7 +1380,7 @@ class GMResponseExecutor:
                 "intent": intent,
             }
 
-            prompt = cls._clean_optional_text(raw.get("prompt"), max_len=180)
+            prompt = cls._clean_optional_text(raw.get("prompt"), max_len=_POI_PROMPT_MAX_LEN)
             icon = cls._clean_optional_text(raw.get("icon"), max_len=48)
             if prompt:
                 interaction["prompt"] = prompt
