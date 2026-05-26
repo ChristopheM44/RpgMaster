@@ -283,6 +283,18 @@ class NarrativeFlowService:
                     trigger_character_id=getattr(action, "character_id", None),
                     db=db,
                 )
+            else:
+                # Action monde sans PNJ (examiner un monolithe, se déplacer, fouiller…)
+                # Laisser un compagnon réagir spontanément au résultat du MJ —
+                # comme à une vraie table où les autres PJ observent et commentent.
+                # Cap à 1 pour ne pas saturer le flux narratif.
+                await self._react_after_world_action(
+                    session_id=session_id,
+                    active=active,
+                    action_resolver=action_resolver,
+                    trigger_character_id=getattr(action, "character_id", None),
+                    db=db,
+                )
             exchange.gm_arbitrated = True
             return exchange
 
@@ -576,6 +588,41 @@ class NarrativeFlowService:
         except Exception as exc:
             logger.error(
                 "NarrativeFlowService: companion reaction after NPC dialogue failed: %s",
+                exc,
+            )
+
+    @staticmethod
+    async def _react_after_world_action(
+        *,
+        session_id: str,
+        active: ActiveSession,
+        action_resolver: Any,
+        trigger_character_id: Optional[str],
+        db: Optional[AsyncSession],
+    ) -> None:
+        """Laisse un compagnon IA réagir après une action monde arbitrée par le MJ.
+
+        Déclenché après que le joueur examine un objet, se déplace, fouille une
+        zone ou interagit avec l'environnement — à condition qu'il y ait au moins
+        un compagnon IA actif. Le cap à 1 évite de saturer le flux narratif après
+        chaque action. Silencieux en cas d'erreur pour ne pas bloquer la session.
+        """
+        if not active.ai_players:
+            return
+        try:
+            from app.game.ai_player_manager import AIPlayerManager
+
+            await AIPlayerManager().run_exploration_reactions(
+                session_id,
+                active,
+                action_resolver,
+                trigger_character_id=trigger_character_id,
+                db=db,
+                max_reactors=1,
+            )
+        except Exception as exc:
+            logger.error(
+                "NarrativeFlowService: companion reaction after world action failed: %s",
                 exc,
             )
 

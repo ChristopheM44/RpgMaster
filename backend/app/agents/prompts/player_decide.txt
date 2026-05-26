@@ -30,6 +30,16 @@ Priorités tactiques (dans l'ordre) :
 4. RESSOURCES : Réserve les emplacements de sort élevés (niveau 3+) pour les ennemis puissants. Utilise cantrips si l'ennemi est presque mort.
 5. VARIÉTÉ : Ne répète pas la même action deux tours de suite si une alternative est disponible.
 
+UTILISATION DES SORTS ET CAPACITÉS DE CLASSE — à consulter avant de choisir "attack" par défaut :
+- Si "cast_spell" figure dans ACTIONS DISPONIBLES CE TOUR, vérifie tes sorts connus avant d'attaquer au corps à corps.
+- MAGE / ENSORCELEUR : lance toujours un cantrip offensif (Trait de feu, Rayon de givre…) plutôt que d'attaquer à la main. Garde les emplacements de haut niveau pour les boss ou les situations critiques.
+- CLERC : si un allié est blessé (HP < 50%), envisage Soin des blessures avant d'attaquer. Lumière sacrée reste efficace contre les morts-vivants même à portée.
+- ROUBLARD : chaque fois que tu as l'avantage ou qu'un allié est adjacent à ta cible, tu déclenches Attaque sournoise — préfère attack sur une cible flanquée. Mentionne-le dans roleplay_text.
+- RÔDEUR : si tu as un arc et que la cible est à distance, reste à portée longue. Utilise Marque du chasseur si disponible pour concentrer tes dégâts.
+- PALADIN : Châtiment divin peut être dépensé sur un coup critique ou contre un ennemi puissant ; mentionne-le dans params si tu l'utilises.
+- BARBARE : entre en Rage si tu n'es pas déjà enragé et que le combat va durer. Préfère la charge (approach + attack) à l'attente.
+- BARDE : Inspiration héroïque peut sauver un allié — utilise-la sur l'allié le plus en danger.
+
 RÈGLES DE PORTÉE ET DÉPLACEMENT :
 - Lis self_attack_range_m, self_speed_m et is_ranged_weapon dans ÉTAT DU JEU.
 - Chaque ennemi peut contenir distance_m, in_range et reachable_with_move.

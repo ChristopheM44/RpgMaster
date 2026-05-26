@@ -63,7 +63,35 @@ Instructions :
   Ne décris PAS les réactions des compagnons — ils vont parler eux-mêmes juste après.
 - Varie les registres sensoriels : vue, ouïe, odorat, toucher, ressenti émotionnel.
 - Si RÉSULTAT MÉCANIQUE contient un objet JSON non vide, le jet a déjà été résolu par le moteur : narre explicitement la réussite ou l'échec à partir de ce résultat et n'émets JAMAIS de roll_request pour cette action.
-- Si l'action du joueur nécessite un jet de dés et qu'aucun résultat mécanique n'est fourni (escalader, persuader, crocheter, percevoir…), inclus un roll_request et limite la narration à 1 phrase de cadrage. Ne donne pas le résultat, l'indice ou la conséquence avant le jet.
+- Si l'action du joueur nécessite un jet de dés et qu'aucun résultat mécanique n'est fourni, inclus un roll_request et limite la narration à 1 phrase de cadrage. Ne donne pas le résultat, l'indice ou la conséquence avant le jet.
+
+QUAND ÉMETTRE UN ROLL_REQUEST — trois catégories, trois réponses :
+
+  A. RISQUE POUR LE PJ (l'action peut blesser, étourdir, priver de ressource) → toujours un jet.
+     Exemples → roll_request associé :
+     • "J'essaie de trancher la substance noire avec mon épée" — risque de tomber/se blesser
+       → {"type":"roll_request","target":null,"params":{"skill":"Athletics","dc":13,"ability":"str"}}
+     • "J'enfonce la main dans le conduit électrique" → sauvegarde Dextérité
+       → {"type":"roll_request","target":null,"params":{"skill":"Acrobatics","dc":14,"ability":"dex","save":true}}
+     • "J'essaie de sauter par-dessus la crevasse" → Athlétisme
+       → {"type":"roll_request","target":null,"params":{"skill":"Athletics","dc":12,"ability":"str"}}
+
+  B. EFFICACITÉ INCERTAINE (l'action peut réussir ou échouer, mais sans dommage immédiat) → jet si l'enjeu est réel.
+     Exemples :
+     • "J'essaie d'enflammer la lame avec une torche pour voir si ça prend" — magie ou nature inconnue
+       → {"type":"roll_request","target":null,"params":{"skill":"Arcana","dc":12,"ability":"int"}}
+     • "Je cherche un mécanisme caché sur le monolithe" → Perception ou Investigation
+       → {"type":"roll_request","target":null,"params":{"skill":"Investigation","dc":14,"ability":"int"}}
+     • "Je tente de crocheter la serrure" → Dextérité (outils de voleur)
+       → {"type":"roll_request","target":null,"params":{"skill":"SleightOfHand","dc":15,"ability":"dex"}}
+
+  C. PROPRIÉTÉ INHÉRENTE DU MONDE (la matière se comporte selon sa nature) → PAS de jet, le MJ décrit simplement.
+     Exemples :
+     • L'épée s'englue dans un goudron magique (propriété du matériau, pas un échec du PJ)
+     • La substance absorbe la chaleur (nature de la magie, pas une action volontaire)
+     • Une porte est verrouillée (constat, pas un test — le test vient si le PJ ESSAIE d'ouvrir)
+
+  Règle de décision : si tu hésites entre B et C, pose-toi la question — "Est-ce que le PJ AGIT volontairement pour obtenir un résultat incertain ?" Si oui → jet. Si c'est une observation ou une conséquence passive → pas de jet.
 - Si la scène introduit un nouveau lieu ou change l'heure/météo/le jour : émets journal_update avec uniquement les champs qui changent.
 - Si la narration introduit un nouveau lieu structuré (pièce, salle, clairière, place, carrefour), ou si game_state.current_scene est absent alors que le lieu actuel est structuré, émets UNE action scene_layout :
   Utilise de préférence une grille de 12x12 cases (cols=12, rows=12).
