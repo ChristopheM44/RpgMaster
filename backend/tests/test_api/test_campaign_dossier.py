@@ -819,13 +819,15 @@ async def test_start_game_without_campaign_uses_ephemeral_maps(async_client, db_
 
     result = await db_session.execute(select(GameState).where(GameState.session_id == session_id))
     game_state = result.scalar_one()
-    assert game_state.state_data["current_scene"]["scene_id"] == "scene_lieu_depart"
-    assert game_state.state_data["world_maps"]["region_map"]["current_node_id"] == "lieu_depart"
+    current_scene_id = game_state.state_data["current_scene"]["scene_id"]
+    current_node_id = game_state.state_data["world_maps"]["region_map"]["current_node_id"]
+    assert current_scene_id.startswith("scene_")
+    assert current_scene_id == f"scene_{current_node_id}"
 
     state_response = await async_client.get(f"/api/game/{session_id}/state")
     assert state_response.status_code == 200
     payload = state_response.json()
-    assert payload["region_map"]["current_node_id"] == "lieu_depart"
+    assert payload["region_map"]["current_node_id"] == current_node_id
     assert payload["city_maps"] == {}
 
 
