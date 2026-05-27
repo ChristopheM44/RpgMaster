@@ -175,7 +175,7 @@ class ActionResolver:
         Cette methode est appelee APRES la resolution mecanique (jet de skill)
         pour incarner la voix du PNJ cible.
         """
-        from app.game.action_pipeline import _poi_by_id, resolve_npc_target_id
+        from app.game.social_resolution import _poi_by_id, resolve_npc_target_id
 
         npc_id = resolve_npc_target_id(content, active.state_data, target_id)
         if not npc_id:

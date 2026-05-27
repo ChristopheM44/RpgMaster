@@ -916,7 +916,7 @@ class AIPlayerManager:
         if text in present_ids:
             return text
         try:
-            from app.game.action_pipeline import resolve_npc_target_id
+            from app.game.social_resolution import resolve_npc_target_id
 
             target_id = resolve_npc_target_id(text, state_data)
         except Exception:

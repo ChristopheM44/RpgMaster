@@ -2333,14 +2333,14 @@ class TestDetectNpcTargetByDescription:
         }
 
     def test_descriptive_approach_matches_anonymous_npc(self) -> None:
-        from app.game.action_pipeline import resolve_npc_target_id
+        from app.game.social_resolution import resolve_npc_target_id
 
         text = "Je m'approche de l'homme au chapeau à plumes et le salue d'un geste désinvolte."
         npc_id = resolve_npc_target_id(text, self._state_with_anonymous_npc())
         assert npc_id == "volothamp"
 
     def test_exact_name_still_wins(self) -> None:
-        from app.game.action_pipeline import resolve_npc_target_id
+        from app.game.social_resolution import resolve_npc_target_id
 
         state = self._state_with_anonymous_npc()
         # Le joueur l'a déjà engagé : known_to_party=True et nom visible.
@@ -2350,21 +2350,21 @@ class TestDetectNpcTargetByDescription:
         assert npc_id == "volothamp"
 
     def test_unrelated_action_returns_none(self) -> None:
-        from app.game.action_pipeline import resolve_npc_target_id
+        from app.game.social_resolution import resolve_npc_target_id
 
         text = "Je marche jusqu'à la fontaine pour boire."
         npc_id = resolve_npc_target_id(text, self._state_with_anonymous_npc())
         assert npc_id is None
 
     def test_single_present_npc_accepts_one_keyword_match(self) -> None:
-        from app.game.action_pipeline import resolve_npc_target_id
+        from app.game.social_resolution import resolve_npc_target_id
 
         text = "J'aborde le cartographe."
         npc_id = resolve_npc_target_id(text, self._state_with_anonymous_npc())
         assert npc_id == "volothamp"
 
     def test_clue_poi_is_never_matched_as_npc(self) -> None:
-        from app.game.action_pipeline import resolve_npc_target_id
+        from app.game.social_resolution import resolve_npc_target_id
 
         state = self._state_with_anonymous_npc()
         # On retire le PNJ pour ne laisser que la tente bleue.

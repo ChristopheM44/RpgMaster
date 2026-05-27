@@ -494,7 +494,7 @@ class NarrativeFlowService:
         explicit_target_id: Optional[str],
     ) -> bool:
         try:
-            from app.game.action_pipeline import resolve_npc_target_id
+            from app.game.social_resolution import resolve_npc_target_id
 
             return bool(resolve_npc_target_id(text, active.state_data, explicit_target_id))
         except Exception:
@@ -507,7 +507,7 @@ class NarrativeFlowService:
         explicit_target_id: Optional[str],
     ) -> Optional[str]:
         try:
-            from app.game.action_pipeline import _is_npc_poi, _poi_by_id, resolve_npc_target_id
+            from app.game.social_resolution import _is_npc_poi, _poi_by_id, resolve_npc_target_id
 
             npc_target_id = resolve_npc_target_id(text, active.state_data, explicit_target_id)
             poi = _poi_by_id(active.state_data, npc_target_id)
