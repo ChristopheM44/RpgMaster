@@ -6,14 +6,17 @@ const props = defineProps<{
   entry: Extract<ExNarrativeEntry, { type: 'roll' }>
 }>()
 
+const critical = computed(() => props.entry.rolls[0]?.critical ?? false)
 const success = computed(() => props.entry.rolls[0]?.hit ?? true)
 const total = computed(() => props.entry.rolls[0]?.value ?? 0)
 const label = computed(() => props.entry.rolls[0]?.label ?? '1d20')
+const stateClass = computed(() => critical.value ? 'is-critical' : success.value ? 'is-success' : 'is-fail')
+const marker = computed(() => critical.value ? '★' : success.value ? '✓' : '✕')
 </script>
 
 <template>
-  <div class="roll-card" :class="success ? 'is-success' : 'is-fail'">
-    <span class="roll-card-marker">{{ success ? '✓' : '✕' }}</span>
+  <div class="roll-card" :class="stateClass">
+    <span class="roll-card-marker">{{ marker }}</span>
 
     <span class="roll-card-who">{{ entry.who }}</span>
 
@@ -50,6 +53,11 @@ const label = computed(() => props.entry.rolls[0]?.label ?? '1d20')
   border-color: rgba(232, 69, 69, 0.25);
 }
 
+.roll-card.is-critical {
+  background: rgba(255, 215, 0, 0.07);
+  border-color: rgba(255, 215, 0, 0.35);
+}
+
 .roll-card-marker {
   font-size: 12px;
 }
@@ -64,6 +72,16 @@ const label = computed(() => props.entry.rolls[0]?.label ?? '1d20')
 .roll-card.is-fail .roll-card-who,
 .roll-card.is-fail .roll-card-result-value {
   color: var(--color-blood);
+}
+
+.roll-card.is-critical .roll-card-marker,
+.roll-card.is-critical .roll-card-who,
+.roll-card.is-critical .roll-card-result-value {
+  color: var(--color-crit);
+}
+
+.roll-card.is-critical .roll-card-result {
+  border-color: rgba(255, 215, 0, 0.5);
 }
 
 .roll-card-who {

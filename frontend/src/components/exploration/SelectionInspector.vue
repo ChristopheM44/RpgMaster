@@ -20,9 +20,9 @@ const isHero = computed(() => !!hero.value)
 const isSortie = computed(() => poi.value?.kind === 'sortie')
 const isRepere = computed(() => poi.value?.kind === 'repere')
 
-const tone = computed<'ember' | 'arcane' | 'blood' | 'teal' | 'gold' | 'text'>(() => {
+const tone = computed<'gold' | 'arcane' | 'blood' | 'teal' | 'text'>(() => {
   if (hero.value) {
-    if (hero.value.isMe) return 'ember'
+    if (hero.value.isMe) return 'gold'
     return hero.value.ai ? 'arcane' : 'teal'
   }
   if (!poi.value) return 'text'
@@ -33,11 +33,10 @@ const tone = computed<'ember' | 'arcane' | 'blood' | 'teal' | 'gold' | 'text'>((
 const toneVar = computed(() => `var(--color-${tone.value === 'text' ? 'parchment' : tone.value})`)
 const toneHex = computed(() => {
   switch (tone.value) {
-    case 'ember':  return '#ff8247'
+    case 'gold':   return '#f0c764'
     case 'arcane': return '#c090ff'
     case 'blood':  return '#e84545'
     case 'teal':   return '#4fd8c0'
-    case 'gold':   return '#f0c764'
     default:        return '#f7ecd0'
   }
 })
@@ -133,7 +132,7 @@ function act() {
       <template v-if="hero?.isMe">
         <button
           class="inspector-btn-primary"
-          :style="{ background: `linear-gradient(135deg, var(--color-ember), #ff8247aa)` }"
+          :style="{ background: `linear-gradient(135deg, var(--color-gold), #f0c764aa)` }"
           @click="emit('openSheet', hero.id)"
         >
           👤 Fiche

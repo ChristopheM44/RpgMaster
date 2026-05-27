@@ -28,7 +28,7 @@ const refLabel = computed(() => hero.value?.pos ?? poi.value?.label ?? '')
 
 const tone = computed(() => {
   if (hero.value) {
-    if (hero.value.isMe) return 'ember'
+    if (hero.value.isMe) return 'gold'
     return hero.value.ai ? 'arcane' : 'teal'
   }
   if (!poi.value) return 'text'

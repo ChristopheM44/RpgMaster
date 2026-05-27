@@ -281,7 +281,7 @@ const emit = defineEmits<{
   line-height: 1;
 }
 
-.chip-badge--vous { color: var(--color-ember); }
+.chip-badge--vous { color: var(--color-gold); }
 .chip-badge--ia   { color: var(--color-arcane); }
 
 /* HP mini-bar */

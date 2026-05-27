@@ -22,7 +22,7 @@ const CLASS_FR: Record<string, string> = {
   warlock: 'Occultiste',
 }
 
-const COLOR_ME = '#ff8247'   // ember
+const COLOR_ME = '#f0c764'   // gold — joueur humain (cf. design system : ember = MJ)
 const COLOR_AI = '#c090ff'   // arcane
 const COLOR_ALLY = '#4fd8c0' // teal — autre joueur humain
 

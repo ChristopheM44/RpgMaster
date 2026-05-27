@@ -29,7 +29,7 @@ function isHighlighted(id: string) {
 
 <template>
   <div class="decision-card">
-    <div class="rpg-eyebrow decision-card-eyebrow">✦ Décision · {{ entry.who }}</div>
+    <div class="rpg-eyebrow decision-card-eyebrow">◆ Décision · {{ entry.who }}</div>
     <p class="decision-card-text">{{ entry.text }}</p>
     <div class="decision-card-options">
       <button

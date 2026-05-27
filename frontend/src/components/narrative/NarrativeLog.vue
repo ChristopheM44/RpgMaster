@@ -123,30 +123,33 @@ watch(
         <div
           v-else-if="entry.type === 'dialogue'"
           class="rpg-dialogue-entry flex gap-3 rounded-lg border-l-2 py-2.5 pl-4 pr-3"
-          :class="{ 'is-companion': entry.speaker_kind === 'companion' }"
+          :class="entry.speaker_kind === 'companion' ? 'is-companion' : 'is-npc'"
+          :style="entry.speaker_kind === 'companion'
+            ? 'border-color: rgba(192,144,255,0.45); background: rgba(192,144,255,0.04)'
+            : 'border-color: rgba(79,216,192,0.45); background: rgba(79,216,192,0.04)'"
         >
           <div class="min-w-0 flex-1">
             <span
               v-if="entry.speaker"
               class="mr-2 text-sm font-display font-semibold"
-              :class="entry.speaker_kind === 'companion' ? 'rpg-text-arcane' : 'rpg-text-gold'"
-            >{{ entry.speaker }} </span>
+              :class="entry.speaker_kind === 'companion' ? 'rpg-text-arcane' : 'rpg-text-teal'"
+            >{{ entry.speaker_kind === 'companion' ? '◈' : '❦' }} {{ entry.speaker }} </span>
             <span class="rpg-text-main text-sm leading-relaxed">{{ entry.text }}</span>
           </div>
         </div>
 
-        <!-- Action joueur — ember (joueur humain), ton discret/italique -->
+        <!-- Action joueur — gold (joueur humain) ◉ -->
         <div
           v-else-if="entry.type === 'player'"
           class="rpg-player-entry flex gap-3 rounded-lg border-l-2 py-2 pl-4 pr-3"
-          style="border-color: rgba(255,130,71,0.35); background: rgba(255,130,71,0.03);"
+          style="border-color: rgba(240,199,100,0.35); background: rgba(240,199,100,0.03);"
         >
           <div class="min-w-0 flex-1">
             <span
               v-if="entry.speaker"
               class="mr-2 text-[10px] font-display font-bold tracking-wide uppercase"
-              style="color: var(--color-ember);"
-            >{{ entry.speaker }} </span>
+              style="color: var(--color-gold);"
+            >◉ {{ entry.speaker }} </span>
             <span
               class="text-[12.5px] font-serif italic"
               style="color: var(--color-text-muted);"
@@ -183,9 +186,14 @@ watch(
           </div>
         </div>
 
-        <!-- Système -->
-        <div v-else-if="entry.type === 'system'" class="rpg-text-dim py-1 text-center text-xs">
-          ──── {{ entry.text }} ────
+        <!-- Système — notification inline ⚙ -->
+        <div
+          v-else-if="entry.type === 'system'"
+          class="flex items-center gap-1.5 py-1"
+          style="color: var(--color-text-muted);"
+        >
+          <span style="font-size: 10px;">⚙</span>
+          <span class="font-mono text-[10px] tracking-wide">{{ entry.text }}</span>
         </div>
 
       </template>

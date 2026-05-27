@@ -108,12 +108,13 @@ RpgMaster/
 | `--color-text-dim` | `rgba(247,236,208,.32)` | Placeholders |
 | `--color-border` | `rgba(255,235,180,.07)` | Séparateurs discrets |
 | `--color-border-strong` | `rgba(255,235,180,.18)` | Inputs focus, boutons |
-| `--color-ember` | `#ff8247` | Accent CTA, joueur humain |
-| `--color-gold` | `#f0c764` | Titres forts, sélection, tour actif |
-| `--color-blood` | `#e84545` | Danger, ennemis, HP critiques |
-| `--color-arcane` | `#c090ff` | IA, sorts, magie |
-| `--color-teal` | `#4fd8c0` | Alliés, déplacement, succès |
-| `--color-green` | `#6fd96f` | HP pleins, zone sûre |
+| `--color-ember` | `#ff8247` | MJ, accents CTA, actions narratives |
+| `--color-gold` | `#f0c764` | Joueur humain (identité), sélection, décisions, tour actif |
+| `--color-blood` | `#e84545` | Danger, ennemis, attaques, HP critiques |
+| `--color-arcane` | `#c090ff` | Compagnon IA, sorts, magie |
+| `--color-teal` | `#4fd8c0` | PNJ, alliés, déplacement, succès |
+| `--color-green` | `#6fd96f` | HP pleins, jet réussi, zone sûre |
+| `--color-crit` | `#ffd700` | Jet critique (★) — or pur, distinct de gold |
 | `--grad-primary` | `linear-gradient(135deg, #ff8247, #f0c764)` | Bouton CTA, logo, barres |
 
 ### Typographie
@@ -158,7 +159,8 @@ RpgMaster/
 - [ ] Titres Cinzel uppercase avec letter-spacing
 - [ ] Récit Fraunces avec `text-wrap: pretty`
 - [ ] Stats/chiffres JetBrains Mono
-- [ ] Accents sémantiques : ember=joueur, arcane=IA, blood=danger, teal=allié/succès, gold=sélection
+- [ ] Accents sémantiques : ember=MJ/CTA, gold=joueur humain, arcane=IA compagnon, teal=PNJ/allié, blood=danger/attaque, crit=critique
+- [ ] Palette Récit complète → `docs/design-system-narrative.md`
 
 ## Strategie de tests
 

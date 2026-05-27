@@ -83,7 +83,7 @@ function onEntryLeave() {
   >
     <div class="ne-player-head">
       <div class="ne-player-who">
-        <span class="ne-player-marker">▸</span>
+        <span class="ne-player-marker">◉</span>
         <span>{{ entry.who }}</span>
       </div>
       <div v-if="refs.length" class="ne-refs">
@@ -103,10 +103,10 @@ function onEntryLeave() {
   <div
     v-else-if="entry.type === 'dialogue'"
     class="ne-dialogue"
-    :class="[entry.speakerKind === 'companion' ? 'tone-arcane' : 'tone-gold', { compact }]"
+    :class="[entry.speakerKind === 'companion' ? 'tone-arcane' : 'tone-teal', { compact }]"
   >
     <div class="ne-dialogue-who">
-      <span class="ne-dialogue-marker">▸</span>
+      <span class="ne-dialogue-marker">{{ entry.speakerKind === 'companion' ? '◈' : '❦' }}</span>
       <span>{{ entry.who }}</span>
     </div>
     <div class="ne-dialogue-text">« {{ entry.text }} »</div>
@@ -139,6 +139,12 @@ function onEntryLeave() {
     :entry="entry"
     @decide="(id: string) => emit('decide', id)"
   />
+
+  <!-- ─ system (notification inline) ─────────────────────── -->
+  <div v-else-if="entry.type === 'system'" class="ne-system" :class="{ compact }">
+    <span class="ne-system-icon">⚙</span>
+    <span class="ne-system-text">{{ entry.text }}</span>
+  </div>
 </template>
 
 <style scoped>
@@ -197,13 +203,13 @@ function onEntryLeave() {
 }
 
 /* ── player ─────────────────────────────────────────────────────────── */
-/* ember = joueur humain (cf. design system : arcane = IA, ember = joueur) */
+/* gold = joueur humain (cf. design system : ember = MJ, gold = joueur) */
 .ne-player {
   margin: 12px 0;
   padding: 6px 12px;
-  background: rgba(255, 130, 71, 0.04);
-  border: 1px solid rgba(255, 130, 71, 0.15);
-  border-left: 3px solid rgba(255, 130, 71, 0.45);
+  background: rgba(240, 199, 100, 0.04);
+  border: 1px solid rgba(240, 199, 100, 0.15);
+  border-left: 3px solid rgba(240, 199, 100, 0.45);
   border-radius: 6px;
 }
 
@@ -222,13 +228,13 @@ function onEntryLeave() {
   font-family: var(--font-display);
   font-size: 10px;
   font-weight: 700;
-  color: var(--color-ember);
+  color: var(--color-gold);
   letter-spacing: 0.5px;
   text-transform: uppercase;
 }
 
 .ne-player-marker {
-  color: var(--color-ember);
+  color: var(--color-gold);
   font-size: 9px;
 }
 
@@ -262,10 +268,10 @@ function onEntryLeave() {
   border-left-color: rgba(192, 144, 255, 0.6);
 }
 
-.ne-dialogue.tone-gold {
-  background: rgba(240, 199, 100, 0.05);
-  border-color: rgba(240, 199, 100, 0.20);
-  border-left-color: rgba(240, 199, 100, 0.5);
+.ne-dialogue.tone-teal {
+  background: rgba(79, 216, 192, 0.05);
+  border-color: rgba(79, 216, 192, 0.20);
+  border-left-color: rgba(79, 216, 192, 0.5);
 }
 
 .ne-dialogue-who {
@@ -281,7 +287,7 @@ function onEntryLeave() {
 }
 
 .ne-dialogue.tone-arcane .ne-dialogue-who { color: var(--color-arcane); }
-.ne-dialogue.tone-gold   .ne-dialogue-who { color: var(--color-gold); }
+.ne-dialogue.tone-teal   .ne-dialogue-who { color: var(--color-teal); }
 
 .ne-dialogue-marker { font-size: 10px; }
 
@@ -369,4 +375,28 @@ function onEntryLeave() {
 .ne-combat.compact { margin: 10px 0; padding: 6px 10px; }
 .ne-combat.compact .ne-combat-name { font-size: 10px; }
 .ne-combat.compact .ne-combat-detail { font-size: 9px; }
+
+/* ── system (notification inline) ────────────────────────────────────── */
+.ne-system {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0;
+  padding: 4px 0;
+}
+
+.ne-system-icon {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.ne-system-text {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-muted);
+  letter-spacing: 0.3px;
+}
+
+.ne-system.compact { margin: 6px 0; }
 </style>

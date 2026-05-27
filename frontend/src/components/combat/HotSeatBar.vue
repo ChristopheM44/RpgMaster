@@ -371,7 +371,7 @@ function onItemAction(item: Record<string, unknown>, actionType: 'use_item' | 'e
 }
 
 .hs-turn-label--active {
-  color: var(--color-ember);
+  color: var(--color-gold);
 }
 
 .hs-name {

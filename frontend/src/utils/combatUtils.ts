@@ -3,7 +3,7 @@ import type { CombatantState } from '../types'
 /**
  * Returns the semantic tone color token name for a combatant.
  * Mirrors the design spec colour coding:
- *   - Joueur humain (vous) → ember
+ *   - Joueur humain (vous) → gold
  *   - Allié contrôlé par IA     → arcane
  *   - Allié humain secondaire    → teal
  *   - Ennemi                     → blood
@@ -11,9 +11,9 @@ import type { CombatantState } from '../types'
 export function toneForCombatant(
   unit: CombatantState,
   myCharId: string | null | undefined,
-): 'ember' | 'arcane' | 'teal' | 'blood' {
+): 'gold' | 'arcane' | 'teal' | 'blood' {
   if (unit.kind !== 'pc') return 'blood'
-  if (unit.id === myCharId) return 'ember'
+  if (unit.id === myCharId) return 'gold'
   if (unit.is_ai || unit.is_ai_controlled) return 'arcane'
   return 'teal'
 }

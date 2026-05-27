@@ -30,12 +30,14 @@ function adapt(entry: BackendNarrativeEntry, idx: number): ExNarrativeEntry | nu
   }
 
   if (entry.type === 'system') {
-    return { id, type: 'divider', text: entry.text ?? '' }
+    // Inline system notifications (⚙ text-muted) — distinct des dividers de section (gold)
+    return { id, type: 'system', text: entry.text ?? '' }
   }
 
   if (entry.type === 'roll' && entry.roll) {
     const r = entry.roll
     const hit = r.success ?? (r.dc !== undefined && r.dc !== null ? r.total >= r.dc : r.total >= 10)
+    const critical = !!(r.critical)
     const what = r.label
       ? (r.dc !== undefined && r.dc !== null ? `${r.label} · DD ${r.dc}` : r.label)
       : r.dice_notation
@@ -44,8 +46,8 @@ function adapt(entry: BackendNarrativeEntry, idx: number): ExNarrativeEntry | nu
       type: 'roll',
       who: r.character_name ?? entry.speaker ?? '—',
       what,
-      rolls: [{ label: r.dice_notation, value: r.total, hit }],
-      result: hit ? 'Succès' : 'Échec',
+      rolls: [{ label: r.dice_notation, value: r.total, hit, critical }],
+      result: critical ? 'Critique !' : hit ? 'Succès' : 'Échec',
       detail: r.breakdown ?? undefined,
     }
   }

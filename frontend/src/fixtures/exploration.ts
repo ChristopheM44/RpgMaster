@@ -44,6 +44,7 @@ export interface ExRoll {
   label: string
   value: number
   hit: boolean
+  critical?: boolean
 }
 
 export interface ExDecisionOption {
@@ -66,6 +67,7 @@ export type ExNarrativeEntry =
       d20: number; attackRoll: number; targetAc: number
       hit: boolean; damage: number | null; critical?: boolean
     }
+  | { id: number; type: 'system'; text: string }
 
 export interface ExQuest {
   id: string
@@ -174,10 +176,20 @@ export const EX_NARRATIVE: ExNarrativeEntry[] = [
   { id: 5, type: 'player', who: 'Elara',
     text: "Plus loin, sous les arbres, je vois une lueur qui pulse. Quelque chose d'arcanique. Ça ne devrait pas être là.",
     refs: ['H4'] },
-  { id: 6, type: 'gm',
+  { id: 6, type: 'dialogue', who: 'Sildar',
+    text: "Trouvez Gundren… il était avec moi sur la piste.",
+    speakerKind: 'npc' },
+  { id: 7, type: 'dialogue', who: 'Elara',
+    text: "Je le connais. On va vous sortir de là, promis.",
+    speakerKind: 'companion' },
+  { id: 8, type: 'roll', who: 'Elara', what: 'Perception · DD 14',
+    rolls: [{ label: '1d20+4', value: 20, hit: true, critical: true }], result: 'Critique !',
+    detail: 'Elara détecte un battement de cœur dans les fourrés — des gobelins en embuscade.' },
+  { id: 9, type: 'gm',
     text: "Oaken s'approche du corps en armure de cuir et pose deux doigts sur sa gorge. Encore en vie, mais à peine. Sa main serre quelque chose — un petit médaillon en cuivre frappé d'une serre de loup.",
     refs: ['H2', 'oaken'] },
-  { id: 7, type: 'decision', who: 'Le groupe',
+  { id: 10, type: 'system', text: 'Initiative lancée. Krell commence.' },
+  { id: 11, type: 'decision', who: 'Le groupe',
     text: "Choisir une direction. La piste continue vers l'est ; le retour mène à Phandalin.",
     options: [
       { id: 'H6', label: "S'enfoncer davantage", icon: '↦', tone: 'gold' },

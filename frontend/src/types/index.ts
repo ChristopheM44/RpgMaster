@@ -642,6 +642,7 @@ export interface RollResultPayload {
   label?: string
   success?: boolean
   character_name?: string
+  critical?: boolean
 }
 
 export interface SocialOutcomePayload {

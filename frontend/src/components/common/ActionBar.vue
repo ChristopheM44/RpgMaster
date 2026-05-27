@@ -287,7 +287,7 @@ function buildAddressingPayload(text: string): Record<string, unknown> | undefin
       <span class="rpg-text-muted text-sm">
         Vous incarnez
         <strong class="rpg-text-main font-display">{{ charStore.myCharacter.name }}</strong>
-        <span v-if="isMyTurn && gameStore.isInCombat" class="rpg-text-ember"> — c'est à vous de jouer</span>
+        <span v-if="isMyTurn && gameStore.isInCombat" class="rpg-text-gold"> — c'est à vous de jouer</span>
         <span v-else-if="gameStore.isInCombat && activeCombatantName" class="italic"> — tour de {{ activeCombatantName }}</span>
       </span>
     </div>
