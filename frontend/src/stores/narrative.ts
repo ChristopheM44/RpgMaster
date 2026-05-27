@@ -1,15 +1,17 @@
 import { defineStore } from 'pinia'
 import { computed } from 'vue'
 import { useGameStore } from './game'
+import { useCharacterStore } from './character'
 import type { NarrativeEntry as BackendNarrativeEntry } from '../types'
 import type { ExNarrativeEntry } from '../fixtures/exploration'
 
 // Adapter backend → V2 récit
 // Backend NarrativeEntry types : narration | dialogue | roll | system | player | combat_action
-// V2 ExNarrativeEntry types    : divider  | gm       | player | roll | decision
+// V2 ExNarrativeEntry types    : divider  | gm       | player | roll | decision | system
 // `decision` n'existe pas (encore) côté backend — pas d'émission par cet adapter.
 
-function adapt(entry: BackendNarrativeEntry, idx: number): ExNarrativeEntry | null {
+/** IDs des personnages IA pour distinguer leurs actions de celles du joueur humain */
+function adapt(entry: BackendNarrativeEntry, idx: number, aiCharIds: Set<string>): ExNarrativeEntry | null {
   const id = idx + 1
 
   // ── combat_action → combat ──────────────────────────────────────────────────
@@ -53,6 +55,16 @@ function adapt(entry: BackendNarrativeEntry, idx: number): ExNarrativeEntry | nu
   }
 
   if (entry.type === 'player') {
+    // Compagnon IA (speaker_id dans la liste des IDs IA) → dialogue arcane, pas player gold
+    if (entry.speaker_id && aiCharIds.has(entry.speaker_id)) {
+      return {
+        id,
+        type: 'dialogue',
+        who: entry.speaker ?? '',
+        text: entry.text ?? '',
+        speakerKind: 'companion',
+      }
+    }
     return {
       id,
       type: 'player',
@@ -85,12 +97,25 @@ function adapt(entry: BackendNarrativeEntry, idx: number): ExNarrativeEntry | nu
     if (entry.entry_kind === 'system') {
       return { id, type: 'divider', text: entry.text ?? '' }
     }
-    if (entry.entry_kind === 'dialogue' && (entry.speaker_kind === 'human' || entry.speaker_kind === 'companion')) {
-      return {
-        id,
-        type: 'player',
-        who: entry.speaker ?? '',
-        text: entry.text ?? '',
+    if (entry.entry_kind === 'dialogue') {
+      if (entry.speaker_kind === 'companion') {
+        // Compagnon IA narré → dialogue arcane
+        return {
+          id,
+          type: 'dialogue',
+          who: entry.speaker ?? '',
+          text: entry.text ?? '',
+          speakerKind: 'companion',
+        }
+      }
+      if (entry.speaker_kind === 'human') {
+        // Joueur humain → player gold
+        return {
+          id,
+          type: 'player',
+          who: entry.speaker ?? '',
+          text: entry.text ?? '',
+        }
       }
     }
     // narration / action GM par défaut
@@ -102,12 +127,23 @@ function adapt(entry: BackendNarrativeEntry, idx: number): ExNarrativeEntry | nu
 
 export const useNarrativeStore = defineStore('narrative', () => {
   const gameStore = useGameStore()
+  const characterStore = useCharacterStore()
 
-  const entries = computed<ExNarrativeEntry[]>(() =>
-    gameStore.narrativeLog
-      .map((entry, idx) => adapt(entry, idx))
-      .filter((e): e is ExNarrativeEntry => e !== null),
+  /** IDs des personnages IA — mis à jour quand le roster de session change */
+  const aiCharIds = computed(() =>
+    new Set(
+      characterStore.sessionCharacters
+        .filter(c => c.is_ai)
+        .map(c => c.id),
+    ),
   )
+
+  const entries = computed<ExNarrativeEntry[]>(() => {
+    const ids = aiCharIds.value
+    return gameStore.narrativeLog
+      .map((entry, idx) => adapt(entry, idx, ids))
+      .filter((e): e is ExNarrativeEntry => e !== null)
+  })
 
   return { entries }
 })

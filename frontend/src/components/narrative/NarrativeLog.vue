@@ -3,6 +3,7 @@ import { computed, ref, watch, nextTick } from 'vue'
 import { useGameStore } from '../../stores/game'
 import { useNarrativeStore } from '../../stores/narrative'
 import { useSessionStore } from '../../stores/session'
+import { useCharacterStore } from '../../stores/character'
 import DiceRollResult from './DiceRollResult.vue'
 import NarrativeEntry from '../exploration/NarrativeEntry.vue'
 
@@ -17,7 +18,13 @@ withDefaults(defineProps<{
 const gameStore = useGameStore()
 const narrativeStore = useNarrativeStore()
 const sessionStore = useSessionStore()
+const characterStore = useCharacterStore()
 const logEl = ref<HTMLElement | null>(null)
+
+/** IDs des compagnons IA pour distinguer leurs actions du joueur humain */
+const aiCharIds = computed(() =>
+  new Set(characterStore.sessionCharacters.filter(c => c.is_ai).map(c => c.id)),
+)
 const hasThinkingEntry = computed(() =>
   gameStore.isProcessing || gameStore.isGmThinking || gameStore.isPlayerAiThinking,
 )
@@ -157,7 +164,22 @@ watch(
           </div>
         </div>
 
-        <!-- Action joueur — gold (joueur humain) ◉ -->
+        <!-- Action compagnon IA (type player mais speaker_id dans aiCharIds) → arcane ◈ -->
+        <div
+          v-else-if="entry.type === 'player' && entry.speaker_id && aiCharIds.has(entry.speaker_id)"
+          class="rpg-dialogue-entry flex gap-3 rounded-lg border-l-2 py-2.5 pl-4 pr-3 is-companion"
+          style="border-color: rgba(192,144,255,0.45); background: rgba(192,144,255,0.04);"
+        >
+          <div class="min-w-0 flex-1">
+            <span
+              v-if="entry.speaker"
+              class="mr-2 text-sm font-display font-semibold rpg-text-arcane"
+            >◈ {{ entry.speaker }} </span>
+            <span class="rpg-text-main text-sm leading-relaxed">{{ entry.text }}</span>
+          </div>
+        </div>
+
+        <!-- Action joueur humain — gold (joueur humain) ◉ -->
         <div
           v-else-if="entry.type === 'player'"
           class="rpg-player-entry flex gap-3 rounded-lg border-l-2 py-2 pl-4 pr-3"
