@@ -300,7 +300,6 @@ describe('Battlemap', () => {
       hero: {
         free: [{ col: 1, row: 0 }],
         with_dash: [],
-        blocked_by_zoc: [],
         paths: { '1,0': [{ col: 0, row: 0 }, { col: 1, row: 0 }] },
       },
     })

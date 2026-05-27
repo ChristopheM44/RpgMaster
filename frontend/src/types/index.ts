@@ -753,7 +753,6 @@ export interface GridDecoration {
 export interface ReachableCells {
   free: GridPosition[]
   with_dash: GridPosition[]
-  blocked_by_zoc: GridPosition[]
   paths?: Record<string, GridPosition[]>
 }
 

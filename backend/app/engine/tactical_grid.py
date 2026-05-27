@@ -139,7 +139,7 @@ def cells_reachable_with_pathfinding(
             elif cost_m <= dash_m:
                 with_dash.append(target.to_dict())
                 paths[f"{col},{row}"] = [step.to_dict() for step in path]
-    return {"free": free, "with_dash": with_dash, "blocked_by_zoc": [], "paths": paths}
+    return {"free": free, "with_dash": with_dash, "paths": paths}
 
 
 def initialize_positions(

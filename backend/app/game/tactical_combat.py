@@ -807,7 +807,6 @@ def calculate_reachable_cells(
     return {
         "free": free,
         "with_dash": with_dash,
-        "blocked_by_zoc": [],
         "paths": paths,
     }
 
