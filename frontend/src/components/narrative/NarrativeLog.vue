@@ -119,7 +119,26 @@ watch(
           >{{ entry.text }}</p>
         </div>
 
-        <!-- Dialogue compagnon / PNJ -->
+        <!-- Dialogue joueur humain parlant via type dialogue — gold ◉ -->
+        <div
+          v-else-if="entry.type === 'dialogue' && entry.speaker_kind === 'human'"
+          class="rpg-player-entry flex gap-3 rounded-lg border-l-2 py-2 pl-4 pr-3"
+          style="border-color: rgba(240,199,100,0.35); background: rgba(240,199,100,0.03);"
+        >
+          <div class="min-w-0 flex-1">
+            <span
+              v-if="entry.speaker"
+              class="mr-2 text-[10px] font-display font-bold tracking-wide uppercase"
+              style="color: var(--color-gold);"
+            >◉ {{ entry.speaker }} </span>
+            <span
+              class="text-[12.5px] font-serif italic"
+              style="color: var(--color-text-muted);"
+            >« {{ entry.text }} »</span>
+          </div>
+        </div>
+
+        <!-- Dialogue compagnon IA / PNJ -->
         <div
           v-else-if="entry.type === 'dialogue'"
           class="rpg-dialogue-entry flex gap-3 rounded-lg border-l-2 py-2.5 pl-4 pr-3"

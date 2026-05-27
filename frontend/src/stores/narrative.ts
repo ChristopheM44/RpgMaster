@@ -63,6 +63,15 @@ function adapt(entry: BackendNarrativeEntry, idx: number): ExNarrativeEntry | nu
 
   // ── dialogue → type dédié avec speakerKind ──────────────────────────────────
   if (entry.type === 'dialogue') {
+    // Un joueur humain parlant via dialogue → player (gold), pas NPC (teal)
+    if (entry.speaker_kind === 'human') {
+      return {
+        id,
+        type: 'player',
+        who: entry.speaker ?? '',
+        text: entry.text ?? '',
+      }
+    }
     return {
       id,
       type: 'dialogue',
