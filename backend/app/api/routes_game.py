@@ -1345,105 +1345,109 @@ async def start_game(
     db: AsyncSession = Depends(get_db),
 ):
     """Start a game session — transition to EXPLORATION and set up participants."""
-    try:
-        active = await session_manager.open_session(session_id, db)
-    except KeyError:
-        raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found.")
+    async with session_manager.session_lock(session_id):
+        try:
+            active = await session_manager.open_session(session_id, db)
+        except KeyError:
+            raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found.")
 
-    # Already past character creation — idempotent
-    if active.phase not in (SessionStatus.LOBBY, SessionStatus.CHARACTER_CREATION):
-        return {
-            "status": "already_started",
-            "phase": active.phase.value,
-            "session_id": session_id,
+        # Already past character creation — idempotent
+        if active.phase not in (SessionStatus.LOBBY, SessionStatus.CHARACTER_CREATION):
+            return {
+                "status": "already_started",
+                "phase": active.phase.value,
+                "session_id": session_id,
+            }
+
+        # Load characters for this session
+        result = await db.execute(
+            select(Character).where(Character.session_id == session_id)
+        )
+        characters = result.scalars().all()
+
+        if not characters:
+            raise HTTPException(
+                status_code=400,
+                detail="Aucun personnage dans cette session. Créez un personnage d'abord.",
+            )
+
+        # Positionner le flag d'ouverture de narration IMMÉDIATEMENT sous le verrou, avant le changement de phase
+        active.state_data[_OPENING_NARRATION_IN_PROGRESS] = True
+
+        # Force-transition to EXPLORATION (bypasses strict state-machine validation)
+        active.phase = SessionStatus.EXPLORATION
+
+        # Set up TurnManager for exploration (round-robin)
+        participants = [
+            CombatantInfo(
+                combatant_id=c.id,
+                name=c.name,
+                dex_score=int(c.ability_scores.get("dex", 10)),
+                is_player=True,
+                is_ai_controlled=c.is_ai,
+            )
+            for c in characters
+        ]
+        active.turn_manager.setup_exploration(participants)
+
+        # Store character snapshots in state_data for later combat use
+        active.state_data["characters"] = {
+            c.id: character_snapshot(c)
+            for c in characters
         }
 
-    # Load characters for this session
-    result = await db.execute(
-        select(Character).where(Character.session_id == session_id)
-    )
-    characters = result.scalars().all()
-
-    if not characters:
-        raise HTTPException(
-            status_code=400,
-            detail="Aucun personnage dans cette session. Créez un personnage d'abord.",
+        # Seed world-state slices (idempotent — setdefault preserves existing saves)
+        active.state_data.setdefault("adventure_journal", {
+            "location_region": None,
+            "location_place": None,
+            "location_venue": None,
+            "time_of_day": "morning",
+            "day_number": 1,
+            "calendar_date": None,
+            "weather": None,
+        })
+        active.state_data.setdefault("quests", [])
+        active.state_data.setdefault("chronicle", [])
+        active.state_data.setdefault(
+            "world_maps",
+            {"region_map": None, "city_maps": {}, "active_city_id": None},
         )
 
-    # Force-transition to EXPLORATION (bypasses strict state-machine validation)
-    active.phase = SessionStatus.EXPLORATION
+        from app.services import campaign_dossier_service
 
-    # Set up TurnManager for exploration (round-robin)
-    participants = [
-        CombatantInfo(
-            combatant_id=c.id,
-            name=c.name,
-            dex_score=int(c.ability_scores.get("dex", 10)),
-            is_player=True,
-            is_ai_controlled=c.is_ai,
+        campaign_context = await campaign_dossier_service.compile_campaign_context_for_session(
+            session_id,
+            db,
         )
-        for c in characters
-    ]
-    active.turn_manager.setup_exploration(participants)
+        if campaign_context is not None:
+            await _migrate_missing_opening_scene(session_id, campaign_context, db)
+            active.state_data["campaign_context"] = campaign_context
+        else:
+            active.state_data.pop("campaign_context", None)
 
-    # Store character snapshots in state_data for later combat use
-    active.state_data["characters"] = {
-        c.id: character_snapshot(c)
-        for c in characters
-    }
+        # Store adventure context for the GM agent
+        if body.adventure_script:
+            active.state_data["adventure_script"] = body.adventure_script
+        if body.auto_generate:
+            active.state_data["auto_generate_adventure"] = True
+        active.mark_dirty()
+        await session_manager.save_state(session_id, db)
 
-    # Seed world-state slices (idempotent — setdefault preserves existing saves)
-    active.state_data.setdefault("adventure_journal", {
-        "location_region": None,
-        "location_place": None,
-        "location_venue": None,
-        "time_of_day": "morning",
-        "day_number": 1,
-        "calendar_date": None,
-        "weather": None,
-    })
-    active.state_data.setdefault("quests", [])
-    active.state_data.setdefault("chronicle", [])
-    active.state_data.setdefault(
-        "world_maps",
-        {"region_map": None, "city_maps": {}, "active_city_id": None},
-    )
+        # Notify any already-connected WebSocket clients
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.PHASE_CHANGE,
+            {"phase": SessionStatus.EXPLORATION.value},
+            source="routes_game",
+        )
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.SESSION_STATE,
+            await _build_session_state_payload_with_maps(session_id, db),
+            source="routes_game",
+        )
 
-    from app.services import campaign_dossier_service
-
-    campaign_context = await campaign_dossier_service.compile_campaign_context_for_session(
-        session_id,
-        db,
-    )
-    if campaign_context is not None:
-        await _migrate_missing_opening_scene(session_id, campaign_context, db)
-        active.state_data["campaign_context"] = campaign_context
-    else:
-        active.state_data.pop("campaign_context", None)
-
-    # Store adventure context for the GM agent
-    if body.adventure_script:
-        active.state_data["adventure_script"] = body.adventure_script
-    if body.auto_generate:
-        active.state_data["auto_generate_adventure"] = True
-    active.state_data[_OPENING_NARRATION_IN_PROGRESS] = True
-    active.mark_dirty()
-    await session_manager.save_state(session_id, db)
-
-    # Notify any already-connected WebSocket clients
-    await event_bus.publish_to_session(
-        session_id,
-        EventType.PHASE_CHANGE,
-        {"phase": SessionStatus.EXPLORATION.value},
-        source="routes_game",
-    )
-    await event_bus.publish_to_session(
-        session_id,
-        EventType.SESSION_STATE,
-        await _build_session_state_payload_with_maps(session_id, db),
-        source="routes_game",
-    )
-
+    # Le verrou est libéré pour ne pas bloquer les pings WebSocket pendant l'appel au LLM (lent)
     try:
         if body.adventure_script:
             await _send_free_opening_narration(
@@ -1471,9 +1475,11 @@ async def start_game(
                 tone=body.tone,
             )
     except Exception:
-        active.state_data.pop(_OPENING_NARRATION_IN_PROGRESS, None)
-        active.mark_dirty()
-        await session_manager.save_state(session_id, db)
+        # En cas d'erreur de génération, on nettoie le flag sous verrou de session
+        async with session_manager.session_lock(session_id):
+            active.state_data.pop(_OPENING_NARRATION_IN_PROGRESS, None)
+            active.mark_dirty()
+            await session_manager.save_state(session_id, db)
         raise
 
     return {
