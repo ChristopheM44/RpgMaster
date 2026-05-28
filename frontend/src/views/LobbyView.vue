@@ -56,11 +56,8 @@ const sessionToDeleteName = computed(
 async function handleCreate() {
   const name = newSessionName.value.trim()
   if (!name) return
-  const session = await sessionStore.createSession(name)
-  if (session) {
-    newSessionName.value = ''
-    router.push({ name: 'character-setup', params: { id: session.id } })
-  }
+  newSessionName.value = ''
+  router.push({ name: 'campaigns', query: { forge: '1', name } })
 }
 
 function handleJoin(session: Session) {

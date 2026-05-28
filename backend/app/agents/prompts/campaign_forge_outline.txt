@@ -13,8 +13,16 @@ NOTES STRUCTURÉES DES SOURCES PRIVÉES :
 {{ source_notes }}
 
 Contraintes :
-- Conserve TOUS les chapitres, actes ou grandes sections détectés dans les sources. Ne plafonne jamais le nombre de chapitres.
-- Si la source décrit 18 chapitres, `visible_chapters` contient 18 entrées.
+- Si le brief fourni (`brief.pitch` ou `brief.description`) est vide ou très succinct, mais que des notes de sources privées (`source_notes`) sont fournies, base-toi exclusivement sur la synthèse créative et l'analyse de ces sources pour en extraire le titre public, le pitch public sans spoiler, l'accroche (hook), les tonalités et tous les chapitres visibles.
+- Si la structure narrative demandée est 'adaptive' (`options.narrative_structure == 'adaptive'`), tu ne dois PAS te limiter à 5 chapitres. Analyse l'ensemble des sources privées importées et génère autant de chapitres que nécessaires pour couvrir fidèlement toute l'étendue de l'intrigue (génère 6, 7, 8, 10 chapitres ou plus s'il y en a beaucoup dans les sources). Conserve tous les chapitres, actes ou grandes sections détectés dans les sources sans aucun plafonnement.
+- Si la structure narrative demandée est en 5 actes (`options.narrative_structure == 'epic_5_acts'`), ignore le découpage libre des sources et génère EXACTEMENT 5 chapitres dans `visible_chapters` (ids `chapter_1` à `chapter_5`) respectant rigoureusement la progression dramatique suivante :
+  1. **Introduction & Appel à l'aventure** (chapter_1) : Pose le décor, l'ambiance, et présente l'élément déclencheur qui pousse à agir.
+  2. **Le Nœud de l'intrigue** (chapter_2) : Développe des rebondissements, des choix moraux, des indices à décoder et des PNJ mémorables avec leurs propres motivations.
+  3. **La Montée en tension** (chapter_3) : Crée des complications (fausses pistes, urgence). Le temps presse ou les enjeux augmentent.
+  4. **Le Climax** (chapter_4) : Une confrontation finale intense (physique, psychologique ou stratégique) où les choix précédents détermineront l'issue.
+  5. **Résolution & Épilogue** (chapter_5) : Conséquences des actes, conclusion de l'histoire et ouverture vers l'avenir.
+- Si `options.options_5_acts` est fourni, utilise ses valeurs (Ambiance/Univers, Biome, Climat, Ton, Inspirations libres) de manière riche et créative pour façonner l'intrigue.
+- Les titres publics de chapitres doivent être créatifs et thématiques en français (ex: 'L'Ombre sur la Forge'), sans mentionner explicitement 'Introduction', 'Nœud de l'intrigue' ou 'Acte' dans le titre.
 - Les titres et résumés publics ne doivent pas révéler de secrets, twists, plans d'antagonistes ou contenu privé.
 - Chaque chapitre doit avoir un `id` stable `chapter_1`, `chapter_2`, etc. dans l'ordre de jeu.
 - Le premier chapitre est `active`, tous les suivants sont `planned`, sauf information jouée explicite.

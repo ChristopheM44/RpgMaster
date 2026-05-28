@@ -1288,6 +1288,10 @@ h1, h2, h3, h4, h5, h6 {
   border-color: var(--color-ember);
   box-shadow: 0 0 0 3px rgba(255, 130, 71, 0.15);
 }
+.rpg-input option {
+  background-color: var(--color-bg-elev, #1c1819);
+  color: var(--color-parchment, #f7ecd0);
+}
 
 /* Chip de statut */
 .rpg-chip {
