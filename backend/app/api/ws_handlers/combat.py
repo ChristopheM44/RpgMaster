@@ -1,27 +1,32 @@
 """Combat orchestration handlers and helpers used by the game WebSocket facade."""
 from __future__ import annotations
 
-import asyncio
 import logging
 import random
 import re
 from copy import deepcopy
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.ws_handlers.ai_control import handle_ai_turns as handle_ai_combat_turns
+from app.api.ws_handlers.encounter_intro import (
+    is_async_callable,
+    is_unhelpful_intro,
+    pause_at_encounter_start,
+    should_pause_for_encounter_intro,
+)
+from app.api.ws_handlers.session import sync_ai_control_from_db
 from app.api.ws_payloads import (
     build_combat_start_payload,
     build_session_state_payload,
-    character_snapshot,
     compute_ac_from_equipment,
     format_monster_actions,
     monster_color,
     monster_token_for_combatant,
 )
 from app.api.ws_schemas import PlayerActionMessage
-from app.db.database import async_session
 from app.engine.loot import loot_for_encounter
 from app.engine.tactical_grid import GridPosition, initialize_positions
 from app.engine.xp import level_from_xp
@@ -30,33 +35,25 @@ from app.game.combat_stats import build_combatant_combat_stats
 from app.game.constants import INACTIVE_STATUSES
 from app.game.event_bus import EventType, event_bus
 from app.game.runtime import session_manager
-from app.game.state_sync import sync_character_state
-from app.game.tactical_combat import apply_tactical_move, calculate_reachable_cells, grid_position_for
+from app.game.social_resolution import (
+    _is_combat_social_text as is_combat_social_text,
+)
+from app.game.tactical_combat import (
+    apply_tactical_move,
+    calculate_reachable_cells,
+    grid_position_for,
+)
 from app.game.turn_manager import CombatantInfo
 from app.models.character import Character
 from app.models.session import SessionStatus
 from app.services.encounter_service import encounter_service
-from app.services.local_map_service import element_grid_cells
 from app.services.level_up_service import level_up_service
+from app.services.local_map_service import element_grid_cells
 from app.services.message_service import (
     load_recent_messages,
     persist_narration,
     persist_roll_result,
 )
-from app.game.social_resolution import (
-    _is_combat_social_text as is_combat_social_text,
-    _SOCIAL_COMBAT_MARKERS as SOCIAL_COMBAT_MARKERS,
-)
-from app.api.ws_handlers.ai_control import handle_ai_turns as handle_ai_combat_turns
-from app.api.ws_handlers.encounter_intro import (
-    execute_intro_scene_layout,
-    generate_encounter_intro,
-    is_async_callable,
-    is_unhelpful_intro,
-    pause_at_encounter_start,
-    should_pause_for_encounter_intro,
-)
-from app.api.ws_handlers.session import sync_ai_control_from_db
 
 logger = logging.getLogger(__name__)
 action_resolver = ActionResolver()
@@ -1041,7 +1038,7 @@ async def handle_start_combat(
                 built = candidate
             else:
                 logger.warning(
-                    "handle_start_combat: aucun monster_id valide dans pending_encounter %s, fallback.",
+                    "handle_start_combat: pending_encounter %s sans monster_id valide, fallback.",
                     monster_ids,
                 )
 
@@ -1471,7 +1468,7 @@ async def handle_flee(
 
     if not on_exit:
         logger.warning(
-            "handle_flee: Le personnage '%s' a tenté de fuir mais n'est pas sur une case de sortie (pos=%s).",
+            "handle_flee: '%s' a tenté de fuir mais n'est pas sur une case de sortie (pos=%s).",
             name,
             pos,
         )
@@ -1765,8 +1762,8 @@ async def handle_toggle_ai_control(
         if active.phase == SessionStatus.COMBAT:
             await handle_ai_turns(session_id, active, db)
         else:
-            from app.game.ai_player_manager import AIPlayerManager
             from app.api import ws_game
+            from app.game.ai_player_manager import AIPlayerManager
 
             try:
                 await AIPlayerManager().run_exploration_reactions(
@@ -1802,8 +1799,8 @@ async def handle_trigger_ai_reactions(
     if not active.ai_players:
         return
 
-    from app.game.ai_player_manager import AIPlayerManager
     from app.api import ws_game
+    from app.game.ai_player_manager import AIPlayerManager
 
     await AIPlayerManager().run_exploration_reactions(
         session_id,

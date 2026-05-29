@@ -47,7 +47,10 @@ async def persist_narration(
         db.add(msg)
         await db.commit()
     except Exception as exc:
-        logger.warning("persist_narration : échec persistance message session=%s : %s", session_id, exc)
+        logger.warning(
+            "persist_narration : échec persistance message session=%s : %s",
+            session_id, exc,
+        )
 
 
 async def persist_roll_result(
