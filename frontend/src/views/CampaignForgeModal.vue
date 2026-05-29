@@ -33,6 +33,14 @@ const OPTIONS_BIOME = ['Marais / Marécages', 'Ruines oubliées', 'Souterrains /
 const OPTIONS_CLIMAT = ['Brumeux / Humide', 'Glacial / Neigeux', 'Caniculaire / Aride', 'Tempétueux / Orageux', 'Pluvieux / Crachin', 'Ensoleillé / Printanier', 'Nocturne éternel']
 const OPTIONS_TON = ['Tragique', 'Épique / Héroïque', 'Mystérieux / Enquête', 'Survie / Cruel', 'Comique / Léger', 'Sombre / Mélancolique', 'Horrifique / Angoissant']
 
+// Le format (scope) pilote le découpage et dérive la durée affichée.
+// La durée est garantie côté backend ; ces libellés sont le miroir UI.
+const SCOPE_PRESETS: Record<string, { duration: string; chapters: string }> = {
+  'one-shot': { duration: '1 session', chapters: '1 chapitre dense' },
+  'mini-chronique': { duration: '3-5 sessions', chapters: '3-4 chapitres' },
+  'chronique longue': { duration: '6-10 sessions', chapters: '5+ chapitres' },
+}
+
 const IMPORT_KINDS: Array<{ id: ImportKind; label: string }> = [
   { id: 'text', label: 'Texte' },
   { id: 'url', label: 'URL' },
@@ -45,7 +53,6 @@ const forgeStep = ref(1)
 const commonBrief = reactive({
   name: '',
   tones: [] as string[],
-  duration: '3-5',
   startingLevel: 1,
   scope: 'mini-chronique',
   combat: 'hybride léger',
@@ -78,11 +85,12 @@ const validationTab = ref<'contract' | 'secrets'>('contract')
 const narrativeStructure = computed(() => (mode.value === 'scratch' ? 'epic_5_acts' : 'adaptive'))
 const totalSteps = computed(() => (mode.value === 'scratch' ? 6 : 5))
 
+const scopePreset = computed(() => SCOPE_PRESETS[commonBrief.scope] ?? null)
 const durationDisplay = computed(() => {
-  const trimmed = commonBrief.duration.trim()
-  if (!trimmed) return ''
-  if (/session/i.test(trimmed)) return trimmed
-  return `${trimmed} sessions`
+  // En import/adaptive, la durée est calculée côté backend depuis le nombre
+  // réel de chapitres obtenus — le modal ne peut pas l'estimer avant la forge.
+  if (mode.value === 'import') return ''
+  return scopePreset.value?.duration ?? '3-5 sessions'
 })
 
 const isForgeStep = computed(
@@ -487,10 +495,6 @@ function handleFooterBack() {
                 </button>
               </div>
             </div>
-            <label class="block">
-              <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Durée estimée <span class="text-text-dim normal-case tracking-normal">(en sessions)</span></span>
-              <input v-model="commonBrief.duration" class="rpg-input w-full" placeholder="3-5" />
-            </label>
           </div>
 
           <!-- Step 3 scratch — Cadre esthétique 5 Actes -->
@@ -659,19 +663,20 @@ function handleFooterBack() {
             <div class="grid gap-4 md:grid-cols-2">
               <label v-if="mode === 'import'" class="block">
                 <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Durée estimée <span class="text-text-dim normal-case tracking-normal">(en sessions)</span></span>
-                <input v-model="commonBrief.duration" class="rpg-input w-full" placeholder="3-5" />
+                <p class="rounded-lg border border-border bg-surface px-3 py-2 font-serif text-sm italic text-text-muted">Calculée d'après le nombre de chapitres détectés dans les sources.</p>
               </label>
               <label class="block">
                 <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Niveau initial des PJ</span>
                 <input v-model.number="commonBrief.startingLevel" min="1" max="20" type="number" class="rpg-input w-full" />
               </label>
-              <label class="block">
+              <label v-if="mode === 'scratch'" class="block">
                 <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Format</span>
                 <select v-model="commonBrief.scope" class="rpg-input w-full">
                   <option>one-shot</option>
                   <option>mini-chronique</option>
                   <option>chronique longue</option>
                 </select>
+                <span v-if="scopePreset" class="mt-1.5 block font-mono text-[10px] text-gold">{{ scopePreset.chapters }} · {{ scopePreset.duration }}</span>
               </label>
               <label class="block">
                 <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Dominance de jeu</span>
@@ -699,7 +704,8 @@ function handleFooterBack() {
                 <div><dt class="inline text-text-muted">Mode :</dt> <dd class="inline">{{ mode === 'scratch' ? 'Création Assistée (5 Actes)' : 'Conversion de Lore (Adaptive)' }}</dd></div>
                 <div><dt class="inline text-text-muted">Nom :</dt> <dd class="inline">{{ commonBrief.name.trim() || (mode === 'import' ? '— déduit des sources —' : '—') }}</dd></div>
                 <div><dt class="inline text-text-muted">Niveau :</dt> <dd class="inline">{{ commonBrief.startingLevel }}</dd></div>
-                <div><dt class="inline text-text-muted">Format :</dt> <dd class="inline">{{ commonBrief.scope }}</dd></div>
+                <div v-if="mode === 'scratch'"><dt class="inline text-text-muted">Format :</dt> <dd class="inline">{{ commonBrief.scope }}<span v-if="scopePreset" class="text-text-muted"> — {{ scopePreset.chapters }}</span></dd></div>
+                <div v-else><dt class="inline text-text-muted">Structure :</dt> <dd class="inline">adaptée aux sources</dd></div>
                 <div><dt class="inline text-text-muted">Dominance :</dt> <dd class="inline">{{ commonBrief.combat }}</dd></div>
                 <div v-if="mode === 'scratch'"><dt class="inline text-text-muted">Durée :</dt> <dd class="inline">{{ durationDisplay || '—' }}</dd></div>
                 <div v-if="mode === 'import'"><dt class="inline text-text-muted">Sources :</dt> <dd class="inline">{{ sourceCount }}</dd></div>

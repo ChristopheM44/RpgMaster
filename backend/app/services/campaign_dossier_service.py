@@ -196,6 +196,7 @@ async def forge_draft(
         generated.get("player_contract", {}),
         campaign,
         brief=brief,
+        options=options,
     )
     gm_dossier = sanitize_gm_dossier(
         generated.get("gm_dossier", {}),
@@ -924,6 +925,7 @@ async def _run_forge_job(
             outline.get("player_contract", {}),
             campaign,
             brief=brief,
+            options=options,
         )
         visible_chapters = contract.get("visible_chapters", [])
         if not visible_chapters:
@@ -1314,6 +1316,7 @@ def sanitize_player_contract(
     data: dict[str, Any],
     campaign: Campaign,
     brief: dict[str, Any],
+    options: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     title = _text(
         data.get("title") or brief.get("title") or brief.get("name") or campaign.name,
@@ -1328,9 +1331,9 @@ def sanitize_player_contract(
         700,
     )
     tones = _string_list(data.get("tones") or brief.get("tones") or brief.get("tonalities"), 5)
-    duration = _text(data.get("duration") or brief.get("duration") or "3-5 sessions", 80)
     hook = _text(data.get("hook") or brief.get("hook") or pitch, 450)
     chapters = _sanitize_visible_chapters(data.get("visible_chapters"), title)
+    duration = _resolve_duration(data, brief, options, chapter_count=len(chapters))
     objectives = _string_list(data.get("known_objectives") or brief.get("known_objectives"), 8)
     if not objectives:
         objectives = ["Découvrir ce qui menace la région."]
@@ -1445,6 +1448,64 @@ def _starting_level_from_options(options: dict[str, Any], fallback: int = 1) -> 
         return max(1, min(20, int(fallback or 1)))
 
 
+# Durée déterministe dérivée du format (scope) en mode scratch / 5 actes.
+_SCOPE_DURATION: dict[str, str] = {
+    "one-shot": "1 session",
+    "mini-chronique": "3-5 sessions",
+    "chronique longue": "6-10 sessions",
+}
+
+
+def _duration_from_chapter_count(count: int) -> str:
+    """Estimation de durée à partir du nombre de chapitres (chemin import/adaptive)."""
+    if count <= 1:
+        return "1 session"
+    if count <= 2:
+        return "2-3 sessions"
+    if count <= 3:
+        return "3-5 sessions"
+    if count <= 5:
+        return "5-8 sessions"
+    if count <= 8:
+        return "8-12 sessions"
+    return "12+ sessions"
+
+
+def _resolve_duration(
+    data: dict[str, Any],
+    brief: dict[str, Any],
+    options: Optional[dict[str, Any]],
+    chapter_count: int,
+) -> str:
+    """Durée du contrat joueur.
+
+    - scratch (``narrative_structure == 'epic_5_acts'``) : le ``scope`` dérive la
+      durée de façon déterministe (le LLM ne décide pas).
+    - import (``narrative_structure == 'adaptive'``) : durée estimée depuis le
+      nombre réel de chapitres obtenus (fidélité source préservée).
+    - sinon (re-sanitisation d'un contrat existant, options absentes) :
+      comportement historique, la durée stockée est préservée.
+    """
+    options = options or {}
+    structure = str(options.get("narrative_structure") or "").strip().lower()
+    scope = str(options.get("scope") or "").strip().lower()
+    if structure == "epic_5_acts" and scope in _SCOPE_DURATION:
+        return _SCOPE_DURATION[scope]
+    if structure == "adaptive" and chapter_count > 0:
+        return _duration_from_chapter_count(chapter_count)
+    return _text(data.get("duration") or brief.get("duration") or "3-5 sessions", 80)
+
+
+def _fallback_chapter_count(options: Optional[dict[str, Any]]) -> int:
+    """Nombre de chapitres du dossier de secours selon le format demandé."""
+    scope = str((options or {}).get("scope") or "").strip().lower()
+    if scope == "one-shot":
+        return 1
+    if scope == "chronique longue":
+        return 5
+    return 3
+
+
 async def _session_characters(session_id: str, db: AsyncSession) -> list[Character]:
     result = await db.execute(select(Character).where(Character.session_id == session_id))
     return list(result.scalars().all())
@@ -1486,37 +1547,30 @@ def _fallback_dossier(
     tones = _string_list(brief.get("tones") or brief.get("tonalities") or options.get("tones"), 5)
     if not tones:
         tones = ["Mystère", "Exploration"]
-    duration = _text(brief.get("duration") or options.get("duration") or "3-5 sessions", 80)
     public_hook = _text(brief.get("hook") or pitch, 450)
     if sources:
         first = sources[0]
         public_hook = _text(first.get("title") or public_hook, 450)
+    fallback_chapter_titles = [
+        ("L'appel de l'aventure", public_hook),
+        ("La piste s'épaissit", "Les premières réponses ouvrent plusieurs chemins."),
+        ("La montée des périls", "Les complications s'accumulent et le temps presse."),
+        ("Le choix décisif", "La confrontation majeure se profile."),
+        ("Résolution", "La campagne se conclura selon les décisions du groupe."),
+    ]
+    chapter_count = _fallback_chapter_count(options)
     chapters = [
         {
-            "id": "chapter_1",
-            "num": "I",
-            "title": "L'appel de l'aventure",
-            "state": "active",
+            "id": f"chapter_{i + 1}",
+            "num": _roman(i + 1),
+            "title": title,
+            "state": "active" if i == 0 else "planned",
             "sessions": 0,
-            "summary": public_hook,
-        },
-        {
-            "id": "chapter_2",
-            "num": "II",
-            "title": "La piste s'épaissit",
-            "state": "planned",
-            "sessions": 0,
-            "summary": "Les premières réponses ouvrent plusieurs chemins.",
-        },
-        {
-            "id": "chapter_3",
-            "num": "III",
-            "title": "Le choix décisif",
-            "state": "planned",
-            "sessions": 0,
-            "summary": "La campagne se conclura selon les décisions du groupe.",
-        },
+            "summary": summary,
+        }
+        for i, (title, summary) in enumerate(fallback_chapter_titles[:chapter_count])
     ]
+    duration = _resolve_duration({}, brief, options, chapter_count=len(chapters))
     return {
         "player_contract": {
             "title": title,

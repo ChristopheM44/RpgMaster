@@ -577,6 +577,57 @@ async def test_forge_job_preserves_all_detected_chapters(async_client):
     assert private_ids == public_ids
 
 
+def test_resolve_duration_scratch_scope_is_authoritative():
+    svc = campaign_dossier_service
+    base = {"narrative_structure": "epic_5_acts"}
+    # En scratch / 5 actes, le scope dérive la durée et écrase la valeur du LLM.
+    assert svc._resolve_duration({"duration": "9 sessions"}, {}, {**base, "scope": "one-shot"}, 1) == "1 session"
+    assert svc._resolve_duration({}, {}, {**base, "scope": "mini-chronique"}, 3) == "3-5 sessions"
+    assert svc._resolve_duration({}, {}, {**base, "scope": "chronique longue"}, 5) == "6-10 sessions"
+
+
+def test_resolve_duration_import_derives_from_chapter_count():
+    svc = campaign_dossier_service
+    options = {"narrative_structure": "adaptive", "scope": "one-shot"}
+    # En import / adaptive, le scope est ignoré : la durée suit le nombre de chapitres.
+    assert svc._resolve_duration({}, {}, options, 8) == svc._duration_from_chapter_count(8)
+    assert svc._resolve_duration({}, {}, options, 8) == "8-12 sessions"
+
+
+def test_resolve_duration_preserves_existing_when_no_options():
+    svc = campaign_dossier_service
+    # Chemin de re-sanitisation (10 appelants avec options=None) : durée stockée préservée.
+    assert svc._resolve_duration({"duration": "4 sessions"}, {}, None, 3) == "4 sessions"
+    # Scope inconnu en 5 actes → repli sur le défaut, pas de crash.
+    unknown = {"narrative_structure": "epic_5_acts", "scope": "saga"}
+    assert svc._resolve_duration({}, {}, unknown, 2) == "3-5 sessions"
+
+
+@pytest.mark.asyncio
+async def test_forge_job_one_shot_scope_yields_single_chapter_and_session(async_client):
+    campaign = await _create_campaign(async_client)
+
+    started = await async_client.post(
+        f"/api/campaigns/{campaign['id']}/forge-draft/jobs",
+        json={
+            "brief": {"title": "Le Phare englouti"},
+            "options": {
+                "scope": "one-shot",
+                "narrative_structure": "epic_5_acts",
+                "chapter_count": 1,
+            },
+        },
+    )
+
+    assert started.status_code == 200
+    job = await _poll_forge_job(async_client, campaign["id"], started.json()["job_id"])
+    assert job["status"] == "completed"
+    contract = job["player_contract"]
+    # scope=one-shot dérive la durée (override du "1 chapitres" renvoyé par l'agent).
+    assert contract["duration"] == "1 session"
+    assert len(contract["visible_chapters"]) == 1
+
+
 @pytest.mark.asyncio
 async def test_forge_job_records_phase_retries(async_client, monkeypatch):
     monkeypatch.setattr(campaign_dossier_service, "FORGE_PHASE_RETRY_BASE_DELAY", 0.0)

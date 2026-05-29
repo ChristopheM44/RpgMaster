@@ -15,12 +15,17 @@ NOTES STRUCTURÉES DES SOURCES PRIVÉES :
 Contraintes :
 - Si le brief fourni (`brief.pitch` ou `brief.description`) est vide ou très succinct, mais que des notes de sources privées (`source_notes`) sont fournies, base-toi exclusivement sur la synthèse créative et l'analyse de ces sources pour en extraire le titre public, le pitch public sans spoiler, l'accroche (hook), les tonalités et tous les chapitres visibles.
 - Si la structure narrative demandée est 'adaptive' (`options.narrative_structure == 'adaptive'`), tu ne dois PAS te limiter à 5 chapitres. Analyse l'ensemble des sources privées importées et génère autant de chapitres que nécessaires pour couvrir fidèlement toute l'étendue de l'intrigue (génère 6, 7, 8, 10 chapitres ou plus s'il y en a beaucoup dans les sources). Conserve tous les chapitres, actes ou grandes sections détectés dans les sources sans aucun plafonnement.
-- Si la structure narrative demandée est en 5 actes (`options.narrative_structure == 'epic_5_acts'`), ignore le découpage libre des sources et génère EXACTEMENT 5 chapitres dans `visible_chapters` (ids `chapter_1` à `chapter_5`) respectant rigoureusement la progression dramatique suivante :
-  1. **Introduction & Appel à l'aventure** (chapter_1) : Pose le décor, l'ambiance, et présente l'élément déclencheur qui pousse à agir.
-  2. **Le Nœud de l'intrigue** (chapter_2) : Développe des rebondissements, des choix moraux, des indices à décoder et des PNJ mémorables avec leurs propres motivations.
-  3. **La Montée en tension** (chapter_3) : Crée des complications (fausses pistes, urgence). Le temps presse ou les enjeux augmentent.
-  4. **Le Climax** (chapter_4) : Une confrontation finale intense (physique, psychologique ou stratégique) où les choix précédents détermineront l'issue.
-  5. **Résolution & Épilogue** (chapter_5) : Conséquences des actes, conclusion de l'histoire et ouverture vers l'avenir.
+- Si la structure narrative demandée est en 5 actes (`options.narrative_structure == 'epic_5_acts'`), ignore le découpage libre des sources : la campagne suit la GRAMMAIRE DRAMATIQUE en 5 TEMPS ci-dessous. ATTENTION : ce sont 5 TEMPS NARRATIFS, PAS forcément 5 chapitres. Le nombre de chapitres est fixé par `options.scope` (règle suivante). Quelle que soit la granularité, l'intrigue doit traverser ces 5 temps :
+  1. **Introduction & Appel à l'aventure** : Pose le décor, l'ambiance, et présente l'élément déclencheur qui pousse à agir.
+  2. **Le Nœud de l'intrigue** : Développe des rebondissements, des choix moraux, des indices à décoder et des PNJ mémorables avec leurs propres motivations.
+  3. **La Montée en tension** : Crée des complications (fausses pistes, urgence). Le temps presse ou les enjeux augmentent.
+  4. **Le Climax** : Une confrontation finale intense (physique, psychologique ou stratégique) où les choix précédents détermineront l'issue.
+  5. **Résolution & Épilogue** : Conséquences des actes, conclusion de l'histoire et ouverture vers l'avenir.
+- Découpage en chapitres selon `options.scope` (UNIQUEMENT quand `options.narrative_structure == 'epic_5_acts'`) :
+  - `one-shot` → génère EXACTEMENT 1 chapitre (`chapter_1`), dense et conclusif, jouable en ~1 session (3-4h). Ce chapitre unique doit traverser les 5 temps EN INTERNE : son résumé pose les temps 1-2, son cœur porte les temps 3-4 (montée en tension, climax) et sa fin amène le temps 5 (résolution).
+  - `mini-chronique` → génère 3 à 4 chapitres (ids `chapter_1`..`chapter_4`). Répartis les 5 temps, par exemple : Ch1 = temps 1-2 (intro + nœud), Ch2 = temps 3 (montée en tension), Ch3 = temps 4-5 (climax + résolution) ; détache le climax dans un 4e chapitre si l'intrigue le justifie.
+  - `chronique longue` → génère 5 chapitres ou plus (5 à 8). Le canon 1:1 des 5 temps, étendu par des sous-intrigues et des arcs secondaires sur les chapitres supplémentaires.
+  - Si `options.scope` est absent ou inconnu, traite-le comme `mini-chronique`.
 - Si `options.options_5_acts` est fourni, utilise ses valeurs (Ambiance/Univers, Biome, Climat, Ton, Inspirations libres) de manière riche et créative pour façonner l'intrigue.
 - Les titres publics de chapitres doivent être créatifs et thématiques en français (ex: 'L'Ombre sur la Forge'), sans mentionner explicitement 'Introduction', 'Nœud de l'intrigue' ou 'Acte' dans le titre.
 - Les titres et résumés publics ne doivent pas révéler de secrets, twists, plans d'antagonistes ou contenu privé.
