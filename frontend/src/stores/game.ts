@@ -456,17 +456,22 @@ export const useGameStore = defineStore('game', () => {
         return typeof value === 'string' ? value : undefined
       }
       if (m.message_type === 'roll_result' && m.metadata) {
+        const meta = m.metadata as Record<string, unknown>
         return {
           id: m.id,
           type: 'roll' as const,
           roll: {
-            dice_notation: String(m.metadata.dice ?? ''),
-            rolls: (m.metadata.rolls as number[]) ?? [],
-            total: Number(m.metadata.total ?? 0),
-            modifier: Number(m.metadata.modifier ?? 0),
-            label: m.content,
-            success: m.metadata.success as boolean | undefined,
-            character_name: m.speaker,
+            dice_notation: String(meta.dice_notation ?? meta.dice ?? ''),
+            rolls: (meta.rolls as number[]) ?? [],
+            total: Number(meta.total ?? 0),
+            modifier: Number(meta.modifier ?? 0),
+            dc: (meta.dc as number | null | undefined) ?? null,
+            d20: meta.d20 as number | undefined,
+            breakdown: meta.breakdown as string | undefined,
+            success: meta.success as boolean | undefined,
+            critical: meta.critical as boolean | undefined,
+            label: (meta.label as string | undefined) ?? m.content,
+            character_name: (meta.character_name as string | undefined) ?? m.speaker,
           },
           timestamp: m.created_at,
         }

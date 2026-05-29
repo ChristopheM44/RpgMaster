@@ -16,7 +16,7 @@ from app.game.session_manager import ActiveSession, SessionManager
 from app.game.state_sync import sync_character_state
 from app.models.character import Character
 from app.models.session import SessionStatus
-from app.services.message_service import persist_narration
+from app.services.message_service import persist_narration, persist_roll_result
 
 
 class RestServiceError(Exception):
@@ -291,6 +291,7 @@ class RestService:
                     update.roll_payload,
                     source="rest_service",
                 )
+                await persist_roll_result(session_id, update.roll_payload, db)
             await event_bus.publish_to_session(
                 session_id,
                 EventType.HP_CHANGED,

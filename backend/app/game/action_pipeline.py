@@ -362,6 +362,9 @@ class ActionPipeline:
                 roll_evt,
                 source=self._source,
             )
+            from app.services.message_service import persist_roll_result
+
+            await persist_roll_result(request.session_id, roll_evt, actual_db)
 
         if request.suppress_gm_narration:
             narration_text = ""

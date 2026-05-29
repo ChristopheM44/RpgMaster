@@ -23,7 +23,7 @@ async def handle_ai_turns(
     cleanup_inactive_npcs: Callable[[str, Any], Awaitable[list[dict[str, Any]]]],
     handle_combat_end: Callable[..., Awaitable[None]],
     combat_end_reason_from_removed: Callable[[list[dict[str, Any]]], str],
-    auto_death_save: Callable[[str, str, str, Any], Awaitable[None]],
+    auto_death_save: Callable[[str, str, str, Any, AsyncSession], Awaitable[None]],
     source: str = "ws_game",
 ) -> None:
     """Trigger consecutive AI-controlled turns, then announce the next human."""
@@ -45,7 +45,7 @@ async def handle_ai_turns(
         if cdata.get("is_player") and int(cdata.get("hp", 1)) == 0:
             death_saves = cdata.get("death_saves", {})
             if not death_saves.get("stable") and not cdata.get("dead"):
-                await auto_death_save(session_id, current.combatant_id, current.name, active)
+                await auto_death_save(session_id, current.combatant_id, current.name, active, db)
             active.turn_manager.next_turn()
             active.turn_number += 1
             active.round_number = active.turn_manager.round_number

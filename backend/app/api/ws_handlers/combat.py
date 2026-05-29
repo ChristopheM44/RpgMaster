@@ -38,7 +38,11 @@ from app.models.session import SessionStatus
 from app.services.encounter_service import encounter_service
 from app.services.local_map_service import element_grid_cells
 from app.services.level_up_service import level_up_service
-from app.services.message_service import load_recent_messages, persist_narration
+from app.services.message_service import (
+    load_recent_messages,
+    persist_narration,
+    persist_roll_result,
+)
 from app.game.social_resolution import (
     _is_combat_social_text as is_combat_social_text,
     _SOCIAL_COMBAT_MARKERS as SOCIAL_COMBAT_MARKERS,
@@ -749,6 +753,7 @@ async def auto_death_save(
     combatant_id: str,
     name: str,
     active: Any,
+    db: Optional[AsyncSession] = None,
 ) -> None:
     """Auto-roule un jet de sauvegarde contre la mort pour un compagnon IA à 0 PV."""
     from app.engine.combat import roll_death_save  # noqa: PLC0415
@@ -805,19 +810,23 @@ async def auto_death_save(
         active.mark_dirty()
         narr = f"{name} est mort(e) — 3 échecs aux jets de sauvegarde."
 
+    death_save_payload = {
+        "dice_notation": "1d20",
+        "rolls": [result.d20_roll],
+        "total": result.d20_roll,
+        "modifier": 0,
+        "label": f"Jet de sauvegarde — {name}",
+        "success": result.success,
+        "character_id": combatant_id,
+        "character_name": name,
+    }
     await event_bus.publish_to_session(
         session_id,
         EventType.ROLL_RESULT,
-        {
-            "dice_notation": "1d20",
-            "rolls": [result.d20_roll],
-            "total": result.d20_roll,
-            "modifier": 0,
-            "label": f"Jet de sauvegarde — {name}",
-            "success": result.success,
-        },
+        death_save_payload,
         source="ws_game",
     )
+    await persist_roll_result(session_id, death_save_payload, db)
     await event_bus.publish_to_session(
         session_id,
         EventType.NARRATION,

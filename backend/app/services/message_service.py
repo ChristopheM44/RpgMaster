@@ -50,6 +50,36 @@ async def persist_narration(
         logger.warning("persist_narration : échec persistance message session=%s : %s", session_id, exc)
 
 
+async def persist_roll_result(
+    session_id: str,
+    roll_payload: dict[str, Any],
+    db: Optional[AsyncSession],
+) -> None:
+    """Persiste un résultat de jet (ROLL_RESULT) pour restaurer le récit au rechargement.
+
+    Le payload complet du jet est stocké dans ``metadata`` afin que la restauration
+    d'historique côté frontend reconstruise une carte de jet identique à l'affichage
+    live (notation, DD, succès, détail). Fire-and-forget comme ``persist_narration``.
+
+    Ces messages sont volontairement exclus de ``load_recent_messages`` : le MJ reçoit
+    déjà les résultats de jets via le canal ``roll_results`` lors de la narration
+    d'outcome, inutile de les réinjecter dans la fenêtre de contexte.
+    """
+    if db is None or not isinstance(roll_payload, dict) or not roll_payload:
+        return
+    label = str(roll_payload.get("label") or roll_payload.get("summary") or "Jet de dé")
+    speaker = str(roll_payload.get("character_name") or "Système")
+    await persist_narration(
+        session_id,
+        label,
+        speaker,
+        db,
+        role=MessageRole.SYSTEM,
+        message_type=MessageType.ROLL_RESULT,
+        metadata=dict(roll_payload),
+    )
+
+
 async def load_recent_messages(
     session_id: str,
     db: AsyncSession,
@@ -71,6 +101,7 @@ async def load_recent_messages(
         stmt = (
             select(Message)
             .where(Message.session_id == session_id)
+            .where(Message.message_type != MessageType.ROLL_RESULT)
             .order_by(Message.created_at.desc())
             .limit(effective_limit)
         )

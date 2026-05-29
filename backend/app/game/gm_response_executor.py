@@ -157,6 +157,9 @@ class GMResponseExecutor:
                         roll_evt,
                         source=self._source,
                     )
+                    from app.services.message_service import persist_roll_result
+
+                    await persist_roll_result(actual_session_id, roll_evt, db)
                 result.executed_actions.append(
                     {"type": gm_action.type, "target": gm_action.target, "params": params}
                 )
