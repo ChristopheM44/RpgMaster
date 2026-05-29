@@ -11,7 +11,7 @@ naming: each entry carries an English `name` (canonical) plus a `name_fr`
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -83,11 +83,11 @@ class Action(BaseModel):
     reach_m: Optional[float] = None
     range_normal_m: Optional[float] = None
     range_long_m: Optional[float] = None
-    secondary_effect: Optional[Dict[str, Any]] = None
+    secondary_effect: Optional[dict[str, Any]] = None
     # Multiattack
-    attacks: Optional[List[str]] = None
+    attacks: Optional[list[str]] = None
     # Save-based / area
-    save: Optional[Dict[str, Any]] = None
+    save: Optional[dict[str, Any]] = None
     area_shape: Optional[str] = None
     area_size_m: Optional[float] = None
 
@@ -154,18 +154,18 @@ class MonsterSchema(BaseModel):
     hit_dice: str
     speed: Speed
     ability_scores: AbilityScores
-    saving_throws: Dict[Ability, int] = Field(default_factory=dict)
-    skills: Dict[str, int] = Field(default_factory=dict)
-    damage_immunities: List[str] = Field(default_factory=list)
-    damage_resistances: List[str] = Field(default_factory=list)
-    damage_vulnerabilities: List[str] = Field(default_factory=list)
-    condition_immunities: List[str] = Field(default_factory=list)
+    saving_throws: dict[Ability, int] = Field(default_factory=dict)
+    skills: dict[str, int] = Field(default_factory=dict)
+    damage_immunities: list[str] = Field(default_factory=list)
+    damage_resistances: list[str] = Field(default_factory=list)
+    damage_vulnerabilities: list[str] = Field(default_factory=list)
+    condition_immunities: list[str] = Field(default_factory=list)
     senses: Senses
-    languages: List[str] = Field(default_factory=list)
+    languages: list[str] = Field(default_factory=list)
     proficiency_bonus: int
-    traits: List[Trait] = Field(default_factory=list)
-    actions: List[Action] = Field(default_factory=list)
-    legendary_actions: List[Action] = Field(default_factory=list)
+    traits: list[Trait] = Field(default_factory=list)
+    actions: list[Action] = Field(default_factory=list)
+    legendary_actions: list[Action] = Field(default_factory=list)
     description: Optional[str] = None
     # Set by the importer when a stat-block could not be fully parsed.
     parse_status: Optional[
@@ -215,11 +215,11 @@ class SpellSchema(BaseModel):
     level: int = Field(..., ge=0, le=9)
     school: SpellSchool
     casting_time: str
-    components: List[SpellComponent]
+    components: list[SpellComponent]
     duration: str
     concentration: bool
     ritual: Optional[bool] = None
-    classes: List[str] = Field(default_factory=list)
+    classes: list[str] = Field(default_factory=list)
     description: str
     # Range
     range_m: Optional[Union[int, float]] = None
@@ -229,7 +229,7 @@ class SpellSchema(BaseModel):
     damage_type: Optional[str] = None
     save: Optional[SpellSave] = None
     upcast_extra_dice: Optional[str] = None
-    upcast_breakpoints: Optional[List[int]] = None
+    upcast_breakpoints: Optional[list[int]] = None
     upcast_extra_targets: Optional[int] = None
     upcast_extra_rays: Optional[int] = None
     upcast_extra_darts: Optional[int] = None

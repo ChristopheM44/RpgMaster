@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
-from app.engine.dice import RollResult, roll_dice, roll_with_advantage
+from app.engine.dice import roll_dice
 
 
 class Ability(str, Enum):

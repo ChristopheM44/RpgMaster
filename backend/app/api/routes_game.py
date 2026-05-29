@@ -917,22 +917,22 @@ def _opening_response(
     auto_generate: bool = False,
 ) -> GMResponse:
     opening_scene = _opening_scene(campaign_context)
-    
+
     # Fall back to dynamic adventure_journal values for lobby-generated games
     journal = active.state_data.get("adventure_journal") or {}
     physical_place = str(opening_scene.get("place") or "").strip()
     if not physical_place or physical_place == "un lieu de départ":
         physical_place = str(journal.get("location_place") or "un lieu de départ").strip()
-        
+
     physical_region = str(opening_scene.get("region") or "").strip() or None
     if not physical_region:
         physical_region = str(journal.get("location_region") or "").strip() or None
-        
+
     physical_venue = opening_scene.get("venue") or journal.get("location_venue")
     location = physical_place
     if physical_region:
         location = f"{physical_place} ({physical_region})"
-        
+
     objective = _opening_objective(campaign_context)
     location_id = _safe_id(str(physical_venue or physical_place), "lieu_depart")
     objective_id = _safe_id(objective, "objectif_rumeur") if objective else ""
@@ -961,7 +961,6 @@ def _opening_response(
     )
 
     pois: list[dict[str, Any]] = []
-    main_description = scene_brief or "Les premiers détails concrets de la scène."
     pois.extend(_theme_affordance_pois(guessed_theme))
     if clues:
         for index, clue in enumerate(clues):
@@ -1273,7 +1272,7 @@ async def _send_free_opening_narration(
             weather=weather,
             tone=tone,
         )
-        
+
         # Inject seed into active state_data
         active.state_data["adventure_journal"] = {
             "location_region": seed["location_region"],
@@ -1290,7 +1289,8 @@ async def _send_free_opening_narration(
     baseline = _opening_response(active, script=script, auto_generate=auto_generate)
     response = baseline
 
-    # If it is auto-generated or has a script, let's run the LLM to make it fully dynamic and immersive!
+    # If it is auto-generated or has a script, let's run the LLM to make it fully
+    # dynamic and immersive!
     await event_bus.publish_to_session(
         session_id,
         EventType.AI_THINKING,
@@ -1299,24 +1299,40 @@ async def _send_free_opening_narration(
     )
     try:
         if script:
-            opening_brief = f"Script de départ fourni par le joueur : {script}. Tisse la scène de départ en te basant fidèlement sur ces consignes."
+            opening_brief = (
+                f"Script de départ fourni par le joueur : {script}. "
+                "Tisse la scène de départ en te basant fidèlement sur ces consignes."
+            )
         elif seed:
             opening_brief = seed["opening_brief"]
         elif auto_generate:
-            opening_brief = "Génération automatique d'aventure. Improvise une situation de départ active et captivante (un hook dramatique, un mystère immédiat, une rumeur pressante) adaptée au niveau et à la composition des personnages."
+            opening_brief = (
+                "Génération automatique d'aventure. Improvise une situation de départ active "
+                "et captivante (un hook dramatique, un mystère immédiat, une rumeur pressante) "
+                "adaptée au niveau et à la composition des personnages."
+            )
         else:
-            opening_brief = "Improvisation libre. Improvise une scène de départ calme et ouverte, un point d'ancrage neutre (ex: une taverne paisible, un campement de voyage au réveil, les portes d'une ville calme) où le groupe est réuni et libre de choisir son orientation sans urgence immédiate."
+            opening_brief = (
+                "Improvisation libre. Improvise une scène de départ calme et ouverte, un point "
+                "d'ancrage neutre (ex: une taverne paisible, un campement de voyage au réveil, "
+                "les portes d'une ville calme) où le groupe est réuni et libre de choisir son "
+                "orientation sans urgence immédiate."
+            )
 
         llm_response = await GMAgent().open_scene(
             game_state=active.state_data,
-            opening_brief=_build_opening_brief(active.state_data) + f"\n\n## INSTRUCTIONS DE DÉPART\n{opening_brief}",
+            opening_brief=(
+                _build_opening_brief(active.state_data)
+                + f"\n\n## INSTRUCTIONS DE DÉPART\n{opening_brief}"
+            ),
             messages=None,
             is_lobby=True,
         )
         llm_narration = str(getattr(llm_response, "narration", "") or "").strip()
         if llm_narration and llm_narration != _FALLBACK_NARRATION:
             actions = list(llm_response.actions) if llm_response.actions else list(baseline.actions)
-            # Garantir qu'une action scene_layout est toujours présente pour éviter de bloquer le loader
+            # Garantir qu'une action scene_layout est toujours présente pour
+            # éviter de bloquer le loader
             if not any(act.type == "scene_layout" for act in actions):
                 baseline_scene_layout = next(
                     (act for act in baseline.actions if act.type == "scene_layout"),
@@ -1338,7 +1354,9 @@ async def _send_free_opening_narration(
                 mood=getattr(llm_response, "mood", None) or baseline.mood,
             )
     except Exception as exc:
-        logger.warning("Free opening scene LLM failed; falling back to deterministic opening: %s", exc)
+        logger.warning(
+            "Free opening scene LLM failed; falling back to deterministic opening: %s", exc
+        )
     finally:
         await event_bus.publish_to_session(
             session_id,
@@ -1454,7 +1472,8 @@ async def start_game(
                 detail="Aucun personnage dans cette session. Créez un personnage d'abord.",
             )
 
-        # Positionner le flag d'ouverture de narration IMMÉDIATEMENT sous le verrou, avant le changement de phase
+        # Positionner le flag d'ouverture de narration IMMÉDIATEMENT sous le verrou,
+        # avant le changement de phase
         active.state_data[_OPENING_NARRATION_IN_PROGRESS] = True
 
         # Force-transition to EXPLORATION (bypasses strict state-machine validation)

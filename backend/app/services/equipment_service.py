@@ -333,7 +333,9 @@ class EquipmentService:
             narration=f"{char.name} identifie {name}.",
         )
 
-    def get_encumbrance_info(self, *, strength_score: int, equipment: list[dict[str, Any]]) -> dict[str, Any]:
+    def get_encumbrance_info(
+        self, *, strength_score: int, equipment: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         from app.engine.inventory import carrying_capacity
 
         weight = total_weight(equipment)

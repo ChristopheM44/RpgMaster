@@ -10,11 +10,10 @@ No I/O, no async, no database access.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from dataclasses import dataclass
+from typing import Optional
 
 from app.engine.ability_checks import ability_modifier, proficiency_bonus
-
 
 # ---------------------------------------------------------------------------
 # Weapon data classes
@@ -29,7 +28,7 @@ class WeaponStats:
     category: str               # "simple" or "martial"
     damage_dice: str            # e.g. "1d6"  – passed directly to roll_damage()
     damage_type: str            # "piercing" | "slashing" | "bludgeoning"
-    properties: List[str]       # SRD property tags (see WEAPON_PROPERTIES)
+    properties: list[str]       # SRD property tags (see WEAPON_PROPERTIES)
     range_normal: Optional[float]  # None pour les armes de mêlée uniquement ; mètres
     range_long: Optional[float]    # longue portée impose le désavantage
     versatile_dice: Optional[str]  # two-handed damage, e.g. "1d8" for longsword
@@ -54,7 +53,7 @@ WEAPON_PROPERTIES = frozenset({
 # Weapon catalogue (SRD 5.2 subset — simple + martial relevant to 4 classes)
 # ---------------------------------------------------------------------------
 
-_WEAPONS: Dict[str, WeaponStats] = {
+_WEAPONS: dict[str, WeaponStats] = {
     # ---- Simple melee ----
     "club": WeaponStats(
         name="Club", category="simple",
@@ -243,7 +242,7 @@ class ArmorStats:
 # Armor catalogue (SRD 5.2)
 # ---------------------------------------------------------------------------
 
-_ARMORS: Dict[str, ArmorStats] = {
+_ARMORS: dict[str, ArmorStats] = {
     # ---- Light armor (DEX mod, uncapped) ----
     "padded": ArmorStats(
         name="Padded", category="light",
@@ -488,7 +487,11 @@ def weapon_attack_stats(
     Raises:
         ValueError: if two_handed=True but the weapon has no versatile property.
     """
-    if two_handed and "versatile" not in weapon.properties and "two-handed" not in weapon.properties:
+    if (
+        two_handed
+        and "versatile" not in weapon.properties
+        and "two-handed" not in weapon.properties
+    ):
         raise ValueError(
             f"'{weapon.name}' cannot be used two-handed "
             "(no 'versatile' or 'two-handed' property)."
@@ -553,7 +556,7 @@ def weapon_attack_stats(
 # ---------------------------------------------------------------------------
 
 
-def is_weapon_proficient(weapon: WeaponStats, armor_proficiencies: List[str]) -> bool:
+def is_weapon_proficient(weapon: WeaponStats, armor_proficiencies: list[str]) -> bool:
     """Return True if a weapon category is covered by the given proficiency list.
 
     Args:
@@ -571,7 +574,7 @@ def is_weapon_proficient(weapon: WeaponStats, armor_proficiencies: List[str]) ->
     return weapon_key in profs or weapon_key_plural in profs
 
 
-def is_armor_proficient(armor: ArmorStats, armor_proficiencies: List[str]) -> bool:
+def is_armor_proficient(armor: ArmorStats, armor_proficiencies: list[str]) -> bool:
     """Return True if a character is proficient with the given armor.
 
     Args:

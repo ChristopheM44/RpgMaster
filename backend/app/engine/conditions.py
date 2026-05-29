@@ -20,8 +20,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Set
-
+from typing import Optional
 
 # ---------------------------------------------------------------------------
 # Condition enum
@@ -260,17 +259,17 @@ def get_effects(condition: Condition) -> ConditionEffects:
     return CONDITION_EFFECTS[condition]
 
 
-def has_attack_advantage(attacker_conditions: Set[Condition]) -> bool:
+def has_attack_advantage(attacker_conditions: set[Condition]) -> bool:
     """True if any of the attacker's conditions grant advantage on attack rolls."""
     return any(CONDITION_EFFECTS[c].attack_advantage for c in attacker_conditions)
 
 
-def has_attack_disadvantage(attacker_conditions: Set[Condition]) -> bool:
+def has_attack_disadvantage(attacker_conditions: set[Condition]) -> bool:
     """True if any of the attacker's conditions impose disadvantage on attack rolls."""
     return any(CONDITION_EFFECTS[c].attack_disadvantage for c in attacker_conditions)
 
 
-def resolve_attack_advantage(attacker_conditions: Set[Condition]) -> Optional[bool]:
+def resolve_attack_advantage(attacker_conditions: set[Condition]) -> Optional[bool]:
     """Resolve the net advantage state for an attacker.
 
     SRD 5.2 §Advantage and Disadvantage: if you have both advantage and
@@ -293,7 +292,7 @@ def resolve_attack_advantage(attacker_conditions: Set[Condition]) -> Optional[bo
 
 
 def is_attacked_with_advantage(
-    target_conditions: Set[Condition],
+    target_conditions: set[Condition],
     ranged: bool = False,
 ) -> bool:
     """True if attacks against the target have advantage.
@@ -312,7 +311,7 @@ def is_attacked_with_advantage(
 
 
 def is_attacked_with_disadvantage(
-    target_conditions: Set[Condition],
+    target_conditions: set[Condition],
     ranged: bool = False,
 ) -> bool:
     """True if attacks against the target have disadvantage.
@@ -331,7 +330,7 @@ def is_attacked_with_disadvantage(
 
 
 def resolve_attack_advantage_vs(
-    target_conditions: Set[Condition],
+    target_conditions: set[Condition],
     ranged: bool = False,
 ) -> Optional[bool]:
     """Resolve the net advantage state for attacks *against* the target.
@@ -352,42 +351,42 @@ def resolve_attack_advantage_vs(
     return None
 
 
-def auto_crits_on_melee(target_conditions: Set[Condition]) -> bool:
+def auto_crits_on_melee(target_conditions: set[Condition]) -> bool:
     """True if melee hits within 5 ft against the target are automatic crits."""
     return any(CONDITION_EFFECTS[c].auto_crit_melee for c in target_conditions)
 
 
-def auto_fails_str_save(target_conditions: Set[Condition]) -> bool:
+def auto_fails_str_save(target_conditions: set[Condition]) -> bool:
     """True if the creature automatically fails STR saving throws."""
     return any(CONDITION_EFFECTS[c].fail_str_saves for c in target_conditions)
 
 
-def auto_fails_dex_save(target_conditions: Set[Condition]) -> bool:
+def auto_fails_dex_save(target_conditions: set[Condition]) -> bool:
     """True if the creature automatically fails DEX saving throws."""
     return any(CONDITION_EFFECTS[c].fail_dex_saves for c in target_conditions)
 
 
-def can_take_actions(conditions: Set[Condition]) -> bool:
+def can_take_actions(conditions: set[Condition]) -> bool:
     """True if the creature can take actions this turn."""
     return not any(CONDITION_EFFECTS[c].no_actions for c in conditions)
 
 
-def can_take_reactions(conditions: Set[Condition]) -> bool:
+def can_take_reactions(conditions: set[Condition]) -> bool:
     """True if the creature can take reactions."""
     return not any(CONDITION_EFFECTS[c].no_reactions for c in conditions)
 
 
-def can_take_bonus_actions(conditions: Set[Condition]) -> bool:
+def can_take_bonus_actions(conditions: set[Condition]) -> bool:
     """True if the creature can take bonus actions."""
     return not any(CONDITION_EFFECTS[c].no_bonus_actions for c in conditions)
 
 
-def breaks_concentration(conditions: Set[Condition]) -> bool:
+def breaks_concentration(conditions: set[Condition]) -> bool:
     """True if any active condition immediately breaks concentration."""
     return any(CONDITION_EFFECTS[c].breaks_concentration for c in conditions)
 
 
-def effective_speed(base_speed: int, conditions: Set[Condition], exhaustion_level: int = 0) -> int:
+def effective_speed(base_speed: int, conditions: set[Condition], exhaustion_level: int = 0) -> int:
     """Return the effective speed in feet after applying conditions and exhaustion.
 
     Args:

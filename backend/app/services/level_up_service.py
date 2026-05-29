@@ -113,7 +113,11 @@ class LevelUpService:
         await event_bus.publish_to_session(
             session_id,
             EventType.HP_CHANGED,
-            {"combatant_id": character_id, "delta": level_result.hp_total_gain, "hp": char.hp_current},
+            {
+                "combatant_id": character_id,
+                "delta": level_result.hp_total_gain,
+                "hp": char.hp_current,
+            },
             source="level_up_service",
         )
         await event_bus.publish_to_session(

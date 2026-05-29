@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import random
 import re
-from dataclasses import dataclass, field
-from typing import List, Optional
+from dataclasses import dataclass
+from typing import Optional
 
 # Regex: XdY[kh|kl]Z[+/-N]
 _NOTATION = re.compile(
@@ -31,14 +31,14 @@ class RollResult:
     """Result of a dice roll."""
 
     notation: str
-    rolls: List[int]          # all individual dice results
-    kept: List[int]           # dice that count toward the total
+    rolls: list[int]          # all individual dice results
+    kept: list[int]           # dice that count toward the total
     modifier: int
     total: int
     advantage: Optional[bool] = None  # True=adv, False=disadv, None=normal
 
 
-def roll_dice(sides: int, count: int = 1, rng: random.Random | None = None) -> List[int]:
+def roll_dice(sides: int, count: int = 1, rng: random.Random | None = None) -> list[int]:
     """Roll `count` dice with `sides` faces."""
     r = rng or random
     return [r.randint(1, sides) for _ in range(count)]
@@ -110,7 +110,12 @@ def roll_with_advantage(
     rolls = roll_dice(sides, 2, rng)
     kept_value = max(rolls) if advantage else min(rolls)
     total = kept_value + modifier
-    notation = f"2d{sides} ({'advantage' if advantage else 'disadvantage'}){modifier:+d}" if modifier else f"2d{sides} ({'advantage' if advantage else 'disadvantage'})"
+    adv_str = "advantage" if advantage else "disadvantage"
+    notation = (
+        f"2d{sides} ({adv_str}){modifier:+d}"
+        if modifier
+        else f"2d{sides} ({adv_str})"
+    )
     return RollResult(
         notation=notation,
         rolls=rolls,
@@ -121,6 +126,6 @@ def roll_with_advantage(
     )
 
 
-def roll_ability_scores() -> List[RollResult]:
+def roll_ability_scores() -> list[RollResult]:
     """Roll six ability scores using the standard 4d6kh3 method."""
     return [roll("4d6kh3") for _ in range(6)]

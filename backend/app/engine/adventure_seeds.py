@@ -268,18 +268,18 @@ def generate_adventure_context(
     # 1. Traitement si Preset d'Univers demandé
     if preset_id and preset_id in PRESETS:
         preset = PRESETS[preset_id]
-        
+
         # Sélection aléatoire d'un prologue d'univers
         prologue = random.choice(preset["prologues"])
-        
+
         # Surcharge éventuelle par des choix directs
         final_theme = biome_id if (biome_id and biome_id in [b["scene_theme"] for b in BIOMES.values()]) else preset["scene_theme"]
         final_weather = weather if (weather and weather != "random") else preset["weather"]
         final_tone = tone if (tone and tone != "random") else preset["tone"]
-        
+
         # Compilation du template
         opening_brief = preset["opening_brief_template"].format(prologue=prologue)
-        
+
         return {
             "preset_id": preset_id,
             "location_place": preset["location_place"],
@@ -296,30 +296,30 @@ def generate_adventure_context(
         chosen_biome_key = random.choice(list(BIOMES.keys()))
     else:
         chosen_biome_key = biome_id if biome_id in BIOMES else "forest"
-    
+
     biome = BIOMES[chosen_biome_key]
-    
+
     # Choix du lieu dans le biome
     place = random.choice(biome["places"])
-    
+
     # Choix de la météo
     if not weather or weather == "random":
         chosen_weather = random.choice(biome["weather_options"])
     else:
         chosen_weather = weather
-        
+
     # Choix du ton
     if not tone or tone == "random":
         chosen_tone = random.choice(["exploration calme", "mystérieuse et tendue", "héroïque et active", "survie immédiate"])
     else:
         chosen_tone = tone
-        
+
     # Sélection de l'historique/prologue générique pour le biome
     prologue = random.choice(biome["prologues"])
-    
+
     # Sélection de l'accroche
     hook = random.choice(GENERIC_HOOKS)
-    
+
     # Compilation du brief pour le LLM
     brief_text = (
         f"HISTORIQUE ET PROLOGUE DE DÉPART (D'où on vient, pourquoi on est là) :\n"

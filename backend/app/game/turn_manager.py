@@ -12,11 +12,9 @@ from __future__ import annotations
 
 import random
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from app.engine.combat import ActionEconomy, new_turn_economy, roll_initiative, sort_initiative
-from app.models.session import SessionStatus
-
 
 # ---------------------------------------------------------------------------
 # Data classes
@@ -46,7 +44,7 @@ class TurnEntry:
     is_ai_controlled: bool = False  # True for AI companion players
     action_economy: ActionEconomy = field(default_factory=ActionEconomy)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "combatant_id": self.combatant_id,
             "name": self.name,
@@ -57,7 +55,7 @@ class TurnEntry:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> TurnEntry:
+    def from_dict(cls, data: dict[str, Any]) -> TurnEntry:
         ae_data = data.get("action_economy", {})
         movement_max = ae_data.get("movement_max", ae_data.get("movement", 9.0))
         ae = ActionEconomy(
@@ -111,7 +109,7 @@ class TurnManager:
     """
 
     def __init__(self) -> None:
-        self._order: List[TurnEntry] = []
+        self._order: list[TurnEntry] = []
         self._index: int = 0
         self._round: int = 0
         self._mode: Optional[str] = None  # "combat" | "exploration"
@@ -122,9 +120,9 @@ class TurnManager:
 
     def setup_combat(
         self,
-        combatants: List[CombatantInfo],
+        combatants: list[CombatantInfo],
         rng: Optional[random.Random] = None,
-    ) -> List[TurnEntry]:
+    ) -> list[TurnEntry]:
         """Roll initiative for all combatants and build the turn order.
 
         Args:
@@ -160,7 +158,7 @@ class TurnManager:
         self._mode = "combat"
         return list(self._order)
 
-    def setup_exploration(self, participants: List[CombatantInfo]) -> List[TurnEntry]:
+    def setup_exploration(self, participants: list[CombatantInfo]) -> list[TurnEntry]:
         """Set up a round-robin order for exploration.
 
         No initiative rolls — participants act in the order provided.
@@ -257,11 +255,11 @@ class TurnManager:
                 return True
         return False
 
-    def get_player_entries(self) -> List[TurnEntry]:
+    def get_player_entries(self) -> list[TurnEntry]:
         """Return only the player entries from the current order."""
         return [e for e in self._order if e.is_player]
 
-    def get_npc_entries(self) -> List[TurnEntry]:
+    def get_npc_entries(self) -> list[TurnEntry]:
         """Return only the NPC/monster entries from the current order."""
         return [e for e in self._order if not e.is_player]
 
@@ -280,7 +278,7 @@ class TurnManager:
     # Serialization (for GameState.state_data blob)
     # ------------------------------------------------------------------
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize current state to a plain dict for JSON storage."""
         return {
             "mode": self._mode,
@@ -289,7 +287,7 @@ class TurnManager:
             "order": [e.to_dict() for e in self._order],
         }
 
-    def load_dict(self, data: Dict[str, Any]) -> None:
+    def load_dict(self, data: dict[str, Any]) -> None:
         """Restore state from a previously serialized dict."""
         self._mode = data.get("mode")
         self._round = data.get("round", 0)

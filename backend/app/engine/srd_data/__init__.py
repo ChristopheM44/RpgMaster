@@ -11,9 +11,9 @@ schemas defined in ``schemas.py``. The cached return value is kept as a
 from __future__ import annotations
 
 import json
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from pydantic import ValidationError
 
@@ -22,13 +22,13 @@ from .schemas import MonsterSchema, SpellSchema
 _DATA_DIR = Path(__file__).parent
 
 
-def _load(filename: str) -> Dict[str, Any]:
+def _load(filename: str) -> dict[str, Any]:
     with (_DATA_DIR / filename).open(encoding="utf-8") as f:
         return json.load(f)
 
 
-def _validate_all(items: List[Dict[str, Any]], model, kind: str) -> List[Dict[str, Any]]:
-    errors: List[str] = []
+def _validate_all(items: list[dict[str, Any]], model, kind: str) -> list[dict[str, Any]]:
+    errors: list[str] = []
     for item in items:
         try:
             model.model_validate(item)
@@ -42,33 +42,33 @@ def _validate_all(items: List[Dict[str, Any]], model, kind: str) -> List[Dict[st
     return items
 
 
-@lru_cache(maxsize=None)
-def get_classes() -> List[Dict[str, Any]]:
+@cache
+def get_classes() -> list[dict[str, Any]]:
     return _load("classes.json")["classes"]
 
 
-@lru_cache(maxsize=None)
-def get_species() -> List[Dict[str, Any]]:
+@cache
+def get_species() -> list[dict[str, Any]]:
     return _load("species.json")["species"]
 
 
-@lru_cache(maxsize=None)
-def get_spells() -> List[Dict[str, Any]]:
+@cache
+def get_spells() -> list[dict[str, Any]]:
     return _validate_all(_load("spells.json")["spells"], SpellSchema, "spell")
 
 
-@lru_cache(maxsize=None)
-def get_monsters() -> List[Dict[str, Any]]:
+@cache
+def get_monsters() -> list[dict[str, Any]]:
     return _validate_all(_load("monsters.json")["monsters"], MonsterSchema, "monster")
 
 
-@lru_cache(maxsize=None)
-def get_equipment() -> Dict[str, Any]:
+@cache
+def get_equipment() -> dict[str, Any]:
     return _load("equipment.json")
 
 
-@lru_cache(maxsize=None)
-def get_equipment_flat() -> List[Dict[str, Any]]:
+@cache
+def get_equipment_flat() -> list[dict[str, Any]]:
     """Return all equipment entries across weapons, armor, gear, consumables, and kits."""
     data = get_equipment()
     items: list[dict[str, Any]] = []
@@ -86,7 +86,7 @@ def get_equipment_flat() -> List[Dict[str, Any]]:
     return items
 
 
-def find_class(class_id: str) -> Dict[str, Any]:
+def find_class(class_id: str) -> dict[str, Any]:
     """Return a class by id (case-insensitive). Raises KeyError if not found."""
     key = class_id.lower()
     for c in get_classes():
@@ -95,7 +95,7 @@ def find_class(class_id: str) -> Dict[str, Any]:
     raise KeyError(f"Class '{class_id}' not found in SRD data")
 
 
-def find_species(species_id: str) -> Dict[str, Any]:
+def find_species(species_id: str) -> dict[str, Any]:
     """Return a species by id (case-insensitive). Raises KeyError if not found."""
     key = species_id.lower()
     for s in get_species():
@@ -104,7 +104,7 @@ def find_species(species_id: str) -> Dict[str, Any]:
     raise KeyError(f"Species '{species_id}' not found in SRD data")
 
 
-def find_spell(spell_id: str) -> Dict[str, Any]:
+def find_spell(spell_id: str) -> dict[str, Any]:
     """Return a spell by id (case-insensitive). Raises KeyError if not found."""
     key = spell_id.lower()
     for sp in get_spells():
@@ -113,7 +113,7 @@ def find_spell(spell_id: str) -> Dict[str, Any]:
     raise KeyError(f"Spell '{spell_id}' not found in SRD data")
 
 
-def find_monster(monster_id: str) -> Dict[str, Any]:
+def find_monster(monster_id: str) -> dict[str, Any]:
     """Return a monster by id (case-insensitive). Raises KeyError if not found."""
     key = monster_id.lower()
     for m in get_monsters():
@@ -122,7 +122,7 @@ def find_monster(monster_id: str) -> Dict[str, Any]:
     raise KeyError(f"Monster '{monster_id}' not found in SRD data")
 
 
-def find_weapon(weapon_id: str) -> Dict[str, Any]:
+def find_weapon(weapon_id: str) -> dict[str, Any]:
     """Return a weapon by id across all weapon categories. Raises KeyError if not found."""
     key = weapon_id.lower()
     weapons = get_equipment()["weapons"]
@@ -133,7 +133,7 @@ def find_weapon(weapon_id: str) -> Dict[str, Any]:
     raise KeyError(f"Weapon '{weapon_id}' not found in SRD data")
 
 
-def find_armor(armor_id: str) -> Dict[str, Any]:
+def find_armor(armor_id: str) -> dict[str, Any]:
     """Return an armor piece by id across all armor categories. Raises KeyError if not found."""
     key = armor_id.lower()
     armors = get_equipment()["armor"]
@@ -144,7 +144,7 @@ def find_armor(armor_id: str) -> Dict[str, Any]:
     raise KeyError(f"Armor '{armor_id}' not found in SRD data")
 
 
-def find_equipment(item_id: str) -> Dict[str, Any]:
+def find_equipment(item_id: str) -> dict[str, Any]:
     """Return any equipment entry by id. Raises KeyError if not found."""
     key = item_id.lower()
     for item in get_equipment_flat():
@@ -153,17 +153,17 @@ def find_equipment(item_id: str) -> Dict[str, Any]:
     raise KeyError(f"Equipment '{item_id}' not found in SRD data")
 
 
-def spells_by_level(level: int) -> List[Dict[str, Any]]:
+def spells_by_level(level: int) -> list[dict[str, Any]]:
     """Return all spells of the given level (0 = cantrips)."""
     return [sp for sp in get_spells() if sp["level"] == level]
 
 
-def spells_for_class(class_id: str) -> List[Dict[str, Any]]:
+def spells_for_class(class_id: str) -> list[dict[str, Any]]:
     """Return all spells available to the given class."""
     key = class_id.lower()
     return [sp for sp in get_spells() if key in sp.get("classes", [])]
 
 
-def monsters_by_cr(cr: float) -> List[Dict[str, Any]]:
+def monsters_by_cr(cr: float) -> list[dict[str, Any]]:
     """Return all monsters of the given CR."""
     return [m for m in get_monsters() if m["cr"] == cr]

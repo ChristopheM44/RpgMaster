@@ -7,8 +7,9 @@ import html
 import logging
 import re
 import uuid
+from collections.abc import Awaitable
 from datetime import datetime
-from typing import Any, Awaitable, Callable, Optional
+from typing import Any, Callable, Optional
 
 import httpx
 from sqlalchemy import func, select
@@ -357,7 +358,6 @@ async def scenario_view(campaign_id: str, db: AsyncSession) -> dict[str, Any]:
         }
 
     contract = sanitize_player_contract(dossier.player_contract or {}, campaign, brief={})
-    gm_dossier = sanitize_gm_dossier(dossier.gm_dossier or {}, campaign, contract)
     canon = sanitize_played_canon(dossier.played_canon or {})
     timeline = _apply_chapter_progress(contract["visible_chapters"], canon)
     current = _current_public_chapter(timeline, dossier.active_chapter_id)
@@ -1065,7 +1065,9 @@ async def _call_forge_phase_with_retry(
                 phase=phase,
             )
             await asyncio.sleep(delay)
-    raise ValueError(f"Phase {phase} échouée après {FORGE_PHASE_MAX_ATTEMPTS} tentatives: {last_exc}") from last_exc
+    raise ValueError(
+        f"Phase {phase} échouée après {FORGE_PHASE_MAX_ATTEMPTS} tentatives: {last_exc}"
+    ) from last_exc
 
 
 async def _mark_forge_job_failed(
@@ -1107,7 +1109,10 @@ def _source_note_inputs(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
             inputs.append(
                 {
                     **source,
-                    "title": f"{source.get('title') or 'Source'} — partie {index + 1}/{len(chunks)}",
+                    "title": (
+                        f"{source.get('title') or 'Source'} — "
+                        f"partie {index + 1}/{len(chunks)}"
+                    ),
                     "content": chunk,
                     "chunk_index": index + 1,
                     "chunk_count": len(chunks),

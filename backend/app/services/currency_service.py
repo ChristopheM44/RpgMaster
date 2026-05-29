@@ -9,7 +9,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engine.currency import (
-    InsufficientFundsError,
     Wealth,
     add_coins,
     normalize_wealth,
@@ -65,7 +64,10 @@ class CurrencyService:
             character_id=character_id,
             old_wealth=old,
             new_wealth=new,
-            delta_cp=total_value_cp(new.gp, new.sp, new.cp) - total_value_cp(old.gp, old.sp, old.cp),
+            delta_cp=(
+                total_value_cp(new.gp, new.sp, new.cp)
+                - total_value_cp(old.gp, old.sp, old.cp)
+            ),
         )
 
     async def spend_currency(
@@ -89,7 +91,10 @@ class CurrencyService:
             character_id=character_id,
             old_wealth=old,
             new_wealth=new,
-            delta_cp=total_value_cp(new.gp, new.sp, new.cp) - total_value_cp(old.gp, old.sp, old.cp),
+            delta_cp=(
+                total_value_cp(new.gp, new.sp, new.cp)
+                - total_value_cp(old.gp, old.sp, old.cp)
+            ),
         )
 
     async def transfer_currency(

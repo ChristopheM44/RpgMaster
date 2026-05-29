@@ -6,10 +6,10 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.ws_payloads import build_session_state_payload
 from app.api.ws_schemas import PlayerActionMessage
 from app.game.event_bus import EventType, event_bus
 from app.game.runtime import rest_service, session_manager
-from app.api.ws_payloads import build_session_state_payload
 from app.services.rest_service import RestServiceError
 
 logger = logging.getLogger(__name__)

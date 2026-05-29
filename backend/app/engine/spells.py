@@ -15,12 +15,16 @@ No I/O, no async, no database access.
 from __future__ import annotations
 
 import random
+import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Optional
 
-from app.engine.ability_checks import _resolve_d20, ability_modifier, proficiency_bonus, saving_throw, Ability
+from app.engine.ability_checks import (
+    Ability,
+    ability_modifier,
+    saving_throw,
+)
 from app.engine.combat import AttackResult, DamageResult, roll_attack, roll_damage
-
 
 # ---------------------------------------------------------------------------
 # Spell slot tables (SRD 5.2)
@@ -29,7 +33,7 @@ from app.engine.combat import AttackResult, DamageResult, roll_attack, roll_dama
 
 # Full casters: Wizard, Cleric, Druid, Bard, Sorcerer
 # Key: character level → {slot_level: count}
-FULL_CASTER_SLOTS: Dict[int, Dict[int, int]] = {
+FULL_CASTER_SLOTS: dict[int, dict[int, int]] = {
     1:  {1: 2},
     2:  {1: 3},
     3:  {1: 4, 2: 2},
@@ -53,7 +57,7 @@ FULL_CASTER_SLOTS: Dict[int, Dict[int, int]] = {
 }
 
 # Half casters: Paladin, Ranger (slots start at class level 2)
-HALF_CASTER_SLOTS: Dict[int, Dict[int, int]] = {
+HALF_CASTER_SLOTS: dict[int, dict[int, int]] = {
     1:  {},
     2:  {1: 2},
     3:  {1: 3},
@@ -78,7 +82,7 @@ HALF_CASTER_SLOTS: Dict[int, Dict[int, int]] = {
 
 # Third casters: Eldritch Knight (Fighter), Arcane Trickster (Rogue)
 # Slots start at class level 3
-THIRD_CASTER_SLOTS: Dict[int, Dict[int, int]] = {
+THIRD_CASTER_SLOTS: dict[int, dict[int, int]] = {
     1:  {},
     2:  {},
     3:  {1: 2},
@@ -102,7 +106,7 @@ THIRD_CASTER_SLOTS: Dict[int, Dict[int, int]] = {
 }
 
 # Warlock Pact Magic slots: slot level is represented by the key, count by value.
-WARLOCK_PACT_SLOTS: Dict[int, Dict[int, int]] = {
+WARLOCK_PACT_SLOTS: dict[int, dict[int, int]] = {
     1: {1: 1},
     2: {1: 2},
     3: {2: 2},
@@ -126,7 +130,7 @@ WARLOCK_PACT_SLOTS: Dict[int, Dict[int, int]] = {
 }
 
 
-def starting_slots(caster_type: str, class_level: int) -> Dict[int, int]:
+def starting_slots(caster_type: str, class_level: int) -> dict[int, int]:
     """Return the spell slot counts for a caster at the given class level.
 
     Args:
@@ -142,7 +146,7 @@ def starting_slots(caster_type: str, class_level: int) -> Dict[int, int]:
     if class_level < 1 or class_level > 20:
         raise ValueError(f"Class level must be 1–20, got {class_level}")
 
-    tables: Dict[str, Dict[int, Dict[int, int]]] = {
+    tables: dict[str, dict[int, dict[int, int]]] = {
         "full": FULL_CASTER_SLOTS,
         "half": HALF_CASTER_SLOTS,
         "third": THIRD_CASTER_SLOTS,
@@ -169,7 +173,7 @@ class SpellSlots:
     Missing keys mean zero slots of that level.
     """
 
-    slots: Dict[int, int] = field(default_factory=dict)
+    slots: dict[int, int] = field(default_factory=dict)
 
     @classmethod
     def from_table(cls, caster_type: str, class_level: int) -> SpellSlots:
@@ -205,7 +209,7 @@ class SpellSlots:
             raise ValueError(f"Slot level must be 1–9, got {level}")
         self.slots[level] = self.slots.get(level, 0) + count
 
-    def snapshot(self) -> Dict[int, int]:
+    def snapshot(self) -> dict[int, int]:
         """Return a copy of the current slots dict."""
         return dict(self.slots)
 
@@ -251,7 +255,7 @@ class SpellCastResult:
     upcasted: bool             # True when slot_level > spell_level
     concentration: bool        # True if this spell requires concentration
     previous_concentration: str  # Name of the concentration spell that was ended ("" if none)
-    slots_remaining: Dict[int, int]  # Slot snapshot after casting
+    slots_remaining: dict[int, int]  # Slot snapshot after casting
 
 
 @dataclass
@@ -456,10 +460,9 @@ def upcast_damage(
         return roll_damage(base_notation, critical=critical, rng=rng)
 
     # Parse the extra dice notation (no modifier allowed on extra dice)
-    import re
-    _EXTRA = re.compile(r"^(?P<count>\d+)?d(?P<sides>\d+)$", re.IGNORECASE)
+    extra_pat = re.compile(r"^(?P<count>\d+)?d(?P<sides>\d+)$", re.IGNORECASE)
     cleaned = extra_dice_per_level.strip().lower()
-    m = _EXTRA.match(cleaned)
+    m = extra_pat.match(cleaned)
     if not m:
         raise ValueError(
             f"Invalid extra_dice_per_level: '{extra_dice_per_level}'. "

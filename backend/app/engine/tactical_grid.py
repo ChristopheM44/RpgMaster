@@ -9,7 +9,7 @@ No I/O, no async, no database. Provides:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 CELL_SIZE_M = 1.5  # Each grid cell = 1.5 m (= 5 ft, SRD FR 5.2.1)
 

@@ -11,14 +11,13 @@ No I/O, no async, no database access.
 """
 from __future__ import annotations
 
-import re
 import random
-from dataclasses import dataclass, field
-from typing import List, Optional
+import re
+from dataclasses import dataclass
+from typing import Optional
 
 from app.engine.ability_checks import _resolve_d20, ability_modifier
 from app.engine.dice import roll_dice
-
 
 # ---------------------------------------------------------------------------
 # Data classes
@@ -40,7 +39,7 @@ class AttackResult:
     """Full breakdown of an attack roll."""
 
     d20_roll: int
-    all_rolls: List[int]       # both dice under advantage/disadvantage
+    all_rolls: list[int]       # both dice under advantage/disadvantage
     attack_bonus: int
     total: int
     target_ac: int
@@ -56,7 +55,7 @@ class DamageResult:
     """Result of a damage roll (with optional critical doubling)."""
 
     notation: str
-    rolls: List[int]   # all dice rolled (2× count on crit)
+    rolls: list[int]   # all dice rolled (2× count on crit)
     modifier: int
     total: int         # always ≥ 0
     critical: bool
@@ -157,7 +156,7 @@ def roll_initiative(
     )
 
 
-def sort_initiative(results: List[InitiativeResult]) -> List[InitiativeResult]:
+def sort_initiative(results: list[InitiativeResult]) -> list[InitiativeResult]:
     """Sort combatants by initiative total (highest first).
 
     Ties are broken by DEX modifier (higher DEX wins).

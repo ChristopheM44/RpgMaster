@@ -13,11 +13,10 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Optional
 
 from app.engine.ability_checks import Ability, ability_modifier
 from app.engine.ability_checks import proficiency_bonus as _prof_bonus
-
 
 # ---------------------------------------------------------------------------
 # Point buy
@@ -26,7 +25,7 @@ from app.engine.ability_checks import proficiency_bonus as _prof_bonus
 POINT_BUY_BUDGET: int = 27
 
 # SRD 5.2 point buy cost table (base scores 8–15, before species bonuses)
-POINT_BUY_COST: Dict[int, int] = {
+POINT_BUY_COST: dict[int, int] = {
     8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9,
 }
 
@@ -52,7 +51,7 @@ def point_buy_cost(score: int) -> int:
     return POINT_BUY_COST[score]
 
 
-def roll_ability_scores(rng: random.Random | None = None) -> List[int]:
+def roll_ability_scores(rng: random.Random | None = None) -> list[int]:
     """Roll six ability scores using the 4d6-drop-lowest method.
 
     For each of the six scores: roll four d6, discard the lowest, sum the rest.
@@ -65,7 +64,7 @@ def roll_ability_scores(rng: random.Random | None = None) -> List[int]:
         List of six integers (each in range 3–18).
     """
     _rng = rng or random
-    results: List[int] = []
+    results: list[int] = []
     for _ in range(6):
         rolls = [_rng.randint(1, 6) for _ in range(4)]
         rolls.sort()
@@ -73,7 +72,7 @@ def roll_ability_scores(rng: random.Random | None = None) -> List[int]:
     return results
 
 
-def validate_point_buy(scores: Dict[str, int]) -> int:
+def validate_point_buy(scores: dict[str, int]) -> int:
     """Validate a complete set of 6 base ability scores against the point buy budget.
 
     Args:
@@ -92,7 +91,8 @@ def validate_point_buy(scores: Dict[str, int]) -> int:
     extra = given - expected
     if missing or extra:
         raise ValueError(
-            f"Expected abilities {sorted(expected)}; missing={sorted(missing)}, extra={sorted(extra)}"
+            f"Expected abilities {sorted(expected)}; "
+            f"missing={sorted(missing)}, extra={sorted(extra)}"
         )
 
     total = sum(point_buy_cost(v) for v in scores.values())  # raises on out-of-range
@@ -127,7 +127,7 @@ class AbilityScores:
         """Return the ability modifier for the given Ability."""
         return ability_modifier(self.get(ability))
 
-    def apply_bonuses(self, bonuses: Dict[str, int]) -> "AbilityScores":
+    def apply_bonuses(self, bonuses: dict[str, int]) -> AbilityScores:
         """Return a new AbilityScores with the given bonuses added (hard cap 20).
 
         Args:
@@ -144,7 +144,7 @@ class AbilityScores:
             d[key] = min(20, d[key] + bonus)
         return AbilityScores(**d)
 
-    def as_dict(self) -> Dict[str, int]:
+    def as_dict(self) -> dict[str, int]:
         """Return a plain dict representation."""
         return {
             "strength": self.strength,
@@ -166,16 +166,16 @@ class SpeciesTraits:
     """Mechanical traits granted by a character's species."""
 
     name: str
-    ability_bonuses: Dict[str, int]     # e.g. {"dexterity": 2, "intelligence": 1}
+    ability_bonuses: dict[str, int]     # e.g. {"dexterity": 2, "intelligence": 1}
     speed: float                        # vitesse de déplacement de base en mètres
     size: str                           # "Medium" or "Small"
     darkvision_m: float                 # 0 = pas de vision dans le noir
-    traits: List[str]                   # feature names
-    skill_proficiencies: List[str]      # bonus skill proficiencies granted by species
-    languages: List[str]
+    traits: list[str]                   # feature names
+    skill_proficiencies: list[str]      # bonus skill proficiencies granted by species
+    languages: list[str]
 
 
-_SPECIES_DATA: Dict[str, SpeciesTraits] = {
+_SPECIES_DATA: dict[str, SpeciesTraits] = {
     # Standard Human: +1 to every ability score
     "human": SpeciesTraits(
         name="Human",
@@ -308,17 +308,17 @@ class ClassFeatures:
 
     name: str
     hit_die: int                            # e.g. 10 for Fighter (d10)
-    saving_throw_proficiencies: List[str]   # ability names
-    armor_proficiencies: List[str]
-    weapon_proficiencies: List[str]
-    skill_choices: List[str]                # pool from which to choose
+    saving_throw_proficiencies: list[str]   # ability names
+    armor_proficiencies: list[str]
+    weapon_proficiencies: list[str]
+    skill_choices: list[str]                # pool from which to choose
     num_skill_choices: int                  # how many to pick
-    level_1_features: List[str]             # feature names at level 1
+    level_1_features: list[str]             # feature names at level 1
     spellcasting_ability: Optional[str]     # None for non-casters
     caster_type: Optional[str]              # "full", "half", "third", "warlock", or None
 
 
-_CLASS_DATA: Dict[str, ClassFeatures] = {
+_CLASS_DATA: dict[str, ClassFeatures] = {
     "fighter": ClassFeatures(
         name="Fighter",
         hit_die=10,
@@ -444,7 +444,9 @@ _CLASS_DATA: Dict[str, ClassFeatures] = {
         saving_throw_proficiencies=["wisdom", "charisma"],
         armor_proficiencies=["light", "medium", "heavy", "shields"],
         weapon_proficiencies=["simple", "martial"],
-        skill_choices=["athletics", "insight", "intimidation", "medicine", "persuasion", "religion"],
+        skill_choices=[
+            "athletics", "insight", "intimidation", "medicine", "persuasion", "religion"
+        ],
         num_skill_choices=2,
         level_1_features=["Divine Sense", "Lay on Hands"],
         spellcasting_ability="charisma",

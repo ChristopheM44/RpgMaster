@@ -13,9 +13,9 @@ from app.config import (
     get_forge_outline_max_tokens,
     get_forge_source_note_max_tokens,
 )
+from app.engine.srd_data import get_monsters
 from app.llm.base_client import LLMClient
 from app.llm.model_router import router
-from app.engine.srd_data import get_monsters
 
 logger = logging.getLogger(__name__)
 

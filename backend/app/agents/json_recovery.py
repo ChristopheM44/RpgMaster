@@ -232,8 +232,9 @@ def build_default_combat_action(
             "action_type": action_type,
             "action_description": f"Action de secours : {action_type}",
             "target": None,
-            "params": {},
-            "roleplay_text": stripped[:_ROLEPLAY_TEXT_MAX_LEN] or f"{character_name} agit prudemment.",
+            "roleplay_text": (
+                stripped[:_ROLEPLAY_TEXT_MAX_LEN] or f"{character_name} agit prudemment."
+            ),
             "inner_reasoning": "Fallback combat : première action disponible.",
         }
 

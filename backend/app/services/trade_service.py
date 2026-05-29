@@ -53,7 +53,10 @@ class TradeService:
 
         sync_character_state(active, sender.id, equipment=sender_equipment)
         sync_character_state(active, receiver.id, equipment=receiver_equipment)
-        for char_id, equipment in ((sender.id, sender_equipment), (receiver.id, receiver_equipment)):
+        for char_id, equipment in (
+            (sender.id, sender_equipment),
+            (receiver.id, receiver_equipment),
+        ):
             await event_bus.publish_to_session(
                 session_id,
                 EventType.EQUIPMENT_UPDATED,

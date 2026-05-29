@@ -435,7 +435,11 @@ class PlayerAgent(BaseAgent):
 
         try:
             record_llm_call("player")
-            raw = await self._client.chat(messages=messages, temperature=0.6, max_tokens=_MAX_TOKENS_PLAYER_DECIDE)
+            raw = await self._client.chat(
+                messages=messages,
+                temperature=0.6,
+                max_tokens=_MAX_TOKENS_PLAYER_DECIDE,
+            )
         except (OllamaError, OpenAICompatibleError) as exc:
             logger.error("PlayerAgent[%s] : appel LLM échoué : %s", self._character_name, exc)
             return _fallback_action(error=f"{type(exc).__name__}: {exc}")
@@ -861,7 +865,9 @@ class PlayerAgent(BaseAgent):
                 action_description=str(data.get("action_description", "")),
                 target=target,
                 params=params,
-                roleplay_text=str(data.get("roleplay_text", raw.strip()[:_FALLBACK_ROLEPLAY_MAX_LEN])),
+                roleplay_text=str(
+                    data.get("roleplay_text", raw.strip()[:_FALLBACK_ROLEPLAY_MAX_LEN])
+                ),
                 inner_reasoning=data.get("inner_reasoning"),
             )
         except Exception as exc:

@@ -43,40 +43,34 @@ from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.connection_manager import ConnectionManager
-from app.api.ws_handlers.rest import handle_take_rest, handle_short_rest
-from app.api.ws_handlers.session import (
-    sync_ai_control_from_db,
-    _build_session_state_payload,
-    _build_session_state_payload_with_maps,
-)
-from app.api.ws_handlers.equipment import (
-    handle_equip_item,
-    handle_use_item,
-    handle_drop_item,
-    handle_give_item,
-    handle_give_currency,
-    handle_identify_item,
-    handle_asi_choice,
-)
-from app.api.ws_handlers.exploration import send_welcome_narration
 from app.api.ws_handlers.combat import (
-    handle_start_combat,
-    handle_end_turn,
+    active_npc_ids,
+    cleanup_inactive_npcs,
+    combat_end_reason_from_removed,
+    combat_target_id,
     handle_ai_turns,
-    handle_reset_combat,
-    handle_flee,
+    handle_combat_end,
     handle_dash,
     handle_disengage,
+    handle_end_turn,
+    handle_flee,
     handle_move,
+    handle_reset_combat,
+    handle_start_combat,
     handle_toggle_ai_control,
     handle_trigger_ai_reactions,
-    consume_pending_combat_transition,
     reject_out_of_turn_action,
-    combat_target_id,
-    cleanup_inactive_npcs,
-    handle_combat_end,
-    combat_end_reason_from_removed,
-    active_npc_ids,
+)
+from app.api.ws_handlers.exploration import send_welcome_narration
+from app.api.ws_handlers.lifecycle import (
+    VALIDATION_ERROR_MESSAGE,
+    character_belongs_to_session,
+    send_ws_error,
+)
+from app.api.ws_handlers.session import (
+    _build_session_state_payload,
+    _build_session_state_payload_with_maps,
+    sync_ai_control_from_db,
 )
 from app.api.ws_payloads import build_combat_start_payload
 from app.api.ws_schemas import (
@@ -95,12 +89,6 @@ from app.game.event_bus import BACKPRESSURE_ERROR_CODE, EventType, GameEvent, ev
 from app.game.runtime import session_manager
 from app.models.session import SessionStatus
 from app.security import websocket_has_valid_access_token
-from app.services.encounter_service import encounter_service
-from app.api.ws_handlers.lifecycle import (
-    VALIDATION_ERROR_MESSAGE,
-    character_belongs_to_session,
-    send_ws_error,
-)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -620,34 +608,20 @@ async def game_websocket(
 # Backwards-compatibility aliases and private bindings for legacy unit tests
 # ---------------------------------------------------------------------------
 
-from app.api.ws_payloads import (
-    compute_ac_from_equipment as _compute_ac_from_equipment,
-    monster_base_id as _monster_base_id,
-    monster_instance_number as _monster_instance_number,
-    monster_token as _monster_token,
-    monster_token_for_combatant as _monster_token_for_combatant,
-    monster_color as _monster_color,
-    format_monster_actions as _format_monster_actions,
-    character_snapshot as _character_snapshot,
-)
-from app.services.message_service import (
-    load_recent_messages as load_recent_messages,
-    persist_narration as persist_narration,
-)
-from app.api.ws_handlers.rest import handle_take_rest as _handle_take_rest
-from app.api.ws_handlers.rest import handle_short_rest as _handle_short_rest
-from app.api.ws_handlers.equipment import handle_equip_item as _handle_equip_item
-from app.api.ws_handlers.equipment import handle_use_item as _handle_use_item
-from app.api.ws_handlers.equipment import handle_drop_item as _handle_drop_item
-from app.api.ws_handlers.equipment import handle_give_item as _handle_give_item
-from app.api.ws_handlers.equipment import handle_give_currency as _handle_give_currency
-from app.api.ws_handlers.equipment import handle_identify_item as _handle_identify_item
-from app.api.ws_handlers.equipment import handle_asi_choice as _handle_asi_choice
+from app.api.ws_handlers.combat import _build_combat_summary as _build_combat_summary  # noqa: E402, I001
+from app.api.ws_handlers.combat import _generate_encounter_end as _generate_encounter_end  # noqa: E402, I001
+from app.api.ws_handlers.equipment import handle_asi_choice as _handle_asi_choice  # noqa: E402, I001
+from app.api.ws_handlers.equipment import handle_drop_item as _handle_drop_item  # noqa: E402, I001
+from app.api.ws_handlers.equipment import handle_equip_item as _handle_equip_item  # noqa: E402, I001
+from app.api.ws_handlers.equipment import handle_give_currency as _handle_give_currency  # noqa: E402, I001
+from app.api.ws_handlers.equipment import handle_give_item as _handle_give_item  # noqa: E402, I001
+from app.api.ws_handlers.equipment import handle_identify_item as _handle_identify_item  # noqa: E402, I001
+from app.api.ws_handlers.equipment import handle_use_item as _handle_use_item  # noqa: E402, I001
+from app.api.ws_handlers.rest import handle_short_rest as _handle_short_rest  # noqa: E402, I001
+from app.api.ws_handlers.rest import handle_take_rest as _handle_take_rest  # noqa: E402, I001
+from app.services.message_service import load_recent_messages as load_recent_messages  # noqa: E402, I001
+from app.services.message_service import persist_narration as persist_narration  # noqa: E402, I001
 
-from app.api.ws_handlers.combat import (
-    _build_combat_summary as _build_combat_summary,
-    _generate_encounter_end as _generate_encounter_end,
-)
 
 async def _generate_encounter_intro(
     session_id: str,
