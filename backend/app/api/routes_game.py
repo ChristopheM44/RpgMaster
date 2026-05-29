@@ -22,6 +22,7 @@ from app.db.database import get_db
 from app.game.event_bus import EventType, event_bus
 from app.game.gm_response_executor import GMResponseExecutor
 from app.game.runtime import session_manager
+from app.game.scene_theme import infer_scene_theme
 from app.game.turn_manager import CombatantInfo
 from app.models.character import Character
 from app.models.game_state import GameState
@@ -119,7 +120,7 @@ def _npc_affordance_text(opening_scene: dict[str, Any]) -> str:
     """Build a concrete NPC affordance from the first present NPC.
 
     Uses the NPC's visible description (appearance) so the party can act on it
-    without knowing the NPC's name. The hook/secret is intentionally excluded.
+    without knowing the NPC's name. Campaign hook text is handled separately.
     """
     present_npcs = opening_scene.get("present_npcs") or []
     if not isinstance(present_npcs, list) or not present_npcs:
@@ -138,25 +139,27 @@ def _npc_affordance_text(opening_scene: dict[str, Any]) -> str:
 def _party_briefing_text(campaign_context: dict[str, Any]) -> str:
     """Briefing public connu du groupe à l'ouverture.
 
-    Surface ``player_contract.known_objectives`` (objectif officiel que le
-    groupe connaît) pour que les joueurs comprennent immédiatement pourquoi
-    leurs personnages sont sur place. Le ``hook`` (twist secret du MJ) reste
-    exclusivement privé.
+    Surface ``player_contract.hook`` and ``known_objectives`` so players
+    understand immediately why their characters are there.
     """
+    hook = _hook_context_text(campaign_context)
     objective = _opening_objective(campaign_context)
-    if not objective:
-        return ""
-    cleaned = objective.rstrip(" .!?")
-    return f"Mission confiée au groupe : {cleaned}."
+    parts: list[str] = []
+    if hook:
+        cleaned_hook = hook.rstrip(" .!?")
+        parts.append(f"Accroche : {cleaned_hook}.")
+    if objective:
+        cleaned_objective = objective.rstrip(" .!?")
+        parts.append(f"Mission confiée au groupe : {cleaned_objective}.")
+    return " ".join(parts)
 
 
 def _campaign_opening_text(campaign_context: dict[str, Any]) -> str:
     """Build the visible opening narration for a campaign session.
 
-    The hook/secret (``player_contract.hook``) is intentionally excluded from
-    the visible text: it belongs to the GM's private briefing, not to the
-    opening read aloud. The public objective (``known_objectives``) is
-    surfaced so the party knows WHY it is here without spoiling the twist.
+    ``player_contract.hook`` is treated as the public playable hook: it says
+    why the party is involved. ``known_objectives`` keeps the official mission
+    visible without turning the prose into a menu.
     """
     briefing = _party_briefing_text(campaign_context)
     scene_text = _scene_context_text(campaign_context)
@@ -600,6 +603,117 @@ def _party_positions(active: Any) -> dict[str, dict[str, int]]:
     return positions
 
 
+def _theme_affordance_pois(scene_theme: str) -> list[dict[str, Any]]:
+    """Concrete non-duplicating affordances for the opening scene map."""
+    presets: dict[str, tuple[dict[str, str], dict[str, str]]] = {
+        "desert": (
+            {
+                "id": "rochers_erodes",
+                "name": "Rochers érodés",
+                "kind": "cover",
+                "icon": "c-half-cover",
+                "description": (
+                    "Des blocs chauffés à blanc offrent un rare abri contre le vent de sable."
+                ),
+                "action_hint": "S'abriter ou observer depuis ce couvert.",
+            },
+            {
+                "id": "sable_traitre",
+                "name": "Sable traître",
+                "kind": "hazard",
+                "icon": "trap-danger",
+                "description": "Une nappe de sable plus sombre s'affaisse sous les rafales.",
+                "action_hint": "Contourner ou tester la stabilité.",
+            },
+        ),
+        "city": (
+            {
+                "id": "echoppe_renversee",
+                "name": "Échoppe renversée",
+                "kind": "cover",
+                "icon": "c-half-cover",
+                "description": "Une structure de bois et de toile bloque partiellement la vue.",
+                "action_hint": "S'abriter ou fouiller rapidement.",
+            },
+            {
+                "id": "foule_agitee",
+                "name": "Foule agitée",
+                "kind": "hazard",
+                "icon": "c-danger-zone",
+                "description": (
+                    "Les passants se pressent et rendent tout mouvement brusque risqué."
+                ),
+                "action_hint": "Avancer avec prudence.",
+            },
+        ),
+        "dungeon": (
+            {
+                "id": "pilier_fissure",
+                "name": "Pilier fissuré",
+                "kind": "cover",
+                "icon": "c-half-cover",
+                "description": "La pierre ancienne tient encore assez pour masquer une silhouette.",
+                "action_hint": "Se couvrir ou examiner les fissures.",
+            },
+            {
+                "id": "dalles_instables",
+                "name": "Dalles instables",
+                "kind": "hazard",
+                "icon": "trap-danger",
+                "description": "Quelques pierres sonnent creux sous la poussière.",
+                "action_hint": "Tester avant de traverser.",
+            },
+        ),
+    }
+    cover, hazard = presets.get(
+        scene_theme,
+        (
+            {
+                "id": "abri_terrain",
+                "name": "Abri du terrain",
+                "kind": "cover",
+                "icon": "c-half-cover",
+                "description": (
+                    "Un élément du décor peut servir de couvert ou de point d'observation."
+                ),
+                "action_hint": "S'abriter ou observer.",
+            },
+            {
+                "id": "zone_instable",
+                "name": "Zone instable",
+                "kind": "hazard",
+                "icon": "trap-danger",
+                "description": "Le sol ou l'environnement immédiat impose de la prudence.",
+                "action_hint": "Contourner ou examiner.",
+            },
+        ),
+    )
+    return [
+        {
+            **cover,
+            "position": {"col": 3, "row": 6},
+            "interactions": [
+                {
+                    "label": "Observer",
+                    "intent": "examine",
+                    "prompt": f"J'observe {cover['name'].lower()} et ce qu'on peut en tirer.",
+                }
+            ],
+        },
+        {
+            **hazard,
+            "position": {"col": 8, "row": 7},
+            "interactions": [
+                {
+                    "label": "Examiner",
+                    "intent": "examine",
+                    "prompt": f"J'examine {hazard['name'].lower()} sans m'y engager.",
+                }
+            ],
+        },
+    ]
+
+
 def _opening_scene_allows_path_choice(state_data: dict[str, Any]) -> bool:
     campaign_context = state_data.get("campaign_context")
     if not isinstance(campaign_context, dict):
@@ -652,9 +766,8 @@ def _append_brief_items(lines: list[str], label: str, values: list[str]) -> None
 def _build_opening_brief(state_data: dict[str, Any]) -> str:
     """Build a private GM brief for ``GMAgent.open_scene``.
 
-    This text is sent only to the GM LLM. The visible narration must still obey
-    the public quest block in ``gm_open_scene.txt`` and avoid leaking private
-    hooks or chapter notes.
+    This text is sent only to the GM LLM. The campaign hook is public and
+    playable; chapter notes and secrets remain private.
     """
     campaign_context = state_data.get("campaign_context")
     if not isinstance(campaign_context, dict):
@@ -681,6 +794,9 @@ def _build_opening_brief(state_data: dict[str, Any]) -> str:
         lines.append(f"- Titre: {title}")
     if pitch_public:
         lines.append(f"- Pitch public: {pitch_public}")
+    hook = str(contract.get("hook") or "").strip()
+    if hook:
+        lines.append(f"- Accroche publique: {hook}")
     _append_brief_items(lines, "Objectifs connus", _brief_list(contract.get("known_objectives")))
     _append_brief_items(lines, "Tons", _brief_list(contract.get("tones"), limit=5))
     if duration:
@@ -776,9 +892,6 @@ def _build_opening_brief(state_data: dict[str, Any]) -> str:
         lines.append("- Le groupe est présent, mais aucun détail de PJ n'est disponible.")
 
     lines.extend(["", "## PRIVÉ MJ"])
-    hook = str(contract.get("hook") or "").strip()
-    if hook:
-        lines.append(f"- Hook privé: {hook}")
     for label, key in (
         ("Objectif de chapitre", "objective"),
         ("Enjeux", "stakes"),
@@ -837,49 +950,19 @@ def _opening_response(
         else _free_opening_text(active, script, auto_generate)
     )
 
-    # Guess scene_theme based on keywords in physical_place and description, or use seed value
-    text_to_check = f"{physical_place} {scene_brief}".lower()
-    guessed_theme = journal.get("scene_theme") or "forest"
-    if not journal.get("scene_theme"):
-        if any(k in text_to_check for k in ["beach", "plage", "sand", "sable"]):
-            guessed_theme = "beach"
-        elif any(k in text_to_check for k in ["coast", "rivage", "mer", "shore", "ocean", "sea", "tempete", "tempête"]):
-            guessed_theme = "coastal"
-        elif any(k in text_to_check for k in ["dungeon", "donjon", "chamber", "chambre", "salle", "crypt"]):
-            guessed_theme = "dungeon"
-        elif any(k in text_to_check for k in ["cave", "grotte", "cavern"]):
-            guessed_theme = "cave"
-        elif any(k in text_to_check for k in ["swamp", "marais", "mud", "boue"]):
-            guessed_theme = "swamp"
-        elif any(k in text_to_check for k in ["desert", "dune"]):
-            guessed_theme = "desert"
-        elif any(k in text_to_check for k in ["mountain", "montagne", "peak"]):
-            guessed_theme = "mountain"
-        elif any(k in text_to_check for k in ["rock", "roche", "cliff", "falaise"]):
-            guessed_theme = "rocky"
-        elif any(k in text_to_check for k in ["city", "ville", "street", "rue", "place", "town"]):
-            guessed_theme = "city"
-        elif any(k in text_to_check for k in ["plain", "plaine", "grass", "herbe", "field"]):
-            guessed_theme = "plains"
+    guessed_theme = infer_scene_theme(
+        journal.get("scene_theme"),
+        physical_place,
+        physical_region,
+        physical_venue,
+        scene_brief,
+        weather,
+        objective,
+    )
 
     pois: list[dict[str, Any]] = []
     main_description = scene_brief or "Les premiers détails concrets de la scène."
-    pois.append({
-        "id": "ambiance_initiale",
-        "name": location if location and location != "un lieu de départ" else "Situation immédiate",
-        "kind": "clue",
-        "position": {"col": 3, "row": 4},
-        "icon": "clue",
-        "description": main_description[:200],
-        "action_hint": "Observer avant de décider.",
-        "interactions": [
-            {
-                "label": "Examiner",
-                "intent": "examine",
-                "prompt": "J'examine la scène et les détails immédiats du lieu.",
-            }
-        ],
-    })
+    pois.extend(_theme_affordance_pois(guessed_theme))
     if clues:
         for index, clue in enumerate(clues):
             clue_name = str(clue.get("name") or clue.get("id") or f"Indice {index + 1}").strip()

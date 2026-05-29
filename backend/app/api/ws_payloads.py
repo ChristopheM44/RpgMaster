@@ -72,6 +72,17 @@ async def build_session_state_payload_enriched(
     db: Any,
 ) -> dict[str, Any]:
     """Build session state plus campaign-level map data when a DB session is available."""
+    if active is not None:
+        try:
+            from app.game.runtime import session_manager
+            from app.services.visual_coherence_service import repair_visual_coherence_for_session
+
+            changed = await repair_visual_coherence_for_session(session_id, active.state_data, db)
+            if changed:
+                active.mark_dirty()
+                await session_manager.save_state(session_id, db)
+        except Exception:
+            pass
     payload = build_session_state_payload(session_id, active)
     try:
         from app.services import campaign_dossier_service

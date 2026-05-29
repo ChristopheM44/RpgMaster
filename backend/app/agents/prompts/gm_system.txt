@@ -56,7 +56,7 @@ TYPES D'ACTIONS :
                     "party_positions":{"thorvald":{"col":5,"row":6}}})
                     CHAMP scene_theme (OBLIGATOIRE) : choisis la valeur qui correspond le mieux au biome physique de la scène.
                     Valeurs autorisées : forest | beach | coastal | rocky | mountain | dungeon | cave | city | plains | swamp | desert
-                    Exemples : rivage/sable/mer → "beach" ; falaises/rochers/île rocailleuse → "rocky" ; intérieur souterrain → "dungeon" ; grotte → "cave" ; prairie ouverte → "plains" ; forêt/bois → "forest" ; marécage/marais → "swamp" ; désert/sable brûlant → "desert" ; zone urbaine/rue/place → "city".
+                    Exemples : plage/rivage avec mer → "beach" ; falaises/rochers/île rocailleuse → "rocky" ; intérieur souterrain → "dungeon" ; grotte → "cave" ; prairie ouverte → "plains" ; forêt/bois → "forest" ; marécage/marais → "swamp" ; désert/dunes/oasis/sable brûlant sans mer → "desert" ; zone urbaine/rue/place → "city".
                     Ce champ pilote le rendu visuel de la carte : ne l'omets jamais, ne répète pas "terrain" si scene_theme suffit.
                     Ajoute description/action_hint très courts aux POI utiles pour que l'interface explique ce que le joueur sélectionne.
                     kind/icon doivent rester cohérents : ennemi visible = kind "enemy", icon "c-enemy"; PNJ = kind "npc", icon "npc"; couvert = kind "cover", icon "c-half-cover"; danger/piège = kind "hazard", icon "trap-danger"; butin/objet = kind "loot", icon "chest"; indice = kind "clue", icon "clue"; porte/sortie navigable = dans exits, pas en doublon dans pois.
@@ -88,7 +88,7 @@ TYPES D'ACTIONS :
                     Réutilise les ids existants de world_maps. N'envoie que les ajouts/modifications.
                     DÉCOR (set-once, premier patch uniquement) : lors de la CRÉATION d'une nouvelle région,
                     ajoute un champ "decor" avec les éléments naturels de la région — forêts, montagnes,
-                    côte/mer, rivières. Ne l'inclus PAS dans les patches narratifs suivants (il sera préservé).
+                    côte/mer seulement si le corpus contient mer/rivage/port explicite, rivières. Ne l'inclus PAS dans les patches narratifs suivants (il sera préservé).
                     Format decor :
                     {
                       "forests": [{"x":24,"y":18,"radius":3.2,"opacity":0.4}, ...],
@@ -97,8 +97,8 @@ TYPES D'ACTIONS :
                       "river": {"path":"M 0 76 Q 30 80 60 78 T 100 80","width":1.5},
                       "decorative_roads": ["M 14 28 Q 30 40 48 58","M 48 58 Q 38 60 26 62"]
                     }
-                    Coordonnées en 0..100 (viewBox SVG). Adapte à la géographie de la région : zone côtière
-                    → coastline; région montagneuse → mountains au NE/NO; rivière = path traversant la carte.
+                    Coordonnées en 0..100 (viewBox SVG). Adapte à la géographie de la région : zone côtière explicite
+                    → coastline; désert/dunes/oasis/sable sans mer → pas de coastline; région montagneuse → mountains au NE/NO; rivière = path traversant la carte.
 - city_map_update : patch incrémental d'une carte de ville.
                     (params: {"city_id":"port_neuf","region_node_id":"port_neuf","name":"Port-Neuf",
                     "current_node_id":"quai_nord","nodes_upsert":[{"id":"quai_nord","name":"Quai nord","kind":"docks","position":{"x":35,"y":70},"status":"current"}],

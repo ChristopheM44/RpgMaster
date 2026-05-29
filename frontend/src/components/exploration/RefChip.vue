@@ -39,7 +39,15 @@ const tone = computed(() => {
 const icon = computed(() => {
   if (hero.value) return '◉'
   if (poi.value?.kind === 'sortie') return '↦'
-  return '🔍'
+  if (poi.value?.iconSymbol) return poi.value.iconSymbol
+  switch (poi.value?.kind) {
+    case 'npc': return '◉'
+    case 'clue': return '✦'
+    case 'hazard': return '⚠'
+    case 'cover': return '◆'
+    case 'loot': return '▣'
+    default: return '✦'
+  }
 })
 
 const highlighted = computed(() => sessionStore.highlightedIds.includes(props.refId))

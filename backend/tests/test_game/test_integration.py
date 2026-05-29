@@ -281,8 +281,8 @@ class TestCastSpellAction:
 
 
 class TestGMActions:
-    def test_damage_apply_publishes_hp_changed(self, ws_client) -> None:
-        """Quand le GM demande damage_apply sur un combattant connu, hp_changed est émis."""
+    def test_damage_apply_after_resolved_roll_publishes_hp_changed(self, ws_client) -> None:
+        """Quand le GM applique des dégâts après un jet résolu, hp_changed est émis."""
         session_id = _create_session(ws_client)
 
         # GM response avec une action damage_apply
@@ -309,15 +309,18 @@ class TestGMActions:
 
             ws.send_json({
                 "type": "action",
-                "action_type": "free_text",
-                "content": "Le gobelin encaisse le coup",
+                "action_type": "cast_spell",
+                "content": "Projectile magique sur le gobelin",
+                "character_id": "hero-1",
+                "target_id": "goblin-1",
             })
 
-            raw_events = _collect_all(ws, 4)
+            raw_events = _collect_all(ws, 5)
             msgs = _without_ai_thinking(raw_events)
 
         _assert_gm_thinking_pair(raw_events)
         event_types = _event_types(msgs)
+        assert "roll_result" in event_types
         assert "hp_changed" in event_types
 
         hp_event = next(m for m in msgs if m["event_type"] == "hp_changed")

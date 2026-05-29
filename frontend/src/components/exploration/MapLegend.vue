@@ -23,6 +23,17 @@ function onHover(id: string | null) {
 function onClick(id: string) {
   sessionStore.selectEntity(id)
 }
+
+function poiSymbol(kind: string) {
+  switch (kind) {
+    case 'npc': return '◉'
+    case 'clue': return '✦'
+    case 'hazard': return '⚠'
+    case 'cover': return '◆'
+    case 'loot': return '▣'
+    default: return '✦'
+  }
+}
 </script>
 
 <template>
@@ -63,7 +74,7 @@ function onClick(id: string) {
         @mouseenter="onHover(p.id)"
         @mouseleave="onHover(null)"
         @click="onClick(p.id)"
-      >🔍 {{ p.label }}</div>
+      >{{ p.iconSymbol ?? poiSymbol(p.kind) }} {{ p.label }}</div>
     </div>
 
     <span v-if="pois.length" class="map-legend-divider" />

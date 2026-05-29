@@ -735,9 +735,9 @@ async def test_start_game_injects_minimal_campaign_context(async_client, db_sess
     assert opening is not None
     assert "La partie commence" not in opening.content
     assert "Le rideau se lève" not in opening.content
-    # Le hook (secret/raison de la présence) ne doit PAS apparaître dans la narration visible.
-    # La narration montre le lieu, la description de scène et l'affordance NPC.
-    assert "Une lueur bleue attire les voyageurs" not in opening.content
+    # Le hook est l'accroche publique jouable : la narration explique pourquoi
+    # le groupe est là, puis montre le lieu et l'affordance NPC.
+    assert "Une lueur bleue attire les voyageurs" in opening.content
     assert "Que faites-vous ?" in opening.content
 
     state_response = await async_client.get(f"/api/game/{session_id}/state")

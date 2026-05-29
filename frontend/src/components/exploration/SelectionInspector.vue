@@ -18,7 +18,7 @@ const poi = computed(() => findPoi(sessionStore.selectedId))
 
 const isHero = computed(() => !!hero.value)
 const isSortie = computed(() => poi.value?.kind === 'sortie')
-const isRepere = computed(() => poi.value?.kind === 'repere')
+const isPoi = computed(() => !!poi.value && !isSortie.value)
 
 const tone = computed<'gold' | 'arcane' | 'blood' | 'teal' | 'text'>(() => {
   if (hero.value) {
@@ -47,12 +47,53 @@ const eyebrow = computed(() => {
     return hero.value!.ai ? 'Compagnon IA' : 'Allié'
   }
   if (isSortie.value) return 'Sortie'
-  if (isRepere.value) return 'Repère'
-  return ''
+  switch (poi.value?.kind) {
+    case 'npc': return 'PNJ'
+    case 'clue': return 'Indice'
+    case 'hazard': return 'Danger'
+    case 'cover': return 'Couvert'
+    case 'loot': return 'Butin'
+    case 'passage': return 'Passage'
+    case 'fog': return 'Brouillard'
+    case 'light': return 'Lumière'
+    case 'ruins': return 'Vestiges'
+    case 'safe': return 'Refuge'
+    case 'unknown': return 'Inconnu'
+    case 'exit': return 'Issue'
+    case 'point': return 'Repère'
+    default: return ''
+  }
 })
 
 const position = computed(() => hero.value?.pos ?? poi.value?.label ?? '')
 const title = computed(() => hero.value?.name ?? poi.value?.title ?? '')
+const poiSymbol = computed(() => {
+  if (poi.value?.iconSymbol) return poi.value.iconSymbol
+  switch (poi.value?.kind) {
+    case 'npc': return '◉'
+    case 'clue': return '✦'
+    case 'hazard': return '⚠'
+    case 'cover': return '◆'
+    case 'loot': return '▣'
+    case 'sortie': return '↦'
+    default: return '✦'
+  }
+})
+const poiActionLabel = computed(() => (
+  poi.value?.actionLabel
+  ?? poi.value?.skill
+  ?? (poi.value?.kind === 'npc' ? 'Parler' : 'Examiner')
+))
+const poiSubPrefix = computed(() => (
+  poi.value?.dc !== undefined && poi.value?.dc !== null ? 'Test' : 'Action'
+))
+const poiSubValue = computed(() => {
+  if (!poi.value) return ''
+  if (poi.value.dc !== undefined && poi.value.dc !== null) {
+    return `${poiActionLabel.value} · DD ${poi.value.dc}`
+  }
+  return poiActionLabel.value
+})
 
 function close() {
   sessionStore.selectEntity(null)
@@ -89,7 +130,7 @@ function act() {
         }"
       >
         <span v-if="hero">{{ hero.token }}</span>
-        <span v-else>{{ isSortie ? '↦' : '🔍' }}</span>
+        <span v-else>{{ poiSymbol }}</span>
       </div>
       <div class="inspector-meta">
         <div class="inspector-eyebrow" :style="{ color: toneVar }">
@@ -99,8 +140,9 @@ function act() {
         <div v-if="hero" class="inspector-sub">
           Niv.1 · {{ hero.cls }} · {{ hero.species }}
         </div>
-        <div v-else-if="isRepere && poi" class="inspector-sub">
-          Test : <span class="inspector-skill" :style="{ color: toneVar }">{{ poi.skill }}</span> · DD {{ poi.dc }}
+        <div v-else-if="isPoi && poi" class="inspector-sub">
+          {{ poiSubPrefix }} :
+          <span class="inspector-skill" :style="{ color: toneVar }">{{ poiSubValue }}</span>
         </div>
         <div v-else-if="isSortie && poi" class="inspector-sub">
           Destination : <span class="inspector-skill" :style="{ color: toneVar }">{{ poi.dest }}</span>
@@ -159,13 +201,17 @@ function act() {
           👁 Fiche
         </button>
       </template>
-      <template v-else-if="isRepere && poi">
+      <template v-else-if="isPoi && poi">
         <button
           class="inspector-btn-primary"
           :style="{ background: `linear-gradient(135deg, ${toneHex}, ${toneHex}aa)` }"
           @click="act"
-        >✦ {{ poi.skill }}</button>
-        <button class="inspector-btn-outline" :style="{ color: 'var(--color-teal)', borderColor: 'rgba(79,216,192,0.4)', background: 'rgba(79,216,192,0.14)' }">
+        >✦ {{ poiActionLabel }}</button>
+        <button
+          v-if="poi.kind !== 'npc'"
+          class="inspector-btn-outline"
+          :style="{ color: 'var(--color-teal)', borderColor: 'rgba(79,216,192,0.4)', background: 'rgba(79,216,192,0.14)' }"
+        >
           ✥ Approcher
         </button>
       </template>

@@ -6,8 +6,8 @@
  * (background_seed ?? id) pour que la carte ne soit jamais vide.
  *
  * Pour les RegionMaps, on tente de détecter le biome à partir des noms de
- * nœuds (mots-clés côtiers, désertiques, etc.) pour éviter d'afficher une
- * forêt sur une île rocailleuse ou un littoral.
+ * nœuds (mots-clés côtiers, désertiques, etc.) pour éviter d'afficher un
+ * littoral ou une forêt dense quand le récit indique clairement autre chose.
  */
 
 import type { MapDecor, ForestSpot, MountainSpot, Coastline, RiverPath } from '../types'
@@ -165,8 +165,8 @@ export function generateMountainRegionDecor(seed: string): MapDecor {
 // ─── Génération principale ────────────────────────────────────────────────────
 
 /**
- * Génère un décor de région (forêts dispersées, montagnes NE, mer optionnelle).
- * Similaire à la preview Côte des Épées mais adapté à chaque seed.
+ * Génère un décor de région intérieur (forêts, montagnes, routes, rivière possible).
+ * Le littoral est réservé aux biomes explicitement côtiers.
  */
 export function generateRegionDecor(seed: string): MapDecor {
   const rand = makePrng(`region:${seed}`)
@@ -201,16 +201,6 @@ export function generateRegionDecor(seed: string): MapDecor {
     })
   }
 
-  // Mer/côte — 50 % de chance, côté déterministe selon seed
-  let coastline: Coastline | undefined
-  if (rand() > 0.5) {
-    const sides = ['west', 'east', 'north'] as const
-    const side = sides[Math.floor(rand() * sides.length)] as Coastline['side']
-    // Points terrain-mer simplifiés selon le côté
-    const coastPoints = _coastlinePoints(side, rand)
-    coastline = { side, points: coastPoints }
-  }
-
   // Rivière — 40 % de chance
   let river: RiverPath | undefined
   if (rand() > 0.6) {
@@ -224,7 +214,7 @@ export function generateRegionDecor(seed: string): MapDecor {
     decorativeRoads.push(_randomRoadPath(rand))
   }
 
-  return { forests, mountains, coastline, river, decorative_roads: decorativeRoads }
+  return { forests, mountains, river, decorative_roads: decorativeRoads }
 }
 
 /**

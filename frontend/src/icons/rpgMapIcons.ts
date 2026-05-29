@@ -293,7 +293,7 @@ function roleFromText(value: unknown, explicitKind = false): PoiSemanticRole | n
   if (!search) return null
 
   if (matchesAny(search, ['enemy', 'enemies', 'hostile', 'foe', 'monster', 'adversaire', 'ennemi', 'bandit', 'cultist', 'cultiste', 'zhentarim'])) return 'enemy'
-  if (matchesAny(search, ['npc', 'pnj', 'personnage', 'villager', 'merchant', 'marchand', 'spy', 'espion', 'emissaire'])) return 'npc'
+  if (matchesAny(search, ['npc', 'pnj', 'personnage', 'guide', 'villager', 'merchant', 'marchand', 'spy', 'espion', 'emissaire'])) return 'npc'
   if (matchesAny(search, ['hazard', 'danger', 'trap', 'piege', 'menace', 'staircase', 'stairs', 'escalier', 'trappe'])) return 'hazard'
   if (matchesAny(search, ['cover', 'couvert', 'half cover', 'full cover', 'barrel', 'barrels', 'baril', 'tonneau', 'tonneaux', 'barricade', 'crate', 'caisse'])) return 'cover'
   if (matchesAny(search, ['loot', 'chest', 'coffre', 'treasure', 'tresor', 'item', 'objet'])) return 'loot'

@@ -5,32 +5,86 @@ import { computed } from 'vue'
 import { useGameStore } from '../stores/game'
 import type { ExPoi } from '../fixtures/exploration'
 import type { PointOfInterest, SceneExit } from '../types'
+import {
+  iconForExit,
+  iconForPoi,
+  semanticRoleForPoi,
+  type PoiSemanticRole,
+} from '../icons/rpgMapIcons'
 
 // Mapping kind backend → tone V2.
-function poiTone(kind: string | undefined): ExPoi['tone'] {
-  switch ((kind ?? '').toLowerCase()) {
-    case 'corpse':
+function poiTone(role: PoiSemanticRole): ExPoi['tone'] {
+  switch (role) {
+    case 'enemy':
     case 'hazard':
-    case 'trap':
-    case 'blood':
       return 'blood'
-    case 'magic':
-    case 'arcane':
-    case 'rune':
-    case 'portal':
-      return 'arcane'
-    case 'treasure':
+    case 'clue':
     case 'loot':
-    case 'objective':
-    case 'gold':
       return 'gold'
+    case 'npc':
     case 'cover':
-    case 'medical':
-    case 'water':
-    case 'teal':
+    case 'safe':
+      return 'teal'
+    case 'fog':
+    case 'light':
+    case 'passage':
+    case 'ruins':
+    case 'unknown':
+    case 'exit':
+    case 'point':
       return 'teal'
     default:
       return 'teal'
+  }
+}
+
+function roleToKind(role: PoiSemanticRole): ExPoi['kind'] {
+  switch (role) {
+    case 'enemy':
+      return 'hazard'
+    case 'npc':
+      return 'npc'
+    case 'hazard':
+      return 'hazard'
+    case 'cover':
+      return 'cover'
+    case 'loot':
+      return 'loot'
+    case 'exit':
+      return 'exit'
+    case 'passage':
+      return 'passage'
+    case 'clue':
+      return 'clue'
+    case 'fog':
+      return 'fog'
+    case 'light':
+      return 'light'
+    case 'ruins':
+      return 'ruins'
+    case 'safe':
+      return 'safe'
+    case 'unknown':
+      return 'unknown'
+    case 'point':
+      return 'point'
+  }
+}
+
+function defaultActionLabel(kind: ExPoi['kind']): string {
+  switch (kind) {
+    case 'npc':
+      return 'Parler'
+    case 'loot':
+      return 'Fouiller'
+    case 'hazard':
+      return 'Examiner'
+    case 'cover':
+      return 'Observer'
+    case 'sortie':
+      return "S'y diriger"
+    default:
+      return 'Examiner'
   }
 }
 
@@ -42,16 +96,27 @@ function colLetter(col: number): string {
 function adaptPoi(p: PointOfInterest): ExPoi {
   const label = `${colLetter(p.position.col)}${p.position.row + 1}`
   const interaction = p.interactions?.[0]
+  const interactionDc = (interaction as { dc?: unknown } | undefined)?.dc
+  const role = semanticRoleForPoi(p)
+  const kind = roleToKind(role)
+  const actionLabel = interaction?.label ?? defaultActionLabel(kind)
   return {
     id: p.id,
-    kind: 'repere',
+    kind,
     x: p.position.col,
     y: p.position.row,
     label,
     title: p.name,
     desc: p.description ?? '',
-    skill: interaction?.label,
-    tone: poiTone(p.kind),
+    skill: actionLabel,
+    dc: typeof interactionDc === 'number' ? interactionDc : undefined,
+    iconId: iconForPoi(p),
+    actionLabel,
+    prompt: interaction?.prompt,
+    intent: interaction?.intent,
+    rawKind: p.kind,
+    rawIcon: p.icon,
+    tone: poiTone(role),
   }
 }
 
@@ -66,6 +131,8 @@ function adaptExit(e: SceneExit, isActive: boolean): ExPoi {
     title: e.label,
     desc: e.description ?? '',
     dest: e.leads_to,
+    iconId: iconForExit(e),
+    actionLabel: "S'y diriger",
     tone: isActive ? 'gold' : 'teal',
     active: isActive,
   }
@@ -85,7 +152,7 @@ export function useExplorationPois() {
     return [...adaptedPois, ...adaptedExits]
   })
 
-  const reperes = computed(() => pois.value.filter((p) => p.kind === 'repere'))
+  const reperes = computed(() => pois.value.filter((p) => p.kind !== 'sortie'))
   const sorties = computed(() => pois.value.filter((p) => p.kind === 'sortie'))
 
   function findPoi(id: string | null | undefined): ExPoi | undefined {

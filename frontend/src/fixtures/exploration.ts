@@ -19,7 +19,21 @@ export interface ExHero {
 
 export interface ExPoi {
   id: string
-  kind: 'repere' | 'sortie'
+  kind:
+    | 'npc'
+    | 'clue'
+    | 'hazard'
+    | 'cover'
+    | 'loot'
+    | 'exit'
+    | 'passage'
+    | 'fog'
+    | 'light'
+    | 'ruins'
+    | 'safe'
+    | 'unknown'
+    | 'point'
+    | 'sortie'
   x: number
   y: number
   label: string
@@ -28,6 +42,13 @@ export interface ExPoi {
   skill?: string
   dc?: number
   dest?: string
+  iconId?: string
+  iconSymbol?: string
+  actionLabel?: string
+  prompt?: string
+  intent?: string
+  rawKind?: string
+  rawIcon?: string
   tone: 'blood' | 'arcane' | 'teal' | 'gold' | 'text'
   active?: boolean
 }
@@ -130,13 +151,13 @@ export const EX_PARTY: ExHero[] = [
 // ── Repères et sorties sur la carte de scène ────────────────────────────
 // TODO: brancher backend — viendra de gameStore.currentScene.pois / .exits
 export const EX_POIS: ExPoi[] = [
-  { id: 'H1', kind: 'repere', x: 1,  y: 2, label: 'H1', title: 'Chariot renversé',
+  { id: 'H1', kind: 'hazard', x: 1,  y: 2, label: 'H1', title: 'Chariot renversé',
     desc: "Deux chevaux abattus, traces de pas en zigzag vers l'est. Sang frais.",
     skill: 'Investigation', dc: 12, tone: 'blood' },
-  { id: 'H4', kind: 'repere', x: 7,  y: 3, label: 'H4', title: 'Lueurs sous les arbres',
+  { id: 'H4', kind: 'clue', x: 7,  y: 3, label: 'H4', title: 'Lueurs sous les arbres',
     desc: 'Une faible lumière froide pulse à intervalles réguliers entre deux pins.',
     skill: 'Arcanes', dc: 14, tone: 'arcane' },
-  { id: 'H2', kind: 'repere', x: 5,  y: 4, label: 'H2', title: 'Corps allongé',
+  { id: 'H2', kind: 'npc', x: 5,  y: 4, label: 'H2', title: 'Corps allongé',
     desc: 'Un humain en armure de cuir, immobile. Respiration faible.',
     skill: 'Médecine', dc: 10, tone: 'teal' },
   { id: 'H7', kind: 'sortie', x: 0,  y: 7, label: 'H7', title: 'Retour vers Phandalin',

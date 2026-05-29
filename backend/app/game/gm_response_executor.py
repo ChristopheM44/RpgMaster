@@ -19,6 +19,7 @@ from sqlalchemy import select
 from app.agents.schemas import AgentResponse, GMResponse
 from app.engine.srd_data import find_equipment
 from app.game.event_bus import EventType, event_bus
+from app.game.scene_theme import coerce_scene_theme
 from app.game.session_manager import ActiveSession
 from app.game.social_resolution import SocialResolution
 from app.game.state_sync import sync_character_state
@@ -60,20 +61,6 @@ SCENE_POI_INTERACTION_INTENTS = {
 
 REWARD_ACTIONS_REQUIRING_AUTHORITY = {"currency_grant", "loot_grant", "xp_grant"}
 DIRECT_EFFECT_ACTIONS_REQUIRING_RESOLUTION = {"damage_apply", "combatant_status"}
-SCENE_THEMES = {
-    "forest",
-    "beach",
-    "coastal",
-    "rocky",
-    "mountain",
-    "dungeon",
-    "cave",
-    "city",
-    "plains",
-    "swamp",
-    "desert",
-}
-
 REWARD_AUTHORITY_MARKERS = (
     "récompense",
     "recompense",
@@ -1402,41 +1389,21 @@ class GMResponseExecutor:
             cell_size_m = 1.5
         cell_size_m = max(0.5, min(cell_size_m, 6.0))
 
-        # Extract and sanitize scene_theme
-        scene_theme = str(raw.get("scene_theme") or "").strip().lower()
-        if scene_theme not in SCENE_THEMES:
-            terrain_lower = str(raw.get("terrain") or "").lower()
-            if any(k in terrain_lower for k in ["beach", "plage", "sand", "sable"]):
-                scene_theme = "beach"
-            elif any(
-                k in terrain_lower
-                for k in ["coast", "rivage", "mer", "shore", "ocean", "sea"]
-            ):
-                scene_theme = "coastal"
-            elif any(
-                k in terrain_lower
-                for k in ["dungeon", "donjon", "chamber", "chambre", "salle", "crypt"]
-            ):
-                scene_theme = "dungeon"
-            elif any(k in terrain_lower for k in ["cave", "grotte", "cavern"]):
-                scene_theme = "cave"
-            elif any(k in terrain_lower for k in ["swamp", "marais", "mud", "boue"]):
-                scene_theme = "swamp"
-            elif any(k in terrain_lower for k in ["desert", "dune"]):
-                scene_theme = "desert"
-            elif any(k in terrain_lower for k in ["mountain", "montagne", "peak"]):
-                scene_theme = "mountain"
-            elif any(k in terrain_lower for k in ["rock", "roche", "cliff", "falaise"]):
-                scene_theme = "rocky"
-            elif any(
-                k in terrain_lower
-                for k in ["city", "ville", "street", "rue", "place", "town"]
-            ):
-                scene_theme = "city"
-            elif any(k in terrain_lower for k in ["plain", "plaine", "grass", "herbe", "field"]):
-                scene_theme = "plains"
-            else:
-                scene_theme = "forest"
+        scene_theme = coerce_scene_theme(
+            raw.get("scene_theme"),
+            raw.get("terrain"),
+            raw.get("description"),
+            " ".join(
+                str(poi.get("name") or poi.get("description") or "")
+                for poi in raw.get("pois", []) or []
+                if isinstance(poi, dict)
+            ),
+            " ".join(
+                str(exit_.get("label") or exit_.get("description") or exit_.get("leads_to") or "")
+                for exit_ in raw.get("exits", []) or []
+                if isinstance(exit_, dict)
+            ),
+        )
 
         layout: dict[str, Any] = {
             "cols": cols,

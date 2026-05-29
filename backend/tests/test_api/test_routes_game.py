@@ -219,7 +219,9 @@ def test_opening_response_falls_back_for_empty_context() -> None:
     scene = _action_by_type(response.actions, "scene_layout")
     assert scene is not None
     poi_ids = [poi["id"] for poi in scene.params["pois"]]
-    assert "ambiance_initiale" in poi_ids
+    assert "ambiance_initiale" not in poi_ids
+    assert "abri_terrain" in poi_ids
+    assert "zone_instable" in poi_ids
     assert "source_information" not in poi_ids
 
 
@@ -297,20 +299,14 @@ def test_opening_response_hides_private_or_structural_meta_text() -> None:
     assert "Mission confiée" in narration
     assert "Atteindre la Tombe de l'annihilation" in narration
     assert "Vous pouvez" not in narration
-    # Le hook (twist secret du MJ) ne doit JAMAIS apparaître en narration
-    # visible. Il alimente le briefing privé du MJ, pas le texte lu aux
-    # joueurs.
-    assert "La Guilde des Cartographes" not in narration
+    # Le hook est une accroche publique jouable : il explique pourquoi le
+    # groupe est impliqué avant de cadrer la scène immédiate.
+    assert "La Guilde des Cartographes" in narration
     assert narration.endswith("Que faites-vous ?")
 
 
-def test_campaign_opening_text_excludes_hook_secret() -> None:
-    """La narration d'ouverture ne révèle pas le hook de campagne (secret du MJ).
-
-    Le hook contient le twist central ("le fléau est libéré", "la tombe est
-    réelle") ; il doit alimenter le briefing privé MJ, pas le texte lu aux
-    joueurs. La narration visible = briefing public + lieu + scène + PNJ.
-    """
+def test_campaign_opening_text_surfaces_public_hook() -> None:
+    """La narration d'ouverture révèle l'accroche publique de campagne."""
     from app.api.routes_game import _campaign_opening_text
 
     campaign_context = {
@@ -330,10 +326,7 @@ def test_campaign_opening_text_excludes_hook_secret() -> None:
             },
         },
         "player_contract": {
-            "hook": (
-                "La tombe légendaire est bien réelle, "
-                "et quelqu'un cherche à en libérer le fléau."
-            ),
+            "hook": "La Guilde des Cartographes vous engage pour atteindre Chult.",
             "known_objectives": [
                 "Cartographier les ruines oubliées de la jungle de Chult"
             ],
@@ -342,10 +335,8 @@ def test_campaign_opening_text_excludes_hook_secret() -> None:
 
     text = _campaign_opening_text(campaign_context)
 
-    # Le secret de campagne ne doit pas apparaître.
-    assert "fléau" not in text.lower()
-    assert "tombe" not in text.lower()
-    assert "réelle" not in text.lower()
+    assert "Accroche" in text
+    assert "Guilde des Cartographes" in text
     # La scène et l'affordance NPC restent présentes.
     assert "Port Nyanzaru" in text or "Marché" in text
     assert "chapeau à plumes" in text
@@ -353,10 +344,10 @@ def test_campaign_opening_text_excludes_hook_secret() -> None:
 
 
 def test_campaign_opening_text_surfaces_known_objective_briefing() -> None:
-    """L'ouverture inclut le briefing public (known_objectives) sans le hook.
+    """L'ouverture inclut le hook public et les known_objectives.
 
     Le joueur doit savoir POURQUOI son groupe est sur place dès l'ouverture,
-    via ``known_objectives``. Le ``hook`` (twist privé MJ) reste invisible.
+    via l'accroche et l'objectif officiel.
     """
     from app.api.routes_game import _campaign_opening_text
 
@@ -376,7 +367,7 @@ def test_campaign_opening_text_surfaces_known_objective_briefing() -> None:
             },
         },
         "player_contract": {
-            "hook": "Le fléau de la tombe est sur le point d'être libéré.",
+            "hook": "Une commanditaire vous paie pour partir vers Chult.",
             "known_objectives": [
                 "Cartographier les ruines oubliées de la jungle de Chult"
             ],
@@ -385,11 +376,10 @@ def test_campaign_opening_text_surfaces_known_objective_briefing() -> None:
 
     text = _campaign_opening_text(campaign_context)
 
+    assert "Accroche" in text
+    assert "commanditaire" in text
     assert "Mission confiée au groupe" in text
     assert "Cartographier les ruines oubliées" in text
-    # Le hook reste exclu.
-    assert "fléau" not in text.lower()
-    assert "tombe" not in text.lower()
 
 
 def test_campaign_opening_text_without_known_objective_skips_briefing() -> None:
@@ -447,7 +437,7 @@ async def test_send_campaign_opening_narration_uses_llm_text_only(monkeypatch) -
             "characters": {"shade": {"name": "Shade", "is_ai": True}},
             "campaign_context": {
                 "player_contract": {
-                    "hook": "SECRET_ARTEFACT privé.",
+                    "hook": "Un message public invite le groupe à suivre la piste.",
                     "pitch_public": "Public pitch.",
                     "known_objectives": ["Suivre la piste publique"],
                 },
@@ -499,6 +489,7 @@ async def test_send_campaign_opening_narration_uses_llm_text_only(monkeypatch) -
     assert "llm_quest" not in str(response.actions)
     assert captured["quest_changed"] is True
     assert "## PUBLIC JOUEURS" in captured["brief"]
+    assert "Accroche publique" in captured["brief"]
     assert "## PRIVÉ MJ" in captured["brief"]
 
 
@@ -513,7 +504,7 @@ async def test_send_campaign_opening_narration_falls_back_on_llm_fallback(monkey
             "characters": {},
             "campaign_context": {
                 "player_contract": {
-                    "hook": "SECRET_ARTEFACT privé.",
+                    "hook": "Un message public invite le groupe à suivre la piste.",
                     "pitch_public": "Public pitch.",
                     "known_objectives": ["Suivre la piste publique"],
                 },

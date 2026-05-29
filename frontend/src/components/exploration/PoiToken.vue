@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import RpgMapIcon from '../common/RpgMapIcon.vue'
 import type { ExPoi } from '../../fixtures/exploration'
 
 const props = defineProps<{
@@ -12,6 +13,18 @@ const props = defineProps<{
 const emit = defineEmits<{ click: [id: string] }>()
 
 const isSortie = computed(() => props.poi.kind === 'sortie')
+const symbol = computed(() => {
+  if (props.poi.iconSymbol) return props.poi.iconSymbol
+  switch (props.poi.kind) {
+    case 'npc': return '◉'
+    case 'clue': return '✦'
+    case 'hazard': return '⚠'
+    case 'cover': return '◆'
+    case 'loot': return '▣'
+    case 'sortie': return '↦'
+    default: return '✦'
+  }
+})
 
 const toneVar = computed(() => {
   switch (props.poi.tone) {
@@ -62,14 +75,22 @@ const style = computed(() => ({
     :style="style"
     @click.stop="emit('click', poi.id)"
   >
+    <RpgMapIcon
+      v-if="poi.iconId"
+      class="poi-token-map-icon"
+      :icon-id="poi.iconId"
+      :size="Math.max(16, Math.round(cell * 0.48))"
+      decorative
+    />
     <span
+      v-else
       class="poi-token-icon"
       :style="{
         fontSize: `${fontPx}px`,
         color: toneVar,
         filter: `drop-shadow(0 0 6px ${toneHex}80)`,
       }"
-    >{{ isSortie ? '↦' : '🔍' }}</span>
+    >{{ symbol }}</span>
 
     <span
       class="poi-token-badge"
@@ -97,6 +118,11 @@ const style = computed(() => ({
 .poi-token-icon {
   line-height: 1;
   pointer-events: none;
+}
+
+.poi-token-map-icon {
+  pointer-events: none;
+  filter: drop-shadow(0 0 6px currentColor);
 }
 
 .poi-token-badge {

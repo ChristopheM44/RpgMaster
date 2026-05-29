@@ -50,4 +50,12 @@ describe('rpgMapIcons', () => {
       icon: 'spy',
     }))).toBe('npc')
   })
+
+  it('maps guide hints to NPC icons', () => {
+    expect(iconForPoi(poi({
+      id: 'khalid_guide',
+      name: 'Khalid le Guide',
+      kind: 'point',
+    }))).toBe('npc')
+  })
 })

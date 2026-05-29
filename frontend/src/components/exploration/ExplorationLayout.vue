@@ -23,8 +23,11 @@ function onAct(id: string) {
     sessionStore.moveParty(poi.dest ?? poi.id)
     emit('action', 'free_text', `Je me dirige vers ${poi.title}.`)
   } else {
-    const skillPart = poi.skill ? ` (${poi.skill}${poi.dc ? ` DD ${poi.dc}` : ''})` : ''
-    emit('action', 'free_text', `J'examine : ${poi.title}${skillPart}.`)
+    const content = poi.prompt
+      ?? (poi.kind === 'npc'
+        ? `Je parle à ${poi.title}.`
+        : `J'examine : ${poi.title}${poi.dc ? ` (${poi.actionLabel ?? poi.skill ?? 'Examiner'} DD ${poi.dc})` : ''}.`)
+    emit('action', 'free_text', content, poi.kind === 'npc' ? poi.id : undefined)
   }
 }
 
