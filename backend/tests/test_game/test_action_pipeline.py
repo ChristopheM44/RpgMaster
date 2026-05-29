@@ -775,6 +775,93 @@ class TestPipelineExecutorUnits:
             }
         ]
 
+    async def test_executor_scene_layout_preserves_elements_and_element_links(self) -> None:
+        layout = GMResponseExecutor._normalize_scene_layout(
+            {
+                "cols": 8,
+                "rows": 8,
+                "terrain": "tavern_room",
+                "scene_theme": "city",
+                "pois": [
+                    {
+                        "id": "desk",
+                        "name": "Bureau fermé",
+                        "kind": "loot",
+                        "position": {"col": 3, "row": 4},
+                        "element_id": "desk_element",
+                    }
+                ],
+                "exits": [
+                    {
+                        "id": "front_door",
+                        "label": "Porte d'entrée",
+                        "position": {"col": 0, "row": 4},
+                        "element_id": "front_door_element",
+                    }
+                ],
+                "elements": [
+                    {
+                        "id": "desk_element",
+                        "name": "Bureau fermé",
+                        "kind": "furniture",
+                        "geometry": {"type": "rect", "col": 3, "row": 4, "width": 1, "height": 1},
+                    },
+                    {
+                        "id": "front_door_element",
+                        "name": "Porte d'entrée",
+                        "kind": "door",
+                        "geometry": {"type": "rect", "col": 0, "row": 4, "width": 0.2, "height": 1},
+                    },
+                ],
+                "visual_asset": {
+                    "provider": "openai_compatible",
+                    "model": "gpt-image-1",
+                    "status": "prompt_ready",
+                    "prompt": "Top-down tavern.",
+                    "prompt_hash": "hash",
+                },
+            }
+        )
+
+        assert layout["pois"][0]["element_id"] == "desk_element"
+        assert layout["exits"][0]["element_id"] == "front_door_element"
+        assert {element["id"] for element in layout["elements"]} >= {
+            "desk_element",
+            "front_door_element",
+            "wall_north",
+        }
+        assert layout["visual_asset"]["model"] == "gpt-image-1"
+
+    async def test_executor_scene_layout_enriches_interior_without_duplicate_exit_poi(self) -> None:
+        layout = GMResponseExecutor._normalize_scene_layout(
+            {
+                "cols": 10,
+                "rows": 8,
+                "terrain": "stone_chamber",
+                "scene_theme": "dungeon",
+                "pois": [
+                    {
+                        "id": "stone_door",
+                        "name": "Porte de pierre",
+                        "kind": "exit",
+                        "position": {"col": 9, "row": 4},
+                    }
+                ],
+                "exits": [
+                    {
+                        "id": "stone_door",
+                        "label": "Porte de pierre",
+                        "position": {"col": 9, "row": 4},
+                    }
+                ],
+            }
+        )
+
+        assert layout["pois"] == []
+        assert layout["exits"][0]["element_id"] == "element_stone_door_door"
+        assert any(element["kind"] == "wall" for element in layout["elements"])
+        assert any(element["id"] == "element_stone_door_door" for element in layout["elements"])
+
     async def test_executor_scene_layout_filters_duplicate_exit_pois(self) -> None:
         layout = GMResponseExecutor._normalize_scene_layout(
             {

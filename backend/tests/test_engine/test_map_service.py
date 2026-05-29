@@ -128,6 +128,16 @@ def _decor_payload() -> dict:
     }
 
 
+def _visual_asset_payload() -> dict:
+    return {
+        "provider": "openai_compatible",
+        "model": "gpt-image-1",
+        "status": "prompt_ready",
+        "prompt": "Top-down city map.",
+        "prompt_hash": "abc123",
+    }
+
+
 def test_region_map_decor_is_set_on_first_patch() -> None:
     """Un premier patch avec decor le stocke correctement."""
     merged = merge_region_map_patch(
@@ -216,6 +226,21 @@ def test_city_map_decor_set_once_semantics() -> None:
     )
 
     assert updated["decor"]["forests"][0]["x"] == 24.0  # préservé
+
+
+def test_region_map_visual_asset_is_preserved_without_patch_value() -> None:
+    initial = merge_region_map_patch(
+        None,
+        {
+            "nodes_upsert": [{"id": "a", "name": "A", "kind": "settlement"}],
+            "visual_asset": _visual_asset_payload(),
+        },
+    )
+
+    updated = merge_region_map_patch(initial, {"current_node_id": "a"})
+
+    assert updated["visual_asset"]["model"] == "gpt-image-1"
+    assert updated["visual_asset"]["status"] == "prompt_ready"
 
 
 def test_public_region_map_filters_hidden_edges() -> None:

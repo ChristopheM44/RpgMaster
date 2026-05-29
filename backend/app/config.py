@@ -57,6 +57,13 @@ class Settings(BaseSettings):
     forge_chapter_max_tokens: int = 8_192
     forge_indexes_max_tokens: int = 16_384
 
+    # Optional image generation for map backing assets.
+    image_generation_enabled: bool = False
+    image_provider: str = "openai_compatible"
+    image_base_url: str = ""
+    image_model: str = ""
+    image_size: str = "1024x1024"
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 
@@ -158,6 +165,12 @@ def update_llm_settings(
     openai_api_key: str | None = None,
     ollama_api_key: str | None = None,
     source_max_chars: int | None = None,
+    image_generation_enabled: bool | None = None,
+    image_provider: str | None = None,
+    image_base_url: str | None = None,
+    image_model: str | None = None,
+    image_api_key: str | None = None,
+    image_size: str | None = None,
 ) -> None:
     """Met à jour le(s) setting(s) LLM en mémoire et persiste."""
     if ollama_base_url is not None:
@@ -194,6 +207,38 @@ def update_llm_settings(
             _runtime_llm["ollama_api_key"] = normalized
     if source_max_chars is not None:
         _runtime_llm["source_max_chars"] = int(source_max_chars)
+    if image_generation_enabled is not None:
+        _runtime_llm["image_generation_enabled"] = bool(image_generation_enabled)
+    if image_provider is not None:
+        normalized = _normalize_runtime_text(image_provider)
+        if normalized:
+            _runtime_llm["image_provider"] = normalized
+        else:
+            _runtime_llm.pop("image_provider", None)
+    if image_base_url is not None:
+        normalized = _normalize_runtime_text(image_base_url)
+        if normalized:
+            _runtime_llm["image_base_url"] = normalized
+        else:
+            _runtime_llm.pop("image_base_url", None)
+    if image_model is not None:
+        normalized = _normalize_runtime_text(image_model)
+        if normalized:
+            _runtime_llm["image_model"] = normalized
+        else:
+            _runtime_llm.pop("image_model", None)
+    if image_api_key is not None:
+        normalized = _normalize_api_key(image_api_key)
+        if normalized == "":
+            _runtime_llm.pop("image_api_key", None)
+        else:
+            _runtime_llm["image_api_key"] = normalized
+    if image_size is not None:
+        normalized = _normalize_runtime_text(image_size)
+        if normalized:
+            _runtime_llm["image_size"] = normalized
+        else:
+            _runtime_llm.pop("image_size", None)
     _save_runtime_llm()
 
 
@@ -279,6 +324,37 @@ def get_openai_api_key() -> str:
 
 def is_openai_api_key_set() -> bool:
     return bool(get_openai_api_key())
+
+
+def get_image_generation_enabled() -> bool:
+    raw = _runtime_llm.get("image_generation_enabled", settings.image_generation_enabled)
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def get_image_provider() -> str:
+    return _runtime_llm.get("image_provider", settings.image_provider)
+
+
+def get_image_base_url() -> str:
+    return _normalize_runtime_text(_runtime_llm.get("image_base_url")) or settings.image_base_url
+
+
+def get_image_model() -> str:
+    return _normalize_runtime_text(_runtime_llm.get("image_model")) or settings.image_model
+
+
+def get_image_api_key() -> str:
+    return _normalize_api_key(_runtime_llm.get("image_api_key")) or ""
+
+
+def is_image_api_key_set() -> bool:
+    return bool(get_image_api_key())
+
+
+def get_image_size() -> str:
+    return _normalize_runtime_text(_runtime_llm.get("image_size")) or settings.image_size
 
 
 _load_runtime_llm()

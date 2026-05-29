@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import TtsSettingsPanel from '../components/ui/TtsSettingsPanel.vue'
 import LlmProviderPanel from '../components/ui/LlmProviderPanel.vue'
+import ImageGenerationPanel from '../components/ui/ImageGenerationPanel.vue'
 </script>
 
 <template>
@@ -15,6 +16,11 @@ import LlmProviderPanel from '../components/ui/LlmProviderPanel.vue'
       <!-- Panel LLM / Provider -->
       <div class="rounded-xl border border-parchment/10 bg-ink/60 p-6">
         <LlmProviderPanel />
+      </div>
+
+      <!-- Panel génération image -->
+      <div class="rounded-xl border border-parchment/10 bg-ink/60 p-6">
+        <ImageGenerationPanel />
       </div>
 
       <!-- Panel TTS -->

@@ -49,6 +49,7 @@ export interface ExPoi {
   intent?: string
   rawKind?: string
   rawIcon?: string
+  elementId?: string
   tone: 'blood' | 'arcane' | 'teal' | 'gold' | 'text'
   active?: boolean
 }

@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useCharacterStore } from '../../stores/character'
 import { useGameStore } from '../../stores/game'
 import RpgMapIcon from '../common/RpgMapIcon.vue'
+import LocalMapCanvas from '../map/LocalMapCanvas.vue'
 import {
   resolveScenePoiInteractions,
   type ResolvedScenePoiInteraction,
@@ -23,6 +24,7 @@ import type {
   PointOfInterest,
   ScenePoiInteraction,
   SceneExit,
+  SceneElement,
   SceneLayout,
   SceneTheme,
 } from '../../types'
@@ -658,6 +660,18 @@ const pendingMoveDistance = computed((): string => {
   return formatMeters(distanceCells(myPos.value, sel.position) * cellSizeM.value)
 })
 
+const selectedElementId = computed(() => {
+  const current = selected.value
+  if (!current) return null
+  if (current.kind === 'poi') {
+    return displayPois.value.find((poi) => poi.id === current.id)?.element_id ?? null
+  }
+  if (current.kind === 'exit') {
+    return (activeScene.value?.exits ?? []).find((exit) => exit.id === current.id)?.element_id ?? null
+  }
+  return null
+})
+
 onMounted(loadPreferences)
 
 watch(storagePrefix, () => {
@@ -898,6 +912,51 @@ function selectZone(position: GridPosition, zone: { id: string; name: string; ki
   }
 }
 
+function selectSceneElement(element: SceneElement) {
+  const linkedExit = (activeScene.value?.exits ?? []).find((exit) => exit.element_id === element.id)
+  if (linkedExit) {
+    selectExit(linkedExit)
+    return
+  }
+  const linkedPoi = displayPois.value.find((poi) => poi.element_id === element.id)
+  if (linkedPoi) {
+    selectPoi(linkedPoi)
+    return
+  }
+
+  const position = elementAnchorPosition(element)
+  selected.value = {
+    kind: element.kind === 'hazard' ? 'zone' : 'obstacle',
+    id: element.id,
+    name: element.name,
+    position,
+    description: element.description || 'Élément physique notable de la carte locale.',
+    meta: element.kind.replaceAll('_', ' '),
+    iconId: element.kind === 'hazard' ? 'c-danger-zone' : 'c-obstacle',
+    iconLabel: element.name,
+  }
+}
+
+function elementAnchorPosition(element: SceneElement): GridPosition {
+  const geometry = element.geometry
+  if (geometry.type === 'line') {
+    return clampPosition({
+      col: Math.floor((geometry.from.col + geometry.to.col) / 2),
+      row: Math.floor((geometry.from.row + geometry.to.row) / 2),
+    })
+  }
+  if (geometry.type === 'rect') {
+    return clampPosition({
+      col: Math.floor(geometry.col + geometry.width / 2),
+      row: Math.floor(geometry.row + geometry.height / 2),
+    })
+  }
+  return clampPosition({
+    col: Math.floor(geometry.col),
+    row: Math.floor(geometry.row),
+  })
+}
+
 function canTargetCombatant(combatant: CombatantState): boolean {
   return combatant.kind === 'monster' && combatant.id !== props.myCharacterId && combatant.hp_current > 0
 }
@@ -1135,174 +1194,18 @@ function markerToneStyle(tone: LegendEntry['tone']) {
 
     <div v-if="!isCollapsed" class="flex min-h-0 flex-1 flex-col lg:flex-row">
       <div class="flex min-h-0 flex-1 items-center justify-center overflow-auto p-4">
-        <div
+        <LocalMapCanvas
           class="rpg-map-grid-frame relative overflow-hidden rounded border"
           data-testid="battlemap-grid"
-          :style="{
-            width: `${cols * cellPx}px`,
-            height: `${rows * cellPx}px`,
-            background: mapBackground,
-          }"
+          :scene="activeScene"
+          :cell="cellPx"
+          :cols-fallback="cols"
+          :rows-fallback="rows"
+          :theme-fallback="theme"
+          :mode="isExploration ? 'exploration' : 'combat'"
+          :selected-element-id="selectedElementId"
+          @element-click="selectSceneElement"
         >
-          <!-- ── Fond ambiance (fog) ── -->
-          <div
-            class="scene-map-fog"
-            :style="{ backgroundImage: biome.fogColors.join(',') }"
-          />
-
-          <!-- ── Eau (beach / coastal) ── -->
-          <svg
-            v-if="showWater"
-            class="scene-map-layer"
-            :width="widthPx"
-            :height="heightPx"
-          >
-            <!-- Zone eau pleine -->
-            <rect
-              :x="0"
-              :y="waterRect.y"
-              :width="widthPx"
-              :height="waterRect.height"
-              fill="rgba(30,80,120,0.35)"
-            />
-            <!-- Dégradé mer vers sable -->
-            <defs>
-              <linearGradient id="waterGrad" x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stop-color="rgba(79,216,192,0.22)" />
-                <stop offset="100%" stop-color="rgba(20,60,100,0.45)" />
-              </linearGradient>
-            </defs>
-            <rect
-              :x="0"
-              :y="waterRect.y"
-              :width="widthPx"
-              :height="waterRect.height"
-              fill="url(#waterGrad)"
-            />
-            <!-- Lignes de vagues -->
-            <path
-              :d="wave1"
-              fill="none"
-              stroke="rgba(79,216,192,0.30)"
-              stroke-width="1.5"
-              stroke-linecap="round"
-            />
-            <path
-              :d="wave2"
-              fill="none"
-              stroke="rgba(79,216,192,0.18)"
-              stroke-width="1"
-              stroke-linecap="round"
-              stroke-dasharray="8 6"
-            />
-          </svg>
-
-          <!-- ── Canopée (forêt / marais / plaines) ── -->
-          <svg
-            v-if="showCanopy"
-            class="scene-map-layer"
-            :width="widthPx"
-            :height="heightPx"
-            style="opacity: 0.35"
-          >
-            <circle
-              v-for="([cx, cy], i) in canopyCircles"
-              :key="i"
-              :cx="cx * cellPx + cellPx / 2"
-              :cy="cy * cellPx + cellPx / 2"
-              :r="cellPx * 1.1"
-              :fill="canopyColor"
-            />
-          </svg>
-
-          <!-- ── Rochers (rocky / montagne) ── -->
-          <svg
-            v-if="showRocks"
-            class="scene-map-layer"
-            :width="widthPx"
-            :height="heightPx"
-            style="opacity: 0.40"
-          >
-            <ellipse
-              v-for="(r, i) in rockClusters"
-              :key="i"
-              :cx="r.x * widthPx"
-              :cy="r.y * heightPx"
-              :rx="r.r * widthPx * 0.9"
-              :ry="r.r * heightPx * 0.55"
-              fill="rgba(100,85,65,0.35)"
-              stroke="rgba(160,140,100,0.18)"
-              stroke-width="1"
-            />
-          </svg>
-
-          <!-- ── Torches / halos (donjon / grotte) ── -->
-          <svg
-            v-if="showTorches"
-            class="scene-map-layer"
-            :width="widthPx"
-            :height="heightPx"
-          >
-            <defs>
-              <radialGradient
-                v-for="(t, i) in torchPositions"
-                :key="`tg${i}`"
-                :id="`tg${i}`"
-                :cx="t.cx"
-                :cy="t.cy"
-                r="0.18"
-                gradientUnits="objectBoundingBox"
-              >
-                <stop offset="0%" :stop-color="theme === 'dungeon' ? 'rgba(255,160,60,0.28)' : 'rgba(79,216,192,0.20)'" />
-                <stop offset="100%" stop-color="transparent" />
-              </radialGradient>
-            </defs>
-            <rect
-              v-for="(t, i) in torchPositions"
-              :key="`tr${i}`"
-              x="0" y="0"
-              :width="widthPx"
-              :height="heightPx"
-              :fill="`url(#tg${i})`"
-            />
-          </svg>
-
-          <!-- ── Piste serpentine ── -->
-          <svg
-            class="scene-map-layer"
-            :width="widthPx"
-            :height="heightPx"
-          >
-            <path
-              :d="pathTrack()"
-              fill="none"
-              :stroke="trackVisual.outerColor"
-              :stroke-width="cellPx * trackVisual.outerWidthPct"
-              :stroke-linecap="trackVisual.strokeLinecap ?? 'round'"
-            />
-            <path
-              :d="pathTrack()"
-              fill="none"
-              :stroke="trackVisual.innerColor"
-              :stroke-width="cellPx * trackVisual.innerWidthPct"
-              :stroke-dasharray="trackVisual.innerDash"
-              :stroke-linecap="trackVisual.strokeLinecap ?? 'round'"
-            />
-          </svg>
-
-          <!-- ── Grille ── -->
-          <svg class="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
-            <defs>
-              <pattern id="combat-grid" :width="cellPx" :height="cellPx" patternUnits="userSpaceOnUse">
-                <path :stroke="biome.gridColor" :d="`M ${cellPx} 0 L 0 0 0 ${cellPx}`" fill="none" stroke-width="1" />
-              </pattern>
-            </defs>
-            <rect width="100%" height="100%" fill="url(#combat-grid)" />
-          </svg>
-
-          <div class="pointer-events-none absolute inset-x-0 top-0 h-7 bg-black/25" />
-          <div class="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-black/30" />
-
           <!-- Zones et obstacles tactiques en combat -->
           <template v-if="!isExploration">
             <div
@@ -1579,7 +1482,7 @@ function markerToneStyle(tone: LegendEntry['tone']) {
               </div>
             </div>
           </Transition>
-        </div>
+        </LocalMapCanvas>
       </div>
 
       <aside

@@ -36,6 +36,7 @@ from app.game.turn_manager import CombatantInfo
 from app.models.character import Character
 from app.models.session import SessionStatus
 from app.services.encounter_service import encounter_service
+from app.services.local_map_service import element_grid_cells
 from app.services.level_up_service import level_up_service
 from app.services.message_service import load_recent_messages, persist_narration
 from app.game.social_resolution import (
@@ -1170,7 +1171,7 @@ async def handle_start_combat(
 
     player_ids = [cid for cid, c in combatants_info.items() if c["is_player"]]
     npc_ids = [cid for cid, c in combatants_info.items() if not c["is_player"]]
-    
+
     grid_positions = initialize_positions(
         player_ids,
         npc_ids,
@@ -1185,7 +1186,7 @@ async def handle_start_combat(
     grid_decor = active.state_data.get("grid_decoration") or {}
     obstacles_list = list(grid_decor.get("obstacles", []))
     difficult_list = list(grid_decor.get("difficult", []))
-    
+
     for poi in scene.get("pois", []):
         kind = str(poi.get("kind", "")).lower()
         pos = poi.get("position")
@@ -1195,12 +1196,27 @@ async def handle_start_combat(
             elif kind == "hazard" and pos not in difficult_list:
                 difficult_list.append(pos)
 
+    for element in scene.get("elements", []):
+        if not isinstance(element, dict):
+            continue
+        element_kind = str(element.get("kind") or "").lower()
+        cells = element_grid_cells(element, grid_cols, grid_rows)
+        if element_kind == "hazard":
+            for cell in cells:
+                if cell not in difficult_list:
+                    difficult_list.append(cell)
+            continue
+        if element.get("blocks_movement") or element_kind in {"cover", "furniture"}:
+            for cell in cells:
+                if cell not in obstacles_list:
+                    obstacles_list.append(cell)
+
     active.state_data["grid_decoration"] = {
         "obstacles": obstacles_list,
         "difficult": difficult_list,
         "zones": grid_decor.get("zones", []),
     }
-    
+
     active.state_data["grid_config"] = {
         "cols": grid_cols,
         "rows": grid_rows,
@@ -1453,10 +1469,10 @@ async def handle_flee(
         return
 
     cdata["status"] = "fled"
-    
+
     grid_positions = active.state_data.setdefault("grid_positions", {})
     grid_positions.pop(char_id, None)
-    
+
     active.turn_manager.remove_combatant(char_id)
     active.mark_dirty()
 

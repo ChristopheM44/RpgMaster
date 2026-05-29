@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import MapBackground from './MapBackground.vue'
 import MapNodeMarker from './MapNodeMarker.vue'
-import type { MapEdge, MapNode } from '../../types'
+import type { MapEdge, MapNode, MapVisualAsset } from '../../types'
 
 const props = withDefaults(defineProps<{
   nodes: MapNode[]
@@ -10,12 +10,14 @@ const props = withDefaults(defineProps<{
   currentNodeId?: string | null
   selectedNodeId?: string | null
   backgroundSeed?: string | null
+  visualAsset?: MapVisualAsset | null
   reachableNodeIds?: string[]
   readonly?: boolean
 }>(), {
   currentNodeId: null,
   selectedNodeId: null,
   backgroundSeed: null,
+  visualAsset: null,
   reachableNodeIds: () => [],
   readonly: false,
 })
@@ -36,11 +38,21 @@ const visibleEdges = computed(() =>
     .filter((edge) => edge.fromNode && edge.toNode),
 )
 const reachableSet = computed(() => new Set(props.reachableNodeIds))
+const visualAssetReady = computed(() =>
+  props.visualAsset?.status === 'ready' && Boolean(props.visualAsset.url),
+)
 </script>
 
 <template>
   <div class="node-map">
     <MapBackground :seed="backgroundSeed" />
+    <img
+      v-if="visualAssetReady"
+      class="node-map__image"
+      :src="visualAsset?.url"
+      alt=""
+      draggable="false"
+    />
     <svg class="node-map__edges" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
       <path
         v-for="edge in visibleEdges"
@@ -87,6 +99,16 @@ const reachableSet = computed(() => new Set(props.reachableNodeIds))
   width: 100%;
   height: 100%;
   pointer-events: none;
+  z-index: 1;
+}
+
+.node-map__image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.66;
 }
 
 .node-map__edge {
@@ -111,6 +133,7 @@ const reachableSet = computed(() => new Set(props.reachableNodeIds))
 
 .node-map__node {
   position: absolute;
+  z-index: 2;
   display: inline-flex;
   min-width: 92px;
   max-width: 130px;

@@ -23,6 +23,8 @@ import type {
   OllamaModelInfo,
   LlmSettings,
   LlmSettingsUpdate,
+  ImageGenerationSettings,
+  ImageGenerationSettingsUpdate,
   Campaign,
   CampaignCreate,
   CampaignAdvanceBody,
@@ -331,4 +333,13 @@ export const adminApi = {
       '/admin/llm/ping',
       { method: 'POST' },
     ),
+
+  getImageGenerationSettings: () =>
+    request<ImageGenerationSettings>('/admin/image/settings'),
+
+  updateImageGenerationSettings: (data: ImageGenerationSettingsUpdate) =>
+    request<ImageGenerationSettings>('/admin/image/settings', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
 }

@@ -20,6 +20,10 @@ const region = computed(() => gameStore.regionMap)
 const nodes = computed<MapNode[]>(() => region.value?.nodes ?? [])
 const edges = computed(() => region.value?.edges ?? [])
 const currentNodeId = computed(() => region.value?.current_node_id)
+const visualAsset = computed(() => region.value?.visual_asset)
+const visualAssetReady = computed(() =>
+  visualAsset.value?.status === 'ready' && Boolean(visualAsset.value.url),
+)
 
 // Corpus pour la détection de biome : IDs + noms de tous les nœuds
 const nodeCorpus = computed(() =>
@@ -98,6 +102,13 @@ function mountainPoints(x: number, y: number, h: number): string {
     class="region-map"
     :style="{ width: `${width}px`, height: `${height}px` }"
   >
+    <img
+      v-if="visualAssetReady"
+      class="region-map-image"
+      :src="visualAsset?.url"
+      alt=""
+      draggable="false"
+    />
     <svg
       v-if="region"
       viewBox="0 0 100 100"
@@ -255,6 +266,16 @@ function mountainPoints(x: number, y: number, h: number): string {
 .region-map-svg {
   position: absolute;
   inset: 0;
+  z-index: 1;
+}
+
+.region-map-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.72;
 }
 
 .region-map-empty {

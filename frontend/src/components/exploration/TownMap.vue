@@ -24,6 +24,10 @@ const city = computed(() => {
 const nodes = computed<MapNode[]>(() => city.value?.nodes ?? [])
 const edges = computed(() => city.value?.edges ?? [])
 const currentNodeId = computed(() => city.value?.current_node_id)
+const visualAsset = computed(() => city.value?.visual_asset)
+const visualAssetReady = computed(() =>
+  visualAsset.value?.status === 'ready' && Boolean(visualAsset.value.url),
+)
 
 // Décor : backend ou fallback procédural
 const decor = computed<MapDecor>(() =>
@@ -132,6 +136,13 @@ const youPosition = computed(() => {
     class="town-map"
     :style="{ width: `${width}px`, height: `${height}px` }"
   >
+    <img
+      v-if="visualAssetReady"
+      class="town-map-image"
+      :src="visualAsset?.url"
+      alt=""
+      draggable="false"
+    />
     <svg
       v-if="city"
       viewBox="0 0 100 100"
@@ -263,9 +274,19 @@ const youPosition = computed(() => {
   flex-shrink: 0;
 }
 
+.town-map-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.7;
+}
+
 .town-map-svg {
   position: absolute;
   inset: 0;
+  z-index: 1;
 }
 
 .town-map-empty {

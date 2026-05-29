@@ -116,6 +116,7 @@ function adaptPoi(p: PointOfInterest): ExPoi {
     intent: interaction?.intent,
     rawKind: p.kind,
     rawIcon: p.icon,
+    elementId: p.element_id,
     tone: poiTone(role),
   }
 }
@@ -132,6 +133,7 @@ function adaptExit(e: SceneExit, isActive: boolean): ExPoi {
     desc: e.description ?? '',
     dest: e.leads_to,
     iconId: iconForExit(e),
+    elementId: e.element_id,
     actionLabel: "S'y diriger",
     tone: isActive ? 'gold' : 'teal',
     active: isActive,

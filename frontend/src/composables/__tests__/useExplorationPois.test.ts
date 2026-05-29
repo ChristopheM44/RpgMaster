@@ -24,6 +24,7 @@ describe('useExplorationPois', () => {
             kind: 'npc',
             icon: 'npc',
             position: { col: 5, row: 5 },
+            element_id: 'guide_marker',
             description: 'Un homme brûlé par le soleil.',
             interactions: [
               {
@@ -47,6 +48,7 @@ describe('useExplorationPois', () => {
             id: 'route_oasis',
             label: "Vers l'Oasis",
             position: { col: 11, row: 7 },
+            element_id: 'oasis_gate',
             leads_to: 'Oasis',
           },
         ],
@@ -63,6 +65,7 @@ describe('useExplorationPois', () => {
       iconId: 'npc',
       actionLabel: 'Parler',
       prompt: "Je m'approche de Khalid et lui parle.",
+      elementId: 'guide_marker',
     })
     expect(clue).toMatchObject({ kind: 'clue', iconId: 'clue', actionLabel: 'Examiner' })
     expect(reperes.value).toHaveLength(2)

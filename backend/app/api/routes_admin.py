@@ -24,12 +24,18 @@ from pydantic import BaseModel, Field, field_validator
 from app.api.rate_limit import FixedWindowRateLimiter, client_ip
 from app.config import (
     get_gm_model,
+    get_image_base_url,
+    get_image_generation_enabled,
+    get_image_model,
+    get_image_provider,
+    get_image_size,
     get_llm_provider,
     get_ollama_auth_headers,
     get_ollama_url,
     get_openai_base_url,
     get_player_model,
     get_source_max_chars,
+    is_image_api_key_set,
     is_ollama_api_key_set,
     is_openai_api_key_set,
     update_llm_settings,
@@ -126,6 +132,38 @@ class LlmSettingsUpdate(BaseModel):
     def validate_provider(cls, v: Optional[str]) -> Optional[str]:
         if v is not None and v not in ("ollama", "openai_compatible"):
             raise ValueError("llm_provider doit être 'ollama' ou 'openai_compatible'")
+        return v
+
+
+class ImageGenerationSettingsResponse(BaseModel):
+    enabled: bool
+    provider: str
+    base_url: str
+    model: str
+    api_key_set: bool
+    size: str
+
+
+class ImageGenerationSettingsUpdate(BaseModel):
+    enabled: Optional[bool] = None
+    provider: Optional[str] = None
+    base_url: Optional[str] = None
+    model: Optional[str] = None
+    api_key: Optional[str] = None
+    size: Optional[str] = None
+
+    @field_validator("provider")
+    @classmethod
+    def validate_image_provider(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in ("openai_compatible", "local"):
+            raise ValueError("provider doit être 'openai_compatible' ou 'local'")
+        return v
+
+    @field_validator("size")
+    @classmethod
+    def validate_image_size(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and not re.match(r"^\d{3,5}x\d{3,5}$", v.strip()):
+            raise ValueError("size doit être au format 1024x1024")
         return v
 
 
@@ -270,6 +308,42 @@ async def update_llm_settings_endpoint(body: LlmSettingsUpdate) -> LlmSettingsRe
         api_key_set=is_openai_api_key_set(),
         ollama_api_key_set=is_ollama_api_key_set(),
         source_max_chars=get_source_max_chars(),
+    )
+
+
+@router.get("/image/settings", response_model=ImageGenerationSettingsResponse)
+async def get_image_generation_settings() -> ImageGenerationSettingsResponse:
+    """Retourne la configuration de génération image côté serveur."""
+    return ImageGenerationSettingsResponse(
+        enabled=get_image_generation_enabled(),
+        provider=get_image_provider(),
+        base_url=get_image_base_url(),
+        model=get_image_model(),
+        api_key_set=is_image_api_key_set(),
+        size=get_image_size(),
+    )
+
+
+@router.put("/image/settings", response_model=ImageGenerationSettingsResponse)
+async def update_image_generation_settings(
+    body: ImageGenerationSettingsUpdate,
+) -> ImageGenerationSettingsResponse:
+    """Met à jour les réglages image sans exposer la clé au frontend."""
+    update_llm_settings(
+        image_generation_enabled=body.enabled,
+        image_provider=body.provider,
+        image_base_url=body.base_url,
+        image_model=body.model,
+        image_api_key=body.api_key,
+        image_size=body.size,
+    )
+    return ImageGenerationSettingsResponse(
+        enabled=get_image_generation_enabled(),
+        provider=get_image_provider(),
+        base_url=get_image_base_url(),
+        model=get_image_model(),
+        api_key_set=is_image_api_key_set(),
+        size=get_image_size(),
     )
 
 

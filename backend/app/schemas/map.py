@@ -51,6 +51,7 @@ EdgeKind = Literal[
     "alley",
 ]
 CoastlineSide = Literal["west", "east", "north", "south"]
+VisualAssetStatus = Literal["prompt_ready", "generating", "ready", "failed"]
 
 
 class MapNodePosition(BaseModel):
@@ -184,6 +185,38 @@ class MapDecor(BaseModel):
     decorative_roads: list[str] = Field(default_factory=list, max_length=16)
 
 
+class MapVisualAsset(BaseModel):
+    """Optional generated bitmap backing a structured map.
+
+    Structured nodes, POIs, exits and scene elements remain the gameplay source
+    of truth. This asset is only an inspectable visual layer.
+    """
+    model_config = ConfigDict(extra="ignore")
+
+    provider: str = Field(min_length=1, max_length=48)
+    model: str = Field(min_length=1, max_length=120)
+    status: VisualAssetStatus = "prompt_ready"
+    prompt: str = Field(default="", max_length=2400)
+    prompt_hash: str = Field(min_length=1, max_length=64)
+    url: Optional[str] = Field(default=None, max_length=1000)
+    generated_at: Optional[str] = Field(default=None, max_length=80)
+    error: Optional[str] = Field(default=None, max_length=280)
+
+    @field_validator("provider", "model", "prompt", "prompt_hash", mode="before")
+    @classmethod
+    def clean_required_text(cls, value: str) -> str:
+        cleaned = " ".join(str(value).split())
+        return cleaned
+
+    @field_validator("url", "generated_at", "error", mode="before")
+    @classmethod
+    def clean_text(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = " ".join(str(value).split())
+        return cleaned or None
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -197,6 +230,7 @@ class RegionMap(BaseModel):
     edges: list[MapEdge] = Field(default_factory=list, max_length=128)
     background_seed: Optional[str] = Field(default=None, max_length=80)
     decor: Optional[MapDecor] = None
+    visual_asset: Optional[MapVisualAsset] = None
     updated_at: str
 
 
@@ -211,6 +245,7 @@ class CityMap(BaseModel):
     edges: list[MapEdge] = Field(default_factory=list, max_length=128)
     background_seed: Optional[str] = Field(default=None, max_length=80)
     decor: Optional[MapDecor] = None
+    visual_asset: Optional[MapVisualAsset] = None
     updated_at: str
 
 
@@ -227,6 +262,7 @@ class RegionMapPatch(BaseModel):
     background_seed: Optional[str] = Field(default=None, max_length=80)
     # None ⇒ préserver le décor existant ; valeur présente ⇒ remplacer.
     decor: Optional[MapDecor] = None
+    visual_asset: Optional[MapVisualAsset] = None
 
 
 class CityMapPatch(BaseModel):
@@ -242,6 +278,7 @@ class CityMapPatch(BaseModel):
     edges_remove: list[str] = Field(default_factory=list, max_length=128)
     background_seed: Optional[str] = Field(default=None, max_length=80)
     decor: Optional[MapDecor] = None
+    visual_asset: Optional[MapVisualAsset] = None
 
 
 class NodeStatusPatch(BaseModel):

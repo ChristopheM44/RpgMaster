@@ -19,6 +19,7 @@ Objectif :
 - Dans scene_layout, ajoute description/action_hint courts aux points d'interet tactiques, dangers, couverts ou passages, afin que la carte explique ce que le joueur selectionne.
 - Categories visuelles obligatoires dans scene_layout : ennemi visible = kind "enemy", icon "c-enemy"; PNJ non hostile = kind "npc", icon "npc"; couvert = kind "cover", icon "c-half-cover"; danger/piege = kind "hazard", icon "trap-danger"; butin/objet = kind "loot", icon "chest"; indice = kind "clue", icon "clue".
 - Une porte, issue ou sortie navigable doit etre dans exits uniquement. Ne la duplique pas dans pois avec le meme id ou la meme position.
+- Carte locale partagée : si le combat démarre dans le lieu courant, conserve la même scène et complète seulement les `elements`/POI manquants. En intérieur, représente murs, portes, fenêtres si plausibles, mobilier/couverts et dangers. Lie sorties/POI importants avec `element_id`.
 - Pour un PNJ ou objet important visible sur la carte, tu peux ajouter interactions (label, intent: approach|talk|examine|listen|search|use|custom, prompt optionnel).
 - Ne demande pas de jet, ne modifie aucune statistique, ne relance pas encounter_setup, et ne change pas la phase.
 - Ajoute "start_mode": "pause" si les ennemis somment, menacent, parlementent, hesitent ou laissent une chance de reagir.

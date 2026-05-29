@@ -393,6 +393,19 @@ export interface MapDecor {
   river?: RiverPath
   decorative_roads?: string[]  // paths SVG décoratifs
 }
+
+export type MapVisualAssetStatus = 'prompt_ready' | 'generating' | 'ready' | 'failed'
+
+export interface MapVisualAsset {
+  provider: string
+  model: string
+  status: MapVisualAssetStatus
+  prompt: string
+  prompt_hash: string
+  url?: string
+  generated_at?: string
+  error?: string
+}
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface RegionMap {
@@ -403,6 +416,7 @@ export interface RegionMap {
   edges: MapEdge[]
   background_seed?: string
   decor?: MapDecor
+  visual_asset?: MapVisualAsset
   updated_at: string
 }
 
@@ -415,6 +429,7 @@ export interface CityMap {
   edges: MapEdge[]
   background_seed?: string
   decor?: MapDecor
+  visual_asset?: MapVisualAsset
   updated_at: string
 }
 
@@ -526,6 +541,7 @@ export interface PointOfInterest {
   description?: string
   action_hint?: string
   interactions?: ScenePoiInteraction[]
+  element_id?: string
 }
 
 export type ScenePoiInteractionIntent =
@@ -555,6 +571,7 @@ export interface SceneExit {
   icon?: string
   kind?: string
   type?: string
+  element_id?: string
 }
 
 export type SceneTheme =
@@ -579,9 +596,39 @@ export interface SceneLayout {
   pois: PointOfInterest[]
   exits: SceneExit[]
   party_positions: Record<string, GridPosition>
+  elements?: SceneElement[]
+  visual_asset?: MapVisualAsset
   scene_id?: string
   region_node_id?: string
   city_node_id?: string
+}
+
+export type SceneElementKind =
+  | 'wall'
+  | 'door'
+  | 'window'
+  | 'furniture'
+  | 'cover'
+  | 'hazard'
+  | 'light'
+  | 'stairs'
+  | 'terrain'
+  | 'decor'
+
+export type SceneElementGeometry =
+  | { type: 'line'; from: { col: number; row: number }; to: { col: number; row: number } }
+  | { type: 'rect'; col: number; row: number; width: number; height: number }
+  | { type: 'ellipse'; col: number; row: number; radius_col: number; radius_row: number }
+
+export interface SceneElement {
+  id: string
+  name: string
+  kind: SceneElementKind
+  geometry: SceneElementGeometry
+  description?: string
+  blocks_movement?: boolean
+  opaque?: boolean
+  interactive?: boolean
 }
 
 export interface SceneLayoutChangedPayload {
@@ -742,6 +789,7 @@ export interface GridConfig {
   cols: number
   rows: number
   cell_size_m: number
+  scene_theme?: SceneTheme
 }
 
 export interface GridDecoration {
@@ -1000,6 +1048,26 @@ export interface OllamaModelInfo {
   format: string | null
   context_length: number | null
   num_ctx: number | null
+}
+
+export type ImageGenerationProvider = 'openai_compatible' | 'local'
+
+export interface ImageGenerationSettings {
+  enabled: boolean
+  provider: ImageGenerationProvider
+  base_url: string
+  model: string
+  api_key_set: boolean
+  size: string
+}
+
+export interface ImageGenerationSettingsUpdate {
+  enabled?: boolean
+  provider?: ImageGenerationProvider
+  base_url?: string
+  model?: string
+  api_key?: string
+  size?: string
 }
 
 // ─── Campaign ─────────────────────────────────────────────────────────────────

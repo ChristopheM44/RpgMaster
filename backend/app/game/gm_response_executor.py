@@ -17,6 +17,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.agents.schemas import AgentResponse, GMResponse
+from app.config import (
+    get_image_generation_enabled,
+    get_image_model,
+    get_image_provider,
+)
 from app.engine.srd_data import find_equipment
 from app.game.event_bus import EventType, event_bus
 from app.game.scene_theme import coerce_scene_theme
@@ -26,7 +31,7 @@ from app.game.state_sync import sync_character_state
 from app.models.character import Character
 from app.schemas.campaign_content import normalize_content_id
 from app.schemas.equipment import validate_equipment_item
-from app.services import campaign_dossier_service, map_service
+from app.services import campaign_dossier_service, local_map_service, map_service
 from app.services.currency_service import currency_service
 from app.services.equipment_service import EquipmentService
 from app.services.xp_service import xp_service
@@ -819,6 +824,7 @@ class GMResponseExecutor:
         except map_service.MapPatchError as exc:
             logger.warning("region_map_update ignore : patch invalide - %s", exc)
             return
+        self._ensure_map_visual_asset(region_map, map_kind="region")
 
         if campaign is not None:
             dossier = await campaign_dossier_service.update_campaign_maps(
@@ -876,6 +882,7 @@ class GMResponseExecutor:
         except map_service.MapPatchError as exc:
             logger.warning("city_map_update ignore : patch invalide - %s", exc)
             return
+        self._ensure_map_visual_asset(city_maps[city_id], map_kind="city")
 
         if campaign is not None:
             dossier = await campaign_dossier_service.update_campaign_maps(
@@ -1303,6 +1310,21 @@ class GMResponseExecutor:
         return world_maps
 
     @staticmethod
+    def _ensure_map_visual_asset(map_data: dict[str, Any], *, map_kind: str) -> None:
+        if map_data.get("visual_asset") or not get_image_generation_enabled():
+            return
+        image_model = get_image_model()
+        image_provider = get_image_provider()
+        if not image_model or not image_provider:
+            return
+        map_data["visual_asset"] = local_map_service.build_graph_map_visual_asset(
+            map_data,
+            map_kind=map_kind,
+            provider=image_provider,
+            model=image_model,
+        )
+
+    @staticmethod
     def _register_scene_npcs(layout: dict[str, Any], active: ActiveSession) -> None:
         npc_states = active.state_data.setdefault("npc_states", {})
         if not isinstance(npc_states, dict):
@@ -1448,6 +1470,9 @@ class GMResponseExecutor:
                 normalized_poi["description"] = description
             if action_hint:
                 normalized_poi["action_hint"] = action_hint
+            element_id = cls._clean_optional_text(poi.get("element_id"), max_len=80)
+            if element_id:
+                normalized_poi["element_id"] = element_id
             interactions = cls._normalize_poi_interactions(poi.get("interactions"))
             if interactions:
                 normalized_poi["interactions"] = interactions
@@ -1469,6 +1494,9 @@ class GMResponseExecutor:
             description = cls._clean_optional_text(exit_data.get("description"))
             if description:
                 normalized_exit["description"] = description
+            element_id = cls._clean_optional_text(exit_data.get("element_id"), max_len=80)
+            if element_id:
+                normalized_exit["element_id"] = element_id
             layout["exits"].append(normalized_exit)
 
         party_positions = raw.get("party_positions") or {}
@@ -1484,11 +1512,36 @@ class GMResponseExecutor:
             if not cls._is_duplicate_exit_poi(poi, layout["exits"])
         ]
 
+        normalized_elements = []
+        for raw_element in raw.get("elements", []) or []:
+            element = local_map_service.normalize_scene_element(raw_element, cols, rows)
+            if element:
+                normalized_elements.append(element)
+        if normalized_elements:
+            layout["elements"] = normalized_elements
+
+        visual_asset = local_map_service.normalize_visual_asset(raw.get("visual_asset"))
+        if visual_asset:
+            layout["visual_asset"] = visual_asset
+
+        local_map_service.enrich_scene_layout(layout)
+
+        if "visual_asset" not in layout and get_image_generation_enabled():
+            image_model = get_image_model()
+            image_provider = get_image_provider()
+            if image_model and image_provider:
+                layout["visual_asset"] = local_map_service.build_scene_visual_asset(
+                    layout,
+                    provider=image_provider,
+                    model=image_model,
+                )
+
         if "scene_id" not in layout:
             stable_basis = repr((
                 layout["cols"],
                 layout["rows"],
                 layout["terrain"],
+                [(element["id"], element["kind"]) for element in layout.get("elements", [])],
                 [(poi["id"], poi["position"]) for poi in layout["pois"]],
                 [(exit_data["id"], exit_data["position"]) for exit_data in layout["exits"]],
             ))

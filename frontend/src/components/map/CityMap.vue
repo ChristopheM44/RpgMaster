@@ -38,6 +38,7 @@ watch(() => props.map?.id, () => {
       :current-node-id="map?.current_node_id"
       :selected-node-id="selectedNode?.id"
       :background-seed="map?.background_seed"
+      :visual-asset="map?.visual_asset"
       :reachable-node-ids="reachableIds"
       :readonly="readonly"
       @select="(node) => { selectedId = node.id }"

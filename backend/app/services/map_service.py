@@ -9,7 +9,6 @@ from pydantic import ValidationError
 from app.schemas.map import (
     CityMap,
     CityMapPatch,
-    MapDecor,
     MapEdge,
     MapNode,
     NodeStatusPatch,
@@ -36,8 +35,12 @@ def merge_region_map_patch(
         current_node_id = existing_map.current_node_id
     current_node_id = _valid_current_node_id(current_node_id, nodes)
 
-    # Décor : None dans le patch = préserver l'existant (set-once sémantique).
+    # Décor / visual_asset : None dans le patch = préserver l'existant
+    # (set-once / async visual layer semantics).
     merged_decor = patch.decor if patch.decor is not None else existing_map.decor
+    merged_visual_asset = (
+        patch.visual_asset if patch.visual_asset is not None else existing_map.visual_asset
+    )
 
     merged = RegionMap(
         id=patch.id or existing_map.id or "region",
@@ -47,6 +50,7 @@ def merge_region_map_patch(
         edges=list(edges.values()),
         background_seed=patch.background_seed or existing_map.background_seed,
         decor=merged_decor,
+        visual_asset=merged_visual_asset,
         updated_at=_now_iso(),
     )
     return _dump(merged)
@@ -66,8 +70,12 @@ def merge_city_map_patch(
         current_node_id = existing_map.current_node_id
     current_node_id = _valid_current_node_id(current_node_id, nodes)
 
-    # Décor : None dans le patch = préserver l'existant (set-once sémantique).
+    # Décor / visual_asset : None dans le patch = préserver l'existant
+    # (set-once / async visual layer semantics).
     merged_decor = patch.decor if patch.decor is not None else existing_map.decor
+    merged_visual_asset = (
+        patch.visual_asset if patch.visual_asset is not None else existing_map.visual_asset
+    )
 
     merged = CityMap(
         id=patch.city_id,
@@ -78,6 +86,7 @@ def merge_city_map_patch(
         edges=list(edges.values()),
         background_seed=patch.background_seed or existing_map.background_seed,
         decor=merged_decor,
+        visual_asset=merged_visual_asset,
         updated_at=_now_iso(),
     )
     return _dump(merged)
@@ -98,6 +107,7 @@ def update_region_node_status(
         edges=region_map.edges,
         background_seed=region_map.background_seed,
         decor=region_map.decor,
+        visual_asset=region_map.visual_asset,
         updated_at=_now_iso(),
     )
     return _dump(merged)
@@ -121,6 +131,7 @@ def update_city_node_status(
         edges=city_map.edges,
         background_seed=city_map.background_seed,
         decor=city_map.decor,
+        visual_asset=city_map.visual_asset,
         updated_at=_now_iso(),
     )
     return _dump(merged)
@@ -216,6 +227,7 @@ def _coerce_region_map(existing: dict[str, Any] | None) -> RegionMap:
         "edges": raw.get("edges") or [],
         "background_seed": raw.get("background_seed"),
         "decor": raw.get("decor"),
+        "visual_asset": raw.get("visual_asset"),
         "updated_at": raw.get("updated_at") or _now_iso(),
     })
 
@@ -236,6 +248,7 @@ def _coerce_city_map(
         "edges": raw.get("edges") or [],
         "background_seed": raw.get("background_seed"),
         "decor": raw.get("decor"),
+        "visual_asset": raw.get("visual_asset"),
         "updated_at": raw.get("updated_at") or _now_iso(),
     })
 
