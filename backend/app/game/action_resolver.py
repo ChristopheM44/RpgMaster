@@ -300,6 +300,12 @@ class ActionResolver:
             session_id=session_id,
             fallback_actor_id=character_id,
             social_roll_results=roll_results,
+            provenance_context={
+                "phase": active.phase,
+                "player_action": content or "",
+                "recent_messages": recent_messages,
+                "roll_results": roll_results or {},
+            },
         )
         canon_dirty = exec_result.canon_dirty
 
@@ -376,6 +382,12 @@ class ActionResolver:
                     session_id=session_id,
                     fallback_actor_id=character_id,
                     social_roll_results=first_roll,
+                    provenance_context={
+                        "phase": active.phase,
+                        "player_action": content or "",
+                        "recent_messages": recent_messages,
+                        "roll_results": first_roll,
+                    },
                 )
                 if exec_result_2.canon_dirty:
                     canon_dirty = True

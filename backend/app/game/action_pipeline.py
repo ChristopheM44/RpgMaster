@@ -7,9 +7,7 @@ Il ne choisit pas les actions et ne fait pas avancer les tours.
 
 from __future__ import annotations
 
-import hashlib
 import logging
-import re
 from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -17,12 +15,26 @@ from pydantic import BaseModel, Field
 from app.agents.schemas import AgentContext, AgentResponse, GMAction, GMResponse
 from app.engine.ability_checks import SKILL_ABILITY, Ability, Proficiency, skill_check
 from app.engine.tactical_grid import GridPosition
+from app.game.action_narration import (
+    _FALLBACK_NARRATION,
+    _infer_risky_roll_request,
+    _tactical_block_narration,
+)
 from app.game.action_orchestrator import ActionOrchestrator
 from app.game.combat_triggers import prime_combat_from_hostile_narration
 from app.game.constants import INACTIVE_STATUSES
 from app.game.event_bus import EventType, event_bus
 from app.game.gm_response_executor import GMResponseExecutor
 from app.game.session_manager import ActiveSession
+from app.game.social_resolution import (
+    _ability_short_key,
+    _calculate_social_dc,
+    _detect_social_skill,
+    _is_combat_social_text,
+    _is_social_exploration_text,
+    _normalized_skill_proficiencies,
+    resolve_npc_target_id,
+)
 from app.game.tactical_combat import (
     apply_tactical_move,
     calculate_reachable_cells,
@@ -44,31 +56,15 @@ from app.services.spellcasting_service import SpellcastingService, SpellcastingS
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Narration constants and helpers (canonical home is action_narration.py)
-# ---------------------------------------------------------------------------
-from app.game.action_narration import (
-    _ATTACK_BLOCK_TEMPLATES,
-    _FALLBACK_NARRATION,
-    _RISKY_ACTION_PATTERN,
-    _RISKY_SKILL_DEFAULTS,
-    _SPELL_BLOCK_TEMPLATES,
-    _infer_risky_roll_request,
-    _tactical_block_narration,
-)
+ResolvedActionResult = tuple[
+    Optional[str],
+    str,
+    Optional[dict[str, Any]],
+    list[dict[str, Any]],
+    Optional["ResolvedAction"],
+]
 
 spellcasting_service = SpellcastingService()
-
-# Social detection helpers — canonical home is social_resolution.py
-from app.game.social_resolution import (  # noqa: E402
-    _ability_short_key,
-    _calculate_social_dc,
-    _detect_social_skill,
-    _is_combat_social_text,
-    _is_social_exploration_text,
-    _normalized_skill_proficiencies,
-    resolve_npc_target_id,
-)
 
 
 class ActionRequest(BaseModel):
@@ -167,13 +163,23 @@ class ActionPipeline:
         roll_events: list[dict[str, Any]] = []
         executed_actions: list[dict[str, Any]] = []
         canon_dirty = False
-        tactical: Any = None
 
         # 1. Resolution mecanique pure.
         # 1. Resolution mecanique pure par delegation.
         if request.action_type == "attack":
-            target_id, target_name, roll_results, executed_actions, err_act = await self._resolve_attack_action(
-                request, active, phase_value, actor_name, target_id, actual_db
+            (
+                target_id,
+                target_name,
+                roll_results,
+                executed_actions,
+                err_act,
+            ) = await self._resolve_attack_action(
+                request,
+                active,
+                phase_value,
+                actor_name,
+                target_id,
+                actual_db,
             )
             if err_act is not None:
                 return err_act
@@ -182,12 +188,29 @@ class ActionPipeline:
         elif request.action_type == "stabilize":
             roll_results = await self._resolve_stabilize_action(request, active, target_id)
         elif request.action_type in ("move", "dash", "disengage") and phase_value == "COMBAT":
-            err_act = await self._resolve_movement_actions(request, active, phase_value, actor_name, target_id)
+            err_act = await self._resolve_movement_actions(
+                request,
+                active,
+                phase_value,
+                actor_name,
+                target_id,
+            )
             if err_act is not None:
                 return err_act
         elif request.action_type == "cast_spell":
-            target_id, target_name, roll_results, executed_actions, err_act = await self._resolve_cast_spell_action(
-                request, active, phase_value, actor_name, target_id, actual_db
+            (
+                target_id,
+                target_name,
+                roll_results,
+                executed_actions,
+                err_act,
+            ) = await self._resolve_cast_spell_action(
+                request,
+                active,
+                phase_value,
+                actor_name,
+                target_id,
+                actual_db,
             )
             if err_act is not None:
                 return err_act
@@ -367,6 +390,12 @@ class ActionPipeline:
                 session_id=request.session_id,
                 fallback_actor_id=request.actor_id,
                 social_roll_results=roll_results,
+                provenance_context={
+                    "phase": phase_value,
+                    "player_action": request.content or "",
+                    "recent_messages": (context.messages if context is not None else []),
+                    "roll_results": roll_results or {},
+                },
             )
             pending_rolls.extend(exec_result.pending_rolls)
             roll_events.extend(exec_result.pending_rolls)
@@ -431,6 +460,12 @@ class ActionPipeline:
                         )
                         else None
                     ),
+                    provenance_context={
+                        "phase": phase_value,
+                        "player_action": request.content or "",
+                        "recent_messages": (context.messages if context is not None else []),
+                        "roll_results": pending_rolls,
+                    },
                 )
                 roll_events.extend(outcome_exec.pending_rolls)
                 executed_actions.extend(outcome_exec.executed_actions)
@@ -1103,7 +1138,7 @@ class ActionPipeline:
         actor_name: str,
         target_id: Optional[str],
         actual_db: Optional[Any],
-    ) -> tuple[Optional[str], str, Optional[dict[str, Any]], list[dict[str, Any]], Optional[ResolvedAction]]:
+    ) -> ResolvedActionResult:
         target_name = self._combatant_name(active.state_data, target_id)
         roll_results = None
         executed_actions = []
@@ -1382,7 +1417,7 @@ class ActionPipeline:
         actor_name: str,
         target_id: Optional[str],
         actual_db: Optional[Any],
-    ) -> tuple[Optional[str], str, Optional[dict[str, Any]], list[dict[str, Any]], Optional[ResolvedAction]]:
+    ) -> ResolvedActionResult:
         target_name = self._combatant_name(active.state_data, target_id)
         roll_results = None
         executed_actions = []
@@ -1464,7 +1499,7 @@ class ActionPipeline:
                 snapshot = (active.state_data.get("characters") or {}).get(request.actor_id)
                 if isinstance(snapshot, dict):
                     caster_snapshot = snapshot
-            
+
             mechanics = self._get_mechanics()
             if roll_results is None:
                 roll_results = await mechanics._resolve_cast_spell(

@@ -58,6 +58,41 @@ SCENE_POI_INTERACTION_INTENTS = {
     "custom",
 }
 
+REWARD_ACTIONS_REQUIRING_AUTHORITY = {"currency_grant", "loot_grant", "xp_grant"}
+DIRECT_EFFECT_ACTIONS_REQUIRING_RESOLUTION = {"damage_apply", "combatant_status"}
+SCENE_THEMES = {
+    "forest",
+    "beach",
+    "coastal",
+    "rocky",
+    "mountain",
+    "dungeon",
+    "cave",
+    "city",
+    "plains",
+    "swamp",
+    "desert",
+}
+
+REWARD_AUTHORITY_MARKERS = (
+    "récompense",
+    "recompense",
+    "butin",
+    "trésor",
+    "tresor",
+    "coffre",
+    "bourse",
+    "pièce",
+    "piece",
+    "pièces d'or",
+    "pieces d'or",
+    "potion",
+    "vous trouvez",
+    "vous ramassez",
+    "vous gagnez",
+    "vous recevez",
+)
+
 
 class GMExecutionResult(BaseModel):
     """Resultat de l'application d'une reponse GM."""
@@ -88,6 +123,7 @@ class GMResponseExecutor:
         session_id: Optional[str] = None,
         fallback_actor_id: Optional[str] = None,
         social_roll_results: Optional[dict[str, Any]] = None,
+        provenance_context: Optional[dict[str, Any]] = None,
     ) -> GMExecutionResult:
         """Execute toutes les actions d'une reponse GM.
 
@@ -103,6 +139,21 @@ class GMResponseExecutor:
             params: dict[str, Any] = dict(gm_action.params)
             if gm_action.target and "target" not in params:
                 params["target"] = gm_action.target
+
+            if not self._action_has_trusted_authority(
+                gm_action.type,
+                params,
+                active,
+                provenance_context,
+                social_roll_results=social_roll_results,
+            ):
+                logger.warning(
+                    "GMResponseExecutor : action sensible ignoree faute d'autorite "
+                    "canonique (%s, params=%s).",
+                    gm_action.type,
+                    params,
+                )
+                continue
 
             if gm_action.type == "roll_request":
                 roll_evt = self.execute_roll_request(params, fallback_actor_id, active)
@@ -152,6 +203,115 @@ class GMResponseExecutor:
                 result.canon_dirty = True
 
         return result
+
+    def _action_has_trusted_authority(
+        self,
+        action_type: str,
+        params: dict[str, Any],
+        active: ActiveSession,
+        provenance_context: Optional[dict[str, Any]],
+        *,
+        social_roll_results: Optional[dict[str, Any]],
+    ) -> bool:
+        """Refuse sensitive mutations when the player assertion is the only source."""
+        if provenance_context is None:
+            return True
+
+        if action_type in REWARD_ACTIONS_REQUIRING_AUTHORITY:
+            return self._reward_has_trusted_source(action_type, params, active, provenance_context)
+
+        if action_type in DIRECT_EFFECT_ACTIONS_REQUIRING_RESOLUTION:
+            return self._direct_effect_has_resolution(
+                action_type,
+                provenance_context,
+                social_roll_results=social_roll_results,
+            )
+
+        return True
+
+    def _reward_has_trusted_source(
+        self,
+        action_type: str,
+        params: dict[str, Any],
+        active: ActiveSession,
+        provenance_context: dict[str, Any],
+    ) -> bool:
+        del params
+        phase = self._phase_name(provenance_context.get("phase") or active.phase)
+        if phase == "ENCOUNTER_END":
+            return True
+
+        if action_type in {"currency_grant", "loot_grant"} and self._scene_has_loot_source(
+            active
+        ):
+            return True
+
+        if self._recent_gm_text_establishes_reward(provenance_context):
+            return True
+
+        return False
+
+    def _direct_effect_has_resolution(
+        self,
+        action_type: str,
+        provenance_context: dict[str, Any],
+        *,
+        social_roll_results: Optional[dict[str, Any]],
+    ) -> bool:
+        if action_type == "damage_apply" and self._has_resolved_roll(provenance_context):
+            return True
+        if action_type == "combatant_status" and (
+            social_roll_results or self._has_resolved_roll(provenance_context)
+        ):
+            return True
+        return False
+
+    @staticmethod
+    def _phase_name(value: Any) -> str:
+        raw = getattr(value, "name", None) or getattr(value, "value", None) or value
+        return str(raw or "").strip().upper()
+
+    @staticmethod
+    def _has_resolved_roll(provenance_context: dict[str, Any]) -> bool:
+        roll_results = provenance_context.get("roll_results")
+        if isinstance(roll_results, dict):
+            return bool(roll_results)
+        if isinstance(roll_results, list):
+            return bool(roll_results)
+        return False
+
+    @staticmethod
+    def _scene_has_loot_source(active: ActiveSession) -> bool:
+        scene = active.state_data.get("current_scene")
+        if not isinstance(scene, dict):
+            return False
+        for poi in scene.get("pois", []) or []:
+            if not isinstance(poi, dict):
+                continue
+            kind = str(poi.get("kind") or "").strip().lower()
+            icon = str(poi.get("icon") or "").strip().lower()
+            if kind == "loot" or icon == "chest":
+                return True
+        return False
+
+    @staticmethod
+    def _recent_gm_text_establishes_reward(provenance_context: dict[str, Any]) -> bool:
+        for message in provenance_context.get("recent_messages") or []:
+            role = ""
+            content = ""
+            if isinstance(message, dict):
+                role = str(message.get("role") or "").strip().lower()
+                content = str(message.get("content") or "")
+            else:
+                role_value = getattr(message, "role", "")
+                role = str(getattr(role_value, "value", role_value) or "").strip().lower()
+                content = str(getattr(message, "content", "") or "")
+            if role != "gm":
+                continue
+            normalized = content.casefold()
+            if any(marker in normalized for marker in REWARD_AUTHORITY_MARKERS):
+                return True
+        return False
 
     def execute_roll_request(
         self,
@@ -1244,13 +1404,19 @@ class GMResponseExecutor:
 
         # Extract and sanitize scene_theme
         scene_theme = str(raw.get("scene_theme") or "").strip().lower()
-        if scene_theme not in {"forest", "beach", "coastal", "rocky", "mountain", "dungeon", "cave", "city", "plains", "swamp", "desert"}:
+        if scene_theme not in SCENE_THEMES:
             terrain_lower = str(raw.get("terrain") or "").lower()
             if any(k in terrain_lower for k in ["beach", "plage", "sand", "sable"]):
                 scene_theme = "beach"
-            elif any(k in terrain_lower for k in ["coast", "rivage", "mer", "shore", "ocean", "sea"]):
+            elif any(
+                k in terrain_lower
+                for k in ["coast", "rivage", "mer", "shore", "ocean", "sea"]
+            ):
                 scene_theme = "coastal"
-            elif any(k in terrain_lower for k in ["dungeon", "donjon", "chamber", "chambre", "salle", "crypt"]):
+            elif any(
+                k in terrain_lower
+                for k in ["dungeon", "donjon", "chamber", "chambre", "salle", "crypt"]
+            ):
                 scene_theme = "dungeon"
             elif any(k in terrain_lower for k in ["cave", "grotte", "cavern"]):
                 scene_theme = "cave"
@@ -1262,7 +1428,10 @@ class GMResponseExecutor:
                 scene_theme = "mountain"
             elif any(k in terrain_lower for k in ["rock", "roche", "cliff", "falaise"]):
                 scene_theme = "rocky"
-            elif any(k in terrain_lower for k in ["city", "ville", "street", "rue", "place", "town"]):
+            elif any(
+                k in terrain_lower
+                for k in ["city", "ville", "street", "rue", "place", "town"]
+            ):
                 scene_theme = "city"
             elif any(k in terrain_lower for k in ["plain", "plaine", "grass", "herbe", "field"]):
                 scene_theme = "plains"
@@ -1282,7 +1451,10 @@ class GMResponseExecutor:
         raw_scene_id = cls._clean_optional_text(raw.get("scene_id"), max_len=80)
         if raw_scene_id:
             layout["scene_id"] = raw_scene_id
-        raw_description = cls._clean_optional_text(raw.get("description"), max_len=_SCENE_DESCRIPTION_MAX_LEN)
+        raw_description = cls._clean_optional_text(
+            raw.get("description"),
+            max_len=_SCENE_DESCRIPTION_MAX_LEN,
+        )
         if raw_description:
             layout["description"] = raw_description
 
@@ -1301,7 +1473,10 @@ class GMResponseExecutor:
                 "icon": str(poi.get("icon") or "marker"),
             }
             description = cls._clean_optional_text(poi.get("description"))
-            action_hint = cls._clean_optional_text(poi.get("action_hint"), max_len=_POI_ACTION_HINT_MAX_LEN)
+            action_hint = cls._clean_optional_text(
+                poi.get("action_hint"),
+                max_len=_POI_ACTION_HINT_MAX_LEN,
+            )
             if description:
                 normalized_poi["description"] = description
             if action_hint:
@@ -1484,6 +1659,7 @@ async def execute_gm_response(
     event_bus_instance: Any = event_bus,
     source: str = "action_pipeline",
     social_roll_results: Optional[dict[str, Any]] = None,
+    provenance_context: Optional[dict[str, Any]] = None,
 ) -> GMExecutionResult:
     """Fonction pratique gardant l'API explicite du lot 1.4."""
     executor = GMResponseExecutor(event_bus_instance, source=source)
@@ -1494,4 +1670,5 @@ async def execute_gm_response(
         session_id=session_id,
         fallback_actor_id=fallback_actor_id,
         social_roll_results=social_roll_results,
+        provenance_context=provenance_context,
     )

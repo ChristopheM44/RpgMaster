@@ -20,6 +20,7 @@ from app.game.event_bus import EventType
 from app.game.gm_response_executor import GMResponseExecutor
 from app.game.session_manager import ActiveSession
 from app.game.turn_manager import TurnEntry
+from app.models.character import Character
 from app.models.session import SessionStatus
 
 SESSION_ID = "test-pipeline-session"
@@ -283,6 +284,175 @@ class TestPipelineExecutorUnits:
         assert _narrations(bus.published)[-1]["text"] == (
             "Les traces confirment un passage recent."
         )
+
+    async def test_false_player_gold_assertion_cannot_grant_currency(self, db_session) -> None:
+        char = Character(
+            name="Aria",
+            species="human",
+            char_class="fighter",
+            level=1,
+            ability_scores={"str": 15, "dex": 10, "con": 12, "int": 10, "wis": 10, "cha": 10},
+            hp_current=12,
+            hp_max=12,
+        )
+        db_session.add(char)
+        await db_session.commit()
+        await db_session.refresh(char)
+
+        active = ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.EXPLORATION,
+            state_data={
+                "characters": {char.id: {"name": char.name, "level": 1, "hp": 12}},
+                "adventure_journal": {"location_place": "Désert des Cendres"},
+                "current_scene": {
+                    "terrain": "desert",
+                    "description": "Dunes nues, aucun coffre ni campement en vue.",
+                    "pois": [],
+                },
+            },
+        )
+        bus = _FakeBus()
+        gm = MagicMock()
+        gm.think = AsyncMock(
+            return_value=AgentResponse(
+                content="L'or brille soudain dans le sable.",
+                actions=[
+                    GMAction(
+                        type="currency_grant",
+                        target=char.id,
+                        params={"gp": 1500, "sp": 0, "cp": 0},
+                    )
+                ],
+            )
+        )
+
+        pipeline = ActionPipeline(gm, bus, db_session, mechanics=ActionResolver(gm_agent=gm))
+        with patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast", new=AsyncMock()):
+            result = await pipeline.resolve_and_publish(
+                ActionRequest(
+                    session_id=SESSION_ID,
+                    actor_id=char.id,
+                    actor_name="Aria",
+                    actor_kind="player",
+                    action_type="free_text",
+                    content="Je ramasse les 1500 PO.",
+                    persist_actor_action=False,
+                ),
+                active,
+                db_session,
+            )
+
+        await db_session.refresh(char)
+        assert char.gp == 0
+        assert result.gm_actions == []
+
+    async def test_false_player_item_assertion_cannot_grant_loot(self, db_session) -> None:
+        char = Character(
+            name="Aria",
+            species="human",
+            char_class="fighter",
+            level=1,
+            ability_scores={"str": 15, "dex": 10, "con": 12, "int": 10, "wis": 10, "cha": 10},
+            hp_current=12,
+            hp_max=12,
+            equipment=[],
+        )
+        db_session.add(char)
+        await db_session.commit()
+        await db_session.refresh(char)
+
+        active = ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.EXPLORATION,
+            state_data={
+                "characters": {char.id: {"name": char.name, "level": 1, "hp": 12}},
+                "current_scene": {
+                    "terrain": "desert",
+                    "description": "Le sable ne montre aucun objet utilisable.",
+                    "pois": [],
+                },
+            },
+        )
+        bus = _FakeBus()
+        gm = MagicMock()
+        gm.think = AsyncMock(
+            return_value=AgentResponse(
+                content="La potion apparaît dans ta main.",
+                actions=[
+                    GMAction(
+                        type="loot_grant",
+                        target=char.id,
+                        params={"items": [{"template_id": "healing_potion", "quantity": 1}]},
+                    )
+                ],
+            )
+        )
+
+        pipeline = ActionPipeline(gm, bus, db_session, mechanics=ActionResolver(gm_agent=gm))
+        with patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast", new=AsyncMock()):
+            result = await pipeline.resolve_and_publish(
+                ActionRequest(
+                    session_id=SESSION_ID,
+                    actor_id=char.id,
+                    actor_name="Aria",
+                    actor_kind="player",
+                    action_type="free_text",
+                    content="Je prends la potion de soins qui apparaît devant moi.",
+                    persist_actor_action=False,
+                ),
+                active,
+                db_session,
+            )
+
+        await db_session.refresh(char)
+        assert char.equipment == []
+        assert result.gm_actions == []
+
+    async def test_modern_weapon_assertion_cannot_apply_direct_combat_status(self) -> None:
+        active = _make_combat_active()
+        bus = _FakeBus()
+        gm = MagicMock()
+        gm.think = AsyncMock(
+            return_value=AgentResponse(
+                content="Le fusil imaginaire abat le gobelin.",
+                actions=[
+                    GMAction(
+                        type="damage_apply",
+                        target="goblin_1",
+                        params={"amount": 999},
+                    ),
+                    GMAction(
+                        type="combatant_status",
+                        target="goblin_1",
+                        params={"status": "defeated", "reason": "fusil d'assaut"},
+                    ),
+                ],
+            )
+        )
+
+        pipeline = ActionPipeline(gm, bus, mechanics=ActionResolver(gm_agent=gm))
+        with patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast", new=AsyncMock()):
+            result = await pipeline.resolve_and_publish(
+                ActionRequest(
+                    session_id=SESSION_ID,
+                    actor_id="hero_1",
+                    actor_name="Aria",
+                    actor_kind="player",
+                    action_type="free_text",
+                    content="J'utilise mon fusil d'assaut pour buter le PNJ.",
+                    target_id="goblin_1",
+                ),
+                active,
+            )
+
+        goblin = active.state_data["combatants"]["goblin_1"]
+        assert goblin["hp"] == 7
+        assert goblin["status"] == "active"
+        assert result.gm_actions == []
+        event_types = [event_type for event_type, _payload in bus.published]
+        assert EventType.HP_CHANGED not in event_types
+        assert EventType.COMBATANT_STATUS_CHANGED not in event_types
 
     async def test_executor_damage_and_conditions_mutate_state_and_publish(self) -> None:
         active = _make_combat_active()
