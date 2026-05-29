@@ -30,11 +30,16 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 
 
+async def _campaign_response(campaign, db: AsyncSession) -> CampaignResponse:
+    summary = await campaign_dossier_service.public_summary(campaign, db)
+    summaries = await campaign_service.session_summaries(campaign, db)
+    return CampaignResponse.from_orm(campaign, summary, summaries)
+
+
 @router.post("", response_model=CampaignResponse, status_code=201)
 async def create_campaign(body: CampaignCreate, db: AsyncSession = Depends(get_db)):
     campaign = await campaign_service.create_campaign(body.name, body.description, db)
-    summary = await campaign_dossier_service.public_summary(campaign, db)
-    return CampaignResponse.from_orm(campaign, summary)
+    return await _campaign_response(campaign, db)
 
 
 @router.get("", response_model=list[CampaignResponse])
@@ -42,8 +47,7 @@ async def list_campaigns(db: AsyncSession = Depends(get_db)):
     campaigns = await campaign_service.list_campaigns(db)
     responses = []
     for campaign in campaigns:
-        summary = await campaign_dossier_service.public_summary(campaign, db)
-        responses.append(CampaignResponse.from_orm(campaign, summary))
+        responses.append(await _campaign_response(campaign, db))
     return responses
 
 
@@ -52,17 +56,15 @@ async def get_campaign(campaign_id: str, db: AsyncSession = Depends(get_db)):
     campaign = await campaign_service.get_campaign(campaign_id, db)
     if campaign is None:
         raise HTTPException(status_code=404, detail="Campaign not found")
-    summary = await campaign_dossier_service.public_summary(campaign, db)
-    return CampaignResponse.from_orm(campaign, summary)
+    return await _campaign_response(campaign, db)
 
 
 @router.delete("/{campaign_id}", status_code=204)
 async def delete_campaign(campaign_id: str, db: AsyncSession = Depends(get_db)):
-    from sqlalchemy import delete
-
-    from app.models.campaign import Campaign
-    await db.execute(delete(Campaign).where(Campaign.id == campaign_id))
-    await db.commit()
+    try:
+        await campaign_service.delete_campaign(campaign_id, db)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
 
 
 @router.post("/{campaign_id}/reset", response_model=CampaignResetResponse)
@@ -71,9 +73,8 @@ async def reset_campaign(campaign_id: str, db: AsyncSession = Depends(get_db)):
         result = await campaign_service.reset_campaign(campaign_id, db)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
-    summary = await campaign_dossier_service.public_summary(result["campaign"], db)
     return CampaignResetResponse(
-        campaign=CampaignResponse.from_orm(result["campaign"], summary),
+        campaign=await _campaign_response(result["campaign"], db),
         session_id=result["session_id"],
         characters_reset=result["characters_reset"],
         sessions_removed=result["sessions_removed"],
@@ -249,8 +250,7 @@ async def attach_session(
         campaign = await campaign_service.attach_session(campaign_id, body.session_id, db)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
-    summary = await campaign_dossier_service.public_summary(campaign, db)
-    return CampaignResponse.from_orm(campaign, summary)
+    return await _campaign_response(campaign, db)
 
 
 @router.post("/{campaign_id}/advance")
@@ -265,9 +265,8 @@ async def advance_campaign(
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
-    summary = await campaign_dossier_service.public_summary(result["campaign"], db)
     return {
-        "campaign": CampaignResponse.from_orm(result["campaign"], summary),
+        "campaign": await _campaign_response(result["campaign"], db),
         "new_session_id": result["new_session_id"],
         "characters_transferred": result["characters_transferred"],
     }
@@ -285,5 +284,4 @@ async def award_xp(
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
-    summary = await campaign_dossier_service.public_summary(campaign, db)
-    return CampaignResponse.from_orm(campaign, summary)
+    return await _campaign_response(campaign, db)

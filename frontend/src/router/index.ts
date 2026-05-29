@@ -12,7 +12,7 @@ const router = createRouter({
     {
       path: '/lobby',
       name: 'lobby',
-      component: () => import('../views/LobbyView.vue'),
+      redirect: { name: 'campaigns' },
     },
     {
       path: '/session/:id/setup',

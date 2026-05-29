@@ -179,12 +179,7 @@ async def test_delete_session_removes_campaign_reference(async_client):
         json={"name": "Chronique test", "description": ""},
     )
     campaign_id = campaign_resp.json()["id"]
-
-    advance_resp = await async_client.post(
-        f"/api/campaigns/{campaign_id}/advance",
-        json={"new_session_name": "Session 1"},
-    )
-    session_id = advance_resp.json()["new_session_id"]
+    session_id = campaign_resp.json()["session_ids"][0]
 
     delete_resp = await async_client.delete(f"/api/sessions/{session_id}")
     assert delete_resp.status_code == 204

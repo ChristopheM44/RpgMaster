@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { useCampaignStore } from '../stores/campaign'
+import { sessionApi } from '../services/api'
 import type {
   CampaignForgeJobResponse,
   CampaignGmDossier,
@@ -46,7 +47,7 @@ const commonBrief = reactive({
   tones: [] as string[],
   duration: '3-5',
   startingLevel: 1,
-  scope: 'mini-campagne',
+  scope: 'mini-chronique',
   combat: 'hybride léger',
 })
 const scratchInputs = reactive({
@@ -155,7 +156,7 @@ function validateStep(): string | null {
   if (forgeStep.value === 1) return null
   if (mode.value === 'scratch') {
     if (forgeStep.value === 2) {
-      if (!commonBrief.name.trim()) return 'Le nom de la campagne est requis.'
+      if (!commonBrief.name.trim()) return 'Le nom de la chronique est requis.'
     }
     if (forgeStep.value === 4 && commonBrief.startingLevel < 1) {
       return 'Le niveau initial doit être supérieur ou égal à 1.'
@@ -194,14 +195,14 @@ function delay(ms: number): Promise<void> {
 async function ensureForgeCampaign(): Promise<string | null> {
   if (forgeCampaignId.value) return forgeCampaignId.value
   const fallbackName = mode.value === 'import' ? 'Chronique Importée' : 'Chronique sans nom'
-  const fallbackDesc = mode.value === 'import' ? '' : 'Aventure de campagne.'
+  const fallbackDesc = mode.value === 'import' ? '' : 'Aventure de chronique.'
   const pitchForDesc = mode.value === 'scratch' ? scratchInputs.pitch.trim() : ''
   const created = await campaignStore.createCampaign({
     name: commonBrief.name.trim() || fallbackName,
     description: pitchForDesc || fallbackDesc,
   })
   if (!created) {
-    modalError.value = 'Impossible de créer la campagne.'
+    modalError.value = 'Impossible de créer la chronique.'
     return null
   }
   forgeCampaignId.value = created.id
@@ -328,14 +329,22 @@ async function validateAndStart() {
       draftContract.value.title?.trim()
       || draftContract.value.visible_chapters?.[0]?.title?.trim()
       || 'Première session'
-    const result = await campaignStore.advance(forgeCampaignId.value, sessionName)
-    if (!result) {
-      modalError.value = campaignStore.error ?? 'Impossible de créer la première session.'
+    const campaign =
+      campaignStore.currentCampaign?.id === forgeCampaignId.value
+        ? campaignStore.currentCampaign
+        : await campaignStore.fetchCampaign(forgeCampaignId.value)
+    const sessionId =
+      campaign?.session_ids[campaign.current_session_index]
+      ?? campaign?.session_ids[0]
+      ?? null
+    if (!sessionId) {
+      modalError.value = 'Impossible de retrouver la session initiale de la chronique.'
       return
     }
+    await sessionApi.update(sessionId, { name: sessionName })
     emit('forge-completed', {
       campaignId: forgeCampaignId.value,
-      newSessionId: result.new_session_id,
+      newSessionId: sessionId,
     })
   } finally {
     isValidating.value = false
@@ -403,7 +412,7 @@ function handleFooterBack() {
         <div class="rpg-campaign-modal-glow pointer-events-none absolute -right-12 -top-20 h-60 w-60 rounded-full" />
         <div class="relative">
           <div class="rpg-eyebrow"><span class="rpg-sparkle">✦</span>Forger une nouvelle chronique</div>
-          <h2 class="mt-1 font-display text-[28px] font-bold leading-tight">Nouvelle campagne</h2>
+          <h2 class="mt-1 font-display text-[28px] font-bold leading-tight">Nouvelle chronique</h2>
 
           <div class="mt-5 flex gap-2">
             <span
@@ -454,7 +463,7 @@ function handleFooterBack() {
           <div v-else-if="mode === 'scratch' && forgeStep === 2" class="mt-6 space-y-5">
             <div class="rpg-eyebrow"><span class="rpg-sparkle">✦</span>Brief de chronique</div>
             <label class="block">
-              <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Nom de la campagne *</span>
+              <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Nom de la chronique *</span>
               <input v-model="commonBrief.name" class="rpg-input w-full text-base" placeholder="La Chute des Rois Anciens" />
             </label>
             <label class="block">
@@ -578,7 +587,7 @@ function handleFooterBack() {
           <div v-else-if="mode === 'import' && forgeStep === 2" class="mt-6 space-y-4">
             <div class="rpg-eyebrow"><span class="rpg-sparkle">✦</span>Sources de lore</div>
             <label class="block">
-              <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Nom de la campagne (optionnel)</span>
+              <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Nom de la chronique (optionnel)</span>
               <input v-model="commonBrief.name" class="rpg-input w-full text-base" placeholder="Nom déduit de la source si laissé vide…" />
             </label>
 
@@ -660,8 +669,8 @@ function handleFooterBack() {
                 <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Format</span>
                 <select v-model="commonBrief.scope" class="rpg-input w-full">
                   <option>one-shot</option>
-                  <option>mini-campagne</option>
-                  <option>campagne longue</option>
+                  <option>mini-chronique</option>
+                  <option>chronique longue</option>
                 </select>
               </label>
               <label class="block">

@@ -8,7 +8,9 @@ import type {
   CampaignGmDossier,
   CampaignGmDossierResponse,
   CampaignScenario,
+  CampaignSessionSummary,
   CampaignVisibleChapter,
+  SessionStatus,
 } from '../types'
 import ConfirmDialog from '../components/common/ConfirmDialog.vue'
 import CampaignForgeModal from './CampaignForgeModal.vue'
@@ -24,6 +26,17 @@ const DETAIL_TABS: Array<{ id: DetailTab; label: string; icon: string }> = [
   { id: 'scenario', label: 'Scénario', icon: '✦' },
   { id: 'notes', label: 'Notes du MJ', icon: '❦' },
 ]
+const STATUS_META: Record<SessionStatus, { label: string; tone: string; live: boolean }> = {
+  lobby: { label: 'Préparation', tone: 'rpg-tone-muted', live: false },
+  character_creation: { label: 'Création', tone: 'rpg-tone-arcane', live: false },
+  exploration: { label: 'Exploration', tone: 'rpg-tone-green', live: true },
+  encounter_start: { label: 'Rencontre', tone: 'rpg-tone-blood', live: true },
+  combat: { label: 'Combat', tone: 'rpg-tone-blood', live: true },
+  encounter_end: { label: 'Fin rencontre', tone: 'rpg-tone-gold', live: true },
+  rest: { label: 'Repos', tone: 'rpg-tone-teal', live: true },
+  level_up: { label: 'Montée', tone: 'rpg-tone-gold', live: true },
+  session_end: { label: 'Terminée', tone: 'rpg-tone-dim', live: false },
+}
 const GM_SECTIONS: Array<{ key: keyof CampaignGmDossier; label: string }> = [
   { key: 'important_npcs', label: 'PNJ importants' },
   { key: 'locations', label: 'Lieux' },
@@ -71,6 +84,24 @@ watch(activeTab, async (tab) => {
 const scenario = computed<CampaignScenario | null>(() => {
   if (!selectedCampaign.value) return null
   return campaignStore.scenarios[selectedCampaign.value.id] ?? null
+})
+
+const sessionSummaries = computed<CampaignSessionSummary[]>(() => {
+  if (!selectedCampaign.value) return []
+  return selectedCampaign.value.session_summaries ?? selectedCampaign.value.session_ids.map((id) => ({
+    id,
+    name: `Session ${selectedCampaign.value!.session_ids.indexOf(id) + 1}`,
+    status: 'lobby',
+    created_at: selectedCampaign.value!.created_at,
+    updated_at: selectedCampaign.value!.updated_at,
+    character_count: 0,
+  }))
+})
+
+const currentSession = computed<CampaignSessionSummary | null>(() => {
+  if (!selectedCampaign.value) return null
+  const index = selectedCampaign.value.current_session_index
+  return sessionSummaries.value[index] ?? sessionSummaries.value[sessionSummaries.value.length - 1] ?? null
 })
 
 const gmDossierResponse = computed<CampaignGmDossierResponse | null>(() => {
@@ -157,10 +188,18 @@ function currentSessionId(campaign: Campaign): string | null {
 
 async function playCurrent() {
   if (!selectedCampaign.value) return
-  const sid = currentSessionId(selectedCampaign.value)
+  const sid = currentSession.value?.id ?? currentSessionId(selectedCampaign.value)
   if (!sid) return
   actionError.value = null
-  await startAndOpenSession(sid)
+  if (currentSession.value && ['lobby', 'character_creation'].includes(currentSession.value.status)) {
+    await router.push({
+      name: 'character-setup',
+      params: { id: sid },
+      query: { back: 'campaigns' },
+    })
+    return
+  }
+  await openPlaySession(sid)
 }
 
 async function startAndOpenSession(sessionId: string): Promise<boolean> {
@@ -174,10 +213,38 @@ async function startAndOpenSession(sessionId: string): Promise<boolean> {
     return true
   } catch {
     gameStore.setProcessing(false)
-    actionError.value = 'Impossible de lancer la session. Vérifiez que la campagne possède au moins un personnage.'
+    actionError.value = 'Impossible de lancer la session. Vérifiez que la chronique possède au moins un personnage.'
     activeTab.value = 'sessions'
     return false
   }
+}
+
+async function openPlaySession(sessionId: string): Promise<boolean> {
+  gameStore.setProcessing(true)
+  try {
+    await router.push({
+      name: 'game-session',
+      params: { id: sessionId },
+    })
+    return true
+  } catch {
+    gameStore.setProcessing(false)
+    actionError.value = 'Impossible d’ouvrir la session.'
+    activeTab.value = 'sessions'
+    return false
+  }
+}
+
+async function openSession(summary: CampaignSessionSummary) {
+  if (['lobby', 'character_creation'].includes(summary.status)) {
+    await router.push({
+      name: 'character-setup',
+      params: { id: summary.id },
+      query: { back: 'campaigns' },
+    })
+    return
+  }
+  await openPlaySession(summary.id)
 }
 
 async function handleAdvance() {
@@ -254,6 +321,16 @@ function sessionLabel(campaign: Campaign, idx: number): string {
   return `Chap. ${chapter.num} — ${chapter.title}${idx === campaign.current_session_index ? ' · active' : ''}`
 }
 
+function statusMeta(status: SessionStatus) {
+  return STATUS_META[status] ?? STATUS_META.lobby
+}
+
+function sessionActionLabel(status: SessionStatus): string {
+  if (status === 'session_end') return 'Voir →'
+  if (status === 'lobby' || status === 'character_creation') return 'Préparer →'
+  return 'Jouer →'
+}
+
 function chipStateLabel(state: string): string {
   if (state === 'done') return 'Terminé'
   if (state === 'active') return 'En cours'
@@ -312,19 +389,19 @@ function itemDetail(item: unknown): string {
         <div class="rpg-campaign-hero-glow pointer-events-none absolute -left-10 -top-14 h-48 w-72 rounded-full" />
         <div class="relative min-w-0 flex-1">
           <div class="rpg-eyebrow"><span class="rpg-sparkle">✦</span>Vos chroniques</div>
-          <h1 class="font-display text-[44px] font-bold leading-none tracking-[0.03em]">Campagnes</h1>
+          <h1 class="font-display text-[44px] font-bold leading-none tracking-[0.03em]">Chroniques</h1>
           <p class="mt-3 max-w-2xl font-serif text-[15px] italic leading-snug text-parchment-dark">
-            Enchaînez des sessions avec progression persistante. Chaque campagne tisse son propre fil — quêtes, PNJ, lieux et chroniques.
+            Reprenez vos aventures depuis leur chronique. Même un one-shot garde son fil — groupe, session active, quêtes, PNJ et mémoire jouée.
           </p>
         </div>
         <button class="rpg-btn-primary shrink-0" @click="openForge">
-          <span>✦</span> Forger une campagne
+          <span>✦</span> Forger une chronique
         </button>
       </div>
 
       <div class="min-h-0 flex-1 overflow-y-auto px-6 pb-8 md:px-14">
         <p v-if="!campaignStore.campaigns.length" class="py-16 text-center font-serif italic text-text-muted">
-          Aucune campagne.
+          Aucune chronique.
         </p>
         <div class="flex flex-col gap-2.5">
           <article
@@ -351,8 +428,8 @@ function itemDetail(item: unknown): string {
                 <button
                   class="h-6 w-6 rounded text-text-dim transition hover:text-gold"
                   type="button"
-                  title="Réinitialiser la campagne"
-                  aria-label="Réinitialiser la campagne"
+                  title="Réinitialiser la chronique"
+                  aria-label="Réinitialiser la chronique"
                   @click.stop="confirmResetId = campaign.id"
                 >
                   ↺
@@ -360,8 +437,8 @@ function itemDetail(item: unknown): string {
                 <button
                   class="h-6 w-6 rounded text-text-dim transition hover:text-blood"
                   type="button"
-                  title="Supprimer la campagne"
-                  aria-label="Supprimer la campagne"
+                  title="Supprimer la chronique"
+                  aria-label="Supprimer la chronique"
                   @click.stop="confirmDeleteId = campaign.id"
                 >
                   ×
@@ -446,12 +523,12 @@ function itemDetail(item: unknown): string {
           <p v-if="actionError" class="rounded border border-blood/30 bg-blood/10 px-3 py-2 text-sm text-blood-light">
             {{ actionError }}
           </p>
-          <p v-if="!selectedCampaign.session_ids.length" class="py-8 font-serif italic text-text-muted">
-            Aucune session.
+          <p v-if="!sessionSummaries.length" class="py-8 font-serif italic text-text-muted">
+            Aucune session rattachée à cette chronique.
           </p>
           <div
-            v-for="(sid, idx) in selectedCampaign.session_ids"
-            :key="sid"
+            v-for="(session, idx) in sessionSummaries"
+            :key="session.id"
             class="rpg-campaign-session-row flex items-center gap-3 rounded-lg border p-3"
             :class="{ 'is-active': idx === selectedCampaign.current_session_index }"
           >
@@ -462,35 +539,51 @@ function itemDetail(item: unknown): string {
               {{ idx + 1 }}
             </div>
             <div class="min-w-0 flex-1">
-              <div class="font-display text-[13px] font-bold tracking-wide">
-                Session {{ idx + 1 }}
+              <div class="flex min-w-0 items-center gap-2">
+                <div class="truncate font-display text-[13px] font-bold tracking-wide">
+                  {{ session.name || `Session ${idx + 1}` }}
+                </div>
                 <span v-if="idx === selectedCampaign.current_session_index" class="rpg-chip rpg-tone-ember ml-2 px-1.5 py-0.5 text-[9px] uppercase tracking-widest">active</span>
               </div>
               <div class="truncate font-serif text-[11px] italic text-text-muted">{{ sessionLabel(selectedCampaign, idx) }}</div>
+              <div class="mt-1 flex flex-wrap items-center gap-2 font-mono text-[9px] text-text-dim">
+                <span class="rpg-chip px-1.5 py-0.5 text-[9px]" :class="statusMeta(session.status).tone">
+                  <span v-if="statusMeta(session.status).live" class="rpg-pulse">●</span>
+                  {{ statusMeta(session.status).label }}
+                </span>
+                <span>✦ {{ session.character_count }} perso.</span>
+                <span>◷ {{ formatDate(session.updated_at) }}</span>
+              </div>
             </div>
-            <div class="font-mono text-[9px] text-text-dim">{{ sid.slice(0, 8) }}</div>
+            <button
+              class="rpg-btn-secondary shrink-0 !px-3 !py-1.5 !text-[10px]"
+              type="button"
+              @click="openSession(session)"
+            >
+              {{ sessionActionLabel(session.status) }}
+            </button>
           </div>
 
           <div class="pt-3">
             <button
-              v-if="currentSessionId(selectedCampaign)"
+              v-if="currentSession"
               class="rpg-btn-primary w-full justify-center font-display"
               @click="playCurrent"
             >
-              ▶ Jouer la session courante
+              ▶ {{ ['lobby', 'character_creation'].includes(currentSession.status) ? 'Préparer le groupe' : 'Jouer la session courante' }}
             </button>
             <button
               class="rpg-quick-action rpg-tone-arcane mt-2 w-full rounded-lg border px-4 py-2.5 font-display"
               @click="showAdvance = true"
             >
-              → {{ selectedCampaign.session_ids.length === 0 ? 'Démarrer une session' : 'Session suivante (transférer personnages)' }}
+              → Session suivante (transférer personnages)
             </button>
             <button
               class="mt-2 w-full rounded-lg border border-gold/30 bg-gold/10 px-4 py-2.5 font-display text-[11px] font-bold uppercase tracking-[0.12em] text-gold transition hover:border-gold/50"
               type="button"
               @click="confirmResetId = selectedCampaign.id"
             >
-              ↺ Réinitialiser la campagne
+              ↺ Réinitialiser la chronique
             </button>
           </div>
         </div>
@@ -708,13 +801,13 @@ function itemDetail(item: unknown): string {
             </div>
           </template>
           <button class="w-full rounded-lg border border-blood/25 bg-transparent px-4 py-2.5 font-display text-[11px] font-bold uppercase tracking-[0.12em] text-blood/70" @click="confirmDeleteId = selectedCampaign.id">
-            Supprimer la campagne
+            Supprimer la chronique
           </button>
         </div>
       </div>
 
       <footer class="border-t border-border bg-black/25 px-7 py-4">
-        <div class="mb-2 text-[9px] font-bold uppercase tracking-[0.22em] text-text-muted">✦ Codex de la campagne</div>
+        <div class="mb-2 text-[9px] font-bold uppercase tracking-[0.22em] text-text-muted">✦ Codex de la chronique</div>
         <div class="grid grid-cols-3 gap-2">
           <button class="rounded-lg border border-border bg-surface p-3 text-left">
             <div class="flex items-center gap-2 font-mono text-base font-bold text-gold">◷ {{ (selectedCampaign.counts?.quests_active ?? 0) + (selectedCampaign.counts?.quests_done ?? 0) }}</div>
@@ -757,8 +850,8 @@ function itemDetail(item: unknown): string {
 
     <ConfirmDialog
       v-if="campaignToDelete"
-      title="Supprimer cette campagne ?"
-      :message="`« ${campaignToDelete.name} » sera définitivement supprimée. Les sessions rattachées ne seront pas effacées.`"
+      title="Supprimer cette chronique ?"
+      :message="`« ${campaignToDelete.name} » sera définitivement supprimée avec ses sessions rattachées.`"
       confirm-label="Supprimer"
       tone="danger"
       @confirm="handleDelete(campaignToDelete.id)"
@@ -767,7 +860,7 @@ function itemDetail(item: unknown): string {
 
     <ConfirmDialog
       v-if="campaignToReset"
-      title="Réinitialiser cette campagne ?"
+      title="Réinitialiser cette chronique ?"
       :message="`« ${campaignToReset.name} » sera conservée, mais l'historique, les sauvegardes, la progression jouée et les sessions secondaires seront effacés. La session courante et les personnages repartiront du niveau de départ.`"
       confirm-label="Réinitialiser"
       tone="warning"

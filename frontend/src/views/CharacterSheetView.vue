@@ -370,7 +370,7 @@ void personalityTraits
 
       <!-- Breadcrumbs -->
       <div class="rpg-sheet-crumbs flex items-center gap-2">
-        <span>Lobby</span>
+        <span>Chroniques</span>
         <span class="rpg-text-dim">›</span>
         <span>Session</span>
         <span class="rpg-text-dim">›</span>

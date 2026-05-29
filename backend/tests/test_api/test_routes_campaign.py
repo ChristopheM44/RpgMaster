@@ -27,14 +27,10 @@ async def test_campaign_counts_characters_added_after_session_creation(async_cli
         json={"name": "Chroniques des Brumes", "description": ""},
     )
     assert campaign_resp.status_code == 201
-    campaign_id = campaign_resp.json()["id"]
-
-    advance_resp = await async_client.post(
-        f"/api/campaigns/{campaign_id}/advance",
-        json={"new_session_name": "Session 1"},
-    )
-    assert advance_resp.status_code == 200
-    session_id = advance_resp.json()["new_session_id"]
+    campaign = campaign_resp.json()
+    campaign_id = campaign["id"]
+    session_id = campaign["session_ids"][0]
+    assert campaign["session_summaries"][0]["id"] == session_id
 
     for name in ("Mira", "Orin"):
         char_resp = await async_client.post(
@@ -47,12 +43,14 @@ async def test_campaign_counts_characters_added_after_session_creation(async_cli
     assert detail_resp.status_code == 200
     detail = detail_resp.json()
     assert detail["counts"]["characters"] == 2
+    assert detail["session_summaries"][0]["character_count"] == 2
 
     list_resp = await async_client.get("/api/campaigns")
     assert list_resp.status_code == 200
     campaigns = list_resp.json()
     listed = next(c for c in campaigns if c["id"] == campaign_id)
     assert listed["counts"]["characters"] == 2
+    assert listed["session_summaries"][0]["character_count"] == 2
 
 
 @pytest.mark.asyncio
@@ -62,20 +60,15 @@ async def test_get_campaign_prunes_stale_session_ids(async_client, db_session):
         json={"name": "Vestiges", "description": ""},
     )
     assert campaign_resp.status_code == 201
-    campaign_id = campaign_resp.json()["id"]
-
-    first_session = await async_client.post(
-        f"/api/campaigns/{campaign_id}/advance",
-        json={"new_session_name": "Session 1"},
-    )
-    assert first_session.status_code == 200
+    campaign = campaign_resp.json()
+    campaign_id = campaign["id"]
 
     second_session = await async_client.post(
         f"/api/campaigns/{campaign_id}/advance",
         json={"new_session_name": "Session 2"},
     )
     assert second_session.status_code == 200
-    deleted_session_id = first_session.json()["new_session_id"]
+    deleted_session_id = campaign["session_ids"][0]
     surviving_session_id = second_session.json()["new_session_id"]
 
     await db_session.execute(delete(Session).where(Session.id == deleted_session_id))
@@ -105,19 +98,14 @@ async def test_reset_campaign_keeps_current_session_and_clears_played_state(
         json={"name": "Brumes rejouables", "description": "Campagne test"},
     )
     assert campaign_resp.status_code == 201
-    campaign_id = campaign_resp.json()["id"]
+    created_campaign = campaign_resp.json()
+    campaign_id = created_campaign["id"]
+    first_session_id = created_campaign["session_ids"][0]
 
     result = await db_session.execute(select(Campaign).where(Campaign.id == campaign_id))
     campaign = result.scalar_one()
     campaign.starting_level = 2
     await db_session.commit()
-
-    first_resp = await async_client.post(
-        f"/api/campaigns/{campaign_id}/advance",
-        json={"new_session_name": "Session 1"},
-    )
-    assert first_resp.status_code == 200
-    first_session_id = first_resp.json()["new_session_id"]
 
     char_resp = await async_client.post(
         "/api/characters/",
@@ -343,6 +331,14 @@ async def test_reset_campaign_without_session_creates_current_lobby_session(
     )
     assert campaign_resp.status_code == 201
     campaign_id = campaign_resp.json()["id"]
+
+    result = await db_session.execute(select(Campaign).where(Campaign.id == campaign_id))
+    campaign = result.scalar_one()
+    session_ids = list(campaign.session_ids or [])
+    await db_session.execute(delete(Session).where(Session.id.in_(session_ids)))
+    campaign.session_ids = []
+    campaign.current_session_index = 0
+    await db_session.commit()
 
     response = await async_client.post(f"/api/campaigns/{campaign_id}/reset")
 

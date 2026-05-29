@@ -7,10 +7,10 @@ const router = useRouter()
 const route = useRoute()
 const sessionStore = useSessionStore()
 
-/** Fil d'Ariane : Lobby › Session › (Personnage) */
+/** Fil d'Ariane : Chroniques › Session › (Personnage) */
 const crumbs = computed<string[]>(() => {
-  const out: string[] = ['Lobby']
-  if (sessionStore.currentSession && route.name !== 'lobby') {
+  const out: string[] = ['Chroniques']
+  if (sessionStore.currentSession && route.name !== 'campaigns') {
     out.push(sessionStore.currentSession.name)
   }
   if (route.name === 'character-sheet') {
@@ -18,7 +18,7 @@ const crumbs = computed<string[]>(() => {
   } else if (route.name === 'character-setup') {
     out.push('Création')
   } else if (route.name === 'campaigns') {
-    out[out.length - 1] = 'Campagnes'
+    out[out.length - 1] = 'Chroniques'
   } else if (route.name === 'admin') {
     out[out.length - 1] = 'Admin'
   } else if (route.name === 'grimoire') {
@@ -68,16 +68,10 @@ function isActive(name: string): boolean {
     <!-- Nav pills -->
     <nav class="flex items-center gap-1.5">
       <router-link
-        to="/lobby"
-        class="rpg-nav-pill rounded-full border px-3.5 py-1.5 text-xs font-semibold tracking-wide transition"
-        :class="{ 'is-active': isActive('lobby') }"
-      >Lobby</router-link>
-
-      <router-link
         to="/campaigns"
         class="rpg-nav-pill rounded-full border px-3.5 py-1.5 text-xs font-semibold tracking-wide transition"
         :class="{ 'is-active': isActive('campaigns') }"
-      >Campagnes</router-link>
+      >Chroniques</router-link>
 
       <router-link
         to="/grimoire"
@@ -115,13 +109,13 @@ function isActive(name: string): boolean {
       EN LIGNE
     </div>
 
-    <!-- Back-to-lobby button (hors lobby) -->
+    <!-- Back-to-chronicles button (hors hub) -->
     <button
-      v-if="route.name !== 'lobby'"
+      v-if="route.name !== 'campaigns'"
       class="rpg-border-strong rpg-text-muted rounded-md border px-3 py-1 text-xs font-semibold tracking-wide transition"
-      @click="router.push('/lobby')"
+      @click="router.push('/campaigns')"
     >
-      ← Lobby
+      ← Chroniques
     </button>
   </header>
 </template>

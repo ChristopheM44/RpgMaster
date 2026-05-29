@@ -35,7 +35,7 @@ const startingGame = ref(false)
 const showSaveLoad = ref(false)
 const showStartModal = ref(false)
 const routeStartPending = ref(route.query.start === '1')
-const showLobbyConfirm = ref(false)
+const showChroniclesConfirm = ref(false)
 const showEndCombatConfirm = ref(false)
 const showRestDialog = ref(false)
 type MapInteractionMode = 'inspect' | 'move' | 'attack' | 'spell'
@@ -53,7 +53,7 @@ async function initSession() {
     const loaded = await import('../services/api').then(m => m.sessionApi.get(sessionId))
     sessionStore.setCurrentSession(loaded)
   } catch {
-    router.push({ name: 'lobby' })
+    router.push({ name: 'campaigns' })
     return
   }
 
@@ -89,18 +89,18 @@ async function handleLoadComplete() {
   await initSession()
 }
 
-function requestGoToLobby() {
+function requestGoToChronicles() {
   if (!gameStore.connected) {
-    confirmGoToLobby()
+    confirmGoToChronicles()
     return
   }
-  showLobbyConfirm.value = true
+  showChroniclesConfirm.value = true
 }
 
-function confirmGoToLobby() {
-  showLobbyConfirm.value = false
+function confirmGoToChronicles() {
+  showChroniclesConfirm.value = false
   disconnect()
-  router.push({ name: 'lobby' })
+  router.push({ name: 'campaigns' })
 }
 
 const needsStart = computed(() =>
@@ -486,8 +486,8 @@ onUnmounted(() => { disconnect() })
 
         <button
           class="rpg-btn-secondary !py-1.5 !px-4 !text-[11px] shrink-0"
-          @click="requestGoToLobby"
-        >← Lobby</button>
+          @click="requestGoToChronicles"
+        >← Chroniques</button>
       </div>
     </header>
 
@@ -614,14 +614,14 @@ onUnmounted(() => { disconnect() })
     />
 
     <ConfirmDialog
-      v-if="showLobbyConfirm"
+      v-if="showChroniclesConfirm"
       title="Quitter la session ?"
-      message="Vous serez déconnecté et retournerez au Lobby. La progression non sauvegardée peut être perdue."
+      message="Vous serez déconnecté et retournerez aux Chroniques. La progression non sauvegardée peut être perdue."
       confirm-label="Quitter"
       cancel-label="Rester"
       tone="warning"
-      @confirm="confirmGoToLobby"
-      @cancel="showLobbyConfirm = false"
+      @confirm="confirmGoToChronicles"
+      @cancel="showChroniclesConfirm = false"
     />
 
     <ConfirmDialog

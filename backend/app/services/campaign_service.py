@@ -4,7 +4,7 @@ from __future__ import annotations
 import uuid
 from typing import Any, Optional
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engine.character_creation import hp_at_level
@@ -21,12 +21,20 @@ from app.services.rest_service import build_hit_dice
 
 
 async def create_campaign(name: str, description: str, db: AsyncSession) -> Campaign:
-    """Create a new empty campaign."""
+    """Create a campaign with its initial playable session."""
+    initial_session = Session(
+        id=str(uuid.uuid4()),
+        name=f"Session 1 - {name}",
+        status=SessionStatus.LOBBY,
+    )
+    db.add(initial_session)
+    await db.flush()
+
     campaign = Campaign(
         id=str(uuid.uuid4()),
         name=name,
         description=description,
-        session_ids=[],
+        session_ids=[initial_session.id],
         current_session_index=0,
         character_ids=[],
         xp_pool={},
@@ -35,6 +43,56 @@ async def create_campaign(name: str, description: str, db: AsyncSession) -> Camp
     await db.commit()
     await db.refresh(campaign)
     return campaign
+
+
+async def delete_campaign(campaign_id: str, db: AsyncSession) -> None:
+    """Delete a campaign and all sessions owned by it."""
+    campaign = await get_campaign(campaign_id, db)
+    if campaign is None:
+        raise KeyError(f"Campaign {campaign_id} not found")
+
+    session_ids = list(campaign.session_ids or [])
+    if session_ids:
+        result = await db.execute(select(Session).where(Session.id.in_(session_ids)))
+        for session in result.scalars().all():
+            await db.delete(session)
+
+    await db.delete(campaign)
+    await db.commit()
+
+
+async def session_summaries(campaign: Campaign, db: AsyncSession) -> list[dict[str, Any]]:
+    """Return ordered lightweight session summaries for a campaign."""
+    ids = list(campaign.session_ids or [])
+    if not ids:
+        return []
+
+    result = await db.execute(select(Session).where(Session.id.in_(ids)))
+    sessions_by_id = {session.id: session for session in result.scalars().all()}
+
+    count_result = await db.execute(
+        select(Character.session_id, func.count(Character.id).label("cnt"))
+        .where(Character.session_id.in_(ids))
+        .group_by(Character.session_id)
+    )
+    counts = {row.session_id: row.cnt for row in count_result}
+
+    summaries: list[dict[str, Any]] = []
+    for session_id in ids:
+        session = sessions_by_id.get(session_id)
+        if session is None:
+            continue
+        summaries.append(
+            {
+                "id": session.id,
+                "name": session.name,
+                "status": session.status.value,
+                "created_at": session.created_at.isoformat(),
+                "updated_at": session.updated_at.isoformat(),
+                "character_count": counts.get(session.id, 0),
+            }
+        )
+    return summaries
 
 
 async def get_campaign(campaign_id: str, db: AsyncSession) -> Optional[Campaign]:

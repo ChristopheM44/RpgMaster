@@ -301,7 +301,7 @@ async def _forge_and_validate(async_client) -> dict:
         json={"player_contract": contract},
     )
     assert validated.status_code == 200
-    return {"campaign_id": campaign_id, "contract": contract}
+    return {"campaign_id": campaign_id, "contract": contract, "session_id": campaign["session_ids"][0]}
 
 
 async def _poll_forge_job(async_client, campaign_id: str, job_id: str) -> dict:
@@ -695,16 +695,7 @@ async def test_forge_dossier_npc_descriptions_are_roleplay_grade(async_client):
 async def test_start_game_injects_minimal_campaign_context(async_client, db_session):
     forged = await _forge_and_validate(async_client)
     campaign_id = forged["campaign_id"]
-
-    session_resp = await async_client.post("/api/sessions/", json={"name": "Session 1"})
-    assert session_resp.status_code == 201
-    session_id = session_resp.json()["id"]
-
-    attach = await async_client.post(
-        f"/api/campaigns/{campaign_id}/sessions",
-        json={"session_id": session_id},
-    )
-    assert attach.status_code == 200
+    session_id = forged["session_id"]
 
     char_resp = await async_client.post(
         "/api/characters/",
@@ -775,14 +766,7 @@ async def test_initial_campaign_session_ignores_stale_played_canon(async_client,
     )
     assert synth.status_code == 200
 
-    session_resp = await async_client.post("/api/sessions/", json={"name": "Session neuve"})
-    assert session_resp.status_code == 201
-    session_id = session_resp.json()["id"]
-    attach = await async_client.post(
-        f"/api/campaigns/{campaign_id}/sessions",
-        json={"session_id": session_id},
-    )
-    assert attach.status_code == 200
+    session_id = forged["session_id"]
     char_resp = await async_client.post(
         "/api/characters/",
         json={**BASE_CHARACTER, "session_id": session_id},

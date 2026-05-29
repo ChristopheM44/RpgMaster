@@ -10,6 +10,15 @@ class CampaignCreate(BaseModel):
     description: str = ""
 
 
+class CampaignSessionSummary(BaseModel):
+    id: str
+    name: str
+    status: str
+    created_at: str
+    updated_at: str
+    character_count: int = 0
+
+
 class CampaignResponse(BaseModel):
     id: str
     name: str
@@ -26,9 +35,15 @@ class CampaignResponse(BaseModel):
     active_chapter: dict = Field(default_factory=dict)
     progress: dict = Field(default_factory=dict)
     counts: dict = Field(default_factory=dict)
+    session_summaries: list[CampaignSessionSummary] = Field(default_factory=list)
 
     @classmethod
-    def from_orm(cls, c, summary: Optional[dict] = None) -> CampaignResponse:
+    def from_orm(
+        cls,
+        c,
+        summary: Optional[dict] = None,
+        session_summaries: Optional[list[dict]] = None,
+    ) -> CampaignResponse:
         summary = summary or {}
         return cls(
             id=c.id,
@@ -46,6 +61,7 @@ class CampaignResponse(BaseModel):
             active_chapter=summary.get("active_chapter", {}),
             progress=summary.get("progress", {"done": 0, "total": 1}),
             counts=summary.get("counts", {}),
+            session_summaries=session_summaries or [],
         )
 
 

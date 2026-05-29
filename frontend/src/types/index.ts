@@ -1020,6 +1020,7 @@ export interface Campaign {
   active_chapter: CampaignVisibleChapter | Record<string, never>
   progress: CampaignProgress
   counts: CampaignCounts
+  session_summaries?: CampaignSessionSummary[]
 }
 
 export interface CampaignCreate {
@@ -1051,6 +1052,15 @@ export interface CampaignCounts {
   chronicle_entries: number
   npcs: number
   places: number
+}
+
+export interface CampaignSessionSummary {
+  id: string
+  name: string
+  status: SessionStatus
+  created_at: string
+  updated_at: string
+  character_count: number
 }
 
 export interface CampaignPlayerContract {

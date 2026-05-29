@@ -9,7 +9,7 @@ import ConfirmDialog from '../components/common/ConfirmDialog.vue'
 const route = useRoute()
 const router = useRouter()
 const sessionId = route.params.id as string
-const backRoute = (route.query.back as string) ?? 'lobby'
+const backRoute = (route.query.back as string) ?? 'campaigns'
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -272,7 +272,7 @@ function classIcon(classId: string): string {
         class="rounded border border-stone/50 px-4 py-2 text-sm text-parchment-dark transition hover:border-gold hover:text-gold"
         @click="router.push({ name: backRoute })"
       >
-        ← {{ backRoute === 'campaigns' ? 'Campagnes' : 'Lobby' }}
+        ← Chroniques
       </button>
     </div>
 

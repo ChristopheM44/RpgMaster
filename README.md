@@ -26,39 +26,66 @@ git clone <URL_DE_VOTRE_DEPOT_RPGMaster>
 cd RpgMaster
 ```
 
-### 2. Démarrer l'infrastructure IA (Ollama)
-Ollama sert de moteur pour le Maître du Jeu et les joueurs IA.
+### 2. Configurer et démarrer l'infrastructure IA (LLM)
 
-Assurez-vous que l'application Ollama est lancée sur votre Mac (ou exécutez `ollama serve` dans un terminal).
-Puis, téléchargez le modèle linguistique requis (par défaut `mistral:7b`) :
-```bash
-ollama pull mistral:7b
-```
-*Note : Ollama tourne par défaut sur le port local `11434`.*
+RpgMaster offre une grande flexibilité et supporte plusieurs providers de modèles linguistiques (LLM) pour animer le Maître de Jeu (GM) et les compagnons IA. Vous pouvez configurer ces options soit via le fichier de configuration `.env`, soit directement à chaud depuis l'interface d'administration.
 
-#### Utiliser Ollama depuis un autre Mac sur le même réseau
+#### Option A : Ollama en Local (Recommandé pour la confidentialité et le local-first)
+Ollama s'exécute directement sur votre machine. Un matériel performant (processeur graphique Apple Silicon M-Series ou GPU Nvidia RTX disposant de suffisamment de VRAM) est recommandé pour une fluidité optimale avec un modèle 7B ou 8B.
 
-Si Ollama tourne sur un Mac différent (Mac 2) et que vous souhaitez l'exposer sur le réseau local :
-
-1. Fermez complètement l'application Ollama sur le Mac 2 (vérifiez aussi l'icône dans la barre des menus en haut à droite).
-
-2. Ouvrez un Terminal sur le Mac 2 et exécutez la commande suivante pour que Ollama écoute sur toutes les interfaces réseau :
+1. Téléchargez et installez **Ollama** depuis [ollama.com](https://ollama.com/).
+2. Assurez-vous que l'application Ollama est lancée (ou exécutez `ollama serve` dans un terminal).
+3. Téléchargez le modèle linguistique requis (par défaut `mistral:7b`) :
    ```bash
-   launchctl setenv OLLAMA_HOST "0.0.0.0"
+   ollama pull mistral:7b
+   ```
+4. Dans votre fichier `backend/.env`, assurez-vous d'avoir configuré le provider par défaut :
+   ```env
+   OLLAMA_BASE_URL=http://localhost:11434
+   GM_MODEL=mistral:7b
+   PLAYER_MODEL=mistral:7b
    ```
 
-3. Relancez l'application Ollama.
+##### Partager Ollama sur le réseau local (ex: Ollama sur un autre ordinateur)
+Si vous exécutez Ollama sur une machine dédiée performante (PC 2) de votre réseau local :
+* **Sur macOS (PC 2)** : Quittez complètement l'application Ollama, puis dans un terminal exécutez :
+  ```bash
+  launchctl setenv OLLAMA_HOST "0.0.0.0"
+  ```
+  Puis relancez l'application Ollama.
+* **Via terminal directement (PC 2)** :
+  ```bash
+  export OLLAMA_HOST=0.0.0.0
+  ollama serve
+  ```
+* Renseignez ensuite la variable `OLLAMA_BASE_URL` dans `backend/.env` du client avec l'IP du PC 2 :
+  ```env
+  OLLAMA_BASE_URL=http://<IP_DU_PC_2>:11434
+  ```
 
-> **Alternative via terminal :** Si vous préférez démarrer Ollama directement en ligne de commande sans passer par l'application :
-> ```bash
-> export OLLAMA_HOST=0.0.0.0
-> ollama serve
-> ```
+#### Option B : Ollama distant avec Authentification / Ollama Cloud
+Si votre instance Ollama est hébergée sur un serveur distant ou protégée derrière un reverse proxy qui requiert une authentification (ex. Cloudflare Access, Nginx Basic Auth, etc.) :
+* Conservez le provider par défaut `ollama`.
+* Renseignez `OLLAMA_BASE_URL` avec l'URL de votre proxy.
+* Configurez la clé d'API via le panneau d'administration (champ **Ollama API Key**). Le backend injectera automatiquement le header `Authorization: Bearer <clé>` dans toutes ses requêtes.
 
-Une fois Ollama accessible sur le réseau, mettez à jour la variable `OLLAMA_BASE_URL` dans `backend/.env` avec l'adresse IP du Mac 2 :
-```
-OLLAMA_BASE_URL=http://<IP_DU_MAC_2>:11434
-```
+#### Option C : API compatible OpenAI (Alternative performante, sans besoin de GPU local)
+Cette option permet de déléguer la génération de texte à un service externe, payant ou gratuit (comme OpenAI officiel, DeepSeek, Groq, OpenRouter, Together AI, Mistral AI Cloud, ou encore LM Studio en local).
+
+* **Sélection du Provider** : Activez le provider `"openai_compatible"` depuis l'interface d'administration.
+* **Configuration** :
+  - **Base URL** : L'URL racine du service (ex: `https://api.openai.com/v1`, `https://api.deepseek.com`, `https://api.groq.com/openai/v1`, `http://localhost:1234/v1` pour LM Studio, etc.).
+  - **API Key** : Votre clé API (ex: `sk-...`).
+  - **Modèles** : Indiquez les modèles à cibler pour le Maître de Jeu (`GM_MODEL`) et les compagnons (`PLAYER_MODEL`) (ex: `gpt-4o`, `deepseek-chat`, `llama-3.1-70b-versatile`, etc.).
+
+---
+
+#### ⚙️ Configuration dynamique à chaud (Sans redémarrage)
+Toutes ces configurations (changement de provider, clé API, URL, modèles) peuvent être éditées à chaud et à tout moment via le tableau de bord d'administration : **`http://localhost:5173/admin`**.
+
+Les modifications effectuées dans l'admin sont écrites en temps réel dans le fichier de persistance `.runtime/llm_runtime.json` du backend. Elles surchargent les valeurs statiques du `.env` et survivent aux redémarrages de l'application.
+
+
 
 ### 3. Configurer le micro-service TTS restreint (Kokoro-ONNX)
 Le système vocal (Text-to-Speech) fonctionne en micro-service isolé car il cible Python 3.11 spécifiquement pour des questions de compatibilité.
@@ -132,7 +159,7 @@ Une fois tout déployé, voici comment les différents services interagissent :
 - **VueJS Frontend** (`:5173` ou `:80`) : Interface utilisateur (WebSockets & REST).
 - **FastAPI Backend** (`:8000`) : Chef d'orchestre, Engine D&D, DB SQLite `rpgmaster.db`.
 - **Micro-service TTS** (`Subprocess` par Backend) : Activé par le backend lors d'un event "Narration" avec isolation de Python.
-- **Ollama Local** (`:11434`) : Fournit l'intelligence au MJ (Maître de Jeu) et PNJ en local-first.
+- **Moteur LLM (Ollama ou API OpenAI-compatible)** : Fournit l'intelligence au MJ (Maître de Jeu) et aux compagnons IA, soit en local-first (Ollama), soit via des services cloud externes (OpenAI, DeepSeek, Groq, OpenRouter).
 
 ---
 

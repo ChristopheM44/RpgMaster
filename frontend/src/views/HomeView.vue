@@ -8,11 +8,11 @@
       Votre Maître de Jeu propulsé par l'Intelligence Artificielle
     </p>
     <div class="flex gap-4">
-      <router-link to="/lobby" class="rpg-btn-primary">
-        Nouvelle Partie
+      <router-link to="/campaigns?forge=1" class="rpg-btn-primary">
+        Nouvelle Chronique
       </router-link>
-      <router-link to="/lobby" class="rpg-btn-secondary">
-        Charger une Partie
+      <router-link to="/campaigns" class="rpg-btn-secondary">
+        Reprendre une Chronique
       </router-link>
     </div>
   </div>
