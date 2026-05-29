@@ -6,6 +6,7 @@ assurant que tout s'exécute dans le même event loop interne du TestClient.
 """
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -96,6 +97,74 @@ class TestWebSocketConnection:
         ws_game.event_bus.publish_to_session.assert_not_awaited()
         ws_game.persist_narration.assert_not_awaited()
         assert active.state_data == {"_opening_narration_in_progress": True}
+
+    @pytest.mark.asyncio
+    async def test_game_websocket_subscribes_before_accept(self, monkeypatch) -> None:
+        from app.api import ws_game
+
+        calls: list[str] = []
+        sent_messages: list[dict] = []
+
+        class _FakeDbSession:
+            async def __aenter__(self):
+                return object()
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+        def _fake_db_session_factory():
+            return _FakeDbSession()
+
+        class _FakeWebSocket:
+            def __init__(self) -> None:
+                self.scope = {}
+
+            async def accept(self) -> None:
+                calls.append("accept")
+
+            async def send_json(self, data: dict) -> None:
+                sent_messages.append(data)
+
+            async def close(self, code: int | None = None) -> None:
+                calls.append(f"close:{code}")
+
+            async def receive_json(self) -> dict:
+                raise WebSocketDisconnect()
+
+        def _subscribe(session_id: str, maxsize=None):
+            calls.append("subscribe")
+            return asyncio.Queue()
+
+        def _connect(session_id: str, websocket) -> None:
+            calls.append("connect")
+
+        def _disconnect(session_id: str, websocket) -> None:
+            calls.append("disconnect")
+
+        monkeypatch.setattr(ws_game, "websocket_has_valid_access_token", lambda websocket: True)
+        monkeypatch.setattr(ws_game, "_db_session_factory", lambda websocket: _fake_db_session_factory)
+        monkeypatch.setattr(ws_game.session_manager, "open_session", AsyncMock())
+        monkeypatch.setattr(
+            ws_game,
+            "_build_session_state_payload_with_maps",
+            AsyncMock(return_value={"phase": "lobby"}),
+        )
+        monkeypatch.setattr(ws_game.event_bus, "subscribe", _subscribe)
+        monkeypatch.setattr(ws_game.event_bus, "unsubscribe", lambda session_id, queue: None)
+        monkeypatch.setattr(ws_game.connection_manager, "connect", _connect)
+        monkeypatch.setattr(ws_game.connection_manager, "disconnect", _disconnect)
+        monkeypatch.setattr(ws_game.connection_manager, "connection_count", lambda session_id: 1)
+
+        def _create_logged_task(coro, name: str):
+            calls.append("relay_task")
+            return asyncio.create_task(coro)
+
+        monkeypatch.setattr(ws_game, "create_logged_task", _create_logged_task)
+
+        await ws_game.game_websocket(_FakeWebSocket(), "session-1")
+
+        assert calls.index("subscribe") < calls.index("accept")
+        assert sent_messages[0]["event_type"] == "session_state"
 
     def test_connect_requires_access_token_when_configured(self, ws_client, monkeypatch) -> None:
         from app.config import settings

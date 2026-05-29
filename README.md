@@ -138,3 +138,12 @@ Une fois tout déployé, voici comment les différents services interagissent :
 
 ## 🎮 Administration
 Une fois l'application démarrée, vous pouvez valider le bon fonctionnement de tous les services via le tableau de bord d'administration : rendez-vous sur **`http://localhost:5173/admin`** pour tester la santé de l'IA (LLM) et du Text-To-Speech (Kokoro-ONNX).
+
+---
+
+## ⚖️ Licence
+
+Ce projet est distribué sous la licence **[PolyForm Noncommercial License 1.0.0](LICENSE)**.
+
+Cette licence autorise l'utilisation, la copie, la modification et la distribution du code à des fins **personnelles, éducatives, de recherche et non commerciales**. Toute exploitation commerciale, directe ou indirecte, est strictement interdite sans autorisation écrite préalable du détenteur du copyright.
+

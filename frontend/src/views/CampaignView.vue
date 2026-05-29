@@ -1,37 +1,28 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCampaignStore } from '../stores/campaign'
 import { useGameStore } from '../stores/game'
 import type {
   Campaign,
-  CampaignForgeJobResponse,
   CampaignGmDossier,
   CampaignGmDossierResponse,
-  CampaignImportSourceBody,
-  CampaignPlayerContract,
   CampaignScenario,
   CampaignVisibleChapter,
 } from '../types'
 import ConfirmDialog from '../components/common/ConfirmDialog.vue'
+import CampaignForgeModal from './CampaignForgeModal.vue'
 
 const router = useRouter()
 const campaignStore = useCampaignStore()
 const gameStore = useGameStore()
 
 type DetailTab = 'sessions' | 'scenario' | 'notes'
-type ForgeStep = 1 | 2 | 3 | 4 | 5
 
-const TONES = ['Dark fantasy', 'Mystère', 'Politique', 'Exploration', 'Combat tactique', 'Romance', 'Cosmique']
 const DETAIL_TABS: Array<{ id: DetailTab; label: string; icon: string }> = [
   { id: 'sessions', label: 'Sessions', icon: '◆' },
   { id: 'scenario', label: 'Scénario', icon: '✦' },
   { id: 'notes', label: 'Notes du MJ', icon: '❦' },
-]
-const IMPORT_KINDS: Array<{ id: 'url' | 'text' | 'file_text'; label: string }> = [
-  { id: 'text', label: 'Texte' },
-  { id: 'url', label: 'URL' },
-  { id: 'file_text', label: 'Fichier' },
 ]
 const GM_SECTIONS: Array<{ key: keyof CampaignGmDossier; label: string }> = [
   { key: 'important_npcs', label: 'PNJ importants' },
@@ -53,39 +44,17 @@ const showAdvance = ref(false)
 const confirmDeleteId = ref<string | null>(null)
 const confirmResetId = ref<string | null>(null)
 const newSessionName = ref('')
-const forgeStep = ref<ForgeStep>(1)
-const forgeCampaignId = ref<string | null>(null)
-const draftContract = ref<CampaignPlayerContract | null>(null)
-const forgeJob = ref<CampaignForgeJobResponse | null>(null)
-const sourceCount = ref(0)
-const isForging = ref(false)
-const isImporting = ref(false)
-const isValidating = ref(false)
 const isResetting = ref(false)
 const authorMode = ref(false)
 const isLoadingGmDossier = ref(false)
 const actionError = ref<string | null>(null)
-const modalError = ref<string | null>(null)
 const notesError = ref<string | null>(null)
-
-const forgeForm = reactive({
-  name: '',
-  pitch: '',
-  duration: '3-5 sessions',
-  tones: [] as string[],
-  scope: 'mini-campagne',
-  startingLevel: 1,
-  combat: 'hybride léger',
-  importKind: 'text' as 'url' | 'text' | 'file_text',
-  importTitle: '',
-  importUrl: '',
-  importText: '',
-  importFilename: '',
-})
 
 onMounted(async () => {
   await campaignStore.fetchCampaigns()
-  if (campaignStore.campaigns[0]) {
+  if (router.currentRoute.value.query.forge === '1') {
+    showForge.value = true
+  } else if (campaignStore.campaigns[0]) {
     await selectCampaign(campaignStore.campaigns[0])
   }
 })
@@ -116,24 +85,6 @@ const gmDossierRaw = computed(() => {
   return JSON.stringify(gmDossier.value, null, 2)
 })
 
-const forgeProgressPercent = computed(() => {
-  if (!forgeJob.value) return 0
-  const total = Math.max(forgeJob.value.total_steps || 1, 1)
-  const current = Math.min(total, Math.max(forgeJob.value.current_step || 0, 0))
-  return Math.round((current / total) * 100)
-})
-
-const forgeProgressLabel = computed(() => {
-  if (!forgeJob.value) return ''
-  const total = Math.max(forgeJob.value.total_steps || 1, 1)
-  const current = Math.min(total, Math.max(forgeJob.value.current_step || 0, 0))
-  return `Global ${current} / ${total}`
-})
-
-const forgeRetryEvents = computed(() =>
-  (forgeJob.value?.events ?? []).filter((event) => event.type.includes('retry')).slice(-4),
-)
-
 const campaignToDelete = computed(
   () => campaignStore.campaigns.find((c) => c.id === confirmDeleteId.value) ?? null,
 )
@@ -152,215 +103,18 @@ async function selectCampaign(campaign: Campaign) {
 
 function openForge() {
   showForge.value = true
-  forgeStep.value = 1
-  forgeCampaignId.value = null
-  draftContract.value = null
-  forgeJob.value = null
-  sourceCount.value = 0
-  modalError.value = null
-  Object.assign(forgeForm, {
-    name: '',
-    pitch: '',
-    duration: '3-5 sessions',
-    tones: [],
-    scope: 'mini-campagne',
-    startingLevel: 1,
-    combat: 'hybride léger',
-    importKind: 'text',
-    importTitle: '',
-    importUrl: '',
-    importText: '',
-    importFilename: '',
-  })
 }
 
-function closeForge() {
-  if (isForging.value) return
+async function handleForgeCompleted(payload: { campaignId: string; newSessionId: string }) {
   showForge.value = false
-}
-
-function toggleTone(tone: string) {
-  const idx = forgeForm.tones.indexOf(tone)
-  if (idx >= 0) {
-    forgeForm.tones.splice(idx, 1)
-  } else if (forgeForm.tones.length < 3) {
-    forgeForm.tones.push(tone)
-  }
-}
-
-function nextStep() {
-  modalError.value = null
-  if (forgeStep.value === 1 && !forgeForm.name.trim()) {
-    modalError.value = 'Le nom de la campagne est requis.'
-    return
-  }
-  forgeStep.value = Math.min(5, forgeStep.value + 1) as ForgeStep
-}
-
-function previousStep() {
-  if (isForging.value) return
-  modalError.value = null
-  forgeStep.value = Math.max(1, forgeStep.value - 1) as ForgeStep
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, ms))
-}
-
-async function ensureForgeCampaign(): Promise<string | null> {
-  if (forgeCampaignId.value) return forgeCampaignId.value
-  const created = await campaignStore.createCampaign({
-    name: forgeForm.name.trim(),
-    description: forgeForm.pitch.trim(),
+  await campaignStore.fetchCampaigns()
+  const campaign = campaignStore.campaigns.find((c) => c.id === payload.campaignId)
+  if (campaign) selectedCampaign.value = campaign
+  await router.push({
+    name: 'character-setup',
+    params: { id: payload.newSessionId },
+    query: { back: 'campaigns' },
   })
-  if (!created) {
-    modalError.value = 'Impossible de créer la campagne.'
-    return null
-  }
-  forgeCampaignId.value = created.id
-  await selectCampaign(created)
-  return created.id
-}
-
-async function importSource() {
-  modalError.value = null
-  const campaignId = await ensureForgeCampaign()
-  if (!campaignId) return
-  const body: CampaignImportSourceBody = {
-    kind: forgeForm.importKind,
-    title: forgeForm.importTitle.trim() || undefined,
-  }
-  if (forgeForm.importKind === 'url') {
-    body.url = forgeForm.importUrl.trim()
-  } else {
-    body.content = forgeForm.importText.trim()
-    body.filename = forgeForm.importFilename || undefined
-  }
-  if ((body.kind === 'url' && !body.url) || (body.kind !== 'url' && !body.content)) {
-    modalError.value = 'La source est vide.'
-    return
-  }
-  isImporting.value = true
-  try {
-    const result = await campaignStore.importSource(campaignId, body)
-    if (!result) {
-      modalError.value = campaignStore.error ?? "L'import a échoué."
-      return
-    }
-    sourceCount.value = result.source_count
-    forgeForm.importTitle = ''
-    forgeForm.importUrl = ''
-    forgeForm.importText = ''
-    forgeForm.importFilename = ''
-  } finally {
-    isImporting.value = false
-  }
-}
-
-async function handleFileImport(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
-  forgeForm.importKind = 'file_text'
-  forgeForm.importFilename = file.name
-  forgeForm.importTitle = forgeForm.importTitle || file.name
-  forgeForm.importText = await file.text()
-}
-
-async function forgeDraft() {
-  if (isForging.value) return
-  modalError.value = null
-  const campaignId = await ensureForgeCampaign()
-  if (!campaignId) return
-  isForging.value = true
-  forgeJob.value = null
-  try {
-    const initial = await campaignStore.startForgeDraftJob(
-      campaignId,
-      {
-        title: forgeForm.name,
-        pitch: forgeForm.pitch,
-        tones: forgeForm.tones,
-        duration: forgeForm.duration,
-      },
-      {
-        scope: forgeForm.scope,
-        starting_level: forgeForm.startingLevel,
-        combat: forgeForm.combat,
-      },
-    )
-    if (!initial) {
-      modalError.value = campaignStore.error ?? 'La forge a échoué.'
-      return
-    }
-    forgeJob.value = initial
-    let current = initial
-    while (current.status === 'queued' || current.status === 'running') {
-      await delay(1000)
-      const next = await campaignStore.getForgeDraftJob(campaignId, current.job_id)
-      if (!next) {
-        modalError.value = campaignStore.error ?? 'Suivi de forge impossible.'
-        return
-      }
-      current = next
-      forgeJob.value = next
-    }
-    if (current.status !== 'completed' || !current.player_contract) {
-      modalError.value = current.error || 'La forge a échoué.'
-      return
-    }
-    draftContract.value = cloneContract(current.player_contract)
-    forgeStep.value = 5
-  } finally {
-    isForging.value = false
-  }
-}
-
-async function validateContract() {
-  if (!forgeCampaignId.value || !draftContract.value) return
-  isValidating.value = true
-  modalError.value = null
-  try {
-    const result = await campaignStore.validateContract(forgeCampaignId.value, draftContract.value)
-    if (!result) {
-      modalError.value = campaignStore.error ?? 'Validation impossible.'
-      return
-    }
-    await campaignStore.fetchCampaigns()
-    const campaign = campaignStore.campaigns.find((c) => c.id === forgeCampaignId.value)
-    if (campaign) {
-      await selectCampaign(campaign)
-      activeTab.value = 'scenario'
-      await campaignStore.fetchScenario(campaign.id)
-    }
-    closeForge()
-  } finally {
-    isValidating.value = false
-  }
-}
-
-function updateObjectives(value: string) {
-  if (!draftContract.value) return
-  draftContract.value.known_objectives = value
-    .split('\n')
-    .map((item) => item.trim())
-    .filter(Boolean)
-}
-
-function updateToneInput(value: string) {
-  if (!draftContract.value) return
-  draftContract.value.tones = value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-}
-
-function updateToneEvent(event: Event) {
-  updateToneInput((event.target as HTMLInputElement).value)
-}
-
-function updateObjectivesEvent(event: Event) {
-  updateObjectives((event.target as HTMLTextAreaElement).value)
 }
 
 function setActiveTab(tab: DetailTab) {
@@ -548,10 +302,6 @@ function itemDetail(item: unknown): string {
     Object.entries(record).filter(([key]) => !['id', 'title', 'name', 'label', 'public'].includes(key)),
   )
   return Object.keys(rest).length ? JSON.stringify(rest, null, 2) : ''
-}
-
-function cloneContract(contract: CampaignPlayerContract): CampaignPlayerContract {
-  return JSON.parse(JSON.stringify(contract)) as CampaignPlayerContract
 }
 </script>
 
@@ -985,192 +735,11 @@ function cloneContract(contract: CampaignPlayerContract): CampaignPlayerContract
       </footer>
     </aside>
 
-    <Teleport to="body">
-      <div
-        v-if="showForge"
-        class="rpg-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4"
-        @click.self="!isForging && closeForge()"
-      >
-        <div class="rpg-dialog-panel rpg-tone-gold relative max-h-[90vh] w-full max-w-[640px] overflow-y-auto overflow-x-hidden rounded-[14px] border p-7">
-          <div class="rpg-campaign-modal-glow pointer-events-none absolute -right-12 -top-20 h-60 w-60 rounded-full" />
-          <div class="relative">
-            <div class="rpg-eyebrow"><span class="rpg-sparkle">✦</span>Forger une nouvelle chronique</div>
-            <h2 class="mt-1 font-display text-[28px] font-bold leading-tight">Nouvelle campagne</h2>
-
-            <div class="mt-5 flex gap-2">
-              <span
-                v-for="step in 5"
-                :key="step"
-                class="h-1.5 flex-1 rounded-full"
-                :class="step <= forgeStep ? 'bg-[linear-gradient(90deg,var(--color-ember),var(--color-gold))]' : 'bg-surface-raised'"
-              />
-            </div>
-
-            <p v-if="modalError" class="mt-4 rounded border border-blood/30 bg-blood/10 px-3 py-2 text-sm text-blood-light">
-              {{ modalError }}
-            </p>
-
-            <div v-if="forgeStep === 1" class="mt-6 space-y-4">
-              <label class="block">
-                <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Nom de la campagne</span>
-                <input v-model="forgeForm.name" class="rpg-input w-full text-base" placeholder="La Chute des Rois Anciens" />
-              </label>
-              <label class="block">
-                <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Brief court</span>
-                <textarea v-model="forgeForm.pitch" class="rpg-input min-h-28 w-full resize-y" placeholder="Une épopée qui traverse trois royaumes..." />
-              </label>
-              <div>
-                <div class="mb-2 font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Tonalités — max 3</div>
-                <div class="flex flex-wrap gap-2">
-                  <button
-                    v-for="tone in TONES"
-                    :key="tone"
-                    class="rounded-full border px-3 py-1.5 font-serif text-[11px] transition"
-                    :class="forgeForm.tones.includes(tone)
-                      ? 'border-arcane/50 bg-arcane/15 text-arcane'
-                      : 'border-border bg-transparent text-text-muted hover:border-border-strong'"
-                    @click="toggleTone(tone)"
-                  >
-                    {{ tone }}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div v-else-if="forgeStep === 2" class="mt-6 grid gap-4 md:grid-cols-2">
-              <label class="block">
-                <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Durée</span>
-                <input v-model="forgeForm.duration" class="rpg-input w-full" />
-              </label>
-              <label class="block">
-                <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Niveau initial</span>
-                <input v-model.number="forgeForm.startingLevel" min="1" max="20" type="number" class="rpg-input w-full" />
-              </label>
-              <label class="block">
-                <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Format</span>
-                <select v-model="forgeForm.scope" class="rpg-input w-full">
-                  <option>one-shot</option>
-                  <option>mini-campagne</option>
-                  <option>campagne longue</option>
-                </select>
-              </label>
-              <label class="block">
-                <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Mécaniques</span>
-                <select v-model="forgeForm.combat" class="rpg-input w-full">
-                  <option>hybride léger</option>
-                  <option>exploration sociale</option>
-                  <option>combat tactique</option>
-                </select>
-              </label>
-            </div>
-
-            <div v-else-if="forgeStep === 3" class="mt-6 space-y-4">
-              <div class="flex gap-2">
-                <button
-                  v-for="kind in IMPORT_KINDS"
-                  :key="kind.id"
-                  class="rounded-md border px-3 py-1.5 text-xs font-semibold uppercase tracking-widest"
-                  :class="forgeForm.importKind === kind.id ? 'border-gold/40 bg-gold/10 text-gold' : 'border-border text-text-muted'"
-                  @click="forgeForm.importKind = kind.id"
-                >
-                  {{ kind.label }}
-                </button>
-              </div>
-              <input v-model="forgeForm.importTitle" class="rpg-input w-full" placeholder="Titre de source" />
-              <input v-if="forgeForm.importKind === 'url'" v-model="forgeForm.importUrl" class="rpg-input w-full" placeholder="https://..." />
-              <input v-if="forgeForm.importKind === 'file_text'" type="file" class="w-full rounded border border-border-strong bg-black/30 px-3 py-2 text-sm text-text-muted" accept=".txt,.md,.html,.htm" @change="handleFileImport" />
-              <textarea v-if="forgeForm.importKind !== 'url'" v-model="forgeForm.importText" class="rpg-input min-h-40 w-full resize-y" placeholder="Collez une aventure, un synopsis ou des notes..." />
-              <div class="flex items-center justify-between">
-                <span class="font-mono text-xs text-text-muted">{{ sourceCount }} source{{ sourceCount > 1 ? 's' : '' }} privée{{ sourceCount > 1 ? 's' : '' }}</span>
-                <button class="rpg-btn-secondary" :disabled="isImporting" @click="importSource">
-                  {{ isImporting ? 'Import...' : 'Importer' }}
-                </button>
-              </div>
-            </div>
-
-            <div v-else-if="forgeStep === 4" class="mt-6 rounded-lg border border-border bg-surface p-5 text-center">
-              <div class="font-display text-lg font-bold">Forge IA</div>
-              <p class="mx-auto mt-2 max-w-md font-serif text-sm italic text-parchment-dark">
-                Le dossier privé sera structuré côté MJ, puis seul le contrat joueur sera affiché.
-              </p>
-              <div v-if="forgeJob" class="mx-auto mt-4 max-w-md rounded-lg border border-border bg-black/25 p-3 text-left">
-                <div class="flex items-center justify-between gap-3 font-mono text-[10px] uppercase tracking-wider text-text-muted">
-                  <span class="min-w-0 truncate">{{ forgeJob.message || 'Forge en cours...' }}</span>
-                  <span class="shrink-0 text-right text-gold">{{ forgeProgressLabel }}</span>
-                </div>
-                <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-raised">
-                  <div
-                    class="h-full rounded-full bg-[linear-gradient(90deg,var(--color-ember),var(--color-gold))] transition-all"
-                    :style="{ width: `${forgeProgressPercent}%` }"
-                  />
-                </div>
-                <div v-if="forgeRetryEvents.length" class="mt-3 space-y-1">
-                  <div
-                    v-for="event in forgeRetryEvents"
-                    :key="event.at + event.message"
-                    class="font-mono text-[10px] text-gold"
-                  >
-                    {{ event.message }}<span v-if="event.error" class="text-text-dim"> — {{ event.error }}</span>
-                  </div>
-                </div>
-              </div>
-              <button class="rpg-btn-primary mt-5" :disabled="isForging" @click="forgeDraft">
-                <span>⚔</span> {{ isForging ? 'Forge en cours...' : 'Forger le dossier' }}
-              </button>
-            </div>
-
-            <div v-else-if="draftContract" class="mt-6 space-y-4">
-              <label class="block">
-                <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Titre public</span>
-                <input v-model="draftContract.title" class="rpg-input w-full text-base" />
-              </label>
-              <label class="block">
-                <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Pitch public</span>
-                <textarea v-model="draftContract.pitch_public" class="rpg-input min-h-24 w-full resize-y" />
-              </label>
-              <div class="grid gap-4 md:grid-cols-2">
-                <label class="block">
-                  <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Durée</span>
-                  <input v-model="draftContract.duration" class="rpg-input w-full" />
-                </label>
-                <label class="block">
-                  <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Tonalités</span>
-                  <input :value="draftContract.tones.join(', ')" class="rpg-input w-full" @input="updateToneEvent" />
-                </label>
-              </div>
-              <label class="block">
-                <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Accroche</span>
-                <textarea v-model="draftContract.hook" class="rpg-input min-h-20 w-full resize-y" />
-              </label>
-              <label class="block">
-                <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Objectifs connus</span>
-                <textarea :value="draftContract.known_objectives.join('\n')" class="rpg-input min-h-20 w-full resize-y" @input="updateObjectivesEvent" />
-              </label>
-              <div class="space-y-2">
-                <div class="font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Chapitres visibles</div>
-                <div v-for="chapter in draftContract.visible_chapters" :key="chapter.id" class="rounded-lg border border-border bg-surface p-3">
-                  <input v-model="chapter.title" class="rpg-input mb-2 w-full" />
-                  <textarea v-model="chapter.summary" class="rpg-input min-h-16 w-full resize-y" />
-                </div>
-              </div>
-            </div>
-
-            <div class="mt-7 flex justify-end gap-2">
-              <button class="rpg-btn-secondary" :disabled="isForging" @click="forgeStep === 1 ? closeForge() : previousStep()">
-                {{ forgeStep === 1 ? 'Annuler' : 'Retour' }}
-              </button>
-              <button v-if="forgeStep < 4" class="rpg-btn-primary" :disabled="isForging" @click="nextStep">Suivant</button>
-              <button v-else-if="forgeStep === 4" class="rpg-btn-secondary" :disabled="isForging" @click="forgeDraft">
-                {{ isForging ? 'Forge en cours...' : 'Forger' }}
-              </button>
-              <button v-else class="rpg-btn-primary" :disabled="isValidating" @click="validateContract">
-                {{ isValidating ? 'Validation...' : 'Valider le contrat' }}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </Teleport>
+    <CampaignForgeModal
+      v-if="showForge"
+      @close="showForge = false"
+      @forge-completed="handleForgeCompleted"
+    />
 
     <Teleport to="body">
       <div v-if="showAdvance" class="fixed inset-0 z-50 flex items-center justify-center bg-ink/80 p-4" @click.self="showAdvance = false">

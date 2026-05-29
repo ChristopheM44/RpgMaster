@@ -381,17 +381,20 @@ async def game_websocket(
 ) -> None:
     """Main WebSocket endpoint for real-time game communication."""
     db_session_factory = _db_session_factory(websocket)
+    queue: asyncio.Queue | None = None
+    relay_task: asyncio.Task | None = None
+    registered_connection = False
     if not websocket_has_valid_access_token(websocket):
         await websocket.close(code=4401)
         return
 
-    await websocket.accept()
-
-    # 1. Open / load session
+    # Open and subscribe before accept so the client cannot trigger /start
+    # while this handler is still missing session bus events.
     try:
         async with db_session_factory() as db:
             await session_manager.open_session(session_id, db)
     except KeyError:
+        await websocket.accept()
         await websocket.send_json(
             {
                 "event_type": EventType.ERROR,
@@ -402,10 +405,12 @@ async def game_websocket(
         await websocket.close(code=4404)
         return
 
-    # 2. Register connection and subscribe to event bus
-    connection_manager.connect(session_id, websocket)
     queue = event_bus.subscribe(session_id, maxsize=settings.ws_event_queue_size)
+    await websocket.accept()
 
+    # 2. Register connection and start relaying queued events
+    connection_manager.connect(session_id, websocket)
+    registered_connection = True
     relay_task = create_logged_task(_relay_events(websocket, queue), "ws_game.relay_events")
 
     # 3. Send initial session state
@@ -583,11 +588,14 @@ async def game_websocket(
     except WebSocketDisconnect:
         pass
     finally:
-        relay_task.cancel()
-        await asyncio.gather(relay_task, return_exceptions=True)
+        if relay_task is not None:
+            relay_task.cancel()
+            await asyncio.gather(relay_task, return_exceptions=True)
 
-        event_bus.unsubscribe(session_id, queue)
-        connection_manager.disconnect(session_id, websocket)
+        if queue is not None:
+            event_bus.unsubscribe(session_id, queue)
+        if registered_connection:
+            connection_manager.disconnect(session_id, websocket)
 
         if character_id:
             await event_bus.publish_to_session(
@@ -705,4 +713,3 @@ _build_session_state_payload_with_maps = _build_session_state_payload_with_maps
 
 _send_welcome_narration = send_welcome_narration
 _build_combat_start_payload = build_combat_start_payload
-
