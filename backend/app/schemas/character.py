@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Optional, Union
+from typing import Any, Union
 
 from pydantic import BaseModel, Field, computed_field
 
@@ -49,13 +49,13 @@ class CharacterCreate(BaseModel):
     """Payload pour créer un personnage."""
 
     name: str = Field(..., min_length=1, max_length=100)
-    player_name: Optional[str] = Field(None, max_length=100)
+    player_name: str | None = Field(None, max_length=100)
     is_ai: bool = False
 
     species: str = Field(..., max_length=50)
     char_class: str = Field(..., max_length=50)
     level: int = Field(1, ge=1, le=20)
-    background: Optional[str] = Field(None, max_length=50)
+    background: str | None = Field(None, max_length=50)
 
     ability_scores: dict[str, int] = Field(
         default_factory=lambda: {"str": 10, "dex": 10, "con": 10, "int": 10, "wis": 10, "cha": 10}
@@ -76,36 +76,36 @@ class CharacterCreate(BaseModel):
     proficiencies: dict[str, Any] = Field(default_factory=dict)
     personality: dict[str, Any] = Field(default_factory=dict)
 
-    session_id: Optional[str] = None
+    session_id: str | None = None
 
 
 class CharacterUpdate(BaseModel):
     """Payload pour mettre à jour un personnage (champs optionnels)."""
 
-    name: Optional[str] = Field(None, min_length=1, max_length=100)
-    player_name: Optional[str] = Field(None, max_length=100)
-    is_ai: Optional[bool] = None
-    level: Optional[int] = Field(None, ge=1, le=20)
-    background: Optional[str] = Field(None, max_length=50)
+    name: str | None = Field(None, min_length=1, max_length=100)
+    player_name: str | None = Field(None, max_length=100)
+    is_ai: bool | None = None
+    level: int | None = Field(None, ge=1, le=20)
+    background: str | None = Field(None, max_length=50)
 
-    ability_scores: Optional[dict[str, int]] = None
-    hp_current: Optional[int] = Field(None, ge=0)
-    hp_max: Optional[int] = Field(None, ge=0)
-    hp_temp: Optional[int] = Field(None, ge=0)
-    xp: Optional[int] = Field(None, ge=0)
-    gp: Optional[int] = Field(None, ge=0)
-    sp: Optional[int] = Field(None, ge=0)
-    cp: Optional[int] = Field(None, ge=0)
+    ability_scores: dict[str, int] | None = None
+    hp_current: int | None = Field(None, ge=0)
+    hp_max: int | None = Field(None, ge=0)
+    hp_temp: int | None = Field(None, ge=0)
+    xp: int | None = Field(None, ge=0)
+    gp: int | None = Field(None, ge=0)
+    sp: int | None = Field(None, ge=0)
+    cp: int | None = Field(None, ge=0)
 
-    equipment: Optional[list[dict[str, Any]]] = None
-    spell_slots: Optional[dict[str, SpellSlotLevel]] = None
-    hit_dice: Optional[Union[HitDiceState, dict[str, Any]]] = None  # noqa: UP007
-    known_spells: Optional[list[str]] = None
-    conditions: Optional[list[str]] = None
-    proficiencies: Optional[dict[str, Any]] = None
-    personality: Optional[dict[str, Any]] = None
+    equipment: list[dict[str, Any]] | None = None
+    spell_slots: dict[str, SpellSlotLevel] | None = None
+    hit_dice: Union[HitDiceState, dict[str, Any]] | None = None  # noqa: UP007
+    known_spells: list[str] | None = None
+    conditions: list[str] | None = None
+    proficiencies: dict[str, Any] | None = None
+    personality: dict[str, Any] | None = None
 
-    session_id: Optional[str] = None
+    session_id: str | None = None
 
 
 class CharacterResponse(BaseModel):
@@ -113,13 +113,13 @@ class CharacterResponse(BaseModel):
 
     id: str
     name: str
-    player_name: Optional[str]
+    player_name: str | None
     is_ai: bool
 
     species: str
     char_class: str
     level: int
-    background: Optional[str]
+    background: str | None
 
     ability_scores: dict[str, int]
     hp_current: int
@@ -138,7 +138,7 @@ class CharacterResponse(BaseModel):
     proficiencies: dict[str, Any]
     personality: dict[str, Any]
 
-    session_id: Optional[str]
+    session_id: str | None
     created_at: datetime
     updated_at: datetime
 

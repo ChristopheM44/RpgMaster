@@ -1,7 +1,7 @@
 """Partial schema and migration helpers for the JSON game state blob."""
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -13,28 +13,28 @@ STATE_SCHEMA_VERSION = 1
 class CharacterState(BaseModel):
     model_config = ConfigDict(extra="allow")
 
-    name: Optional[str] = None
-    hp: Optional[int] = Field(default=None, ge=0)
-    hp_max: Optional[int] = Field(default=None, ge=0)
-    level: Optional[int] = Field(default=None, ge=1, le=20)
-    xp: Optional[int] = Field(default=None, ge=0)
-    gp: Optional[int] = Field(default=None, ge=0)
-    sp: Optional[int] = Field(default=None, ge=0)
-    cp: Optional[int] = Field(default=None, ge=0)
-    pending_asi: Optional[bool] = None
-    is_ai: Optional[bool] = None
+    name: str | None = None
+    hp: int | None = Field(default=None, ge=0)
+    hp_max: int | None = Field(default=None, ge=0)
+    level: int | None = Field(default=None, ge=1, le=20)
+    xp: int | None = Field(default=None, ge=0)
+    gp: int | None = Field(default=None, ge=0)
+    sp: int | None = Field(default=None, ge=0)
+    cp: int | None = Field(default=None, ge=0)
+    pending_asi: bool | None = None
+    is_ai: bool | None = None
 
 
 class CombatantState(BaseModel):
     model_config = ConfigDict(extra="allow")
 
-    name: Optional[str] = None
-    hp: Optional[int] = Field(default=None, ge=0)
-    hp_max: Optional[int] = Field(default=None, ge=0)
-    ac: Optional[int] = Field(default=None, ge=0)
-    is_player: Optional[bool] = None
-    is_ai: Optional[bool] = None
-    status: Optional[str] = None
+    name: str | None = None
+    hp: int | None = Field(default=None, ge=0)
+    hp_max: int | None = Field(default=None, ge=0)
+    ac: int | None = Field(default=None, ge=0)
+    is_player: bool | None = None
+    is_ai: bool | None = None
+    status: str | None = None
 
 
 class TurnManagerState(BaseModel):
@@ -44,8 +44,8 @@ class TurnManagerState(BaseModel):
 class PendingEncounterState(BaseModel):
     model_config = ConfigDict(extra="allow")
 
-    intro_played: Optional[bool] = None
-    intro_text: Optional[str] = None
+    intro_played: bool | None = None
+    intro_text: str | None = None
     monster_ids: list[str] = Field(default_factory=list)
 
 
@@ -53,15 +53,15 @@ class GameStateData(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     schema_version: int = STATE_SCHEMA_VERSION
-    phase: Optional[str] = None
+    phase: str | None = None
     characters: dict[str, CharacterState] = Field(default_factory=dict)
     combatants: dict[str, CombatantState] = Field(default_factory=dict)
-    turn_manager: Optional[TurnManagerState] = None
-    pending_encounter: Optional[PendingEncounterState] = None
+    turn_manager: TurnManagerState | None = None
+    pending_encounter: PendingEncounterState | None = None
 
     @field_validator("phase")
     @classmethod
-    def validate_phase(cls, value: Optional[str]) -> Optional[str]:
+    def validate_phase(cls, value: str | None) -> str | None:
         if value is None:
             return None
         allowed = {status.value for status in SessionStatus}

@@ -2,17 +2,17 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Optional
+from typing import Any
 
 from app.game.event_bus import EventType
 
 
-def visible_event_type(entry_kind: Optional[str]) -> str:
+def visible_event_type(entry_kind: str | None) -> str:
     """Return the canonical event type for a visible narrative-log entry."""
     return EventType.DIALOGUE if entry_kind == "dialogue" else EventType.NARRATION
 
 
-def strip_visible_speaker_prefix(text: str, speaker: Optional[str]) -> str:
+def strip_visible_speaker_prefix(text: str, speaker: str | None) -> str:
     """Remove redundant leading speaker names from visible dialogue text.
 
     The UI already renders the speaker label. LLMs often start a line with

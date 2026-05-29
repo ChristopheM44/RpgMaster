@@ -57,9 +57,9 @@ from app.services.spellcasting_service import SpellcastingService, SpellcastingS
 logger = logging.getLogger(__name__)
 
 ResolvedActionResult = tuple[
-    Optional[str],
+    str | None,
     str,
-    Optional[dict[str, Any]],
+    dict[str, Any] | None,
     list[dict[str, Any]],
     Optional["ResolvedAction"],
 ]
@@ -71,15 +71,15 @@ class ActionRequest(BaseModel):
     """Action normalisee envoyee au pipeline."""
 
     session_id: str
-    actor_id: Optional[str] = None
-    actor_name: Optional[str] = None
+    actor_id: str | None = None
+    actor_name: str | None = None
     actor_kind: Literal["player", "companion", "monster"] = "player"
     action_type: str
-    content: Optional[str] = None
-    target_id: Optional[str] = None
-    spell_id: Optional[str] = None
-    slot_level: Optional[int] = None
-    display_text: Optional[str] = None
+    content: str | None = None
+    target_id: str | None = None
+    spell_id: str | None = None
+    slot_level: int | None = None
+    display_text: str | None = None
     persist_actor_action: bool = True
     suppress_gm_narration: bool = False
 
@@ -87,11 +87,11 @@ class ActionRequest(BaseModel):
 class ResolvedAction(BaseModel):
     """Resultat structure d'une action resolue et publiee."""
 
-    actor_id: Optional[str] = None
+    actor_id: str | None = None
     actor_name: str = ""
     actor_kind: Literal["player", "companion", "monster"]
     action_type: str
-    target_id: Optional[str] = None
+    target_id: str | None = None
     mechanics: dict[str, Any] = Field(default_factory=dict)
     roll_events: list[dict[str, Any]] = Field(default_factory=list)
     narration: str = ""
@@ -106,10 +106,10 @@ class ActionPipeline:
         self,
         gm_agent: Any,
         event_bus_instance: Any = event_bus,
-        db: Optional[Any] = None,
+        db: Any | None = None,
         *,
-        mechanics: Optional[Any] = None,
-        combat_gm_agent: Optional[Any] = None,
+        mechanics: Any | None = None,
+        combat_gm_agent: Any | None = None,
         source: str = "action_pipeline",
     ) -> None:
         self._gm = gm_agent
@@ -129,7 +129,7 @@ class ActionPipeline:
         self,
         request: ActionRequest,
         active: ActiveSession,
-        db: Optional[Any] = None,
+        db: Any | None = None,
     ) -> ResolvedAction:
         """Execute le flux complet pour une action deja choisie."""
         token, scope = begin_llm_call_scope(
@@ -145,7 +145,7 @@ class ActionPipeline:
         self,
         request: ActionRequest,
         active: ActiveSession,
-        db: Optional[Any] = None,
+        db: Any | None = None,
     ) -> ResolvedAction:
         """Execute le flux complet pour une action deja choisie."""
         actual_db = db if db is not None else self._db
@@ -159,7 +159,7 @@ class ActionPipeline:
         display_text = self._display_text(request, actor_name, target_name)
         phase_value = self._phase_value(active).upper()
 
-        roll_results: Optional[dict[str, Any]] = None
+        roll_results: dict[str, Any] | None = None
         roll_events: list[dict[str, Any]] = []
         executed_actions: list[dict[str, Any]] = []
         canon_dirty = False
@@ -251,9 +251,9 @@ class ActionPipeline:
             and not active.ai_players
         ):
             use_gm = True
-        context: Optional[AgentContext] = None
+        context: AgentContext | None = None
 
-        gm_response: Optional[AgentResponse] = None
+        gm_response: AgentResponse | None = None
         if use_gm:
             recent_messages: list[Any] = []
             if actual_db is not None:
@@ -520,7 +520,7 @@ class ActionPipeline:
         self,
         session_id: str,
         active: ActiveSession,
-        db: Optional[Any],
+        db: Any | None,
     ) -> dict[str, Any]:
         game_state = dict(active.state_data)
         if db is not None:
@@ -539,7 +539,7 @@ class ActionPipeline:
         request: ActionRequest,
         actor_name: str,
         target_name: str,
-        roll_results: Optional[dict[str, Any]],
+        roll_results: dict[str, Any] | None,
     ) -> str:
         action = request.action_type.strip().lower()
         target_label = target_name or "la cible"
@@ -593,7 +593,7 @@ class ActionPipeline:
     async def _publish_tactical_move_result(
         self,
         session_id: str,
-        combatant_id: Optional[str],
+        combatant_id: str | None,
         move_result: Any,
         active: ActiveSession,
     ) -> None:
@@ -678,7 +678,7 @@ class ActionPipeline:
         return True, "", move_result
 
     @staticmethod
-    def _parse_move_destination(content: Optional[str]) -> Optional[GridPosition]:
+    def _parse_move_destination(content: str | None) -> GridPosition | None:
         if not content or "," not in content:
             return None
         try:
@@ -690,7 +690,7 @@ class ActionPipeline:
     async def _publish_action_economy_result(
         self,
         active: ActiveSession,
-        combatant_id: Optional[str],
+        combatant_id: str | None,
     ) -> None:
         if not combatant_id:
             return
@@ -719,7 +719,7 @@ class ActionPipeline:
         self,
         session_id: str,
         narration_text: str,
-        db: Optional[Any],
+        db: Any | None,
     ) -> None:
         await self._orchestrator.publish_gm_narration(session_id, narration_text, db)
 
@@ -729,9 +729,9 @@ class ActionPipeline:
         context: AgentContext,
         pending_rolls: list[dict[str, Any]],
         *,
-        gm_agent: Optional[Any] = None,
-    ) -> Optional[GMResponse]:
-        outcome_response: Optional[GMResponse] = None
+        gm_agent: Any | None = None,
+    ) -> GMResponse | None:
+        outcome_response: GMResponse | None = None
         agent = gm_agent or self._gm_for_phase(context.game_phase)
         try:
             await self._publish_ai_thinking(session_id, True)
@@ -765,8 +765,8 @@ class ActionPipeline:
         visible_text: str,
         actor_name: str,
         request: ActionRequest,
-        target_id: Optional[str],
-        db: Optional[Any],
+        target_id: str | None,
+        db: Any | None,
     ) -> None:
         if db is None:
             return
@@ -794,7 +794,7 @@ class ActionPipeline:
         )
 
     @staticmethod
-    def _as_agent_response(candidate: Any) -> Optional[AgentResponse]:
+    def _as_agent_response(candidate: Any) -> AgentResponse | None:
         if isinstance(candidate, AgentResponse):
             return candidate
         if isinstance(candidate, GMResponse):
@@ -811,7 +811,7 @@ class ActionPipeline:
     def _with_social_roll_fallback(
         response: AgentResponse,
         request: ActionRequest,
-        social_target_id: Optional[str],
+        social_target_id: str | None,
         state_data: dict[str, Any],
     ) -> AgentResponse:
         if (
@@ -852,7 +852,7 @@ class ActionPipeline:
     def _resolve_social_check(
         request: ActionRequest,
         active: ActiveSession,
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Resout un jet de competence social en exploration via le moteur.
 
         Retourne un dict roll_results injecte dans le contexte GM pour narration.
@@ -965,7 +965,7 @@ class ActionPipeline:
         payload: dict[str, Any],
         request: ActionRequest,
         actor_name: str,
-        target_id: Optional[str],
+        target_id: str | None,
     ) -> dict[str, Any]:
         enriched = dict(payload)
         enriched.setdefault("character_id", request.actor_id)
@@ -982,7 +982,7 @@ class ActionPipeline:
         request: ActionRequest,
         actor_name: str,
         target_name: str,
-        roll_results: Optional[dict[str, Any]],
+        roll_results: dict[str, Any] | None,
     ) -> str:
         if request.content:
             text = request.content
@@ -1021,7 +1021,7 @@ class ActionPipeline:
         return request.action_type
 
     @staticmethod
-    def _default_target_id(request: ActionRequest, state_data: dict[str, Any]) -> Optional[str]:
+    def _default_target_id(request: ActionRequest, state_data: dict[str, Any]) -> str | None:
         combatants = state_data.get("combatants", {})
         if not isinstance(combatants, dict):
             return None
@@ -1051,7 +1051,7 @@ class ActionPipeline:
 
     @staticmethod
     def _actor_name(
-        actor_id: Optional[str],
+        actor_id: str | None,
         actor_kind: str,
         state_data: dict[str, Any],
     ) -> str:
@@ -1077,7 +1077,7 @@ class ActionPipeline:
         return fallback
 
     @staticmethod
-    def _combatant_name(state_data: dict[str, Any], combatant_id: Optional[str]) -> str:
+    def _combatant_name(state_data: dict[str, Any], combatant_id: str | None) -> str:
         if not combatant_id:
             return ""
         combatants = state_data.get("combatants", {})
@@ -1100,7 +1100,7 @@ class ActionPipeline:
     async def _apply_stabilize_success(
         self,
         session_id: str,
-        target_id: Optional[str],
+        target_id: str | None,
         roll_results: dict[str, Any],
         active: ActiveSession,
     ) -> None:
@@ -1139,8 +1139,8 @@ class ActionPipeline:
         active: ActiveSession,
         phase_value: str,
         actor_name: str,
-        target_id: Optional[str],
-        actual_db: Optional[Any],
+        target_id: str | None,
+        actual_db: Any | None,
     ) -> ResolvedActionResult:
         target_name = self._combatant_name(active.state_data, target_id)
         roll_results = None
@@ -1251,7 +1251,7 @@ class ActionPipeline:
         self,
         request: ActionRequest,
         active: ActiveSession,
-        target_id: Optional[str],
+        target_id: str | None,
     ) -> dict[str, Any]:
         mechanics = self._get_mechanics()
         roll_results = mechanics._resolve_stabilize(
@@ -1273,8 +1273,8 @@ class ActionPipeline:
         active: ActiveSession,
         phase_value: str,
         actor_name: str,
-        target_id: Optional[str],
-    ) -> Optional[ResolvedAction]:
+        target_id: str | None,
+    ) -> ResolvedAction | None:
         if request.action_type == "move" and phase_value == "COMBAT":
             ok, message, _move_result = await self._execute_tactical_move_request(
                 request,
@@ -1418,8 +1418,8 @@ class ActionPipeline:
         active: ActiveSession,
         phase_value: str,
         actor_name: str,
-        target_id: Optional[str],
-        actual_db: Optional[Any],
+        target_id: str | None,
+        actual_db: Any | None,
     ) -> ResolvedActionResult:
         target_name = self._combatant_name(active.state_data, target_id)
         roll_results = None
@@ -1478,7 +1478,7 @@ class ActionPipeline:
                     )
                     return target_id, target_name, roll_results, executed_actions, error_action
 
-            caster_snapshot: Optional[dict[str, Any]] = None
+            caster_snapshot: dict[str, Any] | None = None
             if actual_db is not None:
                 try:
                     prepared = await spellcasting_service.prepare_cast(

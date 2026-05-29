@@ -4,10 +4,9 @@ from __future__ import annotations
 import pytest
 
 from app.engine.conditions import (
-    Condition,
-    ConditionEffects,
-    ExhaustionEffects,
     CONDITION_EFFECTS,
+    Condition,
+    ExhaustionEffects,
     auto_crits_on_melee,
     auto_fails_dex_save,
     auto_fails_str_save,
@@ -25,7 +24,6 @@ from app.engine.conditions import (
     resolve_attack_advantage,
     resolve_attack_advantage_vs,
 )
-
 
 # ---------------------------------------------------------------------------
 # Condition enum

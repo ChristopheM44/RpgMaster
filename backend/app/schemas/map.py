@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -76,22 +76,22 @@ class MapNode(BaseModel):
     kind: MapNodeKind
     position: MapNodePosition = Field(default_factory=MapNodePosition)
     status: NodeStatus = "known"
-    icon: Optional[str] = Field(default=None, max_length=80)
-    description: Optional[str] = Field(default=None, max_length=280)
-    short_label: Optional[str] = Field(default=None, max_length=40)
-    city_id: Optional[str] = Field(default=None, max_length=80)
+    icon: str | None = Field(default=None, max_length=80)
+    description: str | None = Field(default=None, max_length=280)
+    short_label: str | None = Field(default=None, max_length=40)
+    city_id: str | None = Field(default=None, max_length=80)
     scene_ids: list[str] = Field(default_factory=list, max_length=24)
 
     @field_validator("id", "city_id")
     @classmethod
-    def clean_id(cls, value: Optional[str]) -> Optional[str]:
+    def clean_id(cls, value: str | None) -> str | None:
         if value is None:
             return None
         return value.strip()
 
     @field_validator("name", "icon", "description", "short_label")
     @classmethod
-    def clean_text(cls, value: Optional[str]) -> Optional[str]:
+    def clean_text(cls, value: str | None) -> str | None:
         if value is None:
             return None
         cleaned = " ".join(str(value).split())
@@ -105,7 +105,7 @@ class MapEdge(BaseModel):
     from_: str = Field(alias="from", min_length=1, max_length=80)
     to: str = Field(min_length=1, max_length=80)
     kind: EdgeKind = "road"
-    travel_hint: Optional[str] = Field(default=None, max_length=280)
+    travel_hint: str | None = Field(default=None, max_length=280)
     hidden: bool = False
 
     @field_validator("id", "from_", "to")
@@ -115,7 +115,7 @@ class MapEdge(BaseModel):
 
     @field_validator("travel_hint")
     @classmethod
-    def clean_optional_text(cls, value: Optional[str]) -> Optional[str]:
+    def clean_optional_text(cls, value: str | None) -> str | None:
         if value is None:
             return None
         cleaned = " ".join(str(value).split())
@@ -178,8 +178,8 @@ class MapDecor(BaseModel):
 
     forests: list[ForestSpot] = Field(default_factory=list, max_length=64)
     mountains: list[MountainSpot] = Field(default_factory=list, max_length=24)
-    coastline: Optional[Coastline] = None
-    river: Optional[RiverPath] = None
+    coastline: Coastline | None = None
+    river: RiverPath | None = None
     # Paths SVG décoratifs (en coords 0..100) — donnent de la texture
     # sans être des connexions graph réelles.
     decorative_roads: list[str] = Field(default_factory=list, max_length=16)
@@ -198,9 +198,9 @@ class MapVisualAsset(BaseModel):
     status: VisualAssetStatus = "prompt_ready"
     prompt: str = Field(default="", max_length=2400)
     prompt_hash: str = Field(min_length=1, max_length=64)
-    url: Optional[str] = Field(default=None, max_length=1000)
-    generated_at: Optional[str] = Field(default=None, max_length=80)
-    error: Optional[str] = Field(default=None, max_length=280)
+    url: str | None = Field(default=None, max_length=1000)
+    generated_at: str | None = Field(default=None, max_length=80)
+    error: str | None = Field(default=None, max_length=280)
 
     @field_validator("provider", "model", "prompt", "prompt_hash", mode="before")
     @classmethod
@@ -210,7 +210,7 @@ class MapVisualAsset(BaseModel):
 
     @field_validator("url", "generated_at", "error", mode="before")
     @classmethod
-    def clean_text(cls, value: Optional[str]) -> Optional[str]:
+    def clean_text(cls, value: str | None) -> str | None:
         if value is None:
             return None
         cleaned = " ".join(str(value).split())
@@ -225,12 +225,12 @@ class RegionMap(BaseModel):
 
     id: str = Field(default="region", min_length=1, max_length=80)
     name: str = Field(default="Région", min_length=1, max_length=120)
-    current_node_id: Optional[str] = Field(default=None, max_length=80)
+    current_node_id: str | None = Field(default=None, max_length=80)
     nodes: list[MapNode] = Field(default_factory=list, max_length=64)
     edges: list[MapEdge] = Field(default_factory=list, max_length=128)
-    background_seed: Optional[str] = Field(default=None, max_length=80)
-    decor: Optional[MapDecor] = None
-    visual_asset: Optional[MapVisualAsset] = None
+    background_seed: str | None = Field(default=None, max_length=80)
+    decor: MapDecor | None = None
+    visual_asset: MapVisualAsset | None = None
     updated_at: str
 
 
@@ -240,29 +240,29 @@ class CityMap(BaseModel):
     id: str = Field(min_length=1, max_length=80)
     region_node_id: str = Field(min_length=1, max_length=80)
     name: str = Field(default="Ville", min_length=1, max_length=120)
-    current_node_id: Optional[str] = Field(default=None, max_length=80)
+    current_node_id: str | None = Field(default=None, max_length=80)
     nodes: list[MapNode] = Field(default_factory=list, max_length=64)
     edges: list[MapEdge] = Field(default_factory=list, max_length=128)
-    background_seed: Optional[str] = Field(default=None, max_length=80)
-    decor: Optional[MapDecor] = None
-    visual_asset: Optional[MapVisualAsset] = None
+    background_seed: str | None = Field(default=None, max_length=80)
+    decor: MapDecor | None = None
+    visual_asset: MapVisualAsset | None = None
     updated_at: str
 
 
 class RegionMapPatch(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    id: Optional[str] = Field(default=None, max_length=80)
-    name: Optional[str] = Field(default=None, max_length=120)
-    current_node_id: Optional[str] = Field(default=None, max_length=80)
+    id: str | None = Field(default=None, max_length=80)
+    name: str | None = Field(default=None, max_length=120)
+    current_node_id: str | None = Field(default=None, max_length=80)
     nodes_upsert: list[MapNode] = Field(default_factory=list, max_length=64)
     nodes_remove: list[str] = Field(default_factory=list, max_length=64)
     edges_upsert: list[MapEdge] = Field(default_factory=list, max_length=128)
     edges_remove: list[str] = Field(default_factory=list, max_length=128)
-    background_seed: Optional[str] = Field(default=None, max_length=80)
+    background_seed: str | None = Field(default=None, max_length=80)
     # None ⇒ préserver le décor existant ; valeur présente ⇒ remplacer.
-    decor: Optional[MapDecor] = None
-    visual_asset: Optional[MapVisualAsset] = None
+    decor: MapDecor | None = None
+    visual_asset: MapVisualAsset | None = None
 
 
 class CityMapPatch(BaseModel):
@@ -270,21 +270,21 @@ class CityMapPatch(BaseModel):
 
     city_id: str = Field(min_length=1, max_length=80)
     region_node_id: str = Field(min_length=1, max_length=80)
-    name: Optional[str] = Field(default=None, max_length=120)
-    current_node_id: Optional[str] = Field(default=None, max_length=80)
+    name: str | None = Field(default=None, max_length=120)
+    current_node_id: str | None = Field(default=None, max_length=80)
     nodes_upsert: list[MapNode] = Field(default_factory=list, max_length=64)
     nodes_remove: list[str] = Field(default_factory=list, max_length=64)
     edges_upsert: list[MapEdge] = Field(default_factory=list, max_length=128)
     edges_remove: list[str] = Field(default_factory=list, max_length=128)
-    background_seed: Optional[str] = Field(default=None, max_length=80)
-    decor: Optional[MapDecor] = None
-    visual_asset: Optional[MapVisualAsset] = None
+    background_seed: str | None = Field(default=None, max_length=80)
+    decor: MapDecor | None = None
+    visual_asset: MapVisualAsset | None = None
 
 
 class NodeStatusPatch(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     scope: Literal["region", "city"]
-    city_id: Optional[str] = Field(default=None, max_length=80)
+    city_id: str | None = Field(default=None, max_length=80)
     node_id: str = Field(min_length=1, max_length=80)
     status: NodeStatus

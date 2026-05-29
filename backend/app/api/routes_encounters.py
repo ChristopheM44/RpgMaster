@@ -1,7 +1,7 @@
 """REST endpoints for encounter management (preset listing + dynamic generation)."""
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -90,10 +90,10 @@ def _monster_summary(preset: dict[str, Any]) -> str:
 
 @router.get("", response_model=list[PresetSummary])
 async def list_presets(
-    min_level: Optional[int] = Query(None, description="Niveau minimum du groupe"),
-    max_level: Optional[int] = Query(None, description="Niveau maximum du groupe"),
-    terrain: Optional[str] = Query(None, description="Terrain (forest, dungeon, road...)"),
-    difficulty: Optional[str] = Query(None, description="Difficulté (easy, medium, hard, deadly)"),
+    min_level: int | None = Query(None, description="Niveau minimum du groupe"),
+    max_level: int | None = Query(None, description="Niveau maximum du groupe"),
+    terrain: str | None = Query(None, description="Terrain (forest, dungeon, road...)"),
+    difficulty: str | None = Query(None, description="Difficulté (easy, medium, hard, deadly)"),
 ) -> list[PresetSummary]:
     """List available pre-built encounters, with optional filters."""
     # Ensure data is loaded so _monsters_by_id is populated

@@ -63,11 +63,11 @@ Note d'execution Lot A, 2026-05-09 : les `:style` restants sont limites aux exce
 
 ### Lot B - Migration backend Python 3.11
 
-- [ ] Passer `backend/pyproject.toml` a `requires-python = ">=3.11"` et Ruff `target-version = "py311"`.
-- [ ] Mettre a jour `README.md`, `CLAUDE.md`, les docs d'audit et les commentaires de `voxtral_client.py` qui decrivent encore le backend principal en Python 3.9.
-- [ ] Recreer le venv backend en Python 3.11, reinstaller les dependances, puis valider Alembic, FastAPI startup et toute la suite pytest.
-- [ ] Moderniser les annotations : `list`, `dict`, `set`, `tuple`, `X | None`, sauf cas SQLAlchemy prouve par test.
-- [ ] Supprimer ou reduire l'ignore Ruff `UP045` seulement apres validation des modeles SQLAlchemy sous 3.11.
+- [x] Passer `backend/pyproject.toml` a `requires-python = ">=3.11"` et Ruff `target-version = "py311"`.
+- [x] Mettre a jour `README.md`, `CLAUDE.md`, `AGENTS.md`, les docs d'audit et documenter que les commentaires de `voxtral_client.py` décrivant Python 3.9 seront mis à jour lors du chantier TTS/Voice dédié.
+- [x] Recreer le venv backend en Python 3.11, reinstaller les dependances, puis valider Alembic, FastAPI startup et toute la suite pytest.
+- [x] Retirer l'ignore Ruff `UP045` et valider les modeles SQLAlchemy sous Python 3.11.
+- [/] Moderniser progressivement les annotations : `list`, `dict`, `set`, `tuple`, `X | None` au lieu de `List`, `Dict`, `Set`, `Tuple`, `Optional[X]`.
 
 ### Lot C - Nettoyage Ruff global
 

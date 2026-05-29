@@ -9,7 +9,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.agents.schemas import AgentResponse, GMAction, GMResponse
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -78,8 +77,8 @@ class TestFreeTextAction:
                 mock_instance.think = AsyncMock(return_value=mock_response)
                 MockGMAgent.return_value = mock_instance
 
-                from app.game.action_resolver import ActionResolver
                 from app.api import ws_game
+                from app.game.action_resolver import ActionResolver
                 ws_game.action_resolver = ActionResolver(gm_agent=mock_instance)
 
                 with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
@@ -106,8 +105,8 @@ class TestFreeTextAction:
         session_id = _create_session(ws_client)
         mock_response = _mock_gm_response("Rien de suspect.")
 
-        from app.game.action_resolver import ActionResolver
         from app.api import ws_game
+        from app.game.action_resolver import ActionResolver
 
         mock_gm = MagicMock()
         mock_gm.think = AsyncMock(return_value=mock_response)
@@ -143,8 +142,8 @@ class TestAttackAction:
         session_id = _create_session(ws_client)
         mock_response = _mock_gm_response("Votre épée tranche l'air !")
 
-        from app.game.action_resolver import ActionResolver
         from app.api import ws_game
+        from app.game.action_resolver import ActionResolver
 
         mock_gm = MagicMock()
         mock_gm.think = AsyncMock(return_value=mock_response)
@@ -175,8 +174,8 @@ class TestAttackAction:
         session_id = _create_session(ws_client)
         mock_response = _mock_gm_response("Un coup puissant !")
 
-        from app.game.action_resolver import ActionResolver
         from app.api import ws_game
+        from app.game.action_resolver import ActionResolver
 
         mock_gm = MagicMock()
         mock_gm.think = AsyncMock(return_value=mock_response)
@@ -211,8 +210,8 @@ class TestAttackAction:
         session_id = _create_session(ws_client)
         mock_response = _mock_gm_response("L'ennemi est blessé !")
 
-        from app.game.action_resolver import ActionResolver
         from app.api import ws_game
+        from app.game.action_resolver import ActionResolver
 
         mock_gm = MagicMock()
         mock_gm.think = AsyncMock(return_value=mock_response)
@@ -247,8 +246,8 @@ class TestCastSpellAction:
         session_id = _create_session(ws_client)
         mock_response = _mock_gm_response("Le sort fuse de vos doigts !")
 
-        from app.game.action_resolver import ActionResolver
         from app.api import ws_game
+        from app.game.action_resolver import ActionResolver
 
         mock_gm = MagicMock()
         mock_gm.think = AsyncMock(return_value=mock_response)
@@ -292,8 +291,8 @@ class TestGMActions:
             actions=[gm_action],
         )
 
-        from app.game.action_resolver import ActionResolver
         from app.api import ws_game
+        from app.game.action_resolver import ActionResolver
 
         mock_gm = MagicMock()
         mock_gm.think = AsyncMock(return_value=mock_response)
@@ -339,8 +338,8 @@ class TestTurnProgression:
         session_id = _create_session(ws_client)
         mock_response = _mock_gm_response("Le tour avance.")
 
-        from app.game.action_resolver import ActionResolver
         from app.api import ws_game
+        from app.game.action_resolver import ActionResolver
 
         mock_gm = MagicMock()
         mock_gm.think = AsyncMock(return_value=mock_response)
@@ -365,8 +364,8 @@ class TestTurnProgression:
         session_id = _create_session(ws_client)
         mock_response = _mock_gm_response("Réponse du MJ.")
 
-        from app.game.action_resolver import ActionResolver
         from app.api import ws_game
+        from app.game.action_resolver import ActionResolver
 
         mock_gm = MagicMock()
         mock_gm.think = AsyncMock(return_value=mock_response)
@@ -392,8 +391,8 @@ class TestResilienceGMFailure:
         """Si le GMAgent lève une exception, une narration de fallback est envoyée."""
         session_id = _create_session(ws_client)
 
-        from app.game.action_resolver import ActionResolver
         from app.api import ws_game
+        from app.game.action_resolver import ActionResolver
 
         mock_gm = MagicMock()
         mock_gm.think = AsyncMock(side_effect=RuntimeError("Ollama indisponible"))
@@ -432,8 +431,8 @@ class TestAutoCombatTrigger:
             actions=[],
         )
 
-        from app.game.action_resolver import ActionResolver
         from app.api import ws_game
+        from app.game.action_resolver import ActionResolver
         from app.models.session import SessionStatus
 
         mock_gm = MagicMock()
@@ -489,11 +488,10 @@ class TestAutoCombatTrigger:
         """Si le joueur écrit « j'attaque le bandit », on entre en combat."""
         session_id = _create_session(ws_client)
 
-        from app.api import ws_game
         from app.agents.schemas import GMResponse as _GMResponse
-        from app.models.session import SessionStatus
-
+        from app.api import ws_game
         from app.game.action_resolver import ActionResolver
+        from app.models.session import SessionStatus
 
         mock_gm = MagicMock()
         mock_gm.think = AsyncMock(return_value=_mock_gm_response("Le combat commence."))
@@ -559,8 +557,8 @@ class TestAutoCombatTrigger:
             ],
         )
 
-        from app.game.action_resolver import ActionResolver
         from app.api import ws_game
+        from app.game.action_resolver import ActionResolver
         from app.models.session import SessionStatus
 
         mock_gm = MagicMock()
@@ -638,8 +636,8 @@ class TestAutoCombatTrigger:
             actions=[GMAction(type="state_transition", params={"to": "COMBAT"})],
         )
 
-        from app.game.action_resolver import ActionResolver
         from app.api import ws_game
+        from app.game.action_resolver import ActionResolver
         from app.models.session import SessionStatus
 
         mock_gm = MagicMock()

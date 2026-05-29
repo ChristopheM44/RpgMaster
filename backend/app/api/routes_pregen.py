@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -17,7 +17,7 @@ from app.services.rest_service import build_hit_dice
 router = APIRouter()
 
 _PREGENS_PATH = Path(__file__).parent.parent / "engine" / "srd_data" / "pregens.json"
-_PREGENS_DATA: Optional[list[dict[str, Any]]] = None
+_PREGENS_DATA: list[dict[str, Any]] | None = None
 
 
 def _load_pregens() -> list[dict[str, Any]]:
@@ -47,8 +47,8 @@ class PregenTemplate(BaseModel):
 
 class PregenSelectBody(BaseModel):
     session_id: str
-    name: Optional[str] = None
-    player_name: Optional[str] = None
+    name: str | None = None
+    player_name: str | None = None
     is_ai: bool = False
 
 

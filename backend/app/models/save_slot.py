@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -48,7 +47,7 @@ class SaveSlot(Base):
     )
 
     # Relationship
-    session: Mapped[Optional[Session]] = relationship(  # noqa: F821
+    session: Mapped[Session | None] = relationship(  # noqa: F821
         "Session", back_populates="save_slots"
     )
 

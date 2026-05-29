@@ -19,7 +19,7 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -71,7 +71,7 @@ class ActiveSession:
     ai_players: dict[str, Any] = field(default_factory=dict)
     # Intent classifié par le MJ pour la dernière action joueur :
     # 'social' | 'environmental' | 'mixed' | None
-    last_gm_intent: Optional[str] = None
+    last_gm_intent: str | None = None
 
     def mark_dirty(self) -> None:
         self.is_dirty = True
@@ -189,7 +189,7 @@ class SessionManager:
     # Access
     # ------------------------------------------------------------------
 
-    def get_session(self, session_id: str) -> Optional[ActiveSession]:
+    def get_session(self, session_id: str) -> ActiveSession | None:
         """Return the active session or None if it is not open."""
         return self._sessions.get(session_id)
 

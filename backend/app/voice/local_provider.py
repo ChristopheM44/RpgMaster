@@ -6,7 +6,6 @@ ne spécifie pas ``voice_id_local`` explicitement.
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from app.agents.persona import PersonaAgeRange, PersonaGender, PersonaVoice
 from app.llm.voxtral_client import KokoroClient, VLLMVoxtralClient, VoxtralError
@@ -83,8 +82,8 @@ class LocalVoiceProvider(VoiceProvider):
     def __init__(
         self,
         backend: str = "kokoro",
-        kokoro: Optional[KokoroClient] = None,
-        vllm: Optional[VLLMVoxtralClient] = None,
+        kokoro: KokoroClient | None = None,
+        vllm: VLLMVoxtralClient | None = None,
         *,
         prefer_french: bool = True,
     ) -> None:

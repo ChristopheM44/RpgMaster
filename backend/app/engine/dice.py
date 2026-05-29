@@ -15,7 +15,6 @@ from __future__ import annotations
 import random
 import re
 from dataclasses import dataclass
-from typing import Optional
 
 # Regex: XdY[kh|kl]Z[+/-N]
 _NOTATION = re.compile(
@@ -35,7 +34,7 @@ class RollResult:
     kept: list[int]           # dice that count toward the total
     modifier: int
     total: int
-    advantage: Optional[bool] = None  # True=adv, False=disadv, None=normal
+    advantage: bool | None = None  # True=adv, False=disadv, None=normal
 
 
 def roll_dice(sides: int, count: int = 1, rng: random.Random | None = None) -> list[int]:

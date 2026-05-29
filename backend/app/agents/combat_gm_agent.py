@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from app.agents.gm_agent import GMAgent
 from app.llm.base_client import LLMClient
@@ -15,8 +15,8 @@ class CombatGMAgent(GMAgent):
 
     def __init__(
         self,
-        client: Optional[LLMClient] = None,
-        model: Optional[str] = None,
+        client: LLMClient | None = None,
+        model: str | None = None,
     ):
         super().__init__(client=client, model=model)
         self._system_prompt = self._load_system_prompt("gm_combat_system.txt")
@@ -24,10 +24,10 @@ class CombatGMAgent(GMAgent):
     async def run_combat_turn(
         self,
         game_state: dict[str, Any],
-        context_manager: Optional[Any] = None,
-        player_action: Optional[str] = None,
-        messages: Optional[list] = None,
-        roll_results: Optional[dict[str, Any]] = None,
+        context_manager: Any | None = None,
+        player_action: str | None = None,
+        messages: list | None = None,
+        roll_results: dict[str, Any] | None = None,
     ):
         return await super().run_combat_turn(
             game_state=self._compact_combat_state(game_state),

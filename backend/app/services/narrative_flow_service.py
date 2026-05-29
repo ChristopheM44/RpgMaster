@@ -12,7 +12,7 @@ import re
 import unicodedata
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -132,7 +132,7 @@ _WORLD_MARKERS = (
 class AudienceDetection:
     audience: Audience
     target_ids: list[str] = field(default_factory=list)
-    addressed_to: Optional[str] = None
+    addressed_to: str | None = None
     reason: str = ""
 
 
@@ -156,7 +156,7 @@ class NarrativeFlowService:
         action: Any,
         active: ActiveSession,
         action_resolver: Any,
-        db: Optional[AsyncSession],
+        db: AsyncSession | None,
     ) -> SceneExchange:
         """Traite une action joueur hors combat en flux de scène vivant."""
         text = str(getattr(action, "content", "") or getattr(action, "action_type", ""))
@@ -321,8 +321,8 @@ class NarrativeFlowService:
         active: ActiveSession,
         *,
         action_type: str = "free_text",
-        addressed_to: Optional[str] = None,
-        explicit_audience: Optional[str] = None,
+        addressed_to: str | None = None,
+        explicit_audience: str | None = None,
     ) -> AudienceDetection:
         """Détecte à qui s'adresse un message d'exploration."""
         companions = self._companion_index(active)
@@ -377,8 +377,8 @@ class NarrativeFlowService:
         action_resolver: Any,
         player_text: str,
         target_ids: list[str],
-        trigger_character_id: Optional[str],
-        db: Optional[AsyncSession],
+        trigger_character_id: str | None,
+        db: AsyncSession | None,
         scene_id: str,
     ) -> list[dict[str, str]]:
         if not active.ai_players:
@@ -491,7 +491,7 @@ class NarrativeFlowService:
     def _targets_npc(
         text: str,
         active: ActiveSession,
-        explicit_target_id: Optional[str],
+        explicit_target_id: str | None,
     ) -> bool:
         try:
             from app.game.social_resolution import resolve_npc_target_id
@@ -504,8 +504,8 @@ class NarrativeFlowService:
     def _present_npc_target_id(
         text: str,
         active: ActiveSession,
-        explicit_target_id: Optional[str],
-    ) -> Optional[str]:
+        explicit_target_id: str | None,
+    ) -> str | None:
         try:
             from app.game.social_resolution import _is_npc_poi, _poi_by_id, resolve_npc_target_id
 
@@ -521,7 +521,7 @@ class NarrativeFlowService:
         session_id: str,
         active: ActiveSession,
         npc_target_id: str,
-        db: Optional[AsyncSession],
+        db: AsyncSession | None,
     ) -> None:
         text = "Le Maître du Jeu ne parvient pas à faire répondre ce PNJ pour l'instant."
         scene = active.state_data.get("current_scene")
@@ -565,8 +565,8 @@ class NarrativeFlowService:
         session_id: str,
         active: ActiveSession,
         action_resolver: Any,
-        trigger_character_id: Optional[str],
-        db: Optional[AsyncSession],
+        trigger_character_id: str | None,
+        db: AsyncSession | None,
     ) -> None:
         """Laisse un compagnon IA réagir à la réplique d'un PNJ.
 
@@ -598,9 +598,9 @@ class NarrativeFlowService:
         session_id: str,
         active: ActiveSession,
         action_resolver: Any,
-        trigger_character_id: Optional[str],
-        db: Optional[AsyncSession],
-        action_text: Optional[str] = None,
+        trigger_character_id: str | None,
+        db: AsyncSession | None,
+        action_text: str | None = None,
     ) -> None:
         """Laisse un compagnon IA réagir après une action monde arbitrée par le MJ.
 
@@ -684,7 +684,7 @@ class NarrativeFlowService:
     def _target_ids_for_explicit(
         self,
         explicit: str,
-        addressed_to: Optional[str],
+        addressed_to: str | None,
         companions: dict[str, str],
     ) -> list[str]:
         if explicit == "companion":
@@ -704,9 +704,9 @@ class NarrativeFlowService:
 
     @staticmethod
     def _resolve_companion_reference(
-        reference: Optional[str],
+        reference: str | None,
         companions: dict[str, str],
-    ) -> Optional[str]:
+    ) -> str | None:
         if not reference:
             return None
         normalized_ref = _normalize_text(reference)
@@ -720,7 +720,7 @@ class NarrativeFlowService:
         cls,
         text: str,
         companions: dict[str, str],
-    ) -> Optional[str]:
+    ) -> str | None:
         raw = text or ""
         normalized = _normalize_text(raw)
         for char_id, name in companions.items():
@@ -765,7 +765,7 @@ class NarrativeFlowService:
         return text if text[-1] in ".!?…" else f"{text}."
 
     @staticmethod
-    def _actor_name(character_id: Optional[str], active: ActiveSession) -> str:
+    def _actor_name(character_id: str | None, active: ActiveSession) -> str:
         if not character_id:
             return "Joueur"
         characters = active.state_data.get("characters", {})

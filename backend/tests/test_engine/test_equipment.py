@@ -4,11 +4,11 @@ from __future__ import annotations
 import pytest
 
 from app.engine.equipment import (
+    WEAPON_PROPERTIES,
     ACResult,
     ArmorStats,
     AttackStats,
     WeaponStats,
-    WEAPON_PROPERTIES,
     compute_ac,
     get_armor,
     get_weapon,
@@ -16,7 +16,6 @@ from app.engine.equipment import (
     is_weapon_proficient,
     weapon_attack_stats,
 )
-
 
 # ---------------------------------------------------------------------------
 # get_weapon — catalogue lookup

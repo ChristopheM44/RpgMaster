@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from app.game.session_manager import ActiveSession
 
@@ -11,9 +11,9 @@ logger = logging.getLogger(__name__)
 
 def execute_roll_request(
     params: dict[str, Any],
-    fallback_actor_id: Optional[str],
+    fallback_actor_id: str | None,
     active: ActiveSession,
-) -> Optional[dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Execute a GM ``roll_request`` and return a ROLL_RESULT-ready payload."""
     from app.engine.ability_checks import (
         SKILL_ABILITY,
@@ -61,7 +61,7 @@ def execute_roll_request(
     skill_profs = list(char_data.get("skill_proficiencies", []))
     save_profs = list(char_data.get("save_proficiencies", []))
 
-    ability_short: Optional[str] = (
+    ability_short: str | None = (
         ability_long_map.get(ability_str, ability_str[:3] if ability_str else None)
         if ability_str
         else None

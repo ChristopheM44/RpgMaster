@@ -27,7 +27,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -50,7 +50,7 @@ _IDLE_TIMEOUT_SECONDS = 30.0
 
 def _db_session_factory(websocket: WebSocket) -> Any:
     app = websocket.scope.get("app")
-    factory: Optional[async_sessionmaker] = getattr(
+    factory: async_sessionmaker | None = getattr(
         app.state if app is not None else None, "db_session_factory", None
     )
     if factory is None:
@@ -62,7 +62,7 @@ async def _load_persona_brief(
     session_id: str,
     persona_id: str,
     websocket: WebSocket,
-) -> Optional[tuple[BasePersona, str]]:
+) -> tuple[BasePersona, str] | None:
     """Récupère la persona + brief texte rendu pour Realtime.
 
     Retourne ``(persona, brief)`` ou ``None`` si introuvable (avec close du WS).
@@ -196,7 +196,7 @@ async def _forward_client_to_openai(
             message = await asyncio.wait_for(
                 websocket.receive_text(), timeout=_IDLE_TIMEOUT_SECONDS
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.info("ws_dialogue: idle timeout, closing session")
             return
         except WebSocketDisconnect:

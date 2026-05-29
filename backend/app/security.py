@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from fastapi import Request, WebSocket
 
 from app.config import settings
@@ -15,7 +13,7 @@ def _configured_admin_token() -> str:
     return settings.admin_access_token.strip()
 
 
-def _bearer_value(value: Optional[str]) -> str:
+def _bearer_value(value: str | None) -> str:
     if not value:
         return ""
     prefix = "Bearer "
@@ -40,14 +38,14 @@ def validate_access_token_configuration() -> None:
         )
 
 
-def is_valid_access_token(token: Optional[str]) -> bool:
+def is_valid_access_token(token: str | None) -> bool:
     expected = _configured_token()
     if not expected:
         return True
     return _bearer_value(token) == expected
 
 
-def is_valid_admin_access_token(token: Optional[str]) -> bool:
+def is_valid_admin_access_token(token: str | None) -> bool:
     expected = _configured_admin_token()
     if expected:
         return _bearer_value(token) == expected

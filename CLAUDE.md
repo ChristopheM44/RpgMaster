@@ -8,7 +8,7 @@ Application de jeu de role avec un Maitre de Jeu IA, utilisant les regles D&D SR
 
 | Composant | Technologie | Details |
 |-----------|------------|---------|
-| Backend | Python 3.9+ / FastAPI | Async, app factory dans `backend/app/main.py` |
+| Backend | Python 3.11+ / FastAPI | Async, app factory dans `backend/app/main.py` |
 | Frontend | Vue.js 3 / TypeScript | Composition API, `<script setup>`, Pinia, Vue Router |
 | CSS | TailwindCSS v4 | Tokens `@theme` + classes `.rpg-*` dans `src/assets/main.css` |
 | LLM texte | Ollama | Modele local configurable (default: mistral:7b) |
@@ -198,7 +198,7 @@ COMBAT (rounds) → ENCOUNTER_END → EXPLORATION → ...
 
 ## Contraintes
 
-- Python 3.9.6 (pas 3.11+)
+- Python 3.11.x
 - Voxtral TTS via vLLM-Omni uniquement (port 8091) — PAS Ollama
 - Frontend port 5173, backend port 8000, CORS configure pour `http://localhost:5173`
 

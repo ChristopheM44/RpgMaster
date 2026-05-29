@@ -2,7 +2,7 @@
 name = "rpgmaster-backend"
 version = "0.1.0"
 description = "AI-powered D&D 5.2 Game Master - Backend"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
@@ -37,14 +37,12 @@ build-backend = "setuptools.build_meta"
 include = ["app*"]
 
 [tool.ruff]
-target-version = "py39"
+target-version = "py311"
 line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]
-# UP045: SQLAlchemy 2.0 evalue les annotations ORM via eval() au runtime.
-# Sur Python 3.9, X | None n'est pas supporté dans ce contexte — Optional[X] est requis.
-ignore = ["UP045"]
+ignore = []
 
 [tool.ruff.lint.per-file-ignores]
 "app/engine/adventure_seeds.py" = ["E501"]

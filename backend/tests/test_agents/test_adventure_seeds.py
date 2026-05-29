@@ -1,10 +1,10 @@
-import pytest
-from app.engine.adventure_seeds import generate_adventure_context, PRESETS, BIOMES
+from app.engine.adventure_seeds import generate_adventure_context
+
 
 def test_generate_adventure_context_classical_random():
     """Vérifie que la génération classique/aléatoire par défaut produit un dictionnaire complet et valide."""
     seed = generate_adventure_context()
-    
+
     assert isinstance(seed, dict)
     assert seed["preset_id"] == "classique"
     assert seed["location_place"] != ""
@@ -23,7 +23,7 @@ def test_generate_adventure_context_with_specific_preset():
     assert seed_pangee["scene_theme"] == "rocky"
     assert "Pangée" in seed_pangee["opening_brief"]
     assert "romaine impériale" in seed_pangee["opening_brief"]
-    
+
     # Test preset Jungle
     seed_jungle = generate_adventure_context(preset_id="jungle_dinos")
     assert seed_jungle["preset_id"] == "jungle_dinos"
@@ -37,7 +37,7 @@ def test_generate_adventure_context_preset_with_overrides():
         biome_id="desert",  # Surcharge de theme rocky -> desert
         weather="Pluie battante magique"  # Surcharge de weather
     )
-    
+
     assert seed["preset_id"] == "pangee_romain"
     assert seed["scene_theme"] == "desert"
     assert seed["weather"] == "Pluie battante magique"
@@ -46,7 +46,7 @@ def test_generate_adventure_context_preset_with_overrides():
 def test_generate_adventure_context_invalid_options():
     """Vérifie que le système retombe élégamment sur ses pieds face à des presets ou biomes invalides."""
     seed = generate_adventure_context(preset_id="invalide_preset", biome_id="invalide_biome")
-    
+
     # Doit retomber sur une génération classique par défaut
     assert seed["preset_id"] == "classique"
     assert seed["scene_theme"] in ["city", "dungeon", "forest", "swamp", "desert", "mountain", "coastal", "cave", "plains"]

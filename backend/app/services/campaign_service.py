@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -95,7 +95,7 @@ async def session_summaries(campaign: Campaign, db: AsyncSession) -> list[dict[s
     return summaries
 
 
-async def get_campaign(campaign_id: str, db: AsyncSession) -> Optional[Campaign]:
+async def get_campaign(campaign_id: str, db: AsyncSession) -> Campaign | None:
     result = await db.execute(select(Campaign).where(Campaign.id == campaign_id))
     campaign = result.scalar_one_or_none()
     if campaign is None:

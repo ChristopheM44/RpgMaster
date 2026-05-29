@@ -12,7 +12,6 @@ silence ou une erreur visible côté joueur.
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from app.agents.persona import BasePersona, PersonaImportance
 from app.config import settings
@@ -27,16 +26,16 @@ class VoiceRouter:
 
     def __init__(
         self,
-        local: Optional[VoiceProvider] = None,
-        realtime: Optional[VoiceProvider] = None,
+        local: VoiceProvider | None = None,
+        realtime: VoiceProvider | None = None,
     ) -> None:
         self._local: VoiceProvider = local or LocalVoiceProvider(
             backend=settings.tts_backend,
         )
         # realtime peut être None tant qu'OpenAI Realtime n'est pas configuré
-        self._realtime: Optional[VoiceProvider] = realtime
+        self._realtime: VoiceProvider | None = realtime
 
-    def set_realtime_provider(self, provider: Optional[VoiceProvider]) -> None:
+    def set_realtime_provider(self, provider: VoiceProvider | None) -> None:
         """Permet d'injecter le RealtimeProvider après initialisation."""
         self._realtime = provider
 

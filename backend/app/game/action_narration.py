@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from typing import Any, Optional
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Narrations variées pour les blocages tactiques (portée / chemin absent)
@@ -66,7 +66,7 @@ _RISKY_SKILL_DEFAULTS = {
 }
 
 
-def _infer_risky_roll_request(content: str) -> Optional[dict[str, Any]]:
+def _infer_risky_roll_request(content: str) -> dict[str, Any] | None:
     """Si l'action free_text contient un verbe risqué, retourne un roll_request minimal.
 
     Conservateur : ne tire pas sur les verbes ambigus ni les descriptions passives.

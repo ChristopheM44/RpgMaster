@@ -17,7 +17,6 @@ from __future__ import annotations
 import random
 import re
 from dataclasses import dataclass, field
-from typing import Optional
 
 from app.engine.ability_checks import (
     Ability,
@@ -300,8 +299,8 @@ def roll_spell_attack(
     caster_ability_score: int,
     prof_bonus: int,
     target_ac: int,
-    advantage: Optional[bool] = None,
-    rng: Optional[random.Random] = None,
+    advantage: bool | None = None,
+    rng: random.Random | None = None,
 ) -> AttackResult:
     """Roll a spell attack (ranged or melee spell attack).
 
@@ -381,8 +380,8 @@ def concentration_check(
     damage_taken: int,
     level: int,
     proficient: bool = False,
-    advantage: Optional[bool] = None,
-    rng: Optional[random.Random] = None,
+    advantage: bool | None = None,
+    rng: random.Random | None = None,
 ) -> ConcentrationCheckResult:
     """Roll a concentration check after taking damage.
 
@@ -426,7 +425,7 @@ def upcast_damage(
     spell_level: int,
     slot_level: int,
     critical: bool = False,
-    rng: Optional[random.Random] = None,
+    rng: random.Random | None = None,
 ) -> DamageResult:
     """Roll damage for an upcasted spell with additional dice per slot level.
 

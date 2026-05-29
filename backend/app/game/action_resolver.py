@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from app.agents.combat_gm_agent import CombatGMAgent
 from app.agents.gm_agent import GMAgent
@@ -46,9 +46,9 @@ class ActionResolver:
 
     def __init__(
         self,
-        gm_agent: Optional[GMAgent] = None,
-        combat_gm_agent: Optional[GMAgent] = None,
-        mechanics: Optional[ActionMechanics] = None,
+        gm_agent: GMAgent | None = None,
+        combat_gm_agent: GMAgent | None = None,
+        mechanics: ActionMechanics | None = None,
     ) -> None:
         self._gm: GMAgent = gm_agent or GMAgent()
         self._combat_gm_explicit = combat_gm_agent is not None
@@ -56,7 +56,7 @@ class ActionResolver:
             gm_agent if gm_agent is not None else CombatGMAgent()
         )
         self._mechanics = mechanics or ActionMechanics()
-        self._pipeline: Optional[Any] = None
+        self._pipeline: Any | None = None
         self._orchestrator = ActionOrchestrator(
             event_bus,
             source="action_resolver",
@@ -81,16 +81,16 @@ class ActionResolver:
         self,
         session_id: str,
         action_type: str,
-        content: Optional[str],
-        character_id: Optional[str],
-        target_id: Optional[str],
+        content: str | None,
+        character_id: str | None,
+        target_id: str | None,
         active: ActiveSession,
-        db: Optional[Any] = None,
-        spell_id: Optional[str] = None,
-        slot_level: Optional[int] = None,
+        db: Any | None = None,
+        spell_id: str | None = None,
+        slot_level: int | None = None,
         actor_kind: Literal["player", "companion", "monster"] = "player",
-        actor_name: Optional[str] = None,
-        display_text: Optional[str] = None,
+        actor_name: str | None = None,
+        display_text: str | None = None,
         persist_actor_action: bool = True,
         suppress_gm_narration: bool = False,
     ) -> Any:
@@ -126,7 +126,7 @@ class ActionResolver:
             db,
         )
 
-    def _pipeline_for_call(self, db: Optional[Any]) -> Any:
+    def _pipeline_for_call(self, db: Any | None) -> Any:
         """Return the reusable action pipeline for this resolver."""
         from app.game.action_pipeline import ActionPipeline
 
@@ -163,12 +163,12 @@ class ActionResolver:
     async def resolve_npc_dialogue(
         self,
         session_id: str,
-        content: Optional[str],
-        character_id: Optional[str],
-        target_id: Optional[str],
+        content: str | None,
+        character_id: str | None,
+        target_id: str | None,
         active: ActiveSession,
-        db: Optional[Any] = None,
-        roll_results: Optional[dict[str, Any]] = None,
+        db: Any | None = None,
+        roll_results: dict[str, Any] | None = None,
     ) -> bool:
         """Genere une replique de PNJ via run_npc_dialogue() et la publie.
 
@@ -416,7 +416,7 @@ class ActionResolver:
         session_id: str,
         npc_id: str,
         npc: dict[str, Any],
-        db: Optional[Any],
+        db: Any | None,
     ) -> Any:
         """Cherche une NPCPersona riche dans le dossier, sinon retourne le hint legacy.
 
@@ -464,7 +464,7 @@ class ActionResolver:
         active: ActiveSession,
         player_action: str,
         companion_responses: list[dict[str, str]],
-        db: Optional[Any] = None,
+        db: Any | None = None,
     ) -> None:
         """Appelle le MJ pour conclure une scène sociale après les réponses des compagnons.
 

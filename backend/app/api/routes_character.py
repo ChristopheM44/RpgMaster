@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -29,7 +29,7 @@ from app.services.rest_service import build_hit_dice, normalize_character_hit_di
 # ── Equipment SRD helpers ───────────────────────────────────────────────────────
 
 _EQUIPMENT_JSON_PATH = Path(__file__).parent.parent / "engine" / "srd_data" / "equipment.json"
-_EQUIPMENT_LOOKUP: Optional[dict[str, Any]] = None
+_EQUIPMENT_LOOKUP: dict[str, Any] | None = None
 
 # Noms français pour les items génériques / spéciaux non présents dans equipment.json
 _SPECIAL_ITEM_NAMES: dict[str, str] = {
@@ -193,7 +193,7 @@ async def _normalize_hit_dice_for_response(
 async def list_characters(
     skip: int = 0,
     limit: int = 20,
-    session_id: Optional[str] = Query(None, description="Filtrer par session"),
+    session_id: str | None = Query(None, description="Filtrer par session"),
     db: AsyncSession = Depends(get_db),
 ):
     """Liste tous les personnages avec pagination, filtrage optionnel par session."""

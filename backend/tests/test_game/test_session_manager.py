@@ -8,7 +8,6 @@ from app.game.game_loop import InvalidTransitionError
 from app.game.session_manager import ActiveSession, SessionManager
 from app.models.session import Session, SessionStatus
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

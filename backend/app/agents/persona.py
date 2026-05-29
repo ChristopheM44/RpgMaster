@@ -5,7 +5,7 @@ Voir plan : /Users/christophe/.claude/plans/je-voudrais-reflechir-moonlit-hammoc
 
 from __future__ import annotations
 
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -37,13 +37,13 @@ class PersonaVoice(BaseModel):
 
     gender: PersonaGender = "neutral"
     age_range: PersonaAgeRange = "adult"
-    accent: Optional[str] = Field(None, description="libre : 'noble', 'northern', 'guttural'")
+    accent: str | None = Field(None, description="libre : 'noble', 'northern', 'guttural'")
     speech_register: PersonaSpeechRegister = "casual"
     pitch: PersonaPitch = "medium"
     rate: PersonaRate = "normal"
-    timbre: Optional[str] = Field(None, description="libre : 'raspy', 'warm', 'metallic'")
-    voice_id_local: Optional[str] = Field(None, description="ID voix Kokoro")
-    voice_id_realtime: Optional[str] = Field(None, description="ID voix OpenAI Realtime")
+    timbre: str | None = Field(None, description="libre : 'raspy', 'warm', 'metallic'")
+    voice_id_local: str | None = Field(None, description="ID voix Kokoro")
+    voice_id_realtime: str | None = Field(None, description="ID voix OpenAI Realtime")
 
 
 class PersonaMotivations(BaseModel):
@@ -61,7 +61,7 @@ class PersonaRelationship(BaseModel):
     target_name: str
     kind: RelationshipKind = "neutral"
     intensity: int = Field(default=3, ge=1, le=5)
-    notes: Optional[str] = None
+    notes: str | None = None
 
 
 class PersonaKnowledge(BaseModel):
@@ -117,7 +117,7 @@ class MonsterPersona(BasePersona):
     monster_srd_id: str = Field(..., description="référence vers MonsterSchema")
     behavior_pattern: BehaviorPattern = "tactical"
     combat_taunts: list[str] = Field(default_factory=list, description="vide si can_speak=False")
-    surrender_threshold: Optional[float] = Field(
+    surrender_threshold: float | None = Field(
         None, ge=0.0, le=1.0, description="% HP (None = combat à mort)"
     )
     can_speak: bool = True
@@ -128,11 +128,11 @@ class CompanionPersona(BasePersona):
 
     persona_type: Literal["companion"] = "companion"
     traits: list[str] = Field(default_factory=list)
-    backstory_hook: Optional[str] = None
-    speech_style: Optional[str] = Field(
+    backstory_hook: str | None = None
+    speech_style: str | None = Field(
         None, description="formal | casual | gruff | cheerful | mysterious"
     )
-    bond_to_party: Optional[str] = None
+    bond_to_party: str | None = None
     fears_in_combat: list[str] = Field(default_factory=list)
 
     @field_validator("traits")

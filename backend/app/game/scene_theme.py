@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from typing import Any, Optional
+from typing import Any
 
 SCENE_THEMES = {
     "forest",
@@ -140,7 +140,7 @@ def infer_scene_theme(
 
 
 def coerce_scene_theme(
-    explicit_theme: Optional[str],
+    explicit_theme: str | None,
     *context_parts: Any,
     fallback: str = "forest",
 ) -> str:

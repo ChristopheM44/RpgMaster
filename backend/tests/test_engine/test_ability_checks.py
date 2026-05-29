@@ -7,7 +7,6 @@ import pytest
 
 from app.engine.ability_checks import (
     Ability,
-    CheckResult,
     Proficiency,
     ability_check,
     ability_modifier,

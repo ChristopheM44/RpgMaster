@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -19,7 +19,7 @@ class MessageCreate(BaseModel):
     speaker: str = Field(..., min_length=1, max_length=100)
     message_type: MessageType = MessageType.NARRATION
     content: str = Field(..., min_length=1)
-    metadata_: Optional[dict[str, Any]] = Field(None, alias="metadata")
+    metadata_: dict[str, Any] | None = Field(None, alias="metadata")
 
     model_config = {"populate_by_name": True}
 
@@ -33,7 +33,7 @@ class MessageResponse(BaseModel):
     speaker: str
     message_type: MessageType
     content: str
-    metadata_: Optional[dict[str, Any]] = Field(None, alias="metadata")
+    metadata_: dict[str, Any] | None = Field(None, alias="metadata")
     created_at: datetime
 
     model_config = {"from_attributes": True, "populate_by_name": True}

@@ -17,7 +17,7 @@ consignes textuelles pour guider l'IA Realtime.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 
@@ -122,12 +122,12 @@ class RealtimeVoiceProvider(VoiceProvider):
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         tts_model: str = "tts-1",
-        realtime_model: Optional[str] = None,
-        realtime_base_url: Optional[str] = None,
+        realtime_model: str | None = None,
+        realtime_base_url: str | None = None,
         tts_base_url: str = "https://api.openai.com/v1",
-        http_client: Optional[httpx.AsyncClient] = None,
+        http_client: httpx.AsyncClient | None = None,
     ) -> None:
         self._api_key = api_key or settings.openai_realtime_api_key
         self._tts_model = tts_model

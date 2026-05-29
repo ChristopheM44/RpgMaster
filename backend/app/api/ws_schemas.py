@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -10,7 +10,7 @@ from app.config import settings
 _ID_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 
 
-def _validate_identifier(value: Optional[str], field_name: str) -> Optional[str]:
+def _validate_identifier(value: str | None, field_name: str) -> str | None:
     if value is None:
         return None
     if not _ID_RE.fullmatch(value):
@@ -35,23 +35,23 @@ class JoinMessage(WsBaseMessage):
 class PlayerActionMessage(WsBaseMessage):
     type: Literal["action"]
     action_type: str = Field(min_length=1, max_length=64)
-    content: Optional[str] = None
-    target_id: Optional[str] = None
-    character_id: Optional[str] = None
-    spell_id: Optional[str] = None
-    slot_level: Optional[int] = Field(default=None, ge=0, le=9)
-    item_id: Optional[str] = None
-    gp: Optional[int] = Field(default=None, ge=0)
-    sp: Optional[int] = Field(default=None, ge=0)
-    cp: Optional[int] = Field(default=None, ge=0)
-    mode: Optional[str] = None
-    ability: Optional[str] = None
-    abilities: Optional[list[str]] = None
-    hit_dice_spend: Optional[dict[str, int]] = None
-    area_template: Optional[dict[str, Any]] = None
-    addressed_to: Optional[str] = None
-    audience: Optional[str] = Field(default=None, max_length=32)
-    scene_id: Optional[str] = None
+    content: str | None = None
+    target_id: str | None = None
+    character_id: str | None = None
+    spell_id: str | None = None
+    slot_level: int | None = Field(default=None, ge=0, le=9)
+    item_id: str | None = None
+    gp: int | None = Field(default=None, ge=0)
+    sp: int | None = Field(default=None, ge=0)
+    cp: int | None = Field(default=None, ge=0)
+    mode: str | None = None
+    ability: str | None = None
+    abilities: list[str] | None = None
+    hit_dice_spend: dict[str, int] | None = None
+    area_template: dict[str, Any] | None = None
+    addressed_to: str | None = None
+    audience: str | None = Field(default=None, max_length=32)
+    scene_id: str | None = None
 
     @field_validator("action_type")
     @classmethod
@@ -62,7 +62,7 @@ class PlayerActionMessage(WsBaseMessage):
 
     @field_validator("content")
     @classmethod
-    def validate_content(cls, value: Optional[str]) -> Optional[str]:
+    def validate_content(cls, value: str | None) -> str | None:
         if value is not None and len(value) > settings.max_player_action_chars:
             raise ValueError(
                 f"content dépasse la limite de {settings.max_player_action_chars} caractères."
@@ -71,7 +71,7 @@ class PlayerActionMessage(WsBaseMessage):
 
     @field_validator("audience")
     @classmethod
-    def validate_audience(cls, value: Optional[str]) -> Optional[str]:
+    def validate_audience(cls, value: str | None) -> str | None:
         if value is None:
             return None
         if value not in {"gm", "world", "party", "companion", "mixed"}:
@@ -87,15 +87,15 @@ class PlayerActionMessage(WsBaseMessage):
         "scene_id",
     )
     @classmethod
-    def validate_optional_id(cls, value: Optional[str], info) -> Optional[str]:
+    def validate_optional_id(cls, value: str | None, info) -> str | None:
         return _validate_identifier(value, info.field_name)
 
     @field_validator("hit_dice_spend")
     @classmethod
     def validate_hit_dice_spend(
         cls,
-        value: Optional[dict[str, int]],
-    ) -> Optional[dict[str, int]]:
+        value: dict[str, int] | None,
+    ) -> dict[str, int] | None:
         if value is None:
             return None
         if len(value) > 12:
@@ -108,7 +108,7 @@ class PlayerActionMessage(WsBaseMessage):
 
     @field_validator("mode")
     @classmethod
-    def validate_mode(cls, value: Optional[str]) -> Optional[str]:
+    def validate_mode(cls, value: str | None) -> str | None:
         if value is None:
             return None
         if value not in {"plus_two", "plus_one_two"}:
@@ -117,7 +117,7 @@ class PlayerActionMessage(WsBaseMessage):
 
     @field_validator("ability")
     @classmethod
-    def validate_ability(cls, value: Optional[str]) -> Optional[str]:
+    def validate_ability(cls, value: str | None) -> str | None:
         if value is None:
             return None
         if value not in {"str", "dex", "con", "int", "wis", "cha"}:
@@ -126,7 +126,7 @@ class PlayerActionMessage(WsBaseMessage):
 
     @field_validator("abilities")
     @classmethod
-    def validate_abilities(cls, value: Optional[list[str]]) -> Optional[list[str]]:
+    def validate_abilities(cls, value: list[str] | None) -> list[str] | None:
         if value is None:
             return None
         if len(value) > 2:
@@ -154,9 +154,9 @@ class ToggleAiControlMessage(WsBaseMessage):
 
 class TriggerAiReactionsMessage(WsBaseMessage):
     type: Literal["trigger_ai_reactions"]
-    character_id: Optional[str] = None
+    character_id: str | None = None
 
     @field_validator("character_id")
     @classmethod
-    def validate_character_id(cls, value: Optional[str]) -> Optional[str]:
+    def validate_character_id(cls, value: str | None) -> str | None:
         return _validate_identifier(value, "character_id")

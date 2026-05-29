@@ -5,7 +5,7 @@ import logging
 import re
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -26,7 +26,7 @@ class BaseAgent(ABC):
     - Point d'extension ``think()`` à implémenter par chaque agent
     """
 
-    _jinja_env: Optional[Environment] = None
+    _jinja_env: Environment | None = None
 
     # -------------------------------------------------------------------------
     # Templates Jinja2
@@ -59,7 +59,7 @@ class BaseAgent(ABC):
     # Extraction JSON
     # -------------------------------------------------------------------------
 
-    def _extract_json(self, text: str, *, log_failure: bool = True) -> Optional[dict[str, Any]]:
+    def _extract_json(self, text: str, *, log_failure: bool = True) -> dict[str, Any] | None:
         """Extrait le premier objet JSON valide depuis la sortie brute du LLM.
 
         Tente dans l'ordre :
@@ -123,7 +123,7 @@ class BaseAgent(ABC):
     # -------------------------------------------------------------------------
 
     @staticmethod
-    def _format_messages(messages: Optional[list]) -> str:
+    def _format_messages(messages: list | None) -> str:
         """Formate les N derniers messages en texte pour les templates Jinja2."""
         if not messages:
             return "(aucun message récent)"

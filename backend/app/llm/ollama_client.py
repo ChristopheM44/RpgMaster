@@ -4,7 +4,6 @@ import asyncio
 import logging
 import random
 from collections.abc import AsyncIterator
-from typing import Optional
 
 import httpx
 import ollama
@@ -29,7 +28,7 @@ class OllamaError(Exception):
     """Ollama est injoignable ou a retourné une erreur."""
 
 
-def _ollama_retry_error(exc: Optional[BaseException], max_retries: int) -> OllamaError:
+def _ollama_retry_error(exc: BaseException | None, max_retries: int) -> OllamaError:
     return OllamaError(f"Ollama injoignable après {max_retries} tentatives : {exc}")
 
 
@@ -41,16 +40,16 @@ class OllamaClient:
 
     def __init__(
         self,
-        base_url: Optional[str] = None,
-        model: Optional[str] = None,
-        headers: Optional[dict] = None,
+        base_url: str | None = None,
+        model: str | None = None,
+        headers: dict | None = None,
     ):
         self._explicit_base_url = base_url
         self._explicit_model = model
         self._explicit_headers = headers  # None = lire depuis config au moment de la création
-        self._cached_url: Optional[str] = None
-        self._cached_headers: Optional[dict] = None
-        self._client: Optional[ollama.AsyncClient] = None
+        self._cached_url: str | None = None
+        self._cached_headers: dict | None = None
+        self._client: ollama.AsyncClient | None = None
 
     @property
     def base_url(self) -> str:
@@ -61,7 +60,7 @@ class OllamaClient:
         return self._explicit_model or get_gm_model()
 
     @property
-    def _auth_headers(self) -> Optional[dict]:
+    def _auth_headers(self) -> dict | None:
         if self._explicit_headers is not None:
             return self._explicit_headers or None
         api_key = get_ollama_api_key()
@@ -107,7 +106,7 @@ class OllamaClient:
     async def chat(
         self,
         messages: list[dict[str, str]],
-        model: Optional[str] = None,
+        model: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 1024,
     ) -> str:
@@ -126,8 +125,8 @@ class OllamaClient:
     async def generate(
         self,
         prompt: str,
-        model: Optional[str] = None,
-        system: Optional[str] = None,
+        model: str | None = None,
+        system: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 1024,
     ) -> str:
@@ -147,7 +146,7 @@ class OllamaClient:
     async def stream_chat(
         self,
         messages: list[dict[str, str]],
-        model: Optional[str] = None,
+        model: str | None = None,
         temperature: float = 0.7,
     ) -> AsyncIterator[str]:
         """Stream une réponse chat, retourne les chunks de texte un par un."""

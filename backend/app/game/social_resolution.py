@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from app.engine.ability_checks import Ability
 
@@ -37,11 +37,11 @@ _SOCIAL_COMBAT_MARKERS = (
 )
 
 
-def _normalized_text(text: Optional[str]) -> str:
+def _normalized_text(text: str | None) -> str:
     return re.sub(r"\s+", " ", (text or "").casefold().replace("'", "'"))
 
 
-def _is_combat_social_text(text: Optional[str]) -> bool:
+def _is_combat_social_text(text: str | None) -> bool:
     normalized = _normalized_text(text)
     return any(marker in normalized for marker in _SOCIAL_COMBAT_MARKERS)
 
@@ -89,12 +89,12 @@ _ABILITY_SHORT_KEYS: dict[str, str] = {
 }
 
 
-def _is_social_exploration_text(text: Optional[str]) -> bool:
+def _is_social_exploration_text(text: str | None) -> bool:
     normalized = _normalized_text(text)
     return any(marker in normalized for marker in _SOCIAL_EXPLORATION_MARKERS)
 
 
-def _detect_social_skill(text: Optional[str]) -> Optional[str]:
+def _detect_social_skill(text: str | None) -> str | None:
     normalized = _normalized_text(text)
     for marker, skill in _SOCIAL_EXPLORATION_MARKERS.items():
         if marker in normalized:
@@ -212,7 +212,7 @@ def _is_npc_poi(poi: Any) -> bool:
     return kind == "npc" or icon == "npc"
 
 
-def _poi_by_id(state_data: dict[str, Any], target_id: Optional[str]) -> Optional[dict[str, Any]]:
+def _poi_by_id(state_data: dict[str, Any], target_id: str | None) -> dict[str, Any] | None:
     if not target_id:
         return None
     scene = state_data.get("current_scene", {})
@@ -225,7 +225,7 @@ def _poi_by_id(state_data: dict[str, Any], target_id: Optional[str]) -> Optional
     return None
 
 
-def _detect_social_target_id(text: Optional[str], state_data: dict[str, Any]) -> Optional[str]:
+def _detect_social_target_id(text: str | None, state_data: dict[str, Any]) -> str | None:
     """Extrai l'identifiant d'un PNJ cible depuis le texte du joueur.
 
     Stratégie en deux passes :
@@ -321,7 +321,7 @@ def _detect_social_target_id(text: Optional[str], state_data: dict[str, Any]) ->
     return valid[0][0]
 
 
-def _is_valid_npc_target_id(target_id: Optional[str], state_data: dict[str, Any]) -> bool:
+def _is_valid_npc_target_id(target_id: str | None, state_data: dict[str, Any]) -> bool:
     if not target_id:
         return False
     npc_states = state_data.get("npc_states", {})
@@ -332,10 +332,10 @@ def _is_valid_npc_target_id(target_id: Optional[str], state_data: dict[str, Any]
 
 
 def resolve_npc_target_id(
-    text: Optional[str],
+    text: str | None,
     state_data: dict[str, Any],
-    explicit_target_id: Optional[str] = None,
-) -> Optional[str]:
+    explicit_target_id: str | None = None,
+) -> str | None:
     """Retourne une cible PNJ valide, jamais un coffre/porte/indice."""
     if _is_valid_npc_target_id(explicit_target_id, state_data):
         return explicit_target_id
@@ -366,8 +366,8 @@ def _normalized_skill_proficiencies(char_data: dict[str, Any]) -> set[str]:
 
 def _calculate_social_dc(
     state_data: dict[str, Any],
-    social_target_id: Optional[str],
-    skill: Optional[str],
+    social_target_id: str | None,
+    skill: str | None,
 ) -> int:
     base = 15
     if social_target_id:
@@ -412,7 +412,7 @@ class SocialResolution:
     """Apply deterministic attitude bounds after an engine-resolved social roll."""
 
     @staticmethod
-    def roll_context(roll_results: Optional[dict[str, Any]]) -> Optional[SocialRollContext]:
+    def roll_context(roll_results: dict[str, Any] | None) -> SocialRollContext | None:
         if not isinstance(roll_results, dict):
             return None
         roll_type = roll_results.get("type")
@@ -436,7 +436,7 @@ class SocialResolution:
     def bounded_attitude(
         cls,
         previous_attitude: Any,
-        proposed_attitude: Optional[str],
+        proposed_attitude: str | None,
         *,
         success: bool,
     ) -> tuple[str, bool]:
@@ -481,10 +481,10 @@ class SocialResolution:
         previous_attitude: Any,
         attitude: str,
         note: str = "",
-        roll_context: Optional[SocialRollContext] = None,
+        roll_context: SocialRollContext | None = None,
         clamped: bool = False,
         source: str,
-        new_quest: Optional[dict[str, Any]] = None,
+        new_quest: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "npc_id": npc_id,

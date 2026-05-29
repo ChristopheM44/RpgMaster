@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,11 +42,11 @@ class EquipmentActionResult:
     item_name: str
     equipment: list[dict[str, Any]]
     narration: str
-    equipped: Optional[bool] = None
+    equipped: bool | None = None
     hp_delta: int = 0
-    hp: Optional[int] = None
-    heal_roll: Optional[RollResult] = None
-    slot: Optional[str] = None
+    hp: int | None = None
+    heal_roll: RollResult | None = None
+    slot: str | None = None
 
 
 class EquipmentService:
@@ -58,7 +58,7 @@ class EquipmentService:
         character_id: str,
         item_id: str,
         db: AsyncSession,
-        active: Optional[ActiveSession] = None,
+        active: ActiveSession | None = None,
     ) -> EquipmentActionResult:
         """Backward-compatible toggle used by existing clients."""
         char = await self._load_character(character_id, db)
@@ -79,7 +79,7 @@ class EquipmentService:
         character_id: str,
         item_id: str,
         db: AsyncSession,
-        active: Optional[ActiveSession] = None,
+        active: ActiveSession | None = None,
     ) -> EquipmentActionResult:
         char = await self._load_character(character_id, db)
         equipment = list(char.equipment or [])
@@ -111,7 +111,7 @@ class EquipmentService:
         idx: int,
         item: dict[str, Any],
         db: AsyncSession,
-        active: Optional[ActiveSession],
+        active: ActiveSession | None,
     ) -> EquipmentActionResult:
         item_id = str(item.get("id") or "")
         item_name = self._item_name(item, item_id)
@@ -156,15 +156,15 @@ class EquipmentService:
         character_id: str,
         item_id: str,
         db: AsyncSession,
-        active: Optional[ActiveSession] = None,
+        active: ActiveSession | None = None,
     ) -> EquipmentActionResult:
         char = await self._load_character(character_id, db)
         equipment = list(char.equipment or [])
         idx, item = self._find_item(equipment, item_id)
         item_name = self._item_name(item, item_id)
-        heal_roll: Optional[RollResult] = None
+        heal_roll: RollResult | None = None
         hp_delta = 0
-        hp: Optional[int] = None
+        hp: int | None = None
 
         if self._is_healing_potion(item, item_id):
             heal_roll = roll("2d4+2")
@@ -210,7 +210,7 @@ class EquipmentService:
         character_id: str,
         item_id: str,
         db: AsyncSession,
-        active: Optional[ActiveSession] = None,
+        active: ActiveSession | None = None,
     ) -> EquipmentActionResult:
         char = await self._load_character(character_id, db)
         equipment = list(char.equipment or [])
@@ -238,7 +238,7 @@ class EquipmentService:
         character_id: str,
         item_id: str,
         db: AsyncSession,
-        active: Optional[ActiveSession] = None,
+        active: ActiveSession | None = None,
     ) -> EquipmentActionResult:
         return await self.drop_item(
             character_id=character_id,
@@ -253,7 +253,7 @@ class EquipmentService:
         character_id: str,
         item_id: str,
         db: AsyncSession,
-        active: Optional[ActiveSession] = None,
+        active: ActiveSession | None = None,
     ) -> EquipmentActionResult:
         char = await self._load_character(character_id, db)
         equipment = list(char.equipment or [])
@@ -281,7 +281,7 @@ class EquipmentService:
         character_id: str,
         item_id: str,
         db: AsyncSession,
-        active: Optional[ActiveSession] = None,
+        active: ActiveSession | None = None,
     ) -> EquipmentActionResult:
         char = await self._load_character(character_id, db)
         equipment = list(char.equipment or [])
@@ -307,7 +307,7 @@ class EquipmentService:
         character_id: str,
         item_id: str,
         db: AsyncSession,
-        active: Optional[ActiveSession] = None,
+        active: ActiveSession | None = None,
     ) -> EquipmentActionResult:
         char = await self._load_character(character_id, db)
         equipment = list(char.equipment or [])
@@ -375,12 +375,12 @@ class EquipmentService:
 
     @staticmethod
     def _sync_equipment(
-        active: Optional[ActiveSession],
+        active: ActiveSession | None,
         character_id: str,
         equipment: list[dict[str, Any]],
     ) -> None:
         sync_character_state(active, character_id, equipment=equipment)
 
     @staticmethod
-    def _sync_hp(active: Optional[ActiveSession], character_id: str, hp: int) -> None:
+    def _sync_hp(active: ActiveSession | None, character_id: str, hp: int) -> None:
         sync_character_state(active, character_id, hp=hp)

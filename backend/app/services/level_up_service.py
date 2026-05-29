@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,7 +36,7 @@ class LevelUpService:
         session_id: str,
         character_id: str,
         db: AsyncSession,
-        active: Optional[ActiveSession] = None,
+        active: ActiveSession | None = None,
     ) -> AppliedLevelUp:
         result = await db.execute(select(Character).where(Character.id == character_id))
         char = result.scalar_one_or_none()

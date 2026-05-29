@@ -16,8 +16,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Optional, Protocol
+from datetime import UTC, datetime
+from typing import Any, Protocol
 
 from pydantic import BaseModel, Field
 
@@ -120,8 +120,8 @@ class GameEvent(BaseModel):
     session_id: str
     event_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     payload: dict[str, Any] = Field(default_factory=dict)
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    source: Optional[str] = None
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    source: str | None = None
 
     model_config = {"ser_json_timedelta": "iso8601"}
 
@@ -132,7 +132,7 @@ class GameEvent(BaseModel):
 
 
 class EventBusProtocol(Protocol):
-    def subscribe(self, session_id: str, maxsize: Optional[int] = None) -> asyncio.Queue:
+    def subscribe(self, session_id: str, maxsize: int | None = None) -> asyncio.Queue:
         ...
 
     def unsubscribe(self, session_id: str, queue: asyncio.Queue) -> None:
@@ -149,7 +149,7 @@ class EventBusProtocol(Protocol):
         session_id: str,
         event_type: str,
         payload: dict[str, Any],
-        source: Optional[str] = None,
+        source: str | None = None,
     ) -> None:
         ...
 
@@ -187,7 +187,7 @@ class InProcessEventBus:
     # Subscription management
     # ------------------------------------------------------------------
 
-    def subscribe(self, session_id: str, maxsize: Optional[int] = None) -> asyncio.Queue:
+    def subscribe(self, session_id: str, maxsize: int | None = None) -> asyncio.Queue:
         """Register a new subscriber for *session_id*.
 
         Args:
@@ -226,19 +226,19 @@ class InProcessEventBus:
         """Return the number of active subscribers for *session_id*."""
         return len(self._subscribers.get(session_id, []))
 
-    def dropped_event_count(self, session_id: Optional[str] = None) -> int:
+    def dropped_event_count(self, session_id: str | None = None) -> int:
         """Return dropped events for one session, or total dropped events."""
         if session_id is not None:
             return self._dropped_events.get(session_id, 0)
         return sum(self._dropped_events.values())
 
-    def max_queue_size_observed(self, session_id: Optional[str] = None) -> int:
+    def max_queue_size_observed(self, session_id: str | None = None) -> int:
         """Return the maximum queue depth observed."""
         if session_id is not None:
             return self._max_queue_size.get(session_id, 0)
         return max(self._max_queue_size.values(), default=0)
 
-    def stats(self, session_id: Optional[str] = None) -> dict[str, int]:
+    def stats(self, session_id: str | None = None) -> dict[str, int]:
         """Small in-process metrics snapshot for tests and diagnostics."""
         if session_id is not None:
             return {
@@ -330,7 +330,7 @@ class InProcessEventBus:
         session_id: str,
         event_type: str,
         payload: dict[str, Any],
-        source: Optional[str] = None,
+        source: str | None = None,
     ) -> None:
         """Convenience wrapper to build and publish a :class:`GameEvent`.
 

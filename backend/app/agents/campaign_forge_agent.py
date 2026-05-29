@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from functools import lru_cache
-from typing import Any, Optional
+from typing import Any
 
 from app.agents.base_agent import BaseAgent
 from app.agents.schemas import AgentContext, AgentResponse
@@ -38,7 +38,7 @@ def compact_srd_monster_index() -> list[dict[str, Any]]:
 class CampaignForgeAgent(BaseAgent):
     """LLM helper dedicated to campaign dossier generation and canon synthesis."""
 
-    def __init__(self, client: Optional[LLMClient] = None) -> None:
+    def __init__(self, client: LLMClient | None = None) -> None:
         self._client: LLMClient = client or router.get_gm_client()
         self._srd_monster_index_json = json.dumps(
             compact_srd_monster_index(),

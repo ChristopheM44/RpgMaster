@@ -10,8 +10,7 @@ Ce guide détaille les étapes pour déployer le projet sur une nouvelle machine
 
 1. **Hardware recommandé :** CPU/GPU performant pour l'exécution d'Ollama (Apple Silicon M-Series, Nvidia RTX avec suffisamment de VRAM pour héberger un modèle 7B/8B).
 2. **Ollama** installé nativement sur votre machine (disponible sur [ollama.com](https://ollama.com/)).
-3. **Python 3.9+** (pour le backend FastAPI).
-4. **Python 3.11** (strictement requis pour le micro-service TTS `kokoro-onnx`).
+3. **Python 3.11+** (requis pour le backend FastAPI et le micro-service TTS `kokoro-onnx`).
 5. **Node.js 18+ & npm** (pour le frontend Vue 3).
 6. **Git** (pour récupérer le code).
 
@@ -109,7 +108,7 @@ Le backend contient le moteur de jeu, l'API REST, et la gestion des WebSockets.
 ```bash
 cd backend
 
-# Créer un environnement virtuel (Python 3.9+)
+# Créer un environnement virtuel (Python 3.11+)
 python -m venv .venv
 source .venv/bin/activate
 

@@ -5,7 +5,7 @@ import logging
 import re
 import unicodedata
 from collections.abc import Sequence
-from typing import Any, Optional
+from typing import Any
 
 from app.agents.base_agent import BaseAgent
 from app.agents.context_manager import ContextManager
@@ -86,7 +86,7 @@ _ACTION_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
-def _fallback_action(error: Optional[str] = None) -> PlayerActionChoice:
+def _fallback_action(error: str | None = None) -> PlayerActionChoice:
     """Action de repli quand le LLM ne répond pas ou renvoie un JSON invalide.
 
     ``error`` est propagé dans ``PlayerActionChoice.llm_error`` pour que la
@@ -173,9 +173,9 @@ class PlayerAgent(BaseAgent):
         self,
         character_id: str,
         character_name: str,
-        personality: Optional[PlayerPersonality | CompanionPersona] = None,
-        client: Optional[LLMClient] = None,
-        model: Optional[str] = None,
+        personality: PlayerPersonality | CompanionPersona | None = None,
+        client: LLMClient | None = None,
+        model: str | None = None,
     ):
         self._character_id = character_id
         self._character_name = character_name
@@ -226,9 +226,9 @@ class PlayerAgent(BaseAgent):
     async def decide_action(
         self,
         game_state: dict[str, Any],
-        available_actions: Optional[list[str]] = None,
-        context_manager: Optional[ContextManager] = None,
-        messages: Optional[list] = None,
+        available_actions: list[str] | None = None,
+        context_manager: ContextManager | None = None,
+        messages: list | None = None,
     ) -> PlayerActionChoice:
         """Choisit une action tactique valide parmi les capacités disponibles.
 
@@ -262,8 +262,8 @@ class PlayerAgent(BaseAgent):
         self,
         game_state: dict[str, Any],
         scene_context: str = "",
-        context_manager: Optional[ContextManager] = None,
-        messages: Optional[list] = None,
+        context_manager: ContextManager | None = None,
+        messages: list | None = None,
     ) -> PlayerActionChoice:
         """Génère une réaction narrative / roleplay hors combat."""
         character_data = self._extract_character(game_state)
@@ -295,9 +295,9 @@ class PlayerAgent(BaseAgent):
         self,
         game_state: dict[str, Any],
         player_message: str,
-        context_manager: Optional[ContextManager] = None,
-        messages: Optional[list] = None,
-        interlocutor_persona: Optional[NPCPersona] = None,
+        context_manager: ContextManager | None = None,
+        messages: list | None = None,
+        interlocutor_persona: NPCPersona | None = None,
     ) -> PlayerActionChoice:
         """Répond à un joueur humain dans une scène de dialogue libre.
 
@@ -424,10 +424,10 @@ class PlayerAgent(BaseAgent):
     async def _call_and_parse_action(
         self,
         user_prompt: str,
-        context_manager: Optional[ContextManager],
+        context_manager: ContextManager | None,
         *,
-        game_state: Optional[dict[str, Any]] = None,
-        available_actions: Optional[Sequence[str]] = None,
+        game_state: dict[str, Any] | None = None,
+        available_actions: Sequence[str] | None = None,
         combat_mode: bool = False,
     ) -> PlayerActionChoice:
         """Appelle le LLM et parse la réponse en PlayerActionChoice."""
@@ -482,7 +482,7 @@ class PlayerAgent(BaseAgent):
 
         return self._parse_player_action(data, raw, game_state=game_state or {})
 
-    async def _repair_json_response(self, raw: str) -> Optional[dict[str, Any]]:
+    async def _repair_json_response(self, raw: str) -> dict[str, Any] | None:
         """Second passage léger : demande au modèle de convertir sa prose en JSON.
 
         Certains petits modèles suivent le rôle mais oublient le format. On tente
@@ -542,8 +542,8 @@ class PlayerAgent(BaseAgent):
         self,
         raw: str,
         *,
-        game_state: Optional[dict[str, Any]] = None,
-    ) -> Optional[dict[str, Any]]:
+        game_state: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
         """Recover useful fields from a truncated JSON-like response.
 
         Local models sometimes stop mid-string after producing valid-looking
@@ -557,7 +557,7 @@ class PlayerAgent(BaseAgent):
             safe_recovered_roleplay=self._safe_recovered_roleplay,
         )
 
-    def _recover_structured_text_response(self, raw: str) -> Optional[dict[str, Any]]:
+    def _recover_structured_text_response(self, raw: str) -> dict[str, Any] | None:
         """Recover useful fields from loosely structured text answers."""
         return recover_structured_text_response(raw)
 
@@ -566,9 +566,9 @@ class PlayerAgent(BaseAgent):
         raw: str,
         *,
         game_state: dict[str, Any],
-        available_actions: Optional[Sequence[str]],
+        available_actions: Sequence[str] | None,
         combat_mode: bool,
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Infer an action from plain prose when the model ignored JSON format."""
         return recover_prose_action_response(
             raw,
@@ -589,8 +589,8 @@ class PlayerAgent(BaseAgent):
         raw: str,
         *,
         game_state: dict[str, Any],
-        available_actions: Optional[Sequence[str]],
-    ) -> Optional[dict[str, Any]]:
+        available_actions: Sequence[str] | None,
+    ) -> dict[str, Any] | None:
         """Create a deterministic combat action when the LLM output is unusable."""
         return build_default_combat_action(
             raw,
@@ -603,13 +603,13 @@ class PlayerAgent(BaseAgent):
         )
 
     @staticmethod
-    def _available_action_set(available_actions: Optional[Sequence[str]]) -> set[str]:
+    def _available_action_set(available_actions: Sequence[str] | None) -> set[str]:
         if not available_actions:
             return set(PLAYER_ACTION_TYPES)
         return {str(action).strip() for action in available_actions if str(action).strip()}
 
     @staticmethod
-    def _infer_action_type_from_text(raw: str, available_actions: set[str]) -> Optional[str]:
+    def _infer_action_type_from_text(raw: str, available_actions: set[str]) -> str | None:
         haystack = f" {_normalize_for_match(raw)} "
         for action_type, keywords in _ACTION_KEYWORDS:
             if action_type not in available_actions:
@@ -624,7 +624,7 @@ class PlayerAgent(BaseAgent):
         self,
         raw: str,
         game_state: dict[str, Any],
-    ) -> Optional[str]:
+    ) -> str | None:
         combatants = game_state.get("combatants", {})
         if not isinstance(combatants, dict):
             return None
@@ -642,7 +642,7 @@ class PlayerAgent(BaseAgent):
                     return str(cid)
         return None
 
-    def _select_default_enemy_target(self, game_state: dict[str, Any]) -> Optional[str]:
+    def _select_default_enemy_target(self, game_state: dict[str, Any]) -> str | None:
         combatants = game_state.get("combatants", {})
         if not isinstance(combatants, dict):
             return None
@@ -679,7 +679,7 @@ class PlayerAgent(BaseAgent):
         return combatant_id not in character_ids
 
     @staticmethod
-    def _combatant_hp(cdata: Any) -> Optional[int]:
+    def _combatant_hp(cdata: Any) -> int | None:
         if not isinstance(cdata, dict):
             return None
         raw_hp = cdata.get("hp", cdata.get("current_hp"))
@@ -700,7 +700,7 @@ class PlayerAgent(BaseAgent):
         return hp is None or hp > 0
 
     @staticmethod
-    def _combatant_name(game_state: dict[str, Any], target: Optional[str]) -> str:
+    def _combatant_name(game_state: dict[str, Any], target: str | None) -> str:
         if target is None:
             return "la cible"
         combatants = game_state.get("combatants", {})
@@ -714,7 +714,7 @@ class PlayerAgent(BaseAgent):
         self,
         raw_target: Any,
         game_state: dict[str, Any],
-    ) -> Optional[str]:
+    ) -> str | None:
         if raw_target is None:
             return None
         if not isinstance(raw_target, str):
@@ -731,7 +731,7 @@ class PlayerAgent(BaseAgent):
         self,
         raw: str,
         game_state: dict[str, Any],
-    ) -> Optional[str]:
+    ) -> str | None:
         character = self._extract_character(game_state)
         known_spells = character.get("known_spells", [])
         if not isinstance(known_spells, list):
@@ -821,9 +821,9 @@ class PlayerAgent(BaseAgent):
 
     def _safe_recovered_roleplay(
         self,
-        action_type: Optional[str],
-        action_description: Optional[str],
-        target: Optional[str],
+        action_type: str | None,
+        action_description: str | None,
+        target: str | None,
         game_state: dict[str, Any],
     ) -> str:
         target_name = self._combatant_name(game_state, target)
@@ -841,7 +841,7 @@ class PlayerAgent(BaseAgent):
         data: dict[str, Any],
         raw: str,
         *,
-        game_state: Optional[dict[str, Any]] = None,
+        game_state: dict[str, Any] | None = None,
     ) -> PlayerActionChoice:
         """Convertit le dict JSON parsé en PlayerActionChoice Pydantic."""
         action_type = str(data.get("action_type", "wait")).strip().lower()

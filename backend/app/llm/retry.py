@@ -7,23 +7,23 @@ import logging
 from collections.abc import Awaitable, Callable
 from contextlib import contextmanager
 from functools import wraps
-from typing import Any, Optional, TypeVar
+from typing import Any, TypeVar
 
 ResultT = TypeVar("ResultT")
 AsyncCallable = Callable[..., Awaitable[ResultT]]
-ErrorFactory = Callable[[Optional[BaseException], int], Exception]
+ErrorFactory = Callable[[BaseException | None, int], Exception]
 JitterFactory = Callable[[], float]
 RetryObserver = Callable[[dict[str, Any]], Any]
 
 logger = logging.getLogger(__name__)
-_retry_observer: contextvars.ContextVar[Optional[RetryObserver]] = contextvars.ContextVar(
+_retry_observer: contextvars.ContextVar[RetryObserver | None] = contextvars.ContextVar(
     "llm_retry_observer",
     default=None,
 )
 
 
 @contextmanager
-def observe_llm_retries(observer: Optional[RetryObserver]):
+def observe_llm_retries(observer: RetryObserver | None):
     """Register a task-local observer for low-level LLM retry attempts."""
     token = _retry_observer.set(observer)
     try:
@@ -51,8 +51,8 @@ def with_llm_retry(
     provider_name: str,
     max_retries: int = 3,
     base_delay: float = 1.0,
-    jitter: Optional[JitterFactory] = None,
-    log: Optional[logging.Logger] = None,
+    jitter: JitterFactory | None = None,
+    log: logging.Logger | None = None,
 ) -> Callable[[AsyncCallable[ResultT]], AsyncCallable[ResultT]]:
     """Retry an async LLM call with exponential backoff."""
     if max_retries < 1:
@@ -62,7 +62,7 @@ def with_llm_retry(
         @wraps(func)
         async def wrapper(*args, **kwargs) -> ResultT:
             delay = base_delay
-            last_exc: Optional[BaseException] = None
+            last_exc: BaseException | None = None
             retry_logger = log or logger
 
             for attempt in range(1, max_retries + 1):

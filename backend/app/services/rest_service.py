@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,7 +31,7 @@ class RestCharacterUpdate:
     hp_delta: int = 0
     hit_dice: dict[str, int] = field(default_factory=dict)
     spell_slots: dict[str, Any] = field(default_factory=dict)
-    roll_payload: Optional[dict[str, Any]] = None
+    roll_payload: dict[str, Any] | None = None
 
 
 @dataclass
@@ -44,7 +44,7 @@ class RestResult:
 def build_hit_dice(
     char_class: str,
     level: int,
-    raw: Optional[dict[str, Any]] = None,
+    raw: dict[str, Any] | None = None,
 ) -> dict[str, int]:
     """Retourne un état de dés de vie canonique pour un personnage."""
     level_total = max(1, int(level or 1))
@@ -74,7 +74,7 @@ def normalize_character_hit_dice(character: Character) -> dict[str, int]:
 class RestService:
     """Orchestration des repos avec événements WebSocket optionnels."""
 
-    def __init__(self, session_manager: Optional[SessionManager] = None) -> None:
+    def __init__(self, session_manager: SessionManager | None = None) -> None:
         self._session_manager = session_manager
 
     async def short_rest(
@@ -84,7 +84,7 @@ class RestService:
         active: ActiveSession,
         db: AsyncSession,
         hit_dice_spend: dict[str, int],
-        session_state_payload: Optional[Callable[[], dict[str, Any]]] = None,
+        session_state_payload: Callable[[], dict[str, Any]] | None = None,
     ) -> RestResult:
         try:
             spend = {
@@ -140,7 +140,7 @@ class RestService:
         session_id: str,
         active: ActiveSession,
         db: AsyncSession,
-        session_state_payload: Optional[Callable[[], dict[str, Any]]] = None,
+        session_state_payload: Callable[[], dict[str, Any]] | None = None,
     ) -> RestResult:
         characters = await self._load_session_characters(session_id, db)
         updates: list[RestCharacterUpdate] = []
@@ -371,7 +371,7 @@ class RestService:
         return "Le groupe prend un repos court. " + "; ".join(fragments) + "."
 
 
-def _hit_die_for_class(char_class: str, raw: Optional[dict[str, Any]]) -> int:
+def _hit_die_for_class(char_class: str, raw: dict[str, Any] | None) -> int:
     try:
         return int(get_class_features(char_class).hit_die)
     except ValueError:

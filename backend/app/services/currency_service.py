@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,7 +44,7 @@ class CurrencyService:
         session_id: str,
         character_id: str,
         db: AsyncSession,
-        active: Optional[ActiveSession] = None,
+        active: ActiveSession | None = None,
         gp: int = 0,
         sp: int = 0,
         cp: int = 0,
@@ -77,7 +76,7 @@ class CurrencyService:
         character_id: str,
         cost_gp: int | float | str | Decimal,
         db: AsyncSession,
-        active: Optional[ActiveSession] = None,
+        active: ActiveSession | None = None,
     ) -> CurrencyResult:
         char = await self._load_character(character_id, db)
         old = self._wealth_for(char)
@@ -104,7 +103,7 @@ class CurrencyService:
         from_id: str,
         to_id: str,
         db: AsyncSession,
-        active: Optional[ActiveSession] = None,
+        active: ActiveSession | None = None,
         gp: int = 0,
         sp: int = 0,
         cp: int = 0,
@@ -157,7 +156,7 @@ class CurrencyService:
         char: Character,
         old: Wealth,
         new: Wealth,
-        active: Optional[ActiveSession],
+        active: ActiveSession | None,
     ) -> None:
         sync_character_state(active, char.id, gp=new.gp, sp=new.sp, cp=new.cp)
         await event_bus.publish_to_session(

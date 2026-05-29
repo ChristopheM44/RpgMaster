@@ -1,7 +1,7 @@
 """Player-to-player inventory and currency transfer service."""
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,7 +35,7 @@ class TradeService:
         to_character_id: str,
         item_id: str,
         db: AsyncSession,
-        active: Optional[ActiveSession] = None,
+        active: ActiveSession | None = None,
     ) -> tuple[EquipmentActionResult, EquipmentActionResult]:
         sender = await self._load_character(from_character_id, db)
         receiver = await self._load_character(to_character_id, db)
@@ -91,7 +91,7 @@ class TradeService:
         from_character_id: str,
         to_character_id: str,
         db: AsyncSession,
-        active: Optional[ActiveSession] = None,
+        active: ActiveSession | None = None,
         gp: int = 0,
         sp: int = 0,
         cp: int = 0,
@@ -114,7 +114,7 @@ class TradeService:
         character_id: str,
         item_id: str,
         db: AsyncSession,
-        active: Optional[ActiveSession] = None,
+        active: ActiveSession | None = None,
     ) -> EquipmentActionResult:
         char = await self._load_character(character_id, db)
         equipment = list(char.equipment or [])

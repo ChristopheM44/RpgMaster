@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -19,14 +18,14 @@ class Character(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
 
     # Qui controle ce personnage
-    player_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    player_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     is_ai: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     # Identite D&D
     species: Mapped[str] = mapped_column(String(50), nullable=False)
     char_class: Mapped[str] = mapped_column(String(50), nullable=False)
     level: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    background: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    background: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     # Caracteristiques (STR, DEX, CON, INT, WIS, CHA)
     # Stockees en JSON : {"str": 15, "dex": 12, "con": 14, "int": 10, "wis": 13, "cha": 8}
@@ -62,7 +61,7 @@ class Character(Base):
     personality: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
 
     # FK session (nullable : un personnage peut exister sans session active)
-    session_id: Mapped[Optional[str]] = mapped_column(
+    session_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("sessions.id", ondelete="SET NULL"), nullable=True
     )
 
@@ -74,7 +73,7 @@ class Character(Base):
     )
 
     # Relationships
-    session: Mapped[Optional[Session]] = relationship(  # noqa: F821
+    session: Mapped[Session | None] = relationship(  # noqa: F821
         "Session", back_populates="characters"
     )
 

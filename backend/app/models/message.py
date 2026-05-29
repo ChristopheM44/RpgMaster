@@ -3,7 +3,6 @@ from __future__ import annotations
 import enum
 import uuid
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import JSON, DateTime, Enum, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -53,7 +52,7 @@ class Message(Base):
     # Donnees supplementaires (resultats de jets, cibles, etc.)
     # Pour ROLL_RESULT : {"dice": "2d6+3", "rolls": [4, 5], "total": 12, "success": true}
     # Pour ACTION : {"action_type": "attack", "target": "goblin_1"}
-    metadata_: Mapped[Optional[dict]] = mapped_column("metadata", JSON, nullable=True)
+    metadata_: Mapped[dict | None] = mapped_column("metadata", JSON, nullable=True)
 
     # Default Python-side pour bénéficier de la précision microseconde :
     # SQLite's CURRENT_TIMESTAMP ne retourne que la seconde, ce qui produit

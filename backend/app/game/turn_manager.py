@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import asdict, dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 from app.engine.combat import ActionEconomy, new_turn_economy, roll_initiative, sort_initiative
 
@@ -112,7 +112,7 @@ class TurnManager:
         self._order: list[TurnEntry] = []
         self._index: int = 0
         self._round: int = 0
-        self._mode: Optional[str] = None  # "combat" | "exploration"
+        self._mode: str | None = None  # "combat" | "exploration"
 
     # ------------------------------------------------------------------
     # Setup
@@ -121,7 +121,7 @@ class TurnManager:
     def setup_combat(
         self,
         combatants: list[CombatantInfo],
-        rng: Optional[random.Random] = None,
+        rng: random.Random | None = None,
     ) -> list[TurnEntry]:
         """Roll initiative for all combatants and build the turn order.
 
@@ -193,7 +193,7 @@ class TurnManager:
     # ------------------------------------------------------------------
 
     @property
-    def current_turn(self) -> Optional[TurnEntry]:
+    def current_turn(self) -> TurnEntry | None:
         """The :class:`TurnEntry` for the current turn, or None if not set up."""
         if not self._order:
             return None
@@ -205,11 +205,11 @@ class TurnManager:
         return self._round
 
     @property
-    def mode(self) -> Optional[str]:
+    def mode(self) -> str | None:
         """Current mode: ``'combat'``, ``'exploration'``, or ``None`` if not set up."""
         return self._mode
 
-    def next_turn(self) -> Optional[TurnEntry]:
+    def next_turn(self) -> TurnEntry | None:
         """Advance to the next participant.
 
         Increments the round counter when wrapping back to the first entry.

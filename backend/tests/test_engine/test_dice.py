@@ -7,7 +7,6 @@ import pytest
 
 from app.engine.dice import roll, roll_ability_scores, roll_with_advantage
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

@@ -9,7 +9,7 @@ import logging
 import re
 import unicodedata
 from copy import deepcopy
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -169,7 +169,7 @@ def companion_visible_game_state(state_data: dict[str, Any]) -> dict[str, Any]:
 def sanitize_companion_visible_text(
     text: str,
     *,
-    character_name: Optional[str] = None,
+    character_name: str | None = None,
 ) -> str:
     """Strip obvious GM-owned consequences from companion-visible prose."""
     original = str(text or "").strip()

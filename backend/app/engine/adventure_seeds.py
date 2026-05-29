@@ -1,5 +1,5 @@
 import random
-from typing import Any, Optional
+from typing import Any
 
 BIOMES = {
     "taverne": {
@@ -256,10 +256,10 @@ PRESETS = {
 
 
 def generate_adventure_context(
-    preset_id: Optional[str] = None,
-    biome_id: Optional[str] = None,
-    weather: Optional[str] = None,
-    tone: Optional[str] = None
+    preset_id: str | None = None,
+    biome_id: str | None = None,
+    weather: str | None = None,
+    tone: str | None = None
 ) -> dict[str, Any]:
     """Compile un contexte d'aventure cohérent et varié à partir de presets ou de tirages aléatoires.
 

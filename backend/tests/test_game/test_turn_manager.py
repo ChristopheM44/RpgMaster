@@ -7,7 +7,6 @@ import pytest
 
 from app.game.turn_manager import CombatantInfo, TurnEntry, TurnManager
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

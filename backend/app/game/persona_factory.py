@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any, Optional
+from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -52,7 +52,7 @@ def _slugify(value: str, max_len: int = 60) -> str:
 def _heuristic_behavior_pattern(
     monster_srd_id: str,
     monster_type: str,
-    cr: Optional[float],
+    cr: float | None,
 ) -> tuple[BehaviorPattern, bool]:
     """Devine (behavior_pattern, can_speak) à partir des métadonnées SRD."""
     haystack = f"{monster_srd_id} {monster_type}".casefold()
@@ -77,9 +77,9 @@ def _heuristic_behavior_pattern(
 class PersonaFactory:
     """Fabrique de personas — heuristiques rapides + génération LLM async."""
 
-    _jinja_env: Optional[Environment] = None
+    _jinja_env: Environment | None = None
 
-    def __init__(self, client: Optional[LLMClient] = None) -> None:
+    def __init__(self, client: LLMClient | None = None) -> None:
         self._client: LLMClient = client or router.get_gm_client()
 
     # ------------------------------------------------------------------
@@ -114,7 +114,7 @@ class PersonaFactory:
         scene_location: str = "",
         scene_mood: str = "",
         context_hint: str = "",
-        existing_npcs: Optional[list[dict[str, Any]]] = None,
+        existing_npcs: list[dict[str, Any]] | None = None,
         target_importance: PersonaImportance = "standard",
     ) -> NPCPersona:
         """Génère une persona enrichie via LLM. Retry une fois, puis fallback sur le stub."""
@@ -167,9 +167,9 @@ class PersonaFactory:
         self,
         monster_srd_id: str,
         *,
-        monster_name: Optional[str] = None,
+        monster_name: str | None = None,
         monster_description: str = "",
-        monster_cr: Optional[float] = None,
+        monster_cr: float | None = None,
         monster_type: str = "",
         encounter_context: str = "",
         scene_location: str = "",
@@ -289,7 +289,7 @@ class PersonaFactory:
         *,
         kind: str,
         attempt: int,
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Appelle le LLM et tente d'extraire un JSON valide. Aucun raise."""
         messages = [
             {
@@ -320,7 +320,7 @@ class PersonaFactory:
         return self._extract_json(raw)
 
     @staticmethod
-    def _extract_json(raw: str) -> Optional[dict[str, Any]]:
+    def _extract_json(raw: str) -> dict[str, Any] | None:
         """Extraction JSON tolérante (parse direct, bloc markdown, ou objet équilibré)."""
         stripped = raw.strip()
         try:

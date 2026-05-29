@@ -9,7 +9,7 @@ No I/O, no async, no database. Provides:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 CELL_SIZE_M = 1.5  # Each grid cell = 1.5 m (= 5 ft, SRD FR 5.2.1)
 
@@ -52,7 +52,7 @@ def cells_reachable(
     speed_m: float,
     grid_cols: int,
     grid_rows: int,
-    occupied: Optional[list[GridPosition]] = None,
+    occupied: list[GridPosition] | None = None,
 ) -> list[GridPosition]:
     """Return all grid positions reachable from from_pos with speed_m movement.
 
@@ -84,7 +84,7 @@ def validate_move(
     speed_m: float,
     grid_cols: int,
     grid_rows: int,
-    occupied: Optional[list[GridPosition]] = None,
+    occupied: list[GridPosition] | None = None,
 ) -> tuple[bool, str]:
     """Validate a move action.
 
@@ -113,9 +113,9 @@ def cells_reachable_with_pathfinding(
     dash_m: float,
     grid_cols: int,
     grid_rows: int,
-    occupied: Optional[list[GridPosition]] = None,
-    obstacles: Optional[list[GridPosition]] = None,
-    difficult: Optional[list[GridPosition]] = None,
+    occupied: list[GridPosition] | None = None,
+    obstacles: list[GridPosition] | None = None,
+    difficult: list[GridPosition] | None = None,
 ) -> dict[str, list[dict]]:
     """Return cells reachable by A* with regular movement and with dash."""
     from app.engine.pathfinding import astar_path
@@ -147,7 +147,7 @@ def initialize_positions(
     npc_ids: list[str],
     grid_cols: int = 10,
     grid_rows: int = 8,
-    exploration_positions: Optional[dict[str, Any]] = None,
+    exploration_positions: dict[str, Any] | None = None,
 ) -> dict[str, GridPosition]:
     """Assign starting grid positions for all combatants.
 

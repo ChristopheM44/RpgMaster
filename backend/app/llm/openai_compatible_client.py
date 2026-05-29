@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from collections.abc import AsyncIterator
-from typing import Optional
 
 from openai import APIConnectionError, APIStatusError, APITimeoutError, AsyncOpenAI
 
@@ -21,7 +20,7 @@ class OpenAICompatibleError(Exception):
 
 
 def _openai_retry_error(
-    exc: Optional[BaseException], max_retries: int
+    exc: BaseException | None, max_retries: int
 ) -> OpenAICompatibleError:
     return OpenAICompatibleError(
         f"Provider injoignable après {max_retries} tentatives : {exc}"
@@ -37,16 +36,16 @@ class OpenAICompatibleClient:
 
     def __init__(
         self,
-        base_url: Optional[str] = None,
-        api_key: Optional[str] = None,
-        model: Optional[str] = None,
+        base_url: str | None = None,
+        api_key: str | None = None,
+        model: str | None = None,
     ):
         self._explicit_base_url = base_url
         self._explicit_api_key = api_key
         self._model = model or "mistral-large-latest"
-        self._cached_base_url: Optional[str] = None
-        self._cached_api_key: Optional[str] = None
-        self._client: Optional[AsyncOpenAI] = None
+        self._cached_base_url: str | None = None
+        self._cached_api_key: str | None = None
+        self._client: AsyncOpenAI | None = None
 
     @property
     def _base_url(self) -> str:
@@ -89,7 +88,7 @@ class OpenAICompatibleClient:
     async def generate(
         self,
         prompt: str,
-        system: Optional[str] = None,
+        system: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 1024,
     ) -> str:

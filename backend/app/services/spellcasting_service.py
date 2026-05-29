@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,13 +36,13 @@ class SpellcastingService:
         self,
         *,
         session_id: str,
-        character_id: Optional[str],
+        character_id: str | None,
         spell_id: str,
-        slot_level: Optional[int],
+        slot_level: int | None,
         active: ActiveSession,
         db: AsyncSession,
         event_bus_instance: Any = event_bus,
-    ) -> Optional[SpellCastPreparation]:
+    ) -> SpellCastPreparation | None:
         from app.game.action_mechanics import _load_spells
 
         if not character_id:
@@ -106,7 +106,7 @@ class SpellcastingService:
         *,
         slot_level: int,
         spell_level: int,
-        spell_slots: Optional[dict[str, Any]] = None,
+        spell_slots: dict[str, Any] | None = None,
     ) -> SpellCastPreparation:
         slots = dict(spell_slots if spell_slots is not None else (char.spell_slots or {}))
         remaining = {

@@ -11,7 +11,6 @@ No I/O, no async, no database access.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 from app.engine.ability_checks import ability_modifier, proficiency_bonus
 
@@ -29,9 +28,9 @@ class WeaponStats:
     damage_dice: str            # e.g. "1d6"  – passed directly to roll_damage()
     damage_type: str            # "piercing" | "slashing" | "bludgeoning"
     properties: list[str]       # SRD property tags (see WEAPON_PROPERTIES)
-    range_normal: Optional[float]  # None pour les armes de mêlée uniquement ; mètres
-    range_long: Optional[float]    # longue portée impose le désavantage
-    versatile_dice: Optional[str]  # two-handed damage, e.g. "1d8" for longsword
+    range_normal: float | None  # None pour les armes de mêlée uniquement ; mètres
+    range_long: float | None    # longue portée impose le désavantage
+    versatile_dice: str | None  # two-handed damage, e.g. "1d8" for longsword
     weight: float               # pounds
     cost_gp: float              # gold pieces
 
@@ -231,7 +230,7 @@ class ArmorStats:
     name: str
     category: str           # "light" | "medium" | "heavy" | "shield"
     base_ac: int            # base AC (or bonus for shields)
-    dex_cap: Optional[int]  # max DEX bonus allowed (None = uncapped)
+    dex_cap: int | None  # max DEX bonus allowed (None = uncapped)
     strength_requirement: int   # minimum STR score (0 = none)
     stealth_disadvantage: bool
     weight: float
@@ -356,7 +355,7 @@ class ACResult:
     base: int           # base AC before shield
     shield_bonus: int   # 0 or 2
     dex_applied: int    # DEX modifier actually applied (may be capped or zero)
-    armor_name: Optional[str]
+    armor_name: str | None
     has_shield: bool
     stealth_disadvantage: bool
     breakdown: str
@@ -364,7 +363,7 @@ class ACResult:
 
 def compute_ac(
     dex_score: int,
-    armor: Optional[ArmorStats] = None,
+    armor: ArmorStats | None = None,
     has_shield: bool = False,
 ) -> ACResult:
     """Compute a character's Armor Class.

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import deque
-from typing import Any, Optional
+from typing import Any
 
 from app.agents.schemas import ContextMessage
 from app.config import settings
@@ -14,7 +14,7 @@ class ContextManager:
     les plus anciens sont automatiquement évincés (``deque(maxlen=…)``).
     """
 
-    def __init__(self, max_messages: Optional[int] = None):
+    def __init__(self, max_messages: int | None = None):
         self._max = max_messages or settings.max_context_messages
         self._window: deque[ContextMessage] = deque(maxlen=self._max)
 
@@ -27,7 +27,7 @@ class ContextManager:
         role: str,
         speaker: str,
         content: str,
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Ajoute un message à la fenêtre de contexte."""
         self._window.append(
@@ -43,7 +43,7 @@ class ContextManager:
     # Lecture du contexte
     # -------------------------------------------------------------------------
 
-    def get_messages(self, last_n: Optional[int] = None) -> list[ContextMessage]:
+    def get_messages(self, last_n: int | None = None) -> list[ContextMessage]:
         """Retourne les messages de la fenêtre (tous, ou seulement les N derniers)."""
         messages = list(self._window)
         if last_n is not None:
@@ -53,7 +53,7 @@ class ContextManager:
     def to_ollama_messages(
         self,
         system_prompt: str,
-        last_n: Optional[int] = None,
+        last_n: int | None = None,
     ) -> list[dict[str, str]]:
         """Formate le contexte en liste de messages pour l'API Ollama chat.
 

@@ -4,7 +4,7 @@ import logging
 import re
 import unicodedata
 import uuid
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel
@@ -41,12 +41,12 @@ _OPENING_EXITS_MAX = 5   # sorties disponibles (était 3)
 
 
 class StartGameBody(BaseModel):
-    adventure_script: Optional[str] = None
+    adventure_script: str | None = None
     auto_generate: bool = False
-    adventure_preset: Optional[str] = None
-    biome: Optional[str] = None
-    weather: Optional[str] = None
-    tone: Optional[str] = None
+    adventure_preset: str | None = None
+    biome: str | None = None
+    weather: str | None = None
+    tone: str | None = None
 
 
 class SaveSlotCreate(BaseModel):
@@ -181,7 +181,7 @@ def _campaign_opening_text(campaign_context: dict[str, Any]) -> str:
 
 def _free_opening_text(
     active: Any,
-    script: Optional[str] = None,
+    script: str | None = None,
     auto_generate: bool = False,
 ) -> str:
     party = _party_names(active)
@@ -204,7 +204,7 @@ def _free_opening_text(
     )
 
 
-def _first_key_location(campaign_context: Optional[dict[str, Any]]) -> str:
+def _first_key_location(campaign_context: dict[str, Any] | None) -> str:
     if not isinstance(campaign_context, dict):
         return ""
     chapter = campaign_context.get("active_chapter", {})
@@ -219,12 +219,12 @@ def _first_key_location(campaign_context: Optional[dict[str, Any]]) -> str:
     return ""
 
 
-def _opening_location_name(campaign_context: Optional[dict[str, Any]]) -> str:
+def _opening_location_name(campaign_context: dict[str, Any] | None) -> str:
     opening_scene = _opening_scene(campaign_context)
     return _opening_scene_location_label(opening_scene)
 
 
-def _opening_objective(campaign_context: Optional[dict[str, Any]]) -> str:
+def _opening_objective(campaign_context: dict[str, Any] | None) -> str:
     if not isinstance(campaign_context, dict):
         return ""
     contract = campaign_context.get("player_contract", {})
@@ -236,7 +236,7 @@ def _opening_objective(campaign_context: Optional[dict[str, Any]]) -> str:
     return ""
 
 
-def _opening_scene_entity(value: Any, *, fallback_id: str) -> Optional[dict[str, str]]:
+def _opening_scene_entity(value: Any, *, fallback_id: str) -> dict[str, str] | None:
     if isinstance(value, dict):
         entity_id = str(value.get("id") or "").strip()
         name = str(value.get("name") or value.get("label") or entity_id).strip()
@@ -321,7 +321,7 @@ def _opening_scene_has_content(scene: dict[str, Any]) -> bool:
 
 
 def _infer_opening_present_npcs(
-    campaign_context: Optional[dict[str, Any]],
+    campaign_context: dict[str, Any] | None,
 ) -> list[dict[str, str]]:
     if not isinstance(campaign_context, dict):
         return []
@@ -361,9 +361,9 @@ def _infer_opening_present_npcs(
 
 
 def _infer_opening_host(
-    campaign_context: Optional[dict[str, Any]],
+    campaign_context: dict[str, Any] | None,
     present_npcs: list[dict[str, str]],
-) -> Optional[dict[str, str]]:
+) -> dict[str, str] | None:
     if not isinstance(campaign_context, dict):
         return None
     chapter = campaign_context.get("active_chapter") or {}
@@ -397,7 +397,7 @@ def _normalize_for_match(value: str) -> str:
 
 
 def _infer_opening_description(
-    campaign_context: Optional[dict[str, Any]],
+    campaign_context: dict[str, Any] | None,
     present_npcs: list[dict[str, str]],
 ) -> str:
     if present_npcs:
@@ -422,7 +422,7 @@ def _infer_opening_description(
 
 
 def _infer_opening_scene_from_context(
-    campaign_context: Optional[dict[str, Any]],
+    campaign_context: dict[str, Any] | None,
     fallback_place: str,
 ) -> dict[str, Any]:
     present_npcs = _infer_opening_present_npcs(campaign_context)
@@ -440,7 +440,7 @@ def _infer_opening_scene_from_context(
     }
 
 
-def _opening_scene(campaign_context: Optional[dict[str, Any]]) -> dict[str, Any]:
+def _opening_scene(campaign_context: dict[str, Any] | None) -> dict[str, Any]:
     fallback_place = _first_key_location(campaign_context) or "un lieu de départ"
     if not isinstance(campaign_context, dict):
         chapter = {}
@@ -479,7 +479,7 @@ def _opening_scene(campaign_context: Optional[dict[str, Any]]) -> dict[str, Any]
 
 async def _migrate_missing_opening_scene(
     session_id: str,
-    campaign_context: Optional[dict[str, Any]],
+    campaign_context: dict[str, Any] | None,
     db: AsyncSession,
 ) -> bool:
     if not isinstance(campaign_context, dict):
@@ -535,16 +535,16 @@ def _opening_scene_location_label(opening_scene: dict[str, Any]) -> str:
     return venue or place
 
 
-def _opening_time_of_day(campaign_context: Optional[dict[str, Any]]) -> str:
+def _opening_time_of_day(campaign_context: dict[str, Any] | None) -> str:
     return str(_opening_scene(campaign_context).get("time_of_day") or "morning")
 
 
-def _opening_weather(campaign_context: Optional[dict[str, Any]]) -> Optional[str]:
+def _opening_weather(campaign_context: dict[str, Any] | None) -> str | None:
     weather = _opening_scene(campaign_context).get("weather")
     return str(weather).strip() if weather else None
 
 
-def _opening_scene_brief(campaign_context: Optional[dict[str, Any]]) -> str:
+def _opening_scene_brief(campaign_context: dict[str, Any] | None) -> str:
     if not isinstance(campaign_context, dict):
         return ""
     chapter = campaign_context.get("active_chapter") or {}
@@ -554,7 +554,7 @@ def _opening_scene_brief(campaign_context: Optional[dict[str, Any]]) -> str:
     return str(opening_scene.get("description") or "").strip()[:300]
 
 
-def _opening_clues(campaign_context: Optional[dict[str, Any]]) -> list[str]:
+def _opening_clues(campaign_context: dict[str, Any] | None) -> list[str]:
     return [clue["name"] for clue in _opening_scene(campaign_context).get("visible_clues", [])]
 
 
@@ -912,8 +912,8 @@ def _build_opening_brief(state_data: dict[str, Any]) -> str:
 def _opening_response(
     active: Any,
     *,
-    campaign_context: Optional[dict[str, Any]] = None,
-    script: Optional[str] = None,
+    campaign_context: dict[str, Any] | None = None,
+    script: str | None = None,
     auto_generate: bool = False,
 ) -> GMResponse:
     opening_scene = _opening_scene(campaign_context)
@@ -1255,12 +1255,12 @@ async def _send_free_opening_narration(
     active: Any,
     db: AsyncSession,
     *,
-    script: Optional[str] = None,
+    script: str | None = None,
     auto_generate: bool = False,
-    preset: Optional[str] = None,
-    biome: Optional[str] = None,
-    weather: Optional[str] = None,
-    tone: Optional[str] = None,
+    preset: str | None = None,
+    biome: str | None = None,
+    weather: str | None = None,
+    tone: str | None = None,
 ) -> None:
     # Generate seed if not using custom script
     seed = None

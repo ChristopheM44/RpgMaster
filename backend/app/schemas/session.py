@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -21,8 +20,8 @@ class SessionCreate(BaseModel):
 class SessionUpdate(BaseModel):
     """Payload pour mettre à jour une session (champs optionnels)."""
 
-    name: Optional[str] = Field(None, min_length=1, max_length=100)
-    status: Optional[SessionStatus] = None
+    name: str | None = Field(None, min_length=1, max_length=100)
+    status: SessionStatus | None = None
 
 
 class SessionResponse(BaseModel):

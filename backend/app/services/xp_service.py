@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,7 +40,7 @@ class XPService:
         character_id: str,
         amount: int,
         db: AsyncSession,
-        active: Optional[ActiveSession] = None,
+        active: ActiveSession | None = None,
     ) -> XPGrantResult:
         if int(amount) < 0:
             raise ValueError("XP amount must be non-negative")

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from typing import Any, Optional
+from typing import Any
 
 _MAX_INFERRED_COMBATANTS = 12
 
@@ -127,7 +127,7 @@ def _infer_count(prefix: str, matched_alias: str) -> int:
     return 3 if matched_alias.endswith("s") else 1
 
 
-def infer_monster_ids_from_text(text: Optional[str]) -> list[str]:
+def infer_monster_ids_from_text(text: str | None) -> list[str]:
     """Infer SRD monster IDs from a French/English narrative snippet."""
     if not text:
         return []
@@ -155,7 +155,7 @@ def infer_monster_ids_from_text(text: Optional[str]) -> list[str]:
     return inferred
 
 
-def describes_hostile_encounter(text: Optional[str]) -> bool:
+def describes_hostile_encounter(text: str | None) -> bool:
     """Return True when text clearly describes hostile enemies engaging."""
     if not text:
         return False
@@ -165,7 +165,7 @@ def describes_hostile_encounter(text: Optional[str]) -> bool:
     return any(re.search(pattern, normalized) for pattern in _HOSTILE_PATTERNS)
 
 
-def is_aggressive_player_intent(action_type: str, content: Optional[str]) -> bool:
+def is_aggressive_player_intent(action_type: str, content: str | None) -> bool:
     """Return True for explicit player intent to attack or force combat."""
     if action_type in _AGGRESSIVE_ACTION_TYPES:
         return True
@@ -173,7 +173,7 @@ def is_aggressive_player_intent(action_type: str, content: Optional[str]) -> boo
     return any(re.search(pattern, normalized) for pattern in _AGGRESSIVE_PATTERNS)
 
 
-def _base_monster_id(target_id: Optional[str]) -> Optional[str]:
+def _base_monster_id(target_id: str | None) -> str | None:
     if not target_id:
         return None
     normalized = target_id.strip().lower().replace("-", "_")
@@ -222,7 +222,7 @@ def _prime_transition(
 
 def prime_combat_from_hostile_narration(
     active: Any,
-    narration: Optional[str],
+    narration: str | None,
     *,
     source: str = "hostile_narration",
 ) -> bool:
@@ -241,8 +241,8 @@ def prime_combat_from_aggressive_action(
     active: Any,
     *,
     action_type: str,
-    content: Optional[str],
-    target_id: Optional[str] = None,
+    content: str | None,
+    target_id: str | None = None,
 ) -> bool:
     """Set a combat transition from an explicit non-combat attack intent."""
     if not is_aggressive_player_intent(action_type, content):

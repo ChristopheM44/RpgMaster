@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 import re
 import time
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -63,12 +63,12 @@ class TtsSettingsResponse(BaseModel):
 
 
 class TtsSettingsUpdate(BaseModel):
-    tts_enabled: Optional[bool] = None
-    tts_backend: Optional[str] = None
+    tts_enabled: bool | None = None
+    tts_backend: str | None = None
 
     @field_validator("tts_backend")
     @classmethod
-    def validate_backend(cls, v: Optional[str]) -> Optional[str]:
+    def validate_backend(cls, v: str | None) -> str | None:
         if v is not None and v not in ("kokoro", "vllm"):
             raise ValueError("tts_backend doit être 'kokoro' ou 'vllm'")
         return v
@@ -99,37 +99,37 @@ class LlmSettingsResponse(BaseModel):
 
 class OllamaModelInfoResponse(BaseModel):
     model: str
-    family: Optional[str] = None
+    family: str | None = None
     families: list[str] = Field(default_factory=list)
-    parameter_size: Optional[str] = None
-    quantization_level: Optional[str] = None
-    format: Optional[str] = None
-    context_length: Optional[int] = None
-    num_ctx: Optional[int] = None
+    parameter_size: str | None = None
+    quantization_level: str | None = None
+    format: str | None = None
+    context_length: int | None = None
+    num_ctx: int | None = None
 
 
 class LlmPingResponse(BaseModel):
     ok: bool
     provider: str
     model: str
-    latency_ms: Optional[int] = None
-    sample_response: Optional[str] = None
-    error: Optional[str] = None
+    latency_ms: int | None = None
+    sample_response: str | None = None
+    error: str | None = None
 
 
 class LlmSettingsUpdate(BaseModel):
-    ollama_base_url: Optional[str] = None
-    gm_model: Optional[str] = None
-    player_model: Optional[str] = None
-    llm_provider: Optional[str] = None
-    openai_base_url: Optional[str] = None
-    openai_api_key: Optional[str] = None
-    ollama_api_key: Optional[str] = None
-    source_max_chars: Optional[int] = Field(default=None, ge=1_000, le=2_000_000)
+    ollama_base_url: str | None = None
+    gm_model: str | None = None
+    player_model: str | None = None
+    llm_provider: str | None = None
+    openai_base_url: str | None = None
+    openai_api_key: str | None = None
+    ollama_api_key: str | None = None
+    source_max_chars: int | None = Field(default=None, ge=1_000, le=2_000_000)
 
     @field_validator("llm_provider")
     @classmethod
-    def validate_provider(cls, v: Optional[str]) -> Optional[str]:
+    def validate_provider(cls, v: str | None) -> str | None:
         if v is not None and v not in ("ollama", "openai_compatible"):
             raise ValueError("llm_provider doit être 'ollama' ou 'openai_compatible'")
         return v
@@ -145,29 +145,29 @@ class ImageGenerationSettingsResponse(BaseModel):
 
 
 class ImageGenerationSettingsUpdate(BaseModel):
-    enabled: Optional[bool] = None
-    provider: Optional[str] = None
-    base_url: Optional[str] = None
-    model: Optional[str] = None
-    api_key: Optional[str] = None
-    size: Optional[str] = None
+    enabled: bool | None = None
+    provider: str | None = None
+    base_url: str | None = None
+    model: str | None = None
+    api_key: str | None = None
+    size: str | None = None
 
     @field_validator("provider")
     @classmethod
-    def validate_image_provider(cls, v: Optional[str]) -> Optional[str]:
+    def validate_image_provider(cls, v: str | None) -> str | None:
         if v is not None and v not in ("openai_compatible", "local"):
             raise ValueError("provider doit être 'openai_compatible' ou 'local'")
         return v
 
     @field_validator("size")
     @classmethod
-    def validate_image_size(cls, v: Optional[str]) -> Optional[str]:
+    def validate_image_size(cls, v: str | None) -> str | None:
         if v is not None and not re.match(r"^\d{3,5}x\d{3,5}$", v.strip()):
             raise ValueError("size doit être au format 1024x1024")
         return v
 
 
-def _to_positive_int(value: Any) -> Optional[int]:
+def _to_positive_int(value: Any) -> int | None:
     try:
         parsed = int(value)
     except (TypeError, ValueError):
@@ -175,7 +175,7 @@ def _to_positive_int(value: Any) -> Optional[int]:
     return parsed if parsed > 0 else None
 
 
-def _model_info_context_length(model_info: Any) -> Optional[int]:
+def _model_info_context_length(model_info: Any) -> int | None:
     if not isinstance(model_info, dict):
         return None
     values = []
@@ -188,7 +188,7 @@ def _model_info_context_length(model_info: Any) -> Optional[int]:
     return max(values) if values else None
 
 
-def _model_info_num_ctx(*texts: Any) -> Optional[int]:
+def _model_info_num_ctx(*texts: Any) -> int | None:
     for text in texts:
         if not isinstance(text, str):
             continue

@@ -16,7 +16,7 @@ import logging
 import uuid
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 
@@ -81,9 +81,9 @@ class KokoroClient:
     async def synthesize(
         self,
         text: str,
-        voice: Optional[str] = None,
-        lang: Optional[str] = None,
-        speed: Optional[float] = None,
+        voice: str | None = None,
+        lang: str | None = None,
+        speed: float | None = None,
     ) -> bytes:
         """Synthétise *text* et retourne les bytes WAV.
 
@@ -132,7 +132,7 @@ class KokoroClient:
                     wav_bytes, stderr_bytes = await asyncio.wait_for(
                         proc.communicate(), timeout=self._timeout
                     )
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     proc.kill()
                     raise VoxtralError(
                         f"Kokoro subprocess timeout ({self._timeout}s)"
@@ -179,13 +179,13 @@ class VLLMVoxtralClient:
 
     def __init__(
         self,
-        base_url: Optional[str] = None,
-        model: Optional[str] = None,
+        base_url: str | None = None,
+        model: str | None = None,
     ) -> None:
         self.base_url = (base_url or settings.voxtral_base_url).rstrip("/")
         self.model = model or settings.voxtral_model
 
-    async def synthesize(self, text: str, voice: Optional[str] = None) -> bytes:
+    async def synthesize(self, text: str, voice: str | None = None) -> bytes:
         """Synthétise *text* via vLLM-Omni et retourne les bytes WAV.
 
         Raises:
@@ -200,7 +200,7 @@ class VLLMVoxtralClient:
             payload["voice"] = voice
 
         delay = _BASE_DELAY
-        last_exc: Optional[Exception] = None
+        last_exc: Exception | None = None
 
         for attempt in range(1, _MAX_RETRIES + 1):
             try:
@@ -255,14 +255,14 @@ class TtsRouter:
 
     _RUNTIME_FILE = Path(__file__).parent.parent.parent / "runtime_settings.json"
 
-    def __init__(self, publish_audio: Optional[AudioPublisher] = None) -> None:
+    def __init__(self, publish_audio: AudioPublisher | None = None) -> None:
         self._kokoro = KokoroClient()
         self._vllm = VLLMVoxtralClient()
         # Runtime overrides chargés depuis le fichier de persistance
         self._runtime: dict = self._load_runtime()
         self._publish_audio: AudioPublisher = publish_audio or _noop_audio_publisher
 
-    def configure_audio_publisher(self, publish_audio: Optional[AudioPublisher]) -> None:
+    def configure_audio_publisher(self, publish_audio: AudioPublisher | None) -> None:
         self._publish_audio = publish_audio or _noop_audio_publisher
 
     # ------------------------------------------------------------------
@@ -289,8 +289,8 @@ class TtsRouter:
 
     def configure(
         self,
-        enabled: Optional[bool] = None,
-        backend: Optional[str] = None,
+        enabled: bool | None = None,
+        backend: str | None = None,
     ) -> None:
         """Met à jour la configuration TTS en mémoire et la persiste."""
         if enabled is not None:
@@ -333,8 +333,8 @@ class TtsRouter:
         self,
         text: str,
         session_id: str,
-        narration_id: Optional[str] = None,
-        voice: Optional[str] = None,
+        narration_id: str | None = None,
+        voice: str | None = None,
     ) -> None:
         """Synthétise *text* et publie un événement AUDIO sur le bus.
 

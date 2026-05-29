@@ -5,7 +5,7 @@ import json
 import logging
 import random
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from app.engine.encounter_builder import (
     BuiltEncounter,
@@ -56,10 +56,10 @@ class EncounterService:
 
     def list_presets(
         self,
-        min_level: Optional[int] = None,
-        max_level: Optional[int] = None,
-        terrain: Optional[str] = None,
-        difficulty: Optional[str] = None,
+        min_level: int | None = None,
+        max_level: int | None = None,
+        terrain: str | None = None,
+        difficulty: str | None = None,
     ) -> list[dict[str, Any]]:
         """Return preset encounter metadata, optionally filtered."""
         self._ensure_loaded()
@@ -76,12 +76,12 @@ class EncounterService:
             results.append(preset)
         return results
 
-    def get_preset(self, encounter_id: str) -> Optional[dict[str, Any]]:
+    def get_preset(self, encounter_id: str) -> dict[str, Any] | None:
         """Return a single preset by id, or None if not found."""
         self._ensure_loaded()
         return self._presets_by_id.get(encounter_id)
 
-    def build_from_preset(self, encounter_id: str) -> Optional[BuiltEncounter]:
+    def build_from_preset(self, encounter_id: str) -> BuiltEncounter | None:
         """Convert a preset template into a BuiltEncounter.
 
         Returns None if the encounter_id doesn't exist.
@@ -125,7 +125,7 @@ class EncounterService:
         self,
         monster_ids: list[str],
         *,
-        custom_monsters: Optional[list[dict[str, Any]]] = None,
+        custom_monsters: list[dict[str, Any]] | None = None,
     ) -> BuiltEncounter:
         """Build an encounter from a list of monster IDs (may repeat).
 
@@ -212,7 +212,7 @@ class EncounterService:
         self,
         party_levels: list[int],
         difficulty: str = "medium",
-        rng: Optional[random.Random] = None,
+        rng: random.Random | None = None,
     ) -> BuiltEncounter:
         """Generate a random encounter balanced for the given party."""
         self._ensure_loaded()
@@ -223,7 +223,7 @@ class EncounterService:
         avg_level: int,
         party_size: int = 4,
         difficulty: str = "medium",
-        rng: Optional[random.Random] = None,
+        rng: random.Random | None = None,
     ) -> BuiltEncounter:
         """Convenience method: generate using a uniform party of avg_level."""
         party_levels = [avg_level] * party_size
@@ -245,8 +245,8 @@ class EncounterService:
     def pick_preset_for_party(
         self,
         party_levels: list[int],
-        rng: Optional[random.Random] = None,
-    ) -> Optional[dict[str, Any]]:
+        rng: random.Random | None = None,
+    ) -> dict[str, Any] | None:
         """Return a random preset suitable for the given party levels, or None."""
         self._ensure_loaded()
         if rng is None:

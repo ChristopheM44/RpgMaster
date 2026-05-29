@@ -14,7 +14,6 @@ from __future__ import annotations
 import random
 import re
 from dataclasses import dataclass
-from typing import Optional
 
 from app.engine.ability_checks import _resolve_d20, ability_modifier
 from app.engine.dice import roll_dice
@@ -46,7 +45,7 @@ class AttackResult:
     hit: bool
     critical: bool             # natural 20
     fumble: bool               # natural 1
-    advantage: Optional[bool]  # True=adv, False=disadv, None=normal
+    advantage: bool | None  # True=adv, False=disadv, None=normal
     breakdown: str
 
 
@@ -136,7 +135,7 @@ _DMG_NOTATION = re.compile(
 def roll_initiative(
     dex_score: int,
     combatant_id: str = "",
-    rng: Optional[random.Random] = None,
+    rng: random.Random | None = None,
 ) -> InitiativeResult:
     """Roll initiative (d20 + DEX modifier) for one combatant.
 
@@ -167,8 +166,8 @@ def sort_initiative(results: list[InitiativeResult]) -> list[InitiativeResult]:
 def roll_attack(
     attack_bonus: int,
     target_ac: int,
-    advantage: Optional[bool] = None,
-    rng: Optional[random.Random] = None,
+    advantage: bool | None = None,
+    rng: random.Random | None = None,
 ) -> AttackResult:
     """Resolve an attack roll against a target AC.
 
@@ -217,7 +216,7 @@ def roll_attack(
 def roll_damage(
     notation: str,
     critical: bool = False,
-    rng: Optional[random.Random] = None,
+    rng: random.Random | None = None,
 ) -> DamageResult:
     """Roll damage dice, doubling the dice count on a critical hit.
 
@@ -269,7 +268,7 @@ def roll_damage(
     )
 
 
-def roll_death_save(rng: Optional[random.Random] = None) -> DeathSaveResult:
+def roll_death_save(rng: random.Random | None = None) -> DeathSaveResult:
     """Roll a death saving throw (SRD 5.2 §Dying).
 
     - Natural 20 → critical success (creature regains 1 HP, counts as 3 successes)

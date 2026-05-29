@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from app.agents.base_agent import BaseAgent
 from app.agents.context_manager import ContextManager
@@ -94,8 +94,8 @@ def _compute_npc_attendance(
 
 def _select_spotlight_candidate(
     game_state: dict[str, Any],
-    messages: Optional[list] = None,
-) -> Optional[dict[str, str]]:
+    messages: list | None = None,
+) -> dict[str, str] | None:
     """Choisit un PJ qui n'a pas parlé récemment, à inviter en fin de narration.
 
     Comme à une vraie table, le MJ peut explicitement passer la parole à un
@@ -246,8 +246,8 @@ class GMAgent(BaseAgent):
 
     def __init__(
         self,
-        client: Optional[LLMClient] = None,
-        model: Optional[str] = None,
+        client: LLMClient | None = None,
+        model: str | None = None,
     ):
         self._client: LLMClient = client or router.get_gm_client()
         self._system_prompt = self._load_system_prompt("gm_system.txt")
@@ -287,10 +287,10 @@ class GMAgent(BaseAgent):
     async def narrate(
         self,
         game_state: dict[str, Any],
-        context_manager: Optional[ContextManager] = None,
-        player_action: Optional[str] = None,
-        messages: Optional[list] = None,
-        roll_results: Optional[dict[str, Any]] = None,
+        context_manager: ContextManager | None = None,
+        player_action: str | None = None,
+        messages: list | None = None,
+        roll_results: dict[str, Any] | None = None,
     ) -> GMResponse:
         """Génère une narration d'exploration / générale."""
         user_prompt = self._render_prompt(
@@ -310,10 +310,10 @@ class GMAgent(BaseAgent):
     async def run_combat_turn(
         self,
         game_state: dict[str, Any],
-        context_manager: Optional[ContextManager] = None,
-        player_action: Optional[str] = None,
-        messages: Optional[list] = None,
-        roll_results: Optional[dict[str, Any]] = None,
+        context_manager: ContextManager | None = None,
+        player_action: str | None = None,
+        messages: list | None = None,
+        roll_results: dict[str, Any] | None = None,
     ) -> GMResponse:
         """Narre un tour de combat après résolution mécanique par le moteur."""
         user_prompt = self._render_prompt(
@@ -331,8 +331,8 @@ class GMAgent(BaseAgent):
         self,
         game_state: dict[str, Any],
         combatants: list[dict[str, Any]] | dict[str, Any],
-        messages: Optional[list] = None,
-        context_manager: Optional[ContextManager] = None,
+        messages: list | None = None,
+        context_manager: ContextManager | None = None,
     ) -> GMResponse:
         """Génère l'ouverture cinématique unique d'une rencontre."""
         user_prompt = self._render_prompt(
@@ -348,9 +348,9 @@ class GMAgent(BaseAgent):
     async def open_scene(
         self,
         game_state: dict[str, Any],
-        context_manager: Optional[ContextManager] = None,
-        opening_brief: Optional[str] = None,
-        messages: Optional[list] = None,
+        context_manager: ContextManager | None = None,
+        opening_brief: str | None = None,
+        messages: list | None = None,
         is_lobby: bool = False,
     ) -> GMResponse:
         """Cadre la toute première scène jouable d'une session."""
@@ -370,10 +370,10 @@ class GMAgent(BaseAgent):
         self,
         game_state: dict[str, Any],
         combat_summary: dict[str, Any],
-        suggested_loot: Optional[dict[str, Any]] = None,
-        suggested_xp: Optional[dict[str, Any]] = None,
-        messages: Optional[list] = None,
-        context_manager: Optional[ContextManager] = None,
+        suggested_loot: dict[str, Any] | None = None,
+        suggested_xp: dict[str, Any] | None = None,
+        messages: list | None = None,
+        context_manager: ContextManager | None = None,
     ) -> GMResponse:
         """Génère la narration d'aftercare et la scène post-combat."""
         user_prompt = self._render_prompt(
@@ -410,10 +410,10 @@ class GMAgent(BaseAgent):
         npc_name: str,
         npc_personality: str | NPCPersona,
         player_message: str,
-        game_state: Optional[dict[str, Any]] = None,
-        context_manager: Optional[ContextManager] = None,
-        messages: Optional[list] = None,
-        roll_results: Optional[dict[str, Any]] = None,
+        game_state: dict[str, Any] | None = None,
+        context_manager: ContextManager | None = None,
+        messages: list | None = None,
+        roll_results: dict[str, Any] | None = None,
     ) -> GMResponse:
         """Génère une réplique de PNJ avec sa persona.
 
@@ -444,9 +444,9 @@ class GMAgent(BaseAgent):
         self,
         monster_persona: MonsterPersona,
         game_state: dict[str, Any],
-        roll_results: Optional[dict[str, Any]] = None,
-        messages: Optional[list] = None,
-        context_manager: Optional[ContextManager] = None,
+        roll_results: dict[str, Any] | None = None,
+        messages: list | None = None,
+        context_manager: ContextManager | None = None,
     ) -> GMResponse:
         """Narre un tour de combat avec une voix de monstre intelligent.
 
@@ -470,7 +470,7 @@ class GMAgent(BaseAgent):
         game_state: dict[str, Any],
         player_action: str,
         companion_responses: list[dict[str, str]],
-        context_manager: Optional[ContextManager] = None,
+        context_manager: ContextManager | None = None,
     ) -> GMResponse:
         """Narre la conclusion d'une scène sociale après les réponses des compagnons."""
         responses_text = "\n".join(f"[{r['speaker']}] {r['text']}" for r in companion_responses)
@@ -538,7 +538,7 @@ class GMAgent(BaseAgent):
     async def _call_and_parse(
         self,
         user_prompt: str,
-        context_manager: Optional[ContextManager],
+        context_manager: ContextManager | None,
     ) -> GMResponse:
         """Appelle le LLM et parse la réponse JSON en GMResponse."""
         messages = self._build_messages(user_prompt, context_manager)
@@ -584,7 +584,7 @@ class GMAgent(BaseAgent):
         return text or _FALLBACK_NARRATION
 
     @staticmethod
-    def _extract_json_string_field(raw: str, field: str) -> Optional[str]:
+    def _extract_json_string_field(raw: str, field: str) -> str | None:
         key = f'"{field}"'
         key_index = raw.find(key)
         if key_index < 0:

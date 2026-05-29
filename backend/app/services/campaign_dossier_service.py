@@ -7,9 +7,9 @@ import html
 import logging
 import re
 import uuid
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from datetime import datetime
-from typing import Any, Callable, Optional
+from typing import Any
 
 import httpx
 from sqlalchemy import func, select
@@ -81,7 +81,7 @@ def empty_world_maps() -> dict[str, Any]:
     }
 
 
-async def get_dossier(campaign_id: str, db: AsyncSession) -> Optional[CampaignDossier]:
+async def get_dossier(campaign_id: str, db: AsyncSession) -> CampaignDossier | None:
     result = await db.execute(
         select(CampaignDossier).where(CampaignDossier.campaign_id == campaign_id)
     )
@@ -158,7 +158,7 @@ async def forge_draft(
     brief: dict[str, Any],
     options: dict[str, Any],
     db: AsyncSession,
-    agent: Optional[CampaignForgeAgent] = None,
+    agent: CampaignForgeAgent | None = None,
 ) -> CampaignDossier:
     campaign = await _get_campaign_or_raise(campaign_id, db)
     dossier = await get_or_create_dossier(campaign.id, db)
@@ -271,7 +271,7 @@ async def run_forge_job(
     brief: dict[str, Any],
     options: dict[str, Any],
     session_factory: Callable[[], Any],
-    agent: Optional[CampaignForgeAgent] = None,
+    agent: CampaignForgeAgent | None = None,
 ) -> None:
     """Run the campaign forge in a fresh DB session."""
     async with session_factory() as db:
@@ -309,7 +309,7 @@ async def validate_contract(
     return dossier
 
 
-async def reset_played_state(campaign: Campaign, db: AsyncSession) -> Optional[CampaignDossier]:
+async def reset_played_state(campaign: Campaign, db: AsyncSession) -> CampaignDossier | None:
     """Clear played campaign state while preserving the authored dossier."""
     dossier = await get_dossier(campaign.id, db)
     if dossier is None:
@@ -451,7 +451,7 @@ async def synthesize_canon(
     game_state: dict[str, Any],
     recent_messages: list[dict[str, Any]],
     db: AsyncSession,
-    agent: Optional[CampaignForgeAgent] = None,
+    agent: CampaignForgeAgent | None = None,
 ) -> CampaignDossier:
     campaign = await _get_campaign_or_raise(campaign_id, db)
     dossier = await get_or_create_dossier(campaign.id, db)
@@ -502,7 +502,7 @@ async def synthesize_canon_for_session(
     game_state: dict[str, Any],
     recent_messages: list[dict[str, Any]],
     db: AsyncSession,
-) -> Optional[CampaignDossier]:
+) -> CampaignDossier | None:
     campaign = await campaign_for_session(session_id, db)
     if campaign is None:
         return None
@@ -566,7 +566,7 @@ async def get_npc_persona(
     campaign_id: str,
     persona_id: str,
     db: AsyncSession,
-) -> Optional[NPCPersona]:
+) -> NPCPersona | None:
     """Récupère une persona PNJ — cherche d'abord dans played_canon, puis gm_dossier."""
     dossier = await get_dossier(campaign_id, db)
     if dossier is None:
@@ -619,7 +619,7 @@ async def list_personas(
     }
 
 
-async def campaign_for_session(session_id: str, db: AsyncSession) -> Optional[Campaign]:
+async def campaign_for_session(session_id: str, db: AsyncSession) -> Campaign | None:
     result = await db.execute(select(Campaign).order_by(Campaign.created_at.desc()))
     for campaign in result.scalars().all():
         if session_id in (campaign.session_ids or []):
@@ -630,7 +630,7 @@ async def campaign_for_session(session_id: str, db: AsyncSession) -> Optional[Ca
 async def campaign_maps_for_session(
     session_id: str,
     db: AsyncSession,
-    state_data: Optional[dict[str, Any]] = None,
+    state_data: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     campaign = await campaign_for_session(session_id, db)
     if campaign is None:
@@ -655,7 +655,7 @@ def public_campaign_maps(gm_dossier: dict[str, Any]) -> dict[str, Any]:
 async def map_context_for_session(
     session_id: str,
     db: AsyncSession,
-    state_data: Optional[dict[str, Any]] = None,
+    state_data: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     campaign = await campaign_for_session(session_id, db)
     if campaign is None:
@@ -676,7 +676,7 @@ async def map_context_for_session(
     )
 
 
-def _world_maps_from_state_data(state_data: Optional[dict[str, Any]]) -> dict[str, Any]:
+def _world_maps_from_state_data(state_data: dict[str, Any] | None) -> dict[str, Any]:
     if not isinstance(state_data, dict):
         return empty_world_maps()
     world_maps = state_data.get("world_maps")
@@ -721,7 +721,7 @@ async def update_campaign_maps_for_session(
     region_map: Any = _MISSING,
     city_maps: Any = _MISSING,
     active_city_id: Any = _MISSING,
-) -> Optional[CampaignDossier]:
+) -> CampaignDossier | None:
     campaign = await campaign_for_session(session_id, db)
     if campaign is None:
         return None
@@ -746,7 +746,7 @@ def sanitize_gm_dossier_map_defaults(data: dict[str, Any]) -> dict[str, Any]:
 async def compile_campaign_context_for_session(
     session_id: str,
     db: AsyncSession,
-) -> Optional[dict[str, Any]]:
+) -> dict[str, Any] | None:
     campaign = await campaign_for_session(session_id, db)
     if campaign is None:
         return None
@@ -826,7 +826,7 @@ async def _run_forge_job(
     brief: dict[str, Any],
     options: dict[str, Any],
     db: AsyncSession,
-    agent: Optional[CampaignForgeAgent] = None,
+    agent: CampaignForgeAgent | None = None,
 ) -> CampaignDossier:
     campaign = await _get_campaign_or_raise(campaign_id, db)
     dossier = await get_or_create_dossier(campaign.id, db)
@@ -1043,7 +1043,7 @@ async def _call_forge_phase_with_retry(
     call: Callable[[], Awaitable[dict[str, Any]]],
     validator: Callable[[dict[str, Any]], dict[str, Any]],
 ) -> dict[str, Any]:
-    last_exc: Optional[BaseException] = None
+    last_exc: BaseException | None = None
     for attempt in range(1, FORGE_PHASE_MAX_ATTEMPTS + 1):
         try:
             return validator(await call())
@@ -1242,7 +1242,7 @@ async def _update_forge_job(
     db: AsyncSession,
     job_id: str,
     *,
-    event: Optional[dict[str, Any]] = None,
+    event: dict[str, Any] | None = None,
     **patch: Any,
 ) -> dict[str, Any]:
     job = _coerce_forge_job(dossier.forge_job, dossier.campaign_id)
@@ -1321,7 +1321,7 @@ def sanitize_player_contract(
     data: dict[str, Any],
     campaign: Campaign,
     brief: dict[str, Any],
-    options: Optional[dict[str, Any]] = None,
+    options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     title = _text(
         data.get("title") or brief.get("title") or brief.get("name") or campaign.name,
@@ -1479,7 +1479,7 @@ def _duration_from_chapter_count(count: int) -> str:
 def _resolve_duration(
     data: dict[str, Any],
     brief: dict[str, Any],
-    options: Optional[dict[str, Any]],
+    options: dict[str, Any] | None,
     chapter_count: int,
 ) -> str:
     """Durée du contrat joueur.
@@ -1501,7 +1501,7 @@ def _resolve_duration(
     return _text(data.get("duration") or brief.get("duration") or "3-5 sessions", 80)
 
 
-def _fallback_chapter_count(options: Optional[dict[str, Any]]) -> int:
+def _fallback_chapter_count(options: dict[str, Any] | None) -> int:
     """Nombre de chapitres du dossier de secours selon le format demandé."""
     scope = str((options or {}).get("scope") or "").strip().lower()
     if scope == "one-shot":
@@ -1677,8 +1677,8 @@ def _fallback_canon(
 
 def _summary_from_contract(
     campaign: Campaign,
-    dossier: Optional[CampaignDossier],
-    character_count: Optional[int] = None,
+    dossier: CampaignDossier | None,
+    character_count: int | None = None,
 ) -> dict[str, Any]:
     if dossier is None:
         contract = sanitize_player_contract({}, campaign, brief={})
@@ -1715,7 +1715,7 @@ def _summary_from_contract(
     }
 
 
-def _current_session_id(campaign: Campaign) -> Optional[str]:
+def _current_session_id(campaign: Campaign) -> str | None:
     session_ids = list(campaign.session_ids or [])
     if not session_ids:
         return None
@@ -1725,7 +1725,7 @@ def _current_session_id(campaign: Campaign) -> Optional[str]:
     return session_ids[-1]
 
 
-async def _current_session_character_count(campaign: Campaign, db: AsyncSession) -> Optional[int]:
+async def _current_session_character_count(campaign: Campaign, db: AsyncSession) -> int | None:
     session_id = _current_session_id(campaign)
     if session_id is None:
         return None
@@ -1875,7 +1875,7 @@ def _first_text_item(value: Any) -> str:
     return ""
 
 
-def _sanitize_opening_scene_entity(value: Any, max_name: int) -> Optional[dict[str, str]]:
+def _sanitize_opening_scene_entity(value: Any, max_name: int) -> dict[str, str] | None:
     if isinstance(value, dict):
         entity_id = _text(value.get("id") or "", 80)
         name = _text(value.get("name") or value.get("label") or entity_id, max_name)
@@ -2123,7 +2123,7 @@ def _coerce_legacy_npc_dict(item: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _coerce_persona(item: Any, expected_type: str) -> Optional[dict[str, Any]]:
+def _coerce_persona(item: Any, expected_type: str) -> dict[str, Any] | None:
     """Valide un item dict via Pydantic. Renvoie le dump validé, ou None si rejet.
 
     Migration douce : pour les NPC, accepte un ancien format (sans archetype) à condition

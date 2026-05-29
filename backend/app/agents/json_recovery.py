@@ -4,7 +4,7 @@ import json
 import logging
 import re
 from collections.abc import Callable, Sequence
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -18,15 +18,15 @@ def recover_partial_json_response(
     raw: str,
     *,
     character_name: str,
-    game_state: Optional[dict[str, Any]],
+    game_state: dict[str, Any] | None,
     safe_recovered_roleplay: Callable[
-        [Optional[str], Optional[str], Optional[str], dict[str, Any]], str
+        [str | None, str | None, str | None, dict[str, Any]], str
     ],
-) -> Optional[dict[str, Any]]:
+) -> dict[str, Any] | None:
     if "action_type" not in raw and "roleplay_text" not in raw:
         return None
 
-    def _field(name: str) -> tuple[Optional[str], bool]:
+    def _field(name: str) -> tuple[str | None, bool]:
         complete = re.search(rf'"{name}"\s*:\s*"((?:[^"\\]|\\.)*)"', raw, re.DOTALL)
         match = complete or re.search(rf'"{name}"\s*:\s*"((?:[^"\\]|\\.)*)', raw, re.DOTALL)
         if not match:
@@ -71,12 +71,12 @@ def recover_partial_json_response(
     }
 
 
-def recover_structured_text_response(raw: str) -> Optional[dict[str, Any]]:
+def recover_structured_text_response(raw: str) -> dict[str, Any] | None:
     stripped = raw.strip()
     if not stripped or ":" not in stripped:
         return None
 
-    def _match(pattern: str) -> Optional[str]:
+    def _match(pattern: str) -> str | None:
         match = re.search(pattern, raw, re.IGNORECASE | re.DOTALL)
         if not match:
             return None
@@ -112,16 +112,16 @@ def recover_prose_action_response(
     raw: str,
     *,
     game_state: dict[str, Any],
-    available_actions: Optional[Sequence[str]],
+    available_actions: Sequence[str] | None,
     combat_mode: bool,
-    available_action_set: Callable[[Optional[Sequence[str]]], set[str]],
-    infer_action_type_from_text: Callable[[str, set[str]], Optional[str]],
-    find_referenced_combatant: Callable[[str, dict[str, Any]], Optional[str]],
-    select_default_enemy_target: Callable[[dict[str, Any]], Optional[str]],
-    infer_spell_name_from_text: Callable[[str, dict[str, Any]], Optional[str]],
-    combatant_name: Callable[[dict[str, Any], Optional[str]], str],
+    available_action_set: Callable[[Sequence[str] | None], set[str]],
+    infer_action_type_from_text: Callable[[str, set[str]], str | None],
+    find_referenced_combatant: Callable[[str, dict[str, Any]], str | None],
+    select_default_enemy_target: Callable[[dict[str, Any]], str | None],
+    infer_spell_name_from_text: Callable[[str, dict[str, Any]], str | None],
+    combatant_name: Callable[[dict[str, Any], str | None], str],
     describe_inferred_action: Callable[[str, str, str], str],
-) -> Optional[dict[str, Any]]:
+) -> dict[str, Any] | None:
     stripped = raw.strip()
     if not stripped or stripped in ELLIPSIS_ONLY_RESPONSES:
         return None
@@ -180,11 +180,11 @@ def build_default_combat_action(
     *,
     character_name: str,
     game_state: dict[str, Any],
-    available_actions: Optional[Sequence[str]],
-    available_action_set: Callable[[Optional[Sequence[str]]], set[str]],
-    select_default_enemy_target: Callable[[dict[str, Any]], Optional[str]],
-    combatant_name: Callable[[dict[str, Any], Optional[str]], str],
-) -> Optional[dict[str, Any]]:
+    available_actions: Sequence[str] | None,
+    available_action_set: Callable[[Sequence[str] | None], set[str]],
+    select_default_enemy_target: Callable[[dict[str, Any]], str | None],
+    combatant_name: Callable[[dict[str, Any], str | None], str],
+) -> dict[str, Any] | None:
     available = available_action_set(available_actions)
     target = select_default_enemy_target(game_state)
     target_name = combatant_name(game_state, target)

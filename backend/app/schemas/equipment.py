@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -38,12 +38,12 @@ class EquipmentItem(BaseModel):
     id: str
     template_id: str
     name: str = ""
-    name_fr: Optional[str] = None
+    name_fr: str | None = None
     category: str = ""
     item_type: ItemType = "gear"
     quantity: int = Field(1, ge=1)
     equipped: bool = False
-    slot: Optional[EquipmentSlot] = None
+    slot: EquipmentSlot | None = None
     occupied_slots: list[str] = Field(default_factory=list)
     weight_lb: float = Field(0.0, ge=0)
     cost_gp: float = Field(0.0, ge=0)
@@ -73,15 +73,15 @@ class WeaponItem(EquipmentItem):
     item_type: Literal["weapon"] = "weapon"
     damage_dice: str
     damage_type: str
-    versatile_dice: Optional[str] = None
-    range_normal: Optional[float] = None
-    range_long: Optional[float] = None
+    versatile_dice: str | None = None
+    range_normal: float | None = None
+    range_long: float | None = None
 
 
 class ArmorItem(EquipmentItem):
     item_type: Literal["armor"] = "armor"
     base_ac: int
-    dex_cap: Optional[int] = None
+    dex_cap: int | None = None
     stealth_disadvantage: bool = False
 
 
@@ -101,7 +101,7 @@ class ConsumableItem(EquipmentItem):
 
 class MagicItem(EquipmentItem):
     item_type: Literal["magic"] = "magic"
-    charges: Optional[int] = None
+    charges: int | None = None
 
 
 _ITEM_MODEL_BY_TYPE: dict[str, type[EquipmentItem]] = {

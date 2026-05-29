@@ -22,7 +22,7 @@ import re
 import unicodedata
 import uuid
 from inspect import isawaitable
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from app.agents.player_agent import _NON_JSON_LLM_ERROR
 from app.agents.schemas import PlayerActionChoice
@@ -138,9 +138,9 @@ def order_companion_spotlight(
     active: ActiveSession,
     candidate_ids: list[str],
     *,
-    trigger_character_id: Optional[str] = None,
-    max_count: Optional[int] = None,
-    action_text: Optional[str] = None,
+    trigger_character_id: str | None = None,
+    max_count: int | None = None,
+    action_text: str | None = None,
 ) -> list[str]:
     """Prefer companions who have not had the recent spotlight.
 
@@ -234,8 +234,8 @@ def _build_scene_context(messages: list) -> str:
     Extrait le dernier message du MJ et le dernier message joueur pour que le
     compagnon IA sache ce qui vient de se passer sans ingérer l'historique entier.
     """
-    last_gm: Optional[str] = None
-    last_player: Optional[str] = None
+    last_gm: str | None = None
+    last_player: str | None = None
     for msg in reversed(messages):
         role = getattr(msg, "role", None)
         role_val = role.value if hasattr(role, "value") else str(role)
@@ -354,8 +354,8 @@ class AIPlayerManager:
         session_id: str,
         active: ActiveSession,
         action_resolver: ActionResolver,
-        db: Optional[AsyncSession] = None,
-        max_turns: Optional[int] = None,
+        db: AsyncSession | None = None,
+        max_turns: int | None = None,
     ) -> int:
         """Trigger all consecutive AI-controlled PC turns from the current entry.
 
@@ -432,8 +432,8 @@ class AIPlayerManager:
                     source="ai_player_manager",
                 )
 
-            spell_id: Optional[str] = None
-            slot_level: Optional[int] = None
+            spell_id: str | None = None
+            slot_level: int | None = None
             if active.phase.value == "combat":
                 action, spell_id, slot_level = self._normalize_combat_action(
                     action,
@@ -545,10 +545,10 @@ class AIPlayerManager:
         session_id: str,
         active: ActiveSession,
         action_resolver: ActionResolver,
-        trigger_character_id: Optional[str] = None,
-        db: Optional[AsyncSession] = None,
-        max_reactors: Optional[int] = None,
-        action_text: Optional[str] = None,
+        trigger_character_id: str | None = None,
+        db: AsyncSession | None = None,
+        max_reactors: int | None = None,
+        action_text: str | None = None,
     ) -> tuple[int, list[dict[str, str]]]:
         """Fait réagir une fois chaque compagnon IA en exploration.
 
@@ -849,7 +849,7 @@ class AIPlayerManager:
         action: PlayerActionChoice,
         visible_text: str,
         char_id: str,
-        db: Optional[AsyncSession],
+        db: AsyncSession | None,
     ) -> bool:
         relay = getattr(action_resolver, "resolve_npc_dialogue", None)
         if relay is None or not callable(relay):
@@ -885,7 +885,7 @@ class AIPlayerManager:
         action: PlayerActionChoice,
         visible_text: str,
         state_data: dict[str, Any],
-    ) -> Optional[str]:
+    ) -> str | None:
         raw_target = str(action.target or "").strip()
         explicit_target_id = (
             cls._resolve_present_npc_target(raw_target, state_data) if raw_target else None
@@ -909,7 +909,7 @@ class AIPlayerManager:
         cls,
         text: str,
         state_data: dict[str, Any],
-    ) -> Optional[str]:
+    ) -> str | None:
         if not text:
             return None
         present_ids = cls._present_npc_ids(state_data)
@@ -1036,8 +1036,8 @@ class AIPlayerManager:
         session_id: str,
         thinking: bool,
         *,
-        character_id: Optional[str] = None,
-        character_name: Optional[str] = None,
+        character_id: str | None = None,
+        character_name: str | None = None,
     ) -> None:
         await event_bus.publish_to_session(
             session_id,
@@ -1055,7 +1055,7 @@ class AIPlayerManager:
     async def _get_action(
         agent: Any,
         active: ActiveSession,
-        available_actions: Optional[list[str]] = None,
+        available_actions: list[str] | None = None,
     ) -> PlayerActionChoice:
         """Ask the agent for an action based on the current game phase."""
         from app.models.session import SessionStatus
@@ -1126,7 +1126,7 @@ class AIPlayerManager:
         character_id: str,
         active: ActiveSession,
         available_actions: list[str],
-    ) -> tuple[PlayerActionChoice, Optional[str], Optional[int]]:
+    ) -> tuple[PlayerActionChoice, str | None, int | None]:
         state_data = active.state_data
         if action.action_type not in set(available_actions):
             return (
@@ -1184,7 +1184,7 @@ class AIPlayerManager:
         action: PlayerActionChoice,
         character_id: str,
         active: ActiveSession,
-    ) -> Optional[PlayerActionChoice]:
+    ) -> PlayerActionChoice | None:
         intent = str(action.params.get("intent") or "").strip().lower()
         if intent not in {"approach", "retreat", "flank"}:
             return None
@@ -1236,7 +1236,7 @@ class AIPlayerManager:
         action: PlayerActionChoice,
         character_id: str,
         state_data: dict[str, Any],
-    ) -> Optional[tuple[str, str, int]]:
+    ) -> tuple[str, str, int] | None:
         cdata = cls._character_data(character_id, state_data)
         known_spells = cdata.get("known_spells", [])
         if not isinstance(known_spells, list) or not known_spells:
@@ -1356,7 +1356,7 @@ class AIPlayerManager:
         cls,
         character_id: str,
         state_data: dict[str, Any],
-    ) -> Optional[str]:
+    ) -> str | None:
         combatants = state_data.get("combatants", {})
         if not isinstance(combatants, dict):
             return None
@@ -1481,7 +1481,7 @@ class AIPlayerManager:
         cls,
         raw_target: Any,
         state_data: dict[str, Any],
-    ) -> Optional[str]:
+    ) -> str | None:
         if raw_target is None:
             return None
         raw = str(raw_target).strip()
@@ -1508,7 +1508,7 @@ class AIPlayerManager:
         spell_slots: Any,
         minimum_level: int,
         requested: Any = None,
-    ) -> Optional[int]:
+    ) -> int | None:
         if requested is not None:
             try:
                 requested_level = max(minimum_level, int(requested))
@@ -1542,7 +1542,7 @@ class AIPlayerManager:
         cls,
         character_id: str,
         state_data: dict[str, Any],
-    ) -> Optional[str]:
+    ) -> str | None:
         combatants = state_data.get("combatants", {})
         if not isinstance(combatants, dict):
             return None
@@ -1572,7 +1572,7 @@ class AIPlayerManager:
         return candidates[0][1]
 
     @staticmethod
-    def _combatant_name(state_data: dict[str, Any], target: Optional[str]) -> str:
+    def _combatant_name(state_data: dict[str, Any], target: str | None) -> str:
         if target is None:
             return "la cible"
         combatants = state_data.get("combatants", {})

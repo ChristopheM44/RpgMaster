@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import heapq
-from typing import Optional
 
 from app.engine.tactical_grid import GridPosition, chebyshev_distance
 
@@ -12,8 +11,8 @@ def astar_path(
     goal: GridPosition,
     grid_cols: int,
     grid_rows: int,
-    blocked: Optional[list[GridPosition]] = None,
-    difficult: Optional[list[GridPosition]] = None,
+    blocked: list[GridPosition] | None = None,
+    difficult: list[GridPosition] | None = None,
 ) -> list[GridPosition]:
     blocked_set = {(pos.col, pos.row) for pos in blocked or []}
     difficult_set = {(pos.col, pos.row) for pos in difficult or []}

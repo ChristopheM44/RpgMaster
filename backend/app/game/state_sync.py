@@ -2,30 +2,30 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from app.game.combat_stats import build_combatant_combat_stats
 from app.game.session_manager import ActiveSession
 
 
 def sync_character_state(
-    active: Optional[ActiveSession],
+    active: ActiveSession | None,
     character_id: str,
     *,
-    hp: Optional[int] = None,
-    hp_max: Optional[int] = None,
-    level: Optional[int] = None,
-    xp: Optional[int] = None,
-    gp: Optional[int] = None,
-    sp: Optional[int] = None,
-    cp: Optional[int] = None,
-    xp_to_next_level: Optional[int] = None,
-    ability_scores: Optional[dict[str, int]] = None,
-    pending_asi: Optional[bool] = None,
-    equipment: Optional[list[dict[str, Any]]] = None,
-    spell_slots: Optional[dict[str, Any]] = None,
-    hit_dice: Optional[dict[str, Any]] = None,
-    conditions: Optional[list[str]] = None,
+    hp: int | None = None,
+    hp_max: int | None = None,
+    level: int | None = None,
+    xp: int | None = None,
+    gp: int | None = None,
+    sp: int | None = None,
+    cp: int | None = None,
+    xp_to_next_level: int | None = None,
+    ability_scores: dict[str, int] | None = None,
+    pending_asi: bool | None = None,
+    equipment: list[dict[str, Any]] | None = None,
+    spell_slots: dict[str, Any] | None = None,
+    hit_dice: dict[str, Any] | None = None,
+    conditions: list[str] | None = None,
 ) -> bool:
     """Update character and combatant snapshots inside an active session."""
     if active is None:

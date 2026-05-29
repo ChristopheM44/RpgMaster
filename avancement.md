@@ -293,11 +293,11 @@ La version PyTorch de Kokoro v0.4 souffre d'un bug sur les phonemes francais (fi
 **Solution retenue : Kokoro-ONNX v1.0** en micro-service isole.
 - Modele ONNX 82M parametres, ultra-optimise Apple Silicon M4.
 - Voix francaise : `ff_siwis`, `lang="fr-fr"`, `speed=1.0`
-- Isole dans `tts_service/` avec son propre venv Python 3.11 (incompatible avec le backend Python 3.9).
+- Isole dans `tts_service/` avec son propre venv Python 3.11 (initialement séparé car le backend tournait sous Python 3.9).
 - Modeles telecharges automatiquement : `kokoro-v1.0.onnx` + `voices-v1.0.bin` (~313 Mo total).
 
 **Architecture micro-service subprocess :**
-Le backend principal (Python 3.9) ne peut pas importer `kokoro_onnx`.
+Le backend principal (désormais sous Python 3.11+) conserve cette architecture en micro-service isolé pour Kokoro-ONNX.
 `KokoroClient.synthesize()` lance `tts_service/.venv/bin/python tts_service/synthesize.py --text "..."`,
 recupere les bytes WAV sur stdout. Async via `asyncio.create_subprocess_exec`.
 Semaphore(1) pour serialiser les appels ONNX concurrents.

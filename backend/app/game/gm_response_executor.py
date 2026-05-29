@@ -11,7 +11,7 @@ import logging
 import re
 import uuid
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -110,12 +110,12 @@ class GMResponseExecutor:
         self,
         response: AgentResponse | GMResponse,
         active: ActiveSession,
-        db: Optional[Any] = None,
+        db: Any | None = None,
         *,
-        session_id: Optional[str] = None,
-        fallback_actor_id: Optional[str] = None,
-        social_roll_results: Optional[dict[str, Any]] = None,
-        provenance_context: Optional[dict[str, Any]] = None,
+        session_id: str | None = None,
+        fallback_actor_id: str | None = None,
+        social_roll_results: dict[str, Any] | None = None,
+        provenance_context: dict[str, Any] | None = None,
     ) -> GMExecutionResult:
         """Execute toutes les actions d'une reponse GM.
 
@@ -204,9 +204,9 @@ class GMResponseExecutor:
         action_type: str,
         params: dict[str, Any],
         active: ActiveSession,
-        provenance_context: Optional[dict[str, Any]],
+        provenance_context: dict[str, Any] | None,
         *,
-        social_roll_results: Optional[dict[str, Any]],
+        social_roll_results: dict[str, Any] | None,
     ) -> bool:
         """Refuse sensitive mutations when the player assertion is the only source."""
         if provenance_context is None:
@@ -251,7 +251,7 @@ class GMResponseExecutor:
         action_type: str,
         provenance_context: dict[str, Any],
         *,
-        social_roll_results: Optional[dict[str, Any]],
+        social_roll_results: dict[str, Any] | None,
     ) -> bool:
         if action_type == "damage_apply" and self._has_resolved_roll(provenance_context):
             return True
@@ -311,9 +311,9 @@ class GMResponseExecutor:
     def execute_roll_request(
         self,
         params: dict[str, Any],
-        fallback_actor_id: Optional[str],
+        fallback_actor_id: str | None,
         active: ActiveSession,
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Execute un jet demande par le MJ et retourne un payload ROLL_RESULT."""
         from app.game.roll_executor import execute_roll_request
 
@@ -325,7 +325,7 @@ class GMResponseExecutor:
         action_type: str,
         params: dict[str, Any],
         active: ActiveSession,
-        db: Optional[Any] = None,
+        db: Any | None = None,
     ) -> None:
         """Applique une action mecanique GM et publie les evenements associes."""
         if action_type == "damage_apply":
@@ -656,8 +656,8 @@ class GMResponseExecutor:
         params: dict[str, Any],
         active: ActiveSession,
         *,
-        social_roll_results: Optional[dict[str, Any]] = None,
-    ) -> Optional[str]:
+        social_roll_results: dict[str, Any] | None = None,
+    ) -> str | None:
         npc_id = str(params.get("npc_id") or params.get("target") or "").strip()
         raw_attitude_shift = params.get("attitude_shift")
         attitude_shift = str(raw_attitude_shift or "").strip().lower()
@@ -804,7 +804,7 @@ class GMResponseExecutor:
         session_id: str,
         params: dict[str, Any],
         active: ActiveSession,
-        db: Optional[Any],
+        db: Any | None,
     ) -> None:
         campaign = (
             await campaign_dossier_service.campaign_for_session(session_id, db)
@@ -857,7 +857,7 @@ class GMResponseExecutor:
         session_id: str,
         params: dict[str, Any],
         active: ActiveSession,
-        db: Optional[Any],
+        db: Any | None,
     ) -> None:
         campaign = (
             await campaign_dossier_service.campaign_for_session(session_id, db)
@@ -917,7 +917,7 @@ class GMResponseExecutor:
         session_id: str,
         params: dict[str, Any],
         active: ActiveSession,
-        db: Optional[Any],
+        db: Any | None,
     ) -> None:
         campaign = (
             await campaign_dossier_service.campaign_for_session(session_id, db)
@@ -1012,7 +1012,7 @@ class GMResponseExecutor:
         session_id: str,
         params: dict[str, Any],
         active: ActiveSession,
-        db: Optional[Any],
+        db: Any | None,
     ) -> None:
         if db is None:
             logger.warning("xp_grant ignore : db requis.")
@@ -1040,7 +1040,7 @@ class GMResponseExecutor:
         session_id: str,
         params: dict[str, Any],
         active: ActiveSession,
-        db: Optional[Any],
+        db: Any | None,
     ) -> None:
         if db is None:
             logger.warning("currency_grant ignore : db requis.")
@@ -1068,7 +1068,7 @@ class GMResponseExecutor:
         session_id: str,
         params: dict[str, Any],
         active: ActiveSession,
-        db: Optional[Any],
+        db: Any | None,
     ) -> None:
         if db is None:
             logger.warning("currency_spend ignore : db requis.")
@@ -1095,7 +1095,7 @@ class GMResponseExecutor:
         session_id: str,
         params: dict[str, Any],
         active: ActiveSession,
-        db: Optional[Any],
+        db: Any | None,
     ) -> None:
         if db is None:
             logger.warning("loot_grant ignore : db requis.")
@@ -1167,7 +1167,7 @@ class GMResponseExecutor:
         session_id: str,
         params: dict[str, Any],
         active: ActiveSession,
-        db: Optional[Any],
+        db: Any | None,
     ) -> None:
         if db is None:
             logger.warning("item_remove ignore : db requis.")
@@ -1287,7 +1287,7 @@ class GMResponseExecutor:
     def _instantiate_loot_item(
         template_id: str,
         raw: dict[str, Any],
-        custom_template: Optional[dict[str, Any]] = None,
+        custom_template: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         template = dict(custom_template or find_equipment(template_id))
         template.setdefault("template_id", template_id)
@@ -1651,7 +1651,7 @@ class GMResponseExecutor:
         position: Any,
         cols: int,
         rows: int,
-    ) -> Optional[dict[str, int]]:
+    ) -> dict[str, int] | None:
         if not isinstance(position, dict):
             return None
         return {
@@ -1675,14 +1675,14 @@ class GMResponseExecutor:
 async def execute_gm_response(
     response: AgentResponse | GMResponse,
     active: ActiveSession,
-    db: Optional[Any] = None,
+    db: Any | None = None,
     *,
-    session_id: Optional[str] = None,
-    fallback_actor_id: Optional[str] = None,
+    session_id: str | None = None,
+    fallback_actor_id: str | None = None,
     event_bus_instance: Any = event_bus,
     source: str = "action_pipeline",
-    social_roll_results: Optional[dict[str, Any]] = None,
-    provenance_context: Optional[dict[str, Any]] = None,
+    social_roll_results: dict[str, Any] | None = None,
+    provenance_context: dict[str, Any] | None = None,
 ) -> GMExecutionResult:
     """Fonction pratique gardant l'API explicite du lot 1.4."""
     executor = GMResponseExecutor(event_bus_instance, source=source)

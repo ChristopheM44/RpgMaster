@@ -1,8 +1,8 @@
 """AI combat turn handling for the game WebSocket facade."""
 from __future__ import annotations
 
-from collections.abc import Awaitable
-from typing import Any, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 

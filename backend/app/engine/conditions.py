@@ -20,7 +20,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 # ---------------------------------------------------------------------------
 # Condition enum
@@ -269,7 +268,7 @@ def has_attack_disadvantage(attacker_conditions: set[Condition]) -> bool:
     return any(CONDITION_EFFECTS[c].attack_disadvantage for c in attacker_conditions)
 
 
-def resolve_attack_advantage(attacker_conditions: set[Condition]) -> Optional[bool]:
+def resolve_attack_advantage(attacker_conditions: set[Condition]) -> bool | None:
     """Resolve the net advantage state for an attacker.
 
     SRD 5.2 §Advantage and Disadvantage: if you have both advantage and
@@ -332,7 +331,7 @@ def is_attacked_with_disadvantage(
 def resolve_attack_advantage_vs(
     target_conditions: set[Condition],
     ranged: bool = False,
-) -> Optional[bool]:
+) -> bool | None:
     """Resolve the net advantage state for attacks *against* the target.
 
     Returns:

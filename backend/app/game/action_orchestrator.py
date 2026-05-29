@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any, Optional
+from typing import Any
 
 from app.game.async_tasks import create_logged_task
 from app.game.event_bus import EventType
@@ -28,7 +28,7 @@ class ActionOrchestrator:
         self,
         session_id: str,
         narration_text: str,
-        db: Optional[Any],
+        db: Any | None,
     ) -> None:
         narration_id = str(uuid.uuid4())
         await publish_visible_entry(

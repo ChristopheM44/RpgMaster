@@ -5,7 +5,7 @@ import logging
 import random
 import re
 from copy import deepcopy
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -117,7 +117,7 @@ _HOSTILE_POI_MARKERS = {
 }
 
 
-def normalized_phrase(text: Optional[str]) -> str:
+def normalized_phrase(text: str | None) -> str:
     if not text:
         return ""
     normalized = text.casefold().replace("’", "'")
@@ -140,7 +140,7 @@ def active_npc_ids(active: Any) -> list[str]:
     return result
 
 
-def combat_target_id(action: PlayerActionMessage, active: Any) -> Optional[str]:
+def combat_target_id(action: PlayerActionMessage, active: Any) -> str | None:
     if action.target_id:
         return action.target_id
     if action.action_type != "free_text" or not is_combat_social_text(action.content):
@@ -219,7 +219,7 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
-def _summary_position(position: Any) -> Optional[dict[str, int]]:
+def _summary_position(position: Any) -> dict[str, int] | None:
     if not isinstance(position, dict):
         return None
     if "col" in position or "row" in position:
@@ -235,7 +235,7 @@ def _summary_position(position: Any) -> Optional[dict[str, int]]:
     return None
 
 
-def _dedupe_removed_npcs(*groups: Optional[list[dict[str, Any]]]) -> list[dict[str, Any]]:
+def _dedupe_removed_npcs(*groups: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
     by_id: dict[str, dict[str, Any]] = {}
     for group in groups:
         for entry in group or []:
@@ -250,7 +250,7 @@ def _dedupe_removed_npcs(*groups: Optional[list[dict[str, Any]]]) -> list[dict[s
 
 def _build_combat_summary(
     active: Any,
-    removed_npcs: Optional[list[dict[str, Any]]] = None,
+    removed_npcs: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build a compact, structured combat outcome before combat state cleanup."""
     state_data: dict[str, Any] = active.state_data
@@ -674,7 +674,7 @@ async def _generate_encounter_end(
     active: Any,
     db: AsyncSession,
     combat_summary: dict[str, Any],
-) -> tuple[Optional[str], bool]:
+) -> tuple[str | None, bool]:
     """Ask the GM for one post-combat narration and safe scene updates."""
     from app.api import ws_game
     gm_agent = getattr(ws_game.action_resolver, "_gm", None)
@@ -750,7 +750,7 @@ async def auto_death_save(
     combatant_id: str,
     name: str,
     active: Any,
-    db: Optional[AsyncSession] = None,
+    db: AsyncSession | None = None,
 ) -> None:
     """Auto-roule un jet de sauvegarde contre la mort pour un compagnon IA à 0 PV."""
     from app.engine.combat import roll_death_save  # noqa: PLC0415
@@ -915,7 +915,7 @@ async def handle_combat_end(
     active: Any,
     db: AsyncSession,
     reason: str = "victory",
-    removed_npcs: Optional[list[dict[str, Any]]] = None,
+    removed_npcs: list[dict[str, Any]] | None = None,
 ) -> None:
     """Wrap up combat through ENCOUNTER_END, then return to EXPLORATION."""
     combat_summary = _build_combat_summary(active, removed_npcs)
@@ -996,7 +996,7 @@ async def handle_start_combat(
     session_id: str,
     active: Any,
     db: AsyncSession,
-    encounter_id: Optional[str] = None,
+    encounter_id: str | None = None,
     *,
     force: bool = False,
 ) -> None:
@@ -1016,7 +1016,7 @@ async def handle_start_combat(
     if not party_levels:
         party_levels = [1]
 
-    intro_text: Optional[str] = None
+    intro_text: str | None = None
     built = None
 
     pending = active.state_data.pop("pending_encounter", None)
@@ -1689,7 +1689,7 @@ async def handle_move(
 
 async def handle_toggle_ai_control(
     session_id: str,
-    character_id: Optional[str],
+    character_id: str | None,
     next_is_ai: bool,
     db: AsyncSession,
 ) -> None:
@@ -1782,7 +1782,7 @@ async def handle_toggle_ai_control(
 async def handle_trigger_ai_reactions(
     session_id: str,
     db: AsyncSession,
-    trigger_character_id: Optional[str] = None,
+    trigger_character_id: str | None = None,
 ) -> None:
     """Manual fallback: let AI companions react without a preceding human action."""
     active = session_manager.get_session(session_id)

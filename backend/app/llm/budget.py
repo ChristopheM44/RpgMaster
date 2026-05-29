@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 from app.config import get_llm_budget_mode
 
@@ -46,7 +46,7 @@ class LLMBudgetScope:
     )
 
 
-_current_scope: ContextVar[Optional[LLMBudgetScope]] = ContextVar(
+_current_scope: ContextVar[LLMBudgetScope | None] = ContextVar(
     "llm_budget_scope",
     default=None,
 )
@@ -82,14 +82,14 @@ def record_llm_call(kind: str) -> None:
     scope.counts[normalized] = scope.counts.get(normalized, 0) + 1
 
 
-def is_companion_social_prompt(content: Optional[str]) -> bool:
+def is_companion_social_prompt(content: str | None) -> bool:
     text = (content or "").strip().lower()
     return any(marker in text for marker in _COMPANION_SOCIAL_MARKERS)
 
 
 def is_pure_companion_social_prompt(
     action_type: str,
-    content: Optional[str],
+    content: str | None,
 ) -> bool:
     """Return true only for social prompts that do not need world arbitration."""
     return action_type.strip().lower() in _SOCIAL_ONLY_ACTIONS and is_companion_social_prompt(
@@ -102,8 +102,8 @@ def should_use_gm_for_action(
     phase: str,
     action_type: str,
     actor_kind: str,
-    content: Optional[str],
-    roll_results: Optional[dict[str, Any]],
+    content: str | None,
+    roll_results: dict[str, Any] | None,
 ) -> bool:
     """Return whether the action needs a GM LLM narration under the current budget."""
     del actor_kind, roll_results

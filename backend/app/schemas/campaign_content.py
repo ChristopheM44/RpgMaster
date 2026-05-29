@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from copy import deepcopy
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -34,7 +34,7 @@ class CustomItemTemplate(BaseModel):
     id: str
     template_id: str
     name: str = ""
-    name_fr: Optional[str] = None
+    name_fr: str | None = None
     category: str = ""
     item_type: str = "gear"
     unique: bool = False
@@ -56,13 +56,13 @@ class CustomItemTemplate(BaseModel):
 class MonsterStatOverride(BaseModel):
     """Validated mechanical changes applied over a SRD monster stat block."""
 
-    hp: Optional[int] = Field(None, ge=1)
-    ac: Optional[int] = Field(None, ge=1)
-    cr: Optional[float] = Field(None, ge=0)
-    xp: Optional[int] = Field(None, ge=0)
-    attack_bonus: Optional[int] = None
-    damage_dice: Optional[str] = None
-    damage_type: Optional[str] = None
+    hp: int | None = Field(None, ge=1)
+    ac: int | None = Field(None, ge=1)
+    cr: float | None = Field(None, ge=0)
+    xp: int | None = Field(None, ge=0)
+    attack_bonus: int | None = None
+    damage_dice: str | None = None
+    damage_type: str | None = None
     damage_resistances: list[str] = Field(default_factory=list)
     damage_immunities: list[str] = Field(default_factory=list)
     damage_vulnerabilities: list[str] = Field(default_factory=list)
@@ -77,10 +77,10 @@ class CustomMonsterTemplate(BaseModel):
     id: str
     base_srd_id: str
     name: str
-    name_fr: Optional[str] = None
-    description: Optional[str] = None
+    name_fr: str | None = None
+    description: str | None = None
     stat_overrides: MonsterStatOverride = Field(default_factory=MonsterStatOverride)
-    persona_id: Optional[str] = None
+    persona_id: str | None = None
 
     @model_validator(mode="before")
     @classmethod

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -20,7 +19,7 @@ class WrappedRetryError(Exception):
     pass
 
 
-def _wrap_retry_error(exc: Optional[BaseException], max_retries: int) -> WrappedRetryError:
+def _wrap_retry_error(exc: BaseException | None, max_retries: int) -> WrappedRetryError:
     return WrappedRetryError(f"failed after {max_retries}: {exc}")
 
 

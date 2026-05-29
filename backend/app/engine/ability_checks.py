@@ -12,7 +12,6 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 from app.engine.dice import roll_dice
 
@@ -83,9 +82,9 @@ class CheckResult:
     all_rolls: list[int]           # both dice when advantage/disadvantage applies
     modifier: int                  # total modifier applied
     total: int                     # d20_roll + modifier
-    dc: Optional[int]
-    success: Optional[bool]        # None when no DC was provided
-    advantage: Optional[bool]      # True/False/None
+    dc: int | None
+    success: bool | None        # None when no DC was provided
+    advantage: bool | None      # True/False/None
     label: str                     # human-readable label, e.g. "DEX (Stealth)"
     breakdown: str                 # e.g. "14 + 5 = 19 vs DC 15 ✓"
 
@@ -99,7 +98,7 @@ class CheckResult:
 
 
 def _resolve_d20(
-    advantage: Optional[bool],
+    advantage: bool | None,
     rng: random.Random | None,
 ) -> tuple[int, list[int]]:
     """Roll d20 respecting advantage / disadvantage.
@@ -118,9 +117,9 @@ def _resolve_d20(
 
 def ability_check(
     score: int,
-    dc: Optional[int] = None,
-    advantage: Optional[bool] = None,
-    ability: Optional[Ability] = None,
+    dc: int | None = None,
+    advantage: bool | None = None,
+    ability: Ability | None = None,
     rng: random.Random | None = None,
 ) -> CheckResult:
     """Perform a raw ability check (no proficiency).
@@ -160,8 +159,8 @@ def skill_check(
     skill: str,
     level: int,
     proficiency: Proficiency = Proficiency.NONE,
-    dc: Optional[int] = None,
-    advantage: Optional[bool] = None,
+    dc: int | None = None,
+    advantage: bool | None = None,
     rng: random.Random | None = None,
 ) -> CheckResult:
     """Perform a skill check with optional proficiency.
@@ -221,8 +220,8 @@ def saving_throw(
     ability: Ability,
     level: int,
     proficient: bool = False,
-    dc: Optional[int] = None,
-    advantage: Optional[bool] = None,
+    dc: int | None = None,
+    advantage: bool | None = None,
     rng: random.Random | None = None,
 ) -> CheckResult:
     """Perform a saving throw.

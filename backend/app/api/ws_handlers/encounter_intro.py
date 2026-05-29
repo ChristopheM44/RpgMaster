@@ -4,8 +4,8 @@ from __future__ import annotations
 import inspect
 import logging
 import re
-from collections.abc import Awaitable
-from typing import Any, Callable, Optional
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -62,7 +62,7 @@ def encounter_intro_combatants(combatants_info: dict[str, Any]) -> list[dict[str
     return enemies
 
 
-def is_unhelpful_intro(text: Optional[str]) -> bool:
+def is_unhelpful_intro(text: str | None) -> bool:
     if not text or not text.strip():
         return True
     lowered = text.casefold()
@@ -89,7 +89,7 @@ async def generate_encounter_intro(
     event_bus: Any,
     load_recent_messages: Callable[[str, AsyncSession], Awaitable[list[Any]]],
     source: str = "ws_game",
-) -> Optional[str]:
+) -> str | None:
     """Ask the GM for a one-shot cinematic encounter intro when available."""
     run_intro = getattr(gm_agent, "run_encounter_intro", None)
     if not callable(run_intro) or not is_async_callable(run_intro):
@@ -154,14 +154,14 @@ async def execute_intro_scene_layout(
     )
 
 
-def normalized_phrase(text: Optional[str]) -> str:
+def normalized_phrase(text: str | None) -> str:
     if not text:
         return ""
     normalized = text.casefold().replace("’", "'")
     return re.sub(r"\s+", " ", normalized)
 
 
-def should_pause_for_encounter_intro(text: Optional[str]) -> bool:
+def should_pause_for_encounter_intro(text: str | None) -> bool:
     """Return True when the intro reads like a threat/sommation, not an attack."""
     normalized = normalized_phrase(text)
     if not normalized:

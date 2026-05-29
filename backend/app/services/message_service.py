@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,7 +28,7 @@ async def persist_narration(
     db: AsyncSession,
     role: MessageRole = MessageRole.GM,
     message_type: MessageType = MessageType.NARRATION,
-    metadata: Optional[dict[str, Any]] = None,
+    metadata: dict[str, Any] | None = None,
 ) -> None:
     """Persiste un message narratif en base de données.
 
@@ -56,7 +56,7 @@ async def persist_narration(
 async def persist_roll_result(
     session_id: str,
     roll_payload: dict[str, Any],
-    db: Optional[AsyncSession],
+    db: AsyncSession | None,
 ) -> None:
     """Persiste un résultat de jet (ROLL_RESULT) pour restaurer le récit au rechargement.
 
@@ -86,7 +86,7 @@ async def persist_roll_result(
 async def load_recent_messages(
     session_id: str,
     db: AsyncSession,
-    limit: Optional[int] = None,
+    limit: int | None = None,
 ) -> list[ContextMessage]:
     """Relit les derniers messages persistés d'une session, ordre chronologique.
 

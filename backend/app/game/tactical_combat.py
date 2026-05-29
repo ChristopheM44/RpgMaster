@@ -7,7 +7,7 @@ place so narration can only describe state changes that the server applied.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 from app.engine.combat import roll_attack, roll_damage
 from app.engine.conditions import Condition, can_take_reactions
@@ -38,7 +38,7 @@ class TacticalMoveResult:
     valid: bool
     reason: str = ""
     path: list[GridPosition] = field(default_factory=list)
-    final_position: Optional[GridPosition] = None
+    final_position: GridPosition | None = None
     movement_used_m: float = 0.0
     interrupted: bool = False
     opportunity_attacks: list[OpportunityAttackResult] = field(default_factory=list)
@@ -46,10 +46,10 @@ class TacticalMoveResult:
 
 @dataclass
 class TacticalAttackPreparation:
-    target_id: Optional[str]
+    target_id: str | None
     allowed: bool
     reason: str = ""
-    moved: Optional[TacticalMoveResult] = None
+    moved: TacticalMoveResult | None = None
 
 
 _NO_REACTION_ALIASES = {
@@ -78,14 +78,14 @@ def grid_dimensions(state_data: dict[str, Any]) -> tuple[int, int]:
 def grid_position_for(
     state_data: dict[str, Any],
     combatant_id: str,
-) -> Optional[GridPosition]:
+) -> GridPosition | None:
     raw = (state_data.get("grid_positions") or {}).get(combatant_id)
     if not isinstance(raw, dict) or "col" not in raw or "row" not in raw:
         return None
     return GridPosition.from_dict(raw)
 
 
-def combatant_name(state_data: dict[str, Any], combatant_id: Optional[str]) -> str:
+def combatant_name(state_data: dict[str, Any], combatant_id: str | None) -> str:
     if not combatant_id:
         return "cible"
     cdata = (state_data.get("combatants") or {}).get(combatant_id, {})
@@ -158,7 +158,7 @@ def has_reaction_available(entry: Any, cdata: dict[str, Any]) -> bool:
 def occupied_positions(
     state_data: dict[str, Any],
     *,
-    exclude: Optional[str] = None,
+    exclude: str | None = None,
 ) -> list[GridPosition]:
     positions = state_data.get("grid_positions") or {}
     result: list[GridPosition] = []
@@ -195,7 +195,7 @@ def difficult_positions(state_data: dict[str, Any]) -> list[GridPosition]:
 
 def path_cost_m(
     path: list[GridPosition],
-    difficult: Optional[list[GridPosition]] = None,
+    difficult: list[GridPosition] | None = None,
 ) -> float:
     difficult_set = {(pos.col, pos.row) for pos in difficult or []}
     cost_cells = 0.0
@@ -209,7 +209,7 @@ def is_within_reach(
     attacker_id: str,
     target_id: str,
     *,
-    reach_m: Optional[float] = None,
+    reach_m: float | None = None,
 ) -> bool:
     attacker_pos = grid_position_for(state_data, attacker_id)
     target_pos = grid_position_for(state_data, target_id)
@@ -222,10 +222,10 @@ def is_within_reach(
 
 def choose_attack_target(
     state_data: dict[str, Any],
-    actor_id: Optional[str],
+    actor_id: str | None,
     *,
     actor_is_player: bool,
-) -> Optional[str]:
+) -> str | None:
     combatants = state_data.get("combatants") or {}
     if not isinstance(combatants, dict):
         return None
@@ -301,7 +301,7 @@ def resolve_ai_move_destination(
     intent: str,
     target_id: str,
     movement_m: float,
-) -> Optional[GridPosition]:
+) -> GridPosition | None:
     """Resolve a semantic AI movement intent into a reachable grid cell."""
     normalized = str(intent or "").strip().lower()
     if normalized == "approach":
@@ -331,7 +331,7 @@ async def apply_tactical_move(
     mover_id: str,
     destination: GridPosition,
     event_bus: Any,
-    movement_m: Optional[float] = None,
+    movement_m: float | None = None,
     ignore_opportunity_attacks: bool = False,
     forced_movement: bool = False,
     teleport: bool = False,
@@ -437,8 +437,8 @@ async def prepare_attack(
     *,
     session_id: str,
     active: Any,
-    actor_id: Optional[str],
-    target_id: Optional[str],
+    actor_id: str | None,
+    target_id: str | None,
     actor_kind: str,
     event_bus: Any,
     source: str = "tactical_combat",
@@ -538,8 +538,8 @@ async def prepare_cast_spell(
     *,
     session_id: str,
     active: Any,
-    actor_id: Optional[str],
-    target_id: Optional[str],
+    actor_id: str | None,
+    target_id: str | None,
     spell_id: str,
     actor_kind: str,
     event_bus: Any,
@@ -635,7 +635,7 @@ async def prepare_cast_spell(
     return TacticalAttackPreparation(target_id, True, moved=move_result)
 
 
-def _spell_effective_range_m(spell: dict[str, Any], target_id: Optional[str]) -> float:
+def _spell_effective_range_m(spell: dict[str, Any], target_id: str | None) -> float:
     range_m = _float_value(spell.get("range_m"), 0.0)
     attack_type = str(spell.get("attack_type") or "").lower()
     if range_m == 0 and target_id is None:
@@ -650,7 +650,7 @@ def _closest_reachable_cell_to_target(
     actor_id: str,
     target_id: str,
     movement_m: float,
-) -> Optional[GridPosition]:
+) -> GridPosition | None:
     target = grid_position_for(state_data, target_id)
     if target is None:
         return None
@@ -666,7 +666,7 @@ def _retreat_destination(
     actor_id: str,
     target_id: str,
     movement_m: float,
-) -> Optional[GridPosition]:
+) -> GridPosition | None:
     actor = (state_data.get("combatants") or {}).get(actor_id, {})
     actor_is_player = bool(actor.get("is_player", True)) if isinstance(actor, dict) else True
     combatants = state_data.get("combatants") or {}
@@ -705,7 +705,7 @@ def _flank_destination(
     actor_id: str,
     target_id: str,
     movement_m: float,
-) -> Optional[GridPosition]:
+) -> GridPosition | None:
     target = grid_position_for(state_data, target_id)
     if target is None:
         return None
@@ -758,8 +758,8 @@ def _float_value(value: Any, default: float) -> float:
 
 def calculate_reachable_cells(
     active: Any,
-    combatant_id: Optional[str],
-) -> Optional[dict[str, Any]]:
+    combatant_id: str | None,
+) -> dict[str, Any] | None:
     if not combatant_id:
         return None
     state_data = active.state_data

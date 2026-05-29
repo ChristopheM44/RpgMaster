@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
@@ -209,7 +209,7 @@ async def _dispatch_action(
         return
 
     if action.action_type == "start_combat":
-        encounter_id: Optional[str] = action.content if action.content else None
+        encounter_id: str | None = action.content if action.content else None
         await _handle_start_combat(
             session_id,
             active,
@@ -412,7 +412,7 @@ async def game_websocket(
         }
     )
 
-    character_id: Optional[str] = None
+    character_id: str | None = None
 
     try:
         # 4. Receive loop
@@ -628,7 +628,7 @@ async def _generate_encounter_intro(
     active: Any,
     db: AsyncSession,
     combatants_info: dict[str, Any],
-) -> Optional[str]:
+) -> str | None:
     from app.api.ws_handlers.encounter_intro import generate_encounter_intro
     return await generate_encounter_intro(
         session_id,

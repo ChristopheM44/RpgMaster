@@ -2,9 +2,7 @@
 from __future__ import annotations
 
 import random
-from typing import Any, Dict, List
-
-import pytest
+from typing import Any
 
 from app.engine.encounter_builder import (
     BuiltEncounter,
@@ -22,7 +20,7 @@ from app.engine.encounter_builder import (
 # Minimal monster fixtures (no file I/O)
 # ---------------------------------------------------------------------------
 
-GOBLIN: Dict[str, Any] = {
+GOBLIN: dict[str, Any] = {
     "id": "goblin",
     "name": "Goblin",
     "name_fr": "Gobelin",
@@ -36,7 +34,7 @@ GOBLIN: Dict[str, Any] = {
     ],
 }
 
-HOBGOBLIN: Dict[str, Any] = {
+HOBGOBLIN: dict[str, Any] = {
     "id": "hobgoblin",
     "name": "Hobgoblin",
     "name_fr": "Hobgobelin",
@@ -50,7 +48,7 @@ HOBGOBLIN: Dict[str, Any] = {
     ],
 }
 
-OGRE: Dict[str, Any] = {
+OGRE: dict[str, Any] = {
     "id": "ogre",
     "name": "Ogre",
     "name_fr": "Ogre",
@@ -228,7 +226,7 @@ class TestGenerateEncounter:
 # ---------------------------------------------------------------------------
 
 class TestExpandToCombatants:
-    def _make_encounter(self, entries: List[EncounterEntry]) -> BuiltEncounter:
+    def _make_encounter(self, entries: list[EncounterEntry]) -> BuiltEncounter:
         return BuiltEncounter(entries=entries)
 
     def test_single_entry_single_count(self):

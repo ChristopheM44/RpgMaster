@@ -11,7 +11,7 @@ naming: each entry carries an English `name` (canonical) plus a `name_fr`
 """
 from __future__ import annotations
 
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -73,23 +73,23 @@ class Action(BaseModel):
     name: str
     name_fr: str
     type: ActionType
-    description: Optional[str] = None
+    description: str | None = None
     # Attack fields
-    attack_bonus: Optional[int] = None
-    targets: Optional[int] = None
-    damage_dice: Optional[str] = None
-    damage_type: Optional[str] = None
-    versatile_damage_dice: Optional[str] = None
-    reach_m: Optional[float] = None
-    range_normal_m: Optional[float] = None
-    range_long_m: Optional[float] = None
-    secondary_effect: Optional[dict[str, Any]] = None
+    attack_bonus: int | None = None
+    targets: int | None = None
+    damage_dice: str | None = None
+    damage_type: str | None = None
+    versatile_damage_dice: str | None = None
+    reach_m: float | None = None
+    range_normal_m: float | None = None
+    range_long_m: float | None = None
+    secondary_effect: dict[str, Any] | None = None
     # Multiattack
-    attacks: Optional[list[str]] = None
+    attacks: list[str] | None = None
     # Save-based / area
-    save: Optional[dict[str, Any]] = None
-    area_shape: Optional[str] = None
-    area_size_m: Optional[float] = None
+    save: dict[str, Any] | None = None
+    area_shape: str | None = None
+    area_size_m: float | None = None
 
 
 # --- Monster schema -------------------------------------------------------
@@ -117,21 +117,21 @@ MonsterType = Literal[
 class Speed(BaseModel):
     model_config = ConfigDict(extra="allow")
 
-    walk: Optional[int] = None
-    climb: Optional[int] = None
-    fly: Optional[int] = None
-    swim: Optional[int] = None
-    burrow: Optional[int] = None
+    walk: int | None = None
+    climb: int | None = None
+    fly: int | None = None
+    swim: int | None = None
+    burrow: int | None = None
 
 
 class Senses(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     passive_perception: int
-    darkvision_m: Optional[int] = None
-    blindsight_m: Optional[int] = None
-    truesight_m: Optional[int] = None
-    tremorsense_m: Optional[int] = None
+    darkvision_m: int | None = None
+    blindsight_m: int | None = None
+    truesight_m: int | None = None
+    tremorsense_m: int | None = None
 
 
 class MonsterSchema(BaseModel):
@@ -146,10 +146,10 @@ class MonsterSchema(BaseModel):
     xp: int
     size: MonsterSize
     type: MonsterType
-    subtype: Optional[str] = None
+    subtype: str | None = None
     alignment: str
     ac: int
-    ac_source: Optional[str] = None
+    ac_source: str | None = None
     hp: int
     hit_dice: str
     speed: Speed
@@ -166,11 +166,9 @@ class MonsterSchema(BaseModel):
     traits: list[Trait] = Field(default_factory=list)
     actions: list[Action] = Field(default_factory=list)
     legendary_actions: list[Action] = Field(default_factory=list)
-    description: Optional[str] = None
+    description: str | None = None
     # Set by the importer when a stat-block could not be fully parsed.
-    parse_status: Optional[
-        Literal["needs_review", "needs_actions", "needs_mechanics", "needs_en_name"]
-    ] = None
+    parse_status: Literal["needs_review", "needs_actions", "needs_mechanics", "needs_en_name"] | None = None
 
 
 # --- Spell schema ---------------------------------------------------------
@@ -200,8 +198,8 @@ class SpellSave(BaseModel):
 
     ability: Ability
     on_success: str  # "no_damage" | "half_damage" | "negates" | ...
-    repeat_save: Optional[str] = None  # "end_of_turn" | "start_of_turn" | ...
-    repeat_action: Optional[str] = None
+    repeat_save: str | None = None  # "end_of_turn" | "start_of_turn" | ...
+    repeat_action: str | None = None
 
 
 class SpellSchema(BaseModel):
@@ -218,40 +216,40 @@ class SpellSchema(BaseModel):
     components: list[SpellComponent]
     duration: str
     concentration: bool
-    ritual: Optional[bool] = None
+    ritual: bool | None = None
     classes: list[str] = Field(default_factory=list)
     description: str
     # Range
-    range_m: Optional[Union[int, float]] = None
+    range_m: int | float | None = None
     # Attack / save / damage
-    attack_type: Optional[SpellAttackType] = None
-    damage_dice: Optional[str] = None
-    damage_type: Optional[str] = None
-    save: Optional[SpellSave] = None
-    upcast_extra_dice: Optional[str] = None
-    upcast_breakpoints: Optional[list[int]] = None
-    upcast_extra_targets: Optional[int] = None
-    upcast_extra_rays: Optional[int] = None
-    upcast_extra_darts: Optional[int] = None
+    attack_type: SpellAttackType | None = None
+    damage_dice: str | None = None
+    damage_type: str | None = None
+    save: SpellSave | None = None
+    upcast_extra_dice: str | None = None
+    upcast_breakpoints: list[int] | None = None
+    upcast_extra_targets: int | None = None
+    upcast_extra_rays: int | None = None
+    upcast_extra_darts: int | None = None
     # Healing
-    heal_dice: Optional[str] = None
-    heal_bonus: Optional[str] = None
+    heal_dice: str | None = None
+    heal_bonus: str | None = None
     # Area
-    area_shape: Optional[str] = None
-    area_size_m: Optional[float] = None
-    area_origin: Optional[str] = None
+    area_shape: str | None = None
+    area_size_m: float | None = None
+    area_origin: str | None = None
     # Misc effects
-    targets: Optional[int] = None
-    rays: Optional[int] = None
-    darts: Optional[int] = None
-    push_m: Optional[float] = None
-    teleport_m: Optional[float] = None
-    ac_bonus: Optional[int] = None
-    bonus_action_attack: Optional[bool] = None
-    reaction_trigger: Optional[str] = None
-    condition: Optional[str] = None
+    targets: int | None = None
+    rays: int | None = None
+    darts: int | None = None
+    push_m: float | None = None
+    teleport_m: float | None = None
+    ac_bonus: int | None = None
+    bonus_action_attack: bool | None = None
+    reaction_trigger: str | None = None
+    condition: str | None = None
     # Set by the importer when only the descriptive text could be extracted.
-    parse_status: Optional[Literal["needs_mechanics", "needs_en_name"]] = None
+    parse_status: Literal["needs_mechanics", "needs_en_name"] | None = None
 
 
 __all__ = [

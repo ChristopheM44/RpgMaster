@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import Optional
 
 from app.engine.ability_checks import Ability, ability_modifier
 from app.engine.ability_checks import proficiency_bonus as _prof_bonus
@@ -314,8 +313,8 @@ class ClassFeatures:
     skill_choices: list[str]                # pool from which to choose
     num_skill_choices: int                  # how many to pick
     level_1_features: list[str]             # feature names at level 1
-    spellcasting_ability: Optional[str]     # None for non-casters
-    caster_type: Optional[str]              # "full", "half", "third", "warlock", or None
+    spellcasting_ability: str | None     # None for non-casters
+    caster_type: str | None              # "full", "half", "third", "warlock", or None
 
 
 _CLASS_DATA: dict[str, ClassFeatures] = {

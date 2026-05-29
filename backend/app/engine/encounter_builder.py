@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 # XP thresholds per character per level: (Easy, Medium, Hard, Deadly)
 _XP_THRESHOLDS: dict[int, tuple[int, int, int, int]] = {
@@ -127,7 +127,7 @@ def generate_encounter(
     monsters_data: list[dict[str, Any]],
     party_levels: list[int],
     difficulty: str = "medium",
-    rng: Optional[random.Random] = None,
+    rng: random.Random | None = None,
 ) -> BuiltEncounter:
     """Generate a balanced random encounter for the given party.
 

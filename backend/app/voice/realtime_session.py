@@ -19,7 +19,7 @@ import json
 import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 import websockets
 from websockets.exceptions import WebSocketException
@@ -71,8 +71,8 @@ class RealtimeSession:
         api_key: str,
         voice: PersonaVoice,
         *,
-        model: Optional[str] = None,
-        base_url: Optional[str] = None,
+        model: str | None = None,
+        base_url: str | None = None,
         ws_factory: Any = None,
     ) -> None:
         self._api_key = api_key

@@ -8,7 +8,7 @@ You are the lead developer on RpgMaster, an AI-powered Dungeons & Dragons Game M
 RpgMaster is a full-stack application where an AI Game Master runs tabletop RPG sessions for human and AI players.
 
 ### Tech Stack
-- **Backend**: Python 3.9+ / FastAPI (async everywhere)
+- **Backend**: Python 3.11+ / FastAPI (async everywhere)
 - **Frontend**: Vue.js 3 (Composition API, `<script setup lang="ts">`) + TailwindCSS v4
 - **LLM (text)**: Ollama (local model, default mistral:7b) for GM logic and AI player agents
 - **LLM (voice)**: Voxtral 4B TTS via vLLM-Omni (NOT Ollama) — optional, async, never blocks gameplay
@@ -24,7 +24,7 @@ RpgMaster is a full-stack application where an AI Game Master runs tabletop RPG 
 5. **In-process event bus**: `asyncio.Queue` for Phase 1 (solo). Designed to evolve to Redis pub/sub for network multiplayer.
 
 ### Key Constraint
-Python 3.9.6 is installed on this machine. Use `from __future__ import annotations` for modern type hint syntax.
+Python 3.11.x is installed on this machine. Use modern type hint syntax (like `X | None`).
 </context>
 
 ---
@@ -45,7 +45,7 @@ When asked to implement a feature or fix a bug, follow this process:
 ## Coding Constraints
 
 <constraints>
-- INSTEAD OF using Python 3.10+ syntax (match/case, `X | Y` union types), ALWAYS use compatible syntax with `from __future__ import annotations` for type hints.
+- INSTEAD OF using old type hinting patterns (like `Optional[X]`, `Union[X, Y]`), ALWAYS use modern Python 3.11 features like `X | Y` for union types.
 - INSTEAD OF adding I/O or async code to `engine/`, ALWAYS keep the rules engine as pure synchronous logic. If you need to call the engine from async code, call it directly (no await needed).
 - INSTEAD OF letting the LLM generate dice results or rule outcomes in its narrative, ALWAYS resolve mechanics through the engine first, then pass results to the LLM for narration.
 - INSTEAD OF using free-text LLM responses, ALWAYS request structured JSON output and validate with Pydantic schemas.
@@ -74,7 +74,7 @@ When asked to implement a feature or fix a bug, follow this process:
 <self_verification>
 Before delivering code, verify:
 - [ ] Does it follow the architecture (engine = pure logic, agents = LLM interaction)?
-- [ ] Are all type hints using `from __future__ import annotations` for Python 3.9 compatibility?
+- [ ] Are all type hints using modern Python 3.11 features (like `X | None`)?
 - [ ] Does the engine code have zero I/O (no async, no database, no network)?
 - [ ] Are LLM responses validated through Pydantic schemas?
 - [ ] Are tests included for new functionality?

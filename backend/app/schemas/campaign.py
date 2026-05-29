@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 from pydantic import BaseModel, Field
 
 
@@ -41,8 +39,8 @@ class CampaignResponse(BaseModel):
     def from_orm(
         cls,
         c,
-        summary: Optional[dict] = None,
-        session_summaries: Optional[list[dict]] = None,
+        summary: dict | None = None,
+        session_summaries: list[dict] | None = None,
     ) -> CampaignResponse:
         summary = summary or {}
         return cls(
@@ -87,10 +85,10 @@ class AwardXpBody(BaseModel):
 
 class ImportSourceBody(BaseModel):
     kind: str
-    title: Optional[str] = None
-    url: Optional[str] = None
-    content: Optional[str] = None
-    filename: Optional[str] = None
+    title: str | None = None
+    url: str | None = None
+    content: str | None = None
+    filename: str | None = None
 
 
 class ForgeDraftBody(BaseModel):

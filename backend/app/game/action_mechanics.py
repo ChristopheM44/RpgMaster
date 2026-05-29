@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from app.engine import combat as combat_engine
 from app.engine.ability_checks import ability_modifier, proficiency_bonus
@@ -20,7 +20,7 @@ _DEFAULT_ATTACK_BONUS = 3
 _DEFAULT_DAMAGE = "1d6"
 
 _SRD_SPELLS_PATH = Path(__file__).parent.parent / "engine" / "srd_data" / "spells.json"
-_SPELLS_CACHE: Optional[dict[str, Any]] = None
+_SPELLS_CACHE: dict[str, Any] | None = None
 
 _SPELLCASTING_ABILITIES: dict[str, str] = {
     "wizard": "int",
@@ -50,8 +50,8 @@ class ActionMechanics:
 
     def _resolve_attack(
         self,
-        attacker_id: Optional[str],
-        target_id: Optional[str],
+        attacker_id: str | None,
+        target_id: str | None,
         state_data: dict[str, Any],
     ) -> dict[str, Any]:
         """Résout un jet d'attaque + dégâts via engine/combat.py.
@@ -198,7 +198,7 @@ class ActionMechanics:
             "label": raw.get("summary", ""),
         }
 
-    def _resolve_generic_roll(self, content: Optional[str]) -> dict[str, Any]:
+    def _resolve_generic_roll(self, content: str | None) -> dict[str, Any]:
         """Jet de dé générique (d20) pour les sorts ou tests sans contexte."""
         r = roll("d20")
         return {
@@ -213,12 +213,12 @@ class ActionMechanics:
     async def _resolve_cast_spell(
         self,
         session_id: str,
-        character_id: Optional[str],
+        character_id: str | None,
         spell_id: str,
-        slot_level: Optional[int],
-        target_id: Optional[str],
+        slot_level: int | None,
+        target_id: str | None,
         active: ActiveSession,
-        caster: Optional[Any] = None,
+        caster: Any | None = None,
     ) -> dict[str, Any]:
         """Résout le lancement d'un sort via le moteur de règles SRD 5.2.
 
@@ -276,9 +276,9 @@ class ActionMechanics:
                 payload["slots_remaining"] = slots_remaining
 
         # ── Résolution mécanique selon le type de sort ────────────────
-        attack_type: Optional[str] = spell.get("attack_type")
-        damage_dice: Optional[str] = spell.get("damage_dice")
-        extra_dice: Optional[str] = spell.get("upcast_extra_dice")
+        attack_type: str | None = spell.get("attack_type")
+        damage_dice: str | None = spell.get("damage_dice")
+        extra_dice: str | None = spell.get("upcast_extra_dice")
 
         if attack_type in ("ranged_spell", "melee_spell"):
             # Jet d'attaque de sort
@@ -359,8 +359,8 @@ class ActionMechanics:
             # Jet de sauvegarde de la cible
             full_damage = dmg.total
             applied_damage = full_damage
-            save_d20: Optional[int] = None
-            save_total_val: Optional[int] = None
+            save_d20: int | None = None
+            save_total_val: int | None = None
             target_saved = False
 
             if target_id:
@@ -427,7 +427,7 @@ class ActionMechanics:
 
     def _resolve_death_save(
         self,
-        character_id: Optional[str],
+        character_id: str | None,
         state_data: dict[str, Any],
     ) -> dict[str, Any]:
         """Jet de sauvegarde contre la mort (SRD 5.2 §Dying).
@@ -476,7 +476,7 @@ class ActionMechanics:
     async def _apply_death_save_outcome(
         self,
         session_id: str,
-        character_id: Optional[str],
+        character_id: str | None,
         roll_results: dict[str, Any],
         active: Any,
     ) -> None:
@@ -546,8 +546,8 @@ class ActionMechanics:
 
     def _resolve_stabilize(
         self,
-        healer_id: Optional[str],
-        target_id: Optional[str],
+        healer_id: str | None,
+        target_id: str | None,
         state_data: dict[str, Any],
     ) -> dict[str, Any]:
         """Jet de Médecine DD 10 pour stabiliser un personnage inconscient (SRD 5.2)."""
@@ -587,9 +587,9 @@ class ActionMechanics:
     def _execute_roll_request(
         self,
         params: dict[str, Any],
-        fallback_character_id: Optional[str],
+        fallback_character_id: str | None,
         active: ActiveSession,
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Exécute un jet de compétence/caractéristique/sauvegarde demandé par le GM.
 
         Retourne un payload prêt à être envoyé comme ROLL_RESULT, ou None si les

@@ -5,6 +5,7 @@ import random
 
 import pytest
 
+from app.engine.combat import AttackResult
 from app.engine.spells import (
     FULL_CASTER_SLOTS,
     HALF_CASTER_SLOTS,
@@ -21,7 +22,6 @@ from app.engine.spells import (
     starting_slots,
     upcast_damage,
 )
-from app.engine.combat import AttackResult
 
 
 def seeded(seed: int = 42) -> random.Random:

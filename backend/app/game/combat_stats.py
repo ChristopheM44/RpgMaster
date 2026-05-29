@@ -8,7 +8,7 @@ live equipment sync apply the same weapon/range rules.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from app.engine.ability_checks import ability_modifier, proficiency_bonus
 from app.engine.character_creation import get_class_features
@@ -75,7 +75,7 @@ def build_combatant_combat_stats(cdata: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _main_weapon_item(equipment: Any) -> Optional[dict[str, Any]]:
+def _main_weapon_item(equipment: Any) -> dict[str, Any] | None:
     if not isinstance(equipment, list):
         return None
     equipped_weapons = [
@@ -193,7 +193,7 @@ def _int_value(value: Any, default: int) -> int:
         return default
 
 
-def _optional_float(value: Any) -> Optional[float]:
+def _optional_float(value: Any) -> float | None:
     if value is None:
         return None
     try:
