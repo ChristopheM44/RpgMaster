@@ -10,7 +10,6 @@ const router = useRouter()
 const sessionStore = useSessionStore()
 const characterStore = useCharacterStore()
 
-const newSessionName = ref('')
 const confirmDeleteId = ref<string | null>(null)
 const selectedId = ref<string | null>(null)
 
@@ -53,11 +52,8 @@ const sessionToDeleteName = computed(
   () => sessionStore.sessions.find((s) => s.id === confirmDeleteId.value)?.name ?? '',
 )
 
-async function handleCreate() {
-  const name = newSessionName.value.trim()
-  if (!name) return
-  newSessionName.value = ''
-  router.push({ name: 'campaigns', query: { forge: '1', name } })
+function handleForge() {
+  router.push({ name: 'campaigns', query: { forge: '1' } })
 }
 
 function handleJoin(session: Session) {
@@ -94,14 +90,14 @@ function formatDate(dateStr: string): string {
 
       <!-- Hero -->
       <section class="mb-10">
-        <div class="rpg-eyebrow mb-2">✦ Vos aventures</div>
+        <div class="rpg-eyebrow mb-2">✦ Vos chroniques</div>
         <h1
           class="rpg-text-main font-display text-[44px] font-bold leading-[1.05] tracking-wide mb-3"
         >Lobby</h1>
         <p
           class="rpg-text-secondary max-w-xl font-serif text-[15px] italic"
         >
-          Reprenez une partie en cours, ou forgez une nouvelle légende.
+          Reprenez une session en cours, ou forgez une nouvelle chronique.
           Votre Maître du Jeu IA vous y attend.
         </p>
       </section>
@@ -112,7 +108,7 @@ function formatDate(dateStr: string): string {
         class="rpg-tone-blood rpg-tone-panel mb-6 rounded-lg border px-4 py-3 text-sm"
       >⚠ {{ sessionStore.error }}</div>
 
-      <!-- New session card -->
+      <!-- Forge new campaign CTA -->
       <section
         class="rpg-hero-create-card mb-10 flex items-center gap-5 overflow-hidden rounded-[14px] border px-6 py-5"
       >
@@ -121,26 +117,17 @@ function formatDate(dateStr: string): string {
         >✦</div>
 
         <div class="relative flex-1 min-w-0">
-          <div class="rpg-text-main font-display text-lg font-bold">Nouvelle Partie</div>
+          <div class="rpg-text-main font-display text-lg font-bold">Nouvelle Chronique</div>
           <div class="rpg-text-muted text-xs">
-            Donnez un nom à votre aventure. Le MJ se chargera du reste.
+            Forgez une campagne entière — le MJ structure dossier privé, contrat joueur et 1<sup>re</sup> session pour vous.
           </div>
         </div>
 
-        <form class="relative flex items-center gap-2" @submit.prevent="handleCreate">
-          <input
-            v-model="newSessionName"
-            type="text"
-            maxlength="100"
-            placeholder="Nom de l'aventure…"
-            class="rpg-input w-[260px]"
-          />
-          <button
-            type="submit"
-            class="rpg-btn-primary"
-            :disabled="!newSessionName.trim() || sessionStore.loading"
-          >Forger ⚔</button>
-        </form>
+        <button
+          type="button"
+          class="rpg-btn-primary shrink-0"
+          @click="handleForge"
+        >✦ Forger une chronique</button>
       </section>
 
       <!-- Section title with gradient divider -->
@@ -148,7 +135,7 @@ function formatDate(dateStr: string): string {
         <h2 class="rpg-section-title shrink-0">Sessions sauvegardées</h2>
         <div class="rpg-divider flex-1 h-px" />
         <span class="rpg-text-dim font-mono text-[11px]">
-          {{ sessionStore.sessions.length }} aventure{{ sessionStore.sessions.length > 1 ? 's' : '' }}
+          {{ sessionStore.sessions.length }} session{{ sessionStore.sessions.length > 1 ? 's' : '' }}
         </span>
       </div>
 
@@ -162,7 +149,7 @@ function formatDate(dateStr: string): string {
       <div
         v-else-if="!sessionStore.loading && sessionStore.sessions.length === 0"
         class="rpg-empty-state rounded-[10px] border border-dashed py-16 text-center font-serif italic"
-      >Aucune session sauvegardée. Créez votre première aventure !</div>
+      >Aucune session sauvegardée. Forgez votre première chronique !</div>
 
       <!-- Sessions list -->
       <ul v-else class="flex flex-col gap-2.5">

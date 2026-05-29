@@ -1,50 +1,28 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCampaignStore } from '../stores/campaign'
 import { useGameStore } from '../stores/game'
 import type {
   Campaign,
-  CampaignForgeJobResponse,
   CampaignGmDossier,
   CampaignGmDossierResponse,
-  CampaignImportSourceBody,
-  CampaignPlayerContract,
   CampaignScenario,
   CampaignVisibleChapter,
 } from '../types'
 import ConfirmDialog from '../components/common/ConfirmDialog.vue'
+import CampaignForgeModal from './CampaignForgeModal.vue'
 
 const router = useRouter()
 const campaignStore = useCampaignStore()
 const gameStore = useGameStore()
 
 type DetailTab = 'sessions' | 'scenario' | 'notes'
-type ForgeStep = 1 | 2 | 3 | 4 | 5
 
-const TONES = ['Dark fantasy', 'Mystère', 'Politique', 'Exploration', 'Combat tactique', 'Romance', 'Cosmique']
-const OPTIONS_AMBIANCE = [
-  'High fantasy (Magie & Héroïsme)',
-  'Dark fantasy (Survie & Corruption)',
-  'Low fantasy (Magie rare & Réalisme)',
-  'Sword & Sorcery (Magie occulte & Cités antiques)',
-  'Dungeon crawler (Ruines & Souterrains)',
-  'Intrigue politique (Conflits de cours & Châteaux)',
-  'Mythologie antique (Dieux actifs & Héros légendaires)'
-]
-const OPTIONS_BIOME = ['Marais / Marécages', 'Ruines oubliées', 'Souterrains / Grottes', 'Forêt dense / Jungle', 'Désert aride', 'Plaines verdoyantes', 'Canyons / Montagnes', 'Archipel / Îles tropicales', 'Ville côtière']
-const OPTIONS_CLIMAT = ['Brumeux / Humide', 'Glacial / Neigeux', 'Caniculaire / Aride', 'Tempétueux / Orageux', 'Pluvieux / Crachin', 'Ensoleillé / Printanier', 'Nocturne éternel']
-const OPTIONS_TON = ['Tragique', 'Épique / Héroïque', 'Mystérieux / Enquête', 'Survie / Cruel', 'Comique / Léger', 'Sombre / Mélancolique', 'Horrifique / Angoissant']
 const DETAIL_TABS: Array<{ id: DetailTab; label: string; icon: string }> = [
   { id: 'sessions', label: 'Sessions', icon: '◆' },
   { id: 'scenario', label: 'Scénario', icon: '✦' },
   { id: 'notes', label: 'Notes du MJ', icon: '❦' },
-]
-const IMPORT_KINDS: Array<{ id: 'url' | 'text' | 'file_text' | 'epic_5_acts'; label: string }> = [
-  { id: 'epic_5_acts', label: 'Options 5 Actes ⚔' },
-  { id: 'text', label: 'Texte' },
-  { id: 'url', label: 'URL' },
-  { id: 'file_text', label: 'Fichier' },
 ]
 const GM_SECTIONS: Array<{ key: keyof CampaignGmDossier; label: string }> = [
   { key: 'important_npcs', label: 'PNJ importants' },
@@ -66,54 +44,16 @@ const showAdvance = ref(false)
 const confirmDeleteId = ref<string | null>(null)
 const confirmResetId = ref<string | null>(null)
 const newSessionName = ref('')
-const forgeStep = ref<ForgeStep>(1)
-const forgeCampaignId = ref<string | null>(null)
-const draftContract = ref<CampaignPlayerContract | null>(null)
-const forgeJob = ref<CampaignForgeJobResponse | null>(null)
-const sourceCount = ref(0)
-const isForging = ref(false)
-const isImporting = ref(false)
-const isValidating = ref(false)
 const isResetting = ref(false)
 const authorMode = ref(false)
 const isLoadingGmDossier = ref(false)
 const actionError = ref<string | null>(null)
-const modalError = ref<string | null>(null)
 const notesError = ref<string | null>(null)
-const validationTab = ref<'contract' | 'secrets'>('contract')
-
-const forgeForm = reactive({
-  mode: 'scratch' as 'scratch' | 'import',
-  name: '',
-  pitch: '',
-  duration: '3-5 sessions',
-  tones: [] as string[],
-  scope: 'mini-campagne',
-  startingLevel: 1,
-  combat: 'hybride léger',
-  importKind: 'epic_5_acts' as 'url' | 'text' | 'file_text' | 'epic_5_acts',
-  importTitle: '',
-  importUrl: '',
-  importText: '',
-  importFilename: '',
-  narrative_structure: 'epic_5_acts' as 'adaptive' | 'epic_5_acts',
-  options5Acts: {
-    ambiance: '',
-    biome: '',
-    climat: '',
-    ton: '',
-    info: '',
-  },
-})
 
 onMounted(async () => {
   await campaignStore.fetchCampaigns()
-  const route = router.currentRoute.value
-  if (route.query.forge === '1') {
-    openForge()
-    if (route.query.name) {
-      forgeForm.name = String(route.query.name)
-    }
+  if (router.currentRoute.value.query.forge === '1') {
+    showForge.value = true
   } else if (campaignStore.campaigns[0]) {
     await selectCampaign(campaignStore.campaigns[0])
   }
@@ -145,24 +85,6 @@ const gmDossierRaw = computed(() => {
   return JSON.stringify(gmDossier.value, null, 2)
 })
 
-const forgeProgressPercent = computed(() => {
-  if (!forgeJob.value) return 0
-  const total = Math.max(forgeJob.value.total_steps || 1, 1)
-  const current = Math.min(total, Math.max(forgeJob.value.current_step || 0, 0))
-  return Math.round((current / total) * 100)
-})
-
-const forgeProgressLabel = computed(() => {
-  if (!forgeJob.value) return ''
-  const total = Math.max(forgeJob.value.total_steps || 1, 1)
-  const current = Math.min(total, Math.max(forgeJob.value.current_step || 0, 0))
-  return `Global ${current} / ${total}`
-})
-
-const forgeRetryEvents = computed(() =>
-  (forgeJob.value?.events ?? []).filter((event) => event.type.includes('retry')).slice(-4),
-)
-
 const campaignToDelete = computed(
   () => campaignStore.campaigns.find((c) => c.id === confirmDeleteId.value) ?? null,
 )
@@ -181,258 +103,18 @@ async function selectCampaign(campaign: Campaign) {
 
 function openForge() {
   showForge.value = true
-  forgeStep.value = 1
-  forgeCampaignId.value = null
-  draftContract.value = null
-  forgeJob.value = null
-  sourceCount.value = 0
-  modalError.value = null
-  validationTab.value = 'contract'
-  Object.assign(forgeForm, {
-    mode: 'scratch',
-    name: '',
-    pitch: '',
-    duration: '3-5 sessions',
-    tones: [],
-    scope: 'mini-campagne',
-    startingLevel: 1,
-    combat: 'hybride léger',
-    importKind: 'epic_5_acts',
-    importTitle: '',
-    importUrl: '',
-    importText: '',
-    importFilename: '',
-    narrative_structure: 'epic_5_acts',
-    options5Acts: {
-      ambiance: '',
-      biome: '',
-      climat: '',
-      ton: '',
-      info: '',
-    },
-  })
 }
 
-function closeForge() {
-  if (isForging.value) return
+async function handleForgeCompleted(payload: { campaignId: string; newSessionId: string }) {
   showForge.value = false
-}
-
-function toggleTone(tone: string) {
-  const idx = forgeForm.tones.indexOf(tone)
-  if (idx >= 0) {
-    forgeForm.tones.splice(idx, 1)
-  } else if (forgeForm.tones.length < 3) {
-    forgeForm.tones.push(tone)
-  }
-}
-
-function rollRandomOption(field: 'ambiance' | 'biome' | 'climat' | 'ton') {
-  let list: string[] = []
-  if (field === 'ambiance') list = OPTIONS_AMBIANCE
-  else if (field === 'biome') list = OPTIONS_BIOME
-  else if (field === 'climat') list = OPTIONS_CLIMAT
-  else if (field === 'ton') list = OPTIONS_TON
-  
-  if (list.length) {
-    const randomVal = list[Math.floor(Math.random() * list.length)]
-    ;(forgeForm.options5Acts as any)[field] = randomVal
-  }
-}
-
-function rollAllRandomOptions() {
-  rollRandomOption('ambiance')
-  rollRandomOption('biome')
-  rollRandomOption('climat')
-  rollRandomOption('ton')
-}
-
-function nextStep() {
-  modalError.value = null
-  if (forgeStep.value === 1) {
-    if (forgeForm.mode === 'scratch') {
-      if (!forgeForm.name.trim()) {
-        modalError.value = 'Le nom de la campagne est requis.'
-        return
-      }
-      if (!forgeForm.pitch.trim()) {
-        modalError.value = 'Le brief court est requis pour guider la forge de la campagne.'
-        return
-      }
-    }
-  }
-  forgeStep.value = Math.min(5, forgeStep.value + 1) as ForgeStep
-}
-
-function previousStep() {
-  if (isForging.value) return
-  modalError.value = null
-  forgeStep.value = Math.max(1, forgeStep.value - 1) as ForgeStep
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, ms))
-}
-
-async function ensureForgeCampaign(): Promise<string | null> {
-  if (forgeCampaignId.value) return forgeCampaignId.value
-  const fallbackName = forgeForm.mode === 'import' ? 'Chronique Importée' : 'Chronique sans nom'
-  const fallbackDesc = forgeForm.mode === 'import' ? '' : 'Aventure de campagne.'
-  const created = await campaignStore.createCampaign({
-    name: forgeForm.name.trim() || fallbackName,
-    description: forgeForm.pitch.trim() || fallbackDesc,
+  await campaignStore.fetchCampaigns()
+  const campaign = campaignStore.campaigns.find((c) => c.id === payload.campaignId)
+  if (campaign) selectedCampaign.value = campaign
+  await router.push({
+    name: 'character-setup',
+    params: { id: payload.newSessionId },
+    query: { back: 'campaigns' },
   })
-  if (!created) {
-    modalError.value = 'Impossible de créer la campagne.'
-    return null
-  }
-  forgeCampaignId.value = created.id
-  await selectCampaign(created)
-  return created.id
-}
-
-async function importSource() {
-  modalError.value = null
-  const campaignId = await ensureForgeCampaign()
-  if (!campaignId) return
-  const body: CampaignImportSourceBody = {
-    kind: forgeForm.importKind as any,
-    title: forgeForm.importTitle.trim() || undefined,
-  }
-  if (forgeForm.importKind === 'url') {
-    body.url = forgeForm.importUrl.trim()
-  } else {
-    body.content = forgeForm.importText.trim()
-    body.filename = forgeForm.importFilename || undefined
-  }
-  if ((body.kind === 'url' && !body.url) || (body.kind !== 'url' && !body.content)) {
-    modalError.value = 'La source est vide.'
-    return
-  }
-  isImporting.value = true
-  try {
-    const result = await campaignStore.importSource(campaignId, body)
-    if (!result) {
-      modalError.value = campaignStore.error ?? "L'import a échoué."
-      return
-    }
-    sourceCount.value = result.source_count
-    forgeForm.importTitle = ''
-    forgeForm.importUrl = ''
-    forgeForm.importText = ''
-    forgeForm.importFilename = ''
-  } finally {
-    isImporting.value = false
-  }
-}
-
-async function handleFileImport(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
-  forgeForm.importKind = 'file_text'
-  forgeForm.importFilename = file.name
-  forgeForm.importTitle = forgeForm.importTitle || file.name
-  forgeForm.importText = await file.text()
-}
-
-async function forgeDraft() {
-  if (isForging.value) return
-  modalError.value = null
-  const campaignId = await ensureForgeCampaign()
-  if (!campaignId) return
-  isForging.value = true
-  forgeJob.value = null
-  try {
-    const initial = await campaignStore.startForgeDraftJob(
-      campaignId,
-      {
-        title: forgeForm.name,
-        pitch: forgeForm.pitch,
-        tones: forgeForm.tones,
-        duration: forgeForm.duration,
-      },
-      {
-        scope: forgeForm.scope,
-        starting_level: forgeForm.startingLevel,
-        combat: forgeForm.combat,
-        narrative_structure: forgeForm.narrative_structure,
-        options_5_acts: { ...forgeForm.options5Acts },
-      },
-    )
-    if (!initial) {
-      modalError.value = campaignStore.error ?? 'La forge a échoué.'
-      return
-    }
-    forgeJob.value = initial
-    let current = initial
-    while (current.status === 'queued' || current.status === 'running') {
-      await delay(1000)
-      const next = await campaignStore.getForgeDraftJob(campaignId, current.job_id)
-      if (!next) {
-        modalError.value = campaignStore.error ?? 'Suivi de forge impossible.'
-        return
-      }
-      current = next
-      forgeJob.value = next
-    }
-    if (current.status !== 'completed' || !current.player_contract) {
-      modalError.value = current.error || 'La forge a échoué.'
-      return
-    }
-    draftContract.value = cloneContract(current.player_contract)
-    void campaignStore.fetchGmDossier(campaignId)
-    forgeStep.value = 5
-  } finally {
-    isForging.value = false
-  }
-}
-
-async function validateContract() {
-  if (!forgeCampaignId.value || !draftContract.value) return
-  isValidating.value = true
-  modalError.value = null
-  try {
-    const result = await campaignStore.validateContract(forgeCampaignId.value, draftContract.value)
-    if (!result) {
-      modalError.value = campaignStore.error ?? 'Validation impossible.'
-      return
-    }
-    await campaignStore.fetchCampaigns()
-    const campaign = campaignStore.campaigns.find((c) => c.id === forgeCampaignId.value)
-    if (campaign) {
-      await selectCampaign(campaign)
-      activeTab.value = 'scenario'
-      await campaignStore.fetchScenario(campaign.id)
-    }
-    closeForge()
-  } finally {
-    isValidating.value = false
-  }
-}
-
-function updateObjectives(value: string) {
-  if (!draftContract.value) return
-  draftContract.value.known_objectives = value
-    .split('\n')
-    .map((item) => item.trim())
-    .filter(Boolean)
-}
-
-function updateToneInput(value: string) {
-  if (!draftContract.value) return
-  draftContract.value.tones = value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-}
-
-function updateToneEvent(event: Event) {
-  updateToneInput((event.target as HTMLInputElement).value)
-}
-
-function updateObjectivesEvent(event: Event) {
-  updateObjectives((event.target as HTMLTextAreaElement).value)
 }
 
 function setActiveTab(tab: DetailTab) {
@@ -620,10 +302,6 @@ function itemDetail(item: unknown): string {
     Object.entries(record).filter(([key]) => !['id', 'title', 'name', 'label', 'public'].includes(key)),
   )
   return Object.keys(rest).length ? JSON.stringify(rest, null, 2) : ''
-}
-
-function cloneContract(contract: CampaignPlayerContract): CampaignPlayerContract {
-  return JSON.parse(JSON.stringify(contract)) as CampaignPlayerContract
 }
 </script>
 
@@ -1057,415 +735,11 @@ function cloneContract(contract: CampaignPlayerContract): CampaignPlayerContract
       </footer>
     </aside>
 
-    <Teleport to="body">
-      <div
-        v-if="showForge"
-        class="rpg-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4"
-        @click.self="!isForging && closeForge()"
-      >
-        <div class="rpg-dialog-panel rpg-tone-gold relative max-h-[90vh] w-full max-w-[640px] overflow-y-auto overflow-x-hidden rounded-[14px] border p-7">
-          <div class="rpg-campaign-modal-glow pointer-events-none absolute -right-12 -top-20 h-60 w-60 rounded-full" />
-          <div class="relative">
-            <div class="rpg-eyebrow"><span class="rpg-sparkle">✦</span>Forger une nouvelle chronique</div>
-            <h2 class="mt-1 font-display text-[28px] font-bold leading-tight">Nouvelle campagne</h2>
-
-            <div class="mt-5 flex gap-2">
-              <span
-                v-for="step in 5"
-                :key="step"
-                class="h-1.5 flex-1 rounded-full"
-                :class="step <= forgeStep ? 'bg-[linear-gradient(90deg,var(--color-ember),var(--color-gold))]' : 'bg-surface-raised'"
-              />
-            </div>
-
-            <p v-if="modalError" class="mt-4 rounded border border-blood/30 bg-blood/10 px-3 py-2 text-sm text-blood-light">
-              {{ modalError }}
-            </p>
-
-            <div v-if="forgeStep === 1" class="mt-6 space-y-5">
-              <div class="mb-4">
-                <span class="mb-2 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Type de création</span>
-                <div class="flex gap-3">
-                  <button
-                    class="flex-1 rounded-lg border p-3 text-center transition"
-                    :class="forgeForm.mode === 'scratch' ? 'border-gold/50 bg-gold/10 text-gold' : 'border-border text-text-muted hover:border-border-strong'"
-                    type="button"
-                    @click="forgeForm.mode = 'scratch'; forgeForm.narrative_structure = 'epic_5_acts'; forgeForm.importKind = 'epic_5_acts'"
-                  >
-                    <div class="font-display text-xs font-bold uppercase tracking-wider">Création Assistée ⚔</div>
-                    <div class="mt-1 font-serif text-[10px] italic">Feuille blanche guidée par l'IA</div>
-                  </button>
-                  <button
-                    class="flex-1 rounded-lg border p-3 text-center transition"
-                    :class="forgeForm.mode === 'import' ? 'border-gold/50 bg-gold/10 text-gold' : 'border-border text-text-muted hover:border-border-strong'"
-                    type="button"
-                    @click="forgeForm.mode = 'import'; forgeForm.narrative_structure = 'adaptive'; forgeForm.importKind = 'text'"
-                  >
-                    <div class="font-display text-xs font-bold uppercase tracking-wider">Conversion de Lore ❦</div>
-                    <div class="mt-1 font-serif text-[10px] italic">Importer des scénarios ou bibles</div>
-                  </button>
-                </div>
-              </div>
-
-              <label class="block">
-                <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">
-                  Nom de la campagne {{ forgeForm.mode === 'scratch' ? '*' : '(Optionnel)' }}
-                </span>
-                <input v-model="forgeForm.name" class="rpg-input w-full text-base" :placeholder="forgeForm.mode === 'scratch' ? 'La Chute des Rois Anciens' : 'Nom déduit de la source...'" />
-              </label>
-
-              <label v-if="forgeForm.mode === 'scratch'" class="block">
-                <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Brief court (Pitch) *</span>
-                <textarea v-model="forgeForm.pitch" class="rpg-input min-h-28 w-full resize-y" placeholder="Une épopée qui traverse trois royaumes..." />
-              </label>
-
-              <div>
-                <div class="mb-2 font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Tonalités — max 3</div>
-                <div class="flex flex-wrap gap-2">
-                  <button
-                    v-for="tone in TONES"
-                    :key="tone"
-                    class="rounded-full border px-3 py-1.5 font-serif text-[11px] transition"
-                    :class="forgeForm.tones.includes(tone)
-                      ? 'border-arcane/50 bg-arcane/15 text-arcane'
-                      : 'border-border bg-transparent text-text-muted hover:border-border-strong'"
-                    type="button"
-                    @click="toggleTone(tone)"
-                  >
-                    {{ tone }}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Étape 2 : Options 5 Actes (Mode Scratch) OU Import de Sources (Mode Import) -->
-            <div v-else-if="forgeStep === 2" class="mt-6 space-y-4">
-              <!-- Mode Scratch : Options 5 Actes -->
-              <template v-if="forgeForm.mode === 'scratch'">
-                <div class="rpg-eyebrow"><span class="rpg-sparkle">✦</span>Définir le cadre esthétique</div>
-                <div class="flex items-center justify-between">
-                  <div class="text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Options de départ</div>
-                  <button
-                    type="button"
-                    class="rounded-md border border-gold/30 bg-gold/5 px-2.5 py-1 font-display text-[9px] font-bold uppercase tracking-wider text-gold hover:bg-gold/10 transition"
-                    @click="rollAllRandomOptions"
-                  >
-                    🎲 Tirer tout au sort
-                  </button>
-                </div>
-
-                <div class="grid gap-3 md:grid-cols-2">
-                  <label class="block">
-                    <span class="mb-1 block font-display text-[9px] font-bold uppercase tracking-[0.14em] text-text-muted">Ambiance / Univers</span>
-                    <div class="flex gap-1.5">
-                      <select v-model="forgeForm.options5Acts.ambiance" class="rpg-input flex-1 text-xs">
-                        <option value="">-- Choisir --</option>
-                        <option v-for="opt in OPTIONS_AMBIANCE" :key="opt" :value="opt">{{ opt }}</option>
-                      </select>
-                      <button
-                        type="button"
-                        class="h-9 w-9 rounded-md border border-border bg-black/25 flex items-center justify-center text-sm transition hover:border-gold hover:text-gold"
-                        title="Tirer au sort l'Ambiance"
-                        @click="rollRandomOption('ambiance')"
-                      >
-                        🎲
-                      </button>
-                    </div>
-                  </label>
-
-                  <label class="block">
-                    <span class="mb-1 block font-display text-[9px] font-bold uppercase tracking-[0.14em] text-text-muted">Biome</span>
-                    <div class="flex gap-1.5">
-                      <select v-model="forgeForm.options5Acts.biome" class="rpg-input flex-1 text-xs">
-                        <option value="">-- Choisir --</option>
-                        <option v-for="opt in OPTIONS_BIOME" :key="opt" :value="opt">{{ opt }}</option>
-                      </select>
-                      <button
-                        type="button"
-                        class="h-9 w-9 rounded-md border border-border bg-black/25 flex items-center justify-center text-sm transition hover:border-gold hover:text-gold"
-                        title="Tirer au sort le Biome"
-                        @click="rollRandomOption('biome')"
-                      >
-                        🎲
-                      </button>
-                    </div>
-                  </label>
-
-                  <label class="block">
-                    <span class="mb-1 block font-display text-[9px] font-bold uppercase tracking-[0.14em] text-text-muted">Climat</span>
-                    <div class="flex gap-1.5">
-                      <select v-model="forgeForm.options5Acts.climat" class="rpg-input flex-1 text-xs">
-                        <option value="">-- Choisir --</option>
-                        <option v-for="opt in OPTIONS_CLIMAT" :key="opt" :value="opt">{{ opt }}</option>
-                      </select>
-                      <button
-                        type="button"
-                        class="h-9 w-9 rounded-md border border-border bg-black/25 flex items-center justify-center text-sm transition hover:border-gold hover:text-gold"
-                        title="Tirer au sort le Climat"
-                        @click="rollRandomOption('climat')"
-                      >
-                        🎲
-                      </button>
-                    </div>
-                  </label>
-
-                  <label class="block">
-                    <span class="mb-1 block font-display text-[9px] font-bold uppercase tracking-[0.14em] text-text-muted">Ton</span>
-                    <div class="flex gap-1.5">
-                      <select v-model="forgeForm.options5Acts.ton" class="rpg-input flex-1 text-xs">
-                        <option value="">-- Choisir --</option>
-                        <option v-for="opt in OPTIONS_TON" :key="opt" :value="opt">{{ opt }}</option>
-                      </select>
-                      <button
-                        type="button"
-                        class="h-9 w-9 rounded-md border border-border bg-black/25 flex items-center justify-center text-sm transition hover:border-gold hover:text-gold"
-                        title="Tirer au sort le Ton"
-                        @click="rollRandomOption('ton')"
-                      >
-                        🎲
-                      </button>
-                    </div>
-                  </label>
-                </div>
-
-                <label class="block">
-                  <span class="mb-1 block font-display text-[9px] font-bold uppercase tracking-[0.14em] text-text-muted">Inspirations / Notes libres</span>
-                  <textarea v-model="forgeForm.options5Acts.info" class="rpg-input min-h-28 w-full resize-y text-xs" placeholder="Fournissez plus d'informations pour inspirer la forge de l'aventure en 5 Actes..." />
-                </label>
-              </template>
-
-              <!-- Mode Import : Choix et importation de sources -->
-              <template v-else>
-                <div class="rpg-eyebrow"><span class="rpg-sparkle">✦</span>Importer vos sources de lore</div>
-                <div class="flex gap-2">
-                  <button
-                    v-for="kind in IMPORT_KINDS.filter(k => k.id !== 'epic_5_acts')"
-                    :key="kind.id"
-                    class="rounded-md border px-3 py-1.5 text-xs font-semibold uppercase tracking-widest transition"
-                    :class="forgeForm.importKind === kind.id ? 'border-gold/40 bg-gold/10 text-gold' : 'border-border text-text-muted'"
-                    type="button"
-                    @click="forgeForm.importKind = kind.id"
-                  >
-                    {{ kind.label }}
-                  </button>
-                </div>
-
-                <div class="mt-4 space-y-4">
-                  <input v-model="forgeForm.importTitle" class="rpg-input w-full" placeholder="Titre de la source (ex: Chapitre 1, Lore général...)" />
-                  <input v-if="forgeForm.importKind === 'url'" v-model="forgeForm.importUrl" class="rpg-input w-full" placeholder="https://..." />
-                  <input v-if="forgeForm.importKind === 'file_text'" type="file" class="w-full rounded border border-border-strong bg-black/30 px-3 py-2 text-sm text-text-muted" accept=".txt,.md,.html,.htm" @change="handleFileImport" />
-                  <textarea v-if="forgeForm.importKind !== 'url'" v-model="forgeForm.importText" class="rpg-input min-h-40 w-full resize-y" placeholder="Collez votre scénario, notes, bestiaire ou synopsis ici..." />
-                  <div class="flex items-center justify-between">
-                    <span class="font-mono text-xs text-text-muted">{{ sourceCount }} source{{ sourceCount > 1 ? 's' : '' }} privée{{ sourceCount > 1 ? 's' : '' }} chargée{{ sourceCount > 1 ? 's' : '' }}</span>
-                    <button class="rpg-btn-secondary" :disabled="isImporting" type="button" @click="importSource">
-                      {{ isImporting ? 'Import...' : 'Importer cette source' }}
-                    </button>
-                  </div>
-                </div>
-              </template>
-            </div>
-
-            <!-- Étape 3 : Cadrage Technique (Niveau, Durée, Format, Combat, Structure) -->
-            <div v-else-if="forgeStep === 3" class="mt-6 space-y-4">
-              <div class="rpg-eyebrow"><span class="rpg-sparkle">✦</span>Paramètres de jeu & Mécaniques</div>
-
-              <div class="grid gap-4 md:grid-cols-2">
-                <label class="block">
-                  <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Durée estimée</span>
-                  <input v-model="forgeForm.duration" class="rpg-input w-full" />
-                </label>
-                <label class="block">
-                  <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Niveau initial des PJ</span>
-                  <input v-model.number="forgeForm.startingLevel" min="1" max="20" type="number" class="rpg-input w-full" />
-                </label>
-                <label class="block">
-                  <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Format</span>
-                  <select v-model="forgeForm.scope" class="rpg-input w-full">
-                    <option>one-shot</option>
-                    <option>mini-campagne</option>
-                    <option>campagne longue</option>
-                  </select>
-                </label>
-                <label class="block">
-                  <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Dominance de jeu</span>
-                  <select v-model="forgeForm.combat" class="rpg-input w-full">
-                    <option>hybride léger</option>
-                    <option>exploration sociale</option>
-                    <option>combat tactique</option>
-                  </select>
-                </label>
-              </div>
-
-              <label class="block">
-                <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Structure Narrative</span>
-                <select v-model="forgeForm.narrative_structure" class="rpg-input w-full">
-                  <option value="epic_5_acts">Épique en 5 Actes (Progression dramatique stricte)</option>
-                  <option value="adaptive">Adaptive (Nombre de chapitres libre selon le contenu)</option>
-                </select>
-              </label>
-
-              <!-- Conseil d'alignement de niveau en mode Import -->
-              <div v-if="forgeForm.mode === 'import'" class="rounded-lg border border-gold/20 bg-gold/5 p-3 text-xs leading-relaxed text-text-muted">
-                <span class="font-bold text-gold">💡 Conseil MJ :</span> Si vous importez un scénario ou module pré-écrit contenant des statistiques de combat, veillez à aligner le **Niveau initial** ci-dessus sur les prérequis narratifs de votre document.
-              </div>
-            </div>
-
-            <div v-else-if="forgeStep === 4" class="mt-6 rounded-lg border border-border bg-surface p-5 text-center">
-              <div class="font-display text-lg font-bold">Forge IA</div>
-              <p class="mx-auto mt-2 max-w-md font-serif text-sm italic text-parchment-dark">
-                Le dossier privé sera structuré côté MJ, puis seul le contrat joueur sera affiché.
-              </p>
-              <div v-if="forgeJob" class="mx-auto mt-4 max-w-md rounded-lg border border-border bg-black/25 p-3 text-left">
-                <div class="flex items-center justify-between gap-3 font-mono text-[10px] uppercase tracking-wider text-text-muted">
-                  <span class="min-w-0 truncate">{{ forgeJob.message || 'Forge en cours...' }}</span>
-                  <span class="shrink-0 text-right text-gold">{{ forgeProgressLabel }}</span>
-                </div>
-                <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-raised">
-                  <div
-                    class="h-full rounded-full bg-[linear-gradient(90deg,var(--color-ember),var(--color-gold))] transition-all"
-                    :style="{ width: `${forgeProgressPercent}%` }"
-                  />
-                </div>
-                <div v-if="forgeRetryEvents.length" class="mt-3 space-y-1">
-                  <div
-                    v-for="event in forgeRetryEvents"
-                    :key="event.at + event.message"
-                    class="font-mono text-[10px] text-gold"
-                  >
-                    {{ event.message }}<span v-if="event.error" class="text-text-dim"> — {{ event.error }}</span>
-                  </div>
-                </div>
-              </div>
-              <button class="rpg-btn-primary mt-5" :disabled="isForging" @click="forgeDraft">
-                <span>⚔</span> {{ isForging ? 'Forge en cours...' : 'Forger le dossier' }}
-              </button>
-            </div>
-
-            <div v-else-if="draftContract" class="mt-6 space-y-4">
-              <!-- Onglets de validation -->
-              <nav class="flex border-b border-border mb-4">
-                <button
-                  class="border-b-2 px-4 py-2 font-display text-[11px] font-bold uppercase tracking-[0.12em] transition"
-                  :class="validationTab === 'contract' ? 'border-ember text-parchment' : 'border-transparent text-text-muted hover:text-parchment'"
-                  type="button"
-                  @click="validationTab = 'contract'"
-                >
-                  ✦ Contrat Joueur (Visible)
-                </button>
-                <button
-                  class="border-b-2 px-4 py-2 font-display text-[11px] font-bold uppercase tracking-[0.12em] transition"
-                  :class="validationTab === 'secrets' ? 'border-ember text-parchment' : 'border-transparent text-text-muted hover:text-parchment'"
-                  type="button"
-                  @click="validationTab = 'secrets'"
-                >
-                  ❦ Secrets du MJ (Privé)
-                </button>
-              </nav>
-
-              <!-- Onglet Contrat Joueur -->
-              <div v-if="validationTab === 'contract'" class="space-y-4">
-                <label class="block">
-                  <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Titre public</span>
-                  <input v-model="draftContract.title" class="rpg-input w-full text-base" />
-                </label>
-                <label class="block">
-                  <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Pitch public</span>
-                  <textarea v-model="draftContract.pitch_public" class="rpg-input min-h-24 w-full resize-y" />
-                </label>
-                <div class="grid gap-4 md:grid-cols-2">
-                  <label class="block">
-                    <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Durée</span>
-                    <input v-model="draftContract.duration" class="rpg-input w-full" />
-                  </label>
-                  <label class="block">
-                    <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Tonalités</span>
-                    <input :value="draftContract.tones.join(', ')" class="rpg-input w-full" @input="updateToneEvent" />
-                  </label>
-                </div>
-                <label class="block">
-                  <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Accroche</span>
-                  <textarea v-model="draftContract.hook" class="rpg-input min-h-20 w-full resize-y" />
-                </label>
-                <label class="block">
-                  <span class="mb-1.5 block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Objectifs connus</span>
-                  <textarea :value="draftContract.known_objectives.join('\n')" class="rpg-input min-h-20 w-full resize-y" @input="updateObjectivesEvent" />
-                </label>
-                <div class="space-y-2">
-                  <div class="font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Chapitres visibles</div>
-                  <div v-for="chapter in draftContract.visible_chapters" :key="chapter.id" class="rounded-lg border border-border bg-surface p-3">
-                    <input v-model="chapter.title" class="rpg-input mb-2 w-full" />
-                    <textarea v-model="chapter.summary" class="rpg-input min-h-16 w-full resize-y" />
-                  </div>
-                </div>
-              </div>
-
-              <!-- Onglet Secrets du MJ -->
-              <div v-else-if="validationTab === 'secrets'" class="space-y-4">
-                <div class="rounded-lg border border-border bg-surface p-4">
-                  <div class="text-[9px] font-bold uppercase tracking-[0.22em] text-ember">Arc narratif privé</div>
-                  <p class="mt-2 font-serif text-sm leading-relaxed text-parchment-dark">
-                    {{ gmDossier?.narrative_arc || 'Génération de l\'arc narratif privé...' }}
-                  </p>
-                </div>
-
-                 <div v-if="asList(gmDossier?.important_npcs).length" class="space-y-2">
-                  <div class="text-[9px] font-bold uppercase tracking-[0.22em] text-text-muted">PNJ Importants Générés</div>
-                  <div class="grid gap-2 md:grid-cols-2">
-                    <div
-                      v-for="npc in (asList(gmDossier?.important_npcs) as any[])"
-                      :key="npc.id"
-                      class="rounded border border-border bg-black/20 p-2.5"
-                    >
-                      <div class="font-display text-xs font-bold text-parchment">{{ npc.name }}</div>
-                      <div class="font-mono text-[9px] text-text-dim uppercase tracking-wider mb-1">{{ npc.archetype }}</div>
-                      <p class="font-serif text-[11px] text-parchment-dark leading-snug">{{ npc.short_description }}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div v-if="asList((gmDossier as any)?.items).length" class="space-y-2">
-                  <div class="text-[9px] font-bold uppercase tracking-[0.22em] text-text-muted">Objets Magiques / Custom</div>
-                  <div class="grid gap-2 md:grid-cols-2">
-                    <div
-                      v-for="item in (asList((gmDossier as any)?.items) as any[])"
-                      :key="item.id"
-                      class="rounded border border-border bg-black/20 p-2.5"
-                    >
-                      <div class="font-display text-xs font-bold text-gold">{{ item.name_fr || item.name }}</div>
-                      <div class="font-mono text-[9px] text-text-dim uppercase tracking-wider mb-1">{{ item.rarity }} · {{ item.item_type }}</div>
-                    </div>
-                  </div>
-                </div>
-
-                <div v-if="asList(gmDossier?.chapters).length" class="space-y-2">
-                  <div class="text-[9px] font-bold uppercase tracking-[0.22em] text-text-muted">Détails Privés des Chapitres</div>
-                  <div v-for="(ch, idx) in (asList(gmDossier?.chapters) as any[])" :key="ch.id || idx" class="rounded-lg border border-border bg-surface p-3">
-                    <div class="font-display text-xs font-bold text-parchment mb-1">{{ ch.title }}</div>
-                    <div class="font-serif text-[11px] text-parchment-dark space-y-1">
-                      <p v-if="ch.objective"><span class="font-bold text-text-muted">Objectif secret :</span> {{ ch.objective }}</p>
-                      <p v-if="ch.stakes"><span class="font-bold text-text-muted">Enjeux :</span> {{ ch.stakes }}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="mt-7 flex justify-end gap-2">
-              <button class="rpg-btn-secondary" :disabled="isForging" @click="forgeStep === 1 ? closeForge() : previousStep()">
-                {{ forgeStep === 1 ? 'Annuler' : 'Retour' }}
-              </button>
-              <button v-if="forgeStep < 4" class="rpg-btn-primary" :disabled="isForging" @click="nextStep">Suivant</button>
-              <button v-else-if="forgeStep === 4" class="rpg-btn-secondary" :disabled="isForging" @click="forgeDraft">
-                {{ isForging ? 'Forge en cours...' : 'Forger' }}
-              </button>
-              <button v-else class="rpg-btn-primary" :disabled="isValidating" @click="validateContract">
-                {{ isValidating ? 'Validation...' : 'Valider le contrat' }}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </Teleport>
+    <CampaignForgeModal
+      v-if="showForge"
+      @close="showForge = false"
+      @forge-completed="handleForgeCompleted"
+    />
 
     <Teleport to="body">
       <div v-if="showAdvance" class="fixed inset-0 z-50 flex items-center justify-center bg-ink/80 p-4" @click.self="showAdvance = false">
