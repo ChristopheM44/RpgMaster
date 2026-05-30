@@ -1,4 +1,5 @@
 """Equipment, trade, currency and character development WebSocket action handlers."""
+
 from __future__ import annotations
 
 import logging
@@ -9,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.ws_payloads import build_session_state_payload
 from app.api.ws_schemas import PlayerActionMessage
+from app.engine.xp import level_from_xp
 from app.game.event_bus import EventType, event_bus
 from app.game.runtime import session_manager
 from app.game.state_sync import sync_character_state
@@ -18,6 +20,7 @@ from app.services.equipment_service import (
     EquipmentService,
     ItemNotFoundError,
 )
+from app.services.level_up_service import AsiChoiceError, apply_asi_scores, level_up_service
 from app.services.trade_service import trade_service
 
 logger = logging.getLogger(__name__)
@@ -352,17 +355,18 @@ async def handle_asi_choice(
         return
     scores = dict(char.ability_scores or {})
     mode = str(action.mode or "")
-    if mode == "plus_two" and action.ability:
-        ability = action.ability
-        scores[ability] = min(20, int(scores.get(ability, 10)) + 2)
-    elif mode == "plus_one_two" and action.abilities:
-        for ability in list(action.abilities)[:2]:
-            scores[ability] = min(20, int(scores.get(ability, 10)) + 1)
-    else:
+    try:
+        scores = apply_asi_scores(
+            scores,
+            mode,
+            ability=action.ability,
+            abilities=list(action.abilities) if action.abilities else None,
+        )
+    except AsiChoiceError as exc:
         await event_bus.publish_to_session(
             session_id,
             EventType.ERROR,
-            {"message": "Choix ASI invalide."},
+            {"message": str(exc)},
             source="ws_game",
         )
         return
@@ -389,5 +393,59 @@ async def handle_asi_choice(
         session_id,
         EventType.SESSION_STATE,
         _build_session_state_payload(session_id),
+        source="ws_game",
+    )
+
+
+async def handle_level_up(
+    session_id: str,
+    action: PlayerActionMessage,
+    active: Any,
+    db: AsyncSession,
+) -> None:
+    """Déclenche manuellement un passage de niveau via WebSocket."""
+    character_id = action.character_id
+    if not character_id:
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.ERROR,
+            {"message": "character_id requis pour monter de niveau."},
+            source="ws_game",
+        )
+        return
+
+    result = await db.execute(select(Character).where(Character.id == character_id))
+    char = result.scalar_one_or_none()
+    if char is None:
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.ERROR,
+            {"message": "Personnage introuvable."},
+            source="ws_game",
+        )
+        return
+
+    if level_from_xp(int(getattr(char, "xp", 0) or 0)) <= int(char.level or 1):
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.ERROR,
+            {"message": f"{char.name} n'a pas assez d'XP pour monter de niveau."},
+            source="ws_game",
+        )
+        return
+
+    applied = await level_up_service.level_up_character(
+        session_id=session_id,
+        character_id=character_id,
+        db=db,
+        active=active,
+    )
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.NARRATION,
+        {
+            "text": f"{applied.character.name} passe au niveau {applied.result.new_level} !",
+            "speaker": "Maître du Jeu",
+        },
         source="ws_game",
     )

@@ -1,4 +1,5 @@
 """Level-up persistence service."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -20,6 +21,39 @@ class LevelUpServiceError(Exception):
 
 class CharacterNotFoundError(LevelUpServiceError):
     """The requested character does not exist."""
+
+
+class AsiChoiceError(LevelUpServiceError):
+    """Invalid or illegal ASI choice."""
+
+
+def apply_asi_scores(
+    scores: dict[str, int],
+    mode: str,
+    ability: str | None = None,
+    abilities: list[str] | None = None,
+) -> dict[str, int]:
+    """Apply an ASI choice to *scores* and return the updated dict.
+
+    Raises AsiChoiceError for invalid inputs (unknown mode, missing fields,
+    duplicate abilities in plus_one_two mode).
+    """
+    updated = dict(scores)
+    if mode == "plus_two":
+        if not ability:
+            raise AsiChoiceError("'ability' est requis pour le mode plus_two.")
+        updated[ability] = min(20, int(updated.get(ability, 10)) + 2)
+    elif mode == "plus_one_two":
+        if not abilities or len(abilities) < 2:
+            raise AsiChoiceError("'abilities' doit contenir 2 éléments pour le mode plus_one_two.")
+        a1, a2 = str(abilities[0]), str(abilities[1])
+        if a1 == a2:
+            raise AsiChoiceError("Les deux caractéristiques doivent être différentes.")
+        updated[a1] = min(20, int(updated.get(a1, 10)) + 1)
+        updated[a2] = min(20, int(updated.get(a2, 10)) + 1)
+    else:
+        raise AsiChoiceError(f"Mode ASI inconnu : '{mode}'.")
+    return updated
 
 
 @dataclass

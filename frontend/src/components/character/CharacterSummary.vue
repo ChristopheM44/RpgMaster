@@ -6,6 +6,7 @@ import type { Character } from '../../types'
 
 const emit = defineEmits<{
   (e: 'toggle-ai', characterId: string, nextIsAi: boolean): void
+  (e: 'level-up', characterId: string): void
 }>()
 
 const charStore = useCharacterStore()
@@ -38,6 +39,10 @@ function hpPct(c: Character): number {
 function hpColor(c: Character): string {
   const pct = hpPct(c)
   return pct > 50 ? 'var(--color-green)' : pct > 25 ? 'var(--color-gold)' : 'var(--color-blood)'
+}
+
+function canLevelUp(c: Character): boolean {
+  return c.xp_to_next_level === 0 && c.level < 20
 }
 
 const isMyChar = (c: Character) => c.id === charStore.myCharacter?.id
@@ -96,6 +101,11 @@ const selected = computed(
                   v-if="c.is_ai"
                   class="rpg-text-arcane shrink-0 text-[8px] font-bold tracking-[0.1em]"
                 >IA</span>
+                <span
+                  v-if="canLevelUp(c)"
+                  class="rpg-pulse shrink-0 rounded text-[8px] font-bold uppercase tracking-wider px-1 py-0.5"
+                  style="background: rgba(240,199,100,0.15); color: var(--color-gold)"
+                >✦ NIV.{{ c.level + 1 }}</span>
               </div>
               <div class="rpg-text-muted text-[10px]">
                 Niv. {{ c.level }} · {{ c.char_class }}
@@ -168,6 +178,16 @@ const selected = computed(
             />
           </div>
         </div>
+
+        <!-- Level-up button -->
+        <button
+          v-if="canLevelUp(selected)"
+          class="rpg-btn-secondary rpg-pulse w-full justify-center text-xs"
+          style="border-color: var(--color-gold); color: var(--color-gold)"
+          @click="emit('level-up', selected.id)"
+        >
+          ✦ Monter au niveau {{ selected.level + 1 }}
+        </button>
 
         <!-- Ability scores grid -->
         <div class="grid grid-cols-3 gap-1.5">

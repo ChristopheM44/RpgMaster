@@ -11,7 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
 from app.engine.spells import FULL_CASTER_SLOTS, HALF_CASTER_SLOTS, WARLOCK_PACT_SLOTS
+from app.engine.xp import level_from_xp
 from app.game.constants import ARMOR_CATEGORIES
+from app.game.runtime import session_manager
 from app.models.character import Character
 from app.schemas.character import (
     CharacterCreate,
@@ -24,6 +26,7 @@ from app.services.equipment_service import (
     EquipmentService,
     ItemNotFoundError,
 )
+from app.services.level_up_service import AsiChoiceError, apply_asi_scores, level_up_service
 from app.services.rest_service import build_hit_dice, normalize_character_hit_dice
 
 # ── Equipment SRD helpers ───────────────────────────────────────────────────────
@@ -207,9 +210,7 @@ async def list_characters(
     total_result = await db.execute(count_query)
     total = total_result.scalar_one()
 
-    result = await db.execute(
-        query.order_by(Character.created_at.asc()).offset(skip).limit(limit)
-    )
+    result = await db.execute(query.order_by(Character.created_at.asc()).offset(skip).limit(limit))
     characters = result.scalars().all()
     await _normalize_hit_dice_for_response(list(characters), db)
 
@@ -368,3 +369,99 @@ async def drop_item(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Objet introuvable dans l'inventaire",
         ) from exc
+
+
+# ── Level-up endpoints ──────────────────────────────────────────────────────────
+
+
+class LevelUpResponse(BaseModel):
+    character: CharacterResponse
+    old_level: int
+    new_level: int
+    hp_gained: int
+    requires_asi: bool
+    asi_levels_granted: list[int]
+
+
+class AsiChoiceRequest(BaseModel):
+    mode: str
+    ability: str | None = None
+    abilities: list[str] | None = None
+
+
+@router.post("/{character_id}/level-up", response_model=LevelUpResponse)
+async def level_up_character(
+    character_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Applique le passage de niveau si le personnage a les XP suffisants."""
+    result = await db.execute(select(Character).where(Character.id == character_id))
+    char = result.scalar_one_or_none()
+    if char is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Personnage introuvable")
+
+    target = level_from_xp(int(getattr(char, "xp", 0) or 0))
+    if target <= int(char.level or 1):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="XP insuffisant pour monter de niveau.",
+        )
+
+    session_id: str = str(char.session_id) if char.session_id else ""
+    active = session_manager.get_session(session_id) if session_id else None
+
+    applied = await level_up_service.level_up_character(
+        session_id=session_id,
+        character_id=character_id,
+        db=db,
+        active=active,
+    )
+    await _normalize_hit_dice_for_response(applied.character, db)
+    return LevelUpResponse(
+        character=CharacterResponse.model_validate(applied.character),
+        old_level=applied.result.old_level,
+        new_level=applied.result.new_level,
+        hp_gained=applied.result.hp_total_gain,
+        requires_asi=bool(applied.result.asi_levels_granted),
+        asi_levels_granted=applied.result.asi_levels_granted,
+    )
+
+
+@router.post("/{character_id}/asi-choice", response_model=CharacterResponse)
+async def asi_choice(
+    character_id: str,
+    payload: AsiChoiceRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Applique un choix d'Amélioration de Caractéristique (hors ou en session)."""
+    result = await db.execute(select(Character).where(Character.id == character_id))
+    char = result.scalar_one_or_none()
+    if char is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Personnage introuvable")
+
+    personality = dict(char.personality or {})
+    if not personality.get("pending_asi"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Aucune amélioration de caractéristique en attente.",
+        )
+
+    scores = dict(char.ability_scores or {})
+    try:
+        scores = apply_asi_scores(
+            scores,
+            payload.mode,
+            ability=payload.ability,
+            abilities=payload.abilities,
+        )
+    except AsiChoiceError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    char.ability_scores = scores
+    personality["pending_asi"] = False
+    personality["pending_asi_levels"] = []
+    char.personality = personality
+    await db.commit()
+    await db.refresh(char)
+    await _normalize_hit_dice_for_response(char, db)
+    return char

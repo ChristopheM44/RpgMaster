@@ -259,6 +259,10 @@ async def _dispatch_action(
         await _handle_asi_choice(session_id, action, active, db)
         return
 
+    if action.action_type == "level_up":
+        await _handle_level_up(session_id, action, active, db)
+        return
+
     # Normal action: exploration scene flow or combat pipeline.
     if active.phase != SessionStatus.COMBAT:
         from app.services.narrative_flow_service import NarrativeFlowService
@@ -612,6 +616,7 @@ from app.api.ws_handlers.combat import _build_combat_summary as _build_combat_su
 from app.api.ws_handlers.combat import _generate_encounter_end as _generate_encounter_end  # noqa: E402, I001
 from app.api.ws_handlers.equipment import handle_asi_choice as _handle_asi_choice  # noqa: E402, I001
 from app.api.ws_handlers.equipment import handle_drop_item as _handle_drop_item  # noqa: E402, I001
+from app.api.ws_handlers.equipment import handle_level_up as _handle_level_up  # noqa: E402, I001
 from app.api.ws_handlers.equipment import handle_equip_item as _handle_equip_item  # noqa: E402, I001
 from app.api.ws_handlers.equipment import handle_give_currency as _handle_give_currency  # noqa: E402, I001
 from app.api.ws_handlers.equipment import handle_give_item as _handle_give_item  # noqa: E402, I001
@@ -630,6 +635,7 @@ async def _generate_encounter_intro(
     combatants_info: dict[str, Any],
 ) -> str | None:
     from app.api.ws_handlers.encounter_intro import generate_encounter_intro
+
     return await generate_encounter_intro(
         session_id,
         active,
@@ -639,6 +645,7 @@ async def _generate_encounter_intro(
         event_bus=event_bus,
         load_recent_messages=load_recent_messages,
     )
+
 
 _handle_start_combat = handle_start_combat
 _handle_end_turn = handle_end_turn
@@ -650,6 +657,8 @@ _handle_disengage = handle_disengage
 _handle_move = handle_move
 _handle_toggle_ai_control = handle_toggle_ai_control
 _handle_trigger_ai_reactions = handle_trigger_ai_reactions
+
+
 async def _consume_pending_combat_transition(
     session_id: str,
     active: Any,

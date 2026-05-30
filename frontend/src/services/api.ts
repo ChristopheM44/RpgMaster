@@ -12,6 +12,8 @@ import type {
   CharacterCreate,
   CharacterUpdate,
   CharacterListResponse,
+  LevelUpApiResponse,
+  AsiChoicePayload,
   PregenTemplate,
   GameStateResponse,
   SaveSlot,
@@ -163,6 +165,15 @@ export const characterApi = {
     request<Character>(`/characters/${id}/inventory/drop`, {
       method: 'POST',
       body: JSON.stringify({ item_id: itemId }),
+    }),
+
+  levelUp: (id: string) =>
+    request<LevelUpApiResponse>(`/characters/${id}/level-up`, { method: 'POST' }),
+
+  chooseAsi: (id: string, payload: AsiChoicePayload) =>
+    request<Character>(`/characters/${id}/asi-choice`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
     }),
 }
 

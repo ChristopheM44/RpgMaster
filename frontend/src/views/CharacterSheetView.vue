@@ -3,9 +3,11 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { characterApi, srdApi } from '../services/api'
 import type { Character, EquipmentItem, SrdClass, SrdSpell } from '../types'
+import type { LevelUpResult } from '../components/character/LevelUpModal.vue'
 import ConfirmDialog from '../components/common/ConfirmDialog.vue'
 import CurrencyDisplay from '../components/character/CurrencyDisplay.vue'
 import XpBar from '../components/character/XpBar.vue'
+import LevelUpModal from '../components/character/LevelUpModal.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -348,6 +350,65 @@ async function confirmDrop() {
 
 // suppress unused-var warning — kept for potential future template use
 void personalityTraits
+
+// ─── Level-up ──────────────────────────────────────────────────────────────────
+
+const canLevelUp = computed(() =>
+  !!character.value && character.value.xp_to_next_level === 0 && character.value.level < 20,
+)
+const levelUpLoading = ref(false)
+const levelUpError = ref<string | null>(null)
+const showLevelUpModal = ref(false)
+const levelUpResult = ref<LevelUpResult | null>(null)
+
+async function onLevelUp() {
+  if (!character.value) return
+  levelUpLoading.value = true
+  levelUpError.value = null
+  try {
+    const res = await characterApi.levelUp(character.value.id)
+    character.value = res.character as unknown as Character
+    levelUpResult.value = {
+      hp_gained: res.hp_gained,
+      asi_levels_granted: res.asi_levels_granted,
+      new_level: res.new_level,
+      old_level: res.old_level,
+    }
+    showLevelUpModal.value = true
+  } catch {
+    levelUpError.value = 'Impossible de monter de niveau.'
+  } finally {
+    levelUpLoading.value = false
+  }
+}
+
+async function onAsiChoice(
+  payload:
+    | { characterId: string; mode: 'plus_two'; ability: string }
+    | { characterId: string; mode: 'plus_one_two'; abilities: [string, string] },
+) {
+  if (!character.value) return
+  try {
+    if (payload.mode === 'plus_two') {
+      character.value = await characterApi.chooseAsi(character.value.id, {
+        mode: 'plus_two',
+        ability: payload.ability,
+      })
+    } else {
+      character.value = await characterApi.chooseAsi(character.value.id, {
+        mode: 'plus_one_two',
+        abilities: payload.abilities,
+      })
+    }
+  } catch {
+    levelUpError.value = 'Impossible d\'appliquer l\'amélioration.'
+  }
+}
+
+function onLevelUpClose() {
+  showLevelUpModal.value = false
+  levelUpResult.value = null
+}
 </script>
 
 <template>
@@ -493,6 +554,28 @@ void personalityTraits
           <div class="rpg-stat-slab rounded-lg border px-4 py-3">
             <CurrencyDisplay :character="character" />
           </div>
+        </div>
+
+        <!-- Level-up button -->
+        <div v-if="canLevelUp || character.pending_asi" class="relative mt-3 max-w-[700px] flex items-center gap-3">
+          <button
+            v-if="canLevelUp"
+            class="rpg-btn-primary rpg-pulse flex items-center gap-2"
+            :disabled="levelUpLoading"
+            @click="onLevelUp"
+          >
+            <span>✦</span>
+            <span>{{ levelUpLoading ? 'En cours…' : `Monter au niveau ${(character.level ?? 0) + 1}` }}</span>
+          </button>
+          <button
+            v-else-if="character.pending_asi"
+            class="rpg-btn-secondary rpg-pulse flex items-center gap-2"
+            @click="showLevelUpModal = true"
+          >
+            <span style="color: var(--color-arcane)">✦</span>
+            <span>Choisir l'amélioration de caractéristique</span>
+          </button>
+          <span v-if="levelUpError" class="text-xs" style="color: var(--color-blood)">{{ levelUpError }}</span>
         </div>
       </div>
 
@@ -830,5 +913,14 @@ void personalityTraits
       />
 
     </template>
+
+    <!-- Level-up modal (hors-session) -->
+    <LevelUpModal
+      :visible="showLevelUpModal"
+      :characters="character ? [character] : []"
+      :level-up-result="levelUpResult"
+      @asi-choice="onAsiChoice"
+      @close="onLevelUpClose"
+    />
   </div>
 </template>

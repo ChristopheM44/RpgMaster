@@ -251,11 +251,26 @@ function handleTriggerAi() {
   triggerAiReactions()
 }
 
-function handleAsiChoice(payload: { characterId: string; mode: 'plus_two'; ability: string }) {
-  sendAction('asi_choice', undefined, payload.characterId, undefined, {
-    mode: payload.mode,
-    ability: payload.ability,
-  })
+function handleAsiChoice(
+  payload:
+    | { characterId: string; mode: 'plus_two'; ability: string }
+    | { characterId: string; mode: 'plus_one_two'; abilities: [string, string] },
+) {
+  if (payload.mode === 'plus_two') {
+    sendAction('asi_choice', undefined, payload.characterId, undefined, {
+      mode: payload.mode,
+      ability: payload.ability,
+    })
+  } else {
+    sendAction('asi_choice', undefined, payload.characterId, undefined, {
+      mode: payload.mode,
+      abilities: payload.abilities,
+    })
+  }
+}
+
+function handleLevelUp(characterId: string) {
+  sendAction('level_up', undefined, characterId)
 }
 
 function handleSceneExit(_exitId: string, label: string) {
@@ -549,6 +564,7 @@ onUnmounted(() => { disconnect() })
       :visible="gameStore.phase === 'level_up'"
       :characters="charStore.sessionCharacters"
       @asi-choice="handleAsiChoice"
+      @close="() => {}"
     />
 
     <!-- ─── Mobile layout (V1, V2 desktop-only) ────────────────────────── -->

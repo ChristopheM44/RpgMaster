@@ -756,6 +756,21 @@ export interface CharacterLeveledUpPayload {
   xp_to_next_level?: number
 }
 
+export interface LevelUpApiResponse {
+  character: Character
+  old_level: number
+  new_level: number
+  hp_gained: number
+  requires_asi: boolean
+  asi_levels_granted: number[]
+}
+
+export interface AsiChoicePayload {
+  mode: 'plus_two' | 'plus_one_two'
+  ability?: string
+  abilities?: [string, string]
+}
+
 export interface TurnStartPayload {
   combatant_id: string
   combatant_name?: string
