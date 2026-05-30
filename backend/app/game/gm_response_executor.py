@@ -1500,6 +1500,9 @@ class GMResponseExecutor:
             element_id = cls._clean_optional_text(exit_data.get("element_id"), max_len=80)
             if element_id:
                 normalized_exit["element_id"] = element_id
+            placement = cls._clean_optional_text(exit_data.get("placement"), max_len=24)
+            if placement in {"edge", "embedded"}:
+                normalized_exit["placement"] = placement
             layout["exits"].append(normalized_exit)
 
         party_positions = raw.get("party_positions") or {}

@@ -42,6 +42,13 @@ const scene: SceneLayout = {
       kind: 'door',
       geometry: { type: 'rect', col: 0, row: 4, width: 0.2, height: 1 },
     },
+    {
+      id: 'street_axis',
+      name: 'Rue pavée',
+      kind: 'terrain',
+      terrain_type: 'street',
+      geometry: { type: 'line', from: { col: 0, row: 6 }, to: { col: 8, row: 6 } },
+    },
   ],
   visual_asset: {
     provider: 'openai_compatible',
@@ -61,6 +68,7 @@ describe('LocalMapCanvas', () => {
 
     expect(wrapper.find('[data-testid="local-map-element-desk_element"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="local-map-element-front_door_element"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="local-map-element-street_axis"].terrain-street').exists()).toBe(true)
     expect(wrapper.find('img.local-map-image').attributes('src')).toBe('/map.png')
   })
 
@@ -75,5 +83,29 @@ describe('LocalMapCanvas', () => {
       id: 'front_door_element',
       kind: 'door',
     })
+  })
+
+  it('does not infer a path only because exits exist', () => {
+    const wrapper = mount(LocalMapCanvas, {
+      props: {
+        scene: {
+          cols: 8,
+          rows: 8,
+          cell_size_m: 1.5,
+          terrain: 'market_square',
+          scene_theme: 'city',
+          pois: [],
+          exits: [
+            { id: 'west', label: 'Sortie ouest', position: { col: 0, row: 4 } },
+            { id: 'east', label: 'Sortie est', position: { col: 7, row: 4 } },
+          ],
+          party_positions: {},
+          elements: [],
+        },
+        cell: 40,
+      },
+    })
+
+    expect(wrapper.find('.local-map-route-layer').exists()).toBe(false)
   })
 })

@@ -77,6 +77,9 @@ _PATH_CHOICE_ALLOWED_RE = re.compile(
     r"(?i)\b(carrefour|crois[ée]e|embranchement|intersection|plusieurs chemins|"
     r"plusieurs routes|routes partent|chemins partent)\b"
 )
+_LOCAL_OBJECTIVE_EXIT_SUPPRESSED_RE = re.compile(
+    r"(?i)\b(place|march[ée]|festival|cour|parvis|plaza|square)\b"
+)
 
 
 def _build_session_state_payload(session_id: str) -> dict:
@@ -726,6 +729,11 @@ def _opening_scene_allows_path_choice(state_data: dict[str, Any]) -> bool:
     return bool(_PATH_CHOICE_ALLOWED_RE.search(text))
 
 
+def _opening_scene_suppresses_objective_exit(*parts: Any) -> bool:
+    text = " ".join(str(part or "") for part in parts)
+    return bool(_LOCAL_OBJECTIVE_EXIT_SUPPRESSED_RE.search(text))
+
+
 def _normalize_opening_narration_closer(text: str, state_data: dict[str, Any]) -> str:
     cleaned = str(text or "").strip()
     if not cleaned or _opening_scene_allows_path_choice(state_data):
@@ -1032,7 +1040,13 @@ def _opening_response(
                 "description": "Quitter le point de départ pour observer le terrain proche.",
             }
         ]
-    if objective:
+    objective_exit_suppressed = _opening_scene_suppresses_objective_exit(
+        physical_place,
+        physical_venue,
+        scene_brief,
+        guessed_theme,
+    )
+    if objective and not objective_exit_suppressed:
         exits.append({
             "id": "prendre_route_objectif",
             "label": "Prendre la route",

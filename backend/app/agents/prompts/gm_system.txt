@@ -63,8 +63,11 @@ TYPES D'ACTIONS :
                     Format : {"id":"mur_nord","name":"Mur nord","kind":"wall|door|window|furniture|cover|hazard|light|stairs|terrain|decor",
                     "geometry":{"type":"line","from":{"col":0,"row":0},"to":{"col":12,"row":0}},
                     "description":"Court texte visible","blocks_movement":true,"opaque":true,"interactive":false}
+                    Pour kind "terrain", ajoute terrain_type si utile : road | street | path | plaza_paving | water | mud.
                     Géométries : line(from/to), rect(col,row,width,height), ellipse(col,row,radius_col,radius_row), en coordonnées de grille.
                     En intérieur, représente clairement le contour de la pièce, les ouvertures et 2-4 éléments de décor utiles.
+                    Les sorties de voyage/fuite ont placement "edge" et doivent être sur un bord. Les sorties internes ont placement "embedded" uniquement si elles correspondent à un élément concret (trappe, égout, échelle, escalier, porte, quai, ponton, ouverture) avec element_id.
+                    Routes/rues/sentiers locaux : ajoute-les seulement comme elements terrain explicites quand le récit décrit une voie physique. Une place/marché/cour/festival montre plutôt pavés, étals, foule, bâtiments de bord, pavillon, fontaine ou accès d'égout éventuel.
                     Ajoute description/action_hint très courts aux POI utiles pour que l'interface explique ce que le joueur sélectionne.
                     kind/icon doivent rester cohérents : ennemi visible = kind "enemy", icon "c-enemy"; PNJ = kind "npc", icon "npc"; couvert = kind "cover", icon "c-half-cover"; danger/piège = kind "hazard", icon "trap-danger"; butin/objet = kind "loot", icon "chest"; indice = kind "clue", icon "clue"; porte/sortie navigable = dans exits, pas en doublon dans pois.
                     Les portes navigables restent dans exits et peuvent référencer un élément via element_id. Les portes non navigables importantes sont des elements liés à un POI examinable.

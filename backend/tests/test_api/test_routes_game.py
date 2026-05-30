@@ -83,6 +83,33 @@ def test_opening_response_uses_opening_scene_as_physical_scene() -> None:
     )
 
 
+def test_opening_response_does_not_add_route_exit_inside_square() -> None:
+    from app.api.routes_game import _opening_response
+
+    active = SimpleNamespace(state_data={"characters": {"vel": {"name": "Vel"}}})
+    campaign_context = {
+        "active_chapter": {
+            "opening_scene": {
+                "region": "Cité d'Azur",
+                "place": "Place du Marché Central",
+                "venue": "Pavillon des Festivités",
+                "description": "La foule du festival s'agite sur les pavés autour du pavillon.",
+                "present_npcs": [],
+                "visible_clues": [],
+            },
+        },
+        "player_contract": {
+            "known_objectives": ["Rejoindre les quais"],
+        },
+    }
+
+    response = _opening_response(active, campaign_context=campaign_context)
+
+    scene = _action_by_type(response.actions, "scene_layout")
+    assert scene is not None
+    assert all(exit_["id"] != "prendre_route_objectif" for exit_ in scene.params["exits"])
+
+
 def test_opening_response_does_not_derive_weather_and_time_from_initial_state() -> None:
     """Le moment et la météo viennent de opening_scene, pas du contexte."""
     from app.api.routes_game import _opening_response

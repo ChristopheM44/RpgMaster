@@ -25,6 +25,14 @@ def build_session_state_payload(
     if active is None:
         return {"session_id": session_id, "phase": "unknown"}
 
+    try:
+        from app.services.visual_coherence_service import repair_state_visual_coherence
+
+        if repair_state_visual_coherence(active.state_data):
+            active.mark_dirty()
+    except Exception:
+        pass
+
     turn_data = active.turn_manager.to_dict()
 
     def _map_entry(entry: dict[str, Any]) -> dict[str, Any]:

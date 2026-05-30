@@ -572,6 +572,7 @@ export interface SceneExit {
   kind?: string
   type?: string
   element_id?: string
+  placement?: 'edge' | 'embedded'
 }
 
 export type SceneTheme =
@@ -620,11 +621,14 @@ export type SceneElementGeometry =
   | { type: 'rect'; col: number; row: number; width: number; height: number }
   | { type: 'ellipse'; col: number; row: number; radius_col: number; radius_row: number }
 
+export type SceneTerrainType = 'road' | 'street' | 'path' | 'plaza_paving' | 'water' | 'mud'
+
 export interface SceneElement {
   id: string
   name: string
   kind: SceneElementKind
   geometry: SceneElementGeometry
+  terrain_type?: SceneTerrainType
   description?: string
   blocks_movement?: boolean
   opaque?: boolean

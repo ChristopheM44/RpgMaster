@@ -161,10 +161,6 @@ const visualAssetReady = computed(() =>
   visualAsset.value?.status === 'ready' && Boolean(visualAsset.value.url),
 )
 const patternId = computed(() => `local-map-grid-${hashSeed(props.scene?.scene_id ?? `${cols.value}x${rows.value}`)}`)
-const showTrack = computed(() =>
-  !elements.value.some((element) => element.kind === 'wall')
-  && (props.scene?.exits?.length ?? 0) > 0,
-)
 
 function isElementInteractive(element: SceneElement): boolean {
   return Boolean(element.interactive || elementLinks.value.has(element.id))
@@ -200,22 +196,6 @@ function shapeForGeometry(geometry: SceneElementGeometry) {
   }
 }
 
-function pathTrack() {
-  const exits = (props.scene?.exits ?? []).filter((exit) => exit.position)
-  if (exits.length < 2) {
-    const trackRow = Math.max(0, Math.min(rows.value - 1, Math.floor(rows.value / 2)))
-    return `M 0 ${(trackRow + 0.5) * props.cell} L ${widthPx.value} ${(trackRow + 0.5) * props.cell}`
-  }
-  const sorted = [...exits].sort((a, b) => a.position.col - b.position.col)
-  const start = sorted[0]!.position
-  const end = sorted[sorted.length - 1]!.position
-  const x1 = (start.col + 0.5) * props.cell
-  const y1 = (start.row + 0.5) * props.cell
-  const x2 = (end.col + 0.5) * props.cell
-  const y2 = (end.row + 0.5) * props.cell
-  return `M ${x1} ${y1} C ${x1 + (x2 - x1) * 0.35} ${y1 - props.cell * 1.2} ${x1 + (x2 - x1) * 0.65} ${y2 + props.cell * 1.2} ${x2} ${y2}`
-}
-
 function hashSeed(seed: string): number {
   let hash = 0
   for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0
@@ -247,30 +227,6 @@ function hashSeed(seed: string): number {
     />
 
     <svg
-      v-if="showTrack"
-      class="local-map-layer"
-      :width="widthPx"
-      :height="heightPx"
-      aria-hidden="true"
-    >
-      <path
-        :d="pathTrack()"
-        fill="none"
-        :stroke="biome.track"
-        :stroke-width="cell * 0.72"
-        stroke-linecap="round"
-      />
-      <path
-        :d="pathTrack()"
-        fill="none"
-        stroke="rgba(247,236,208,0.22)"
-        :stroke-width="cell * 0.15"
-        stroke-dasharray="6 7"
-        stroke-linecap="round"
-      />
-    </svg>
-
-    <svg
       class="local-map-layer local-map-elements"
       :width="widthPx"
       :height="heightPx"
@@ -281,6 +237,7 @@ function hashSeed(seed: string): number {
         class="local-map-element"
         :class="[
           `kind-${element.kind}`,
+          element.terrain_type ? `terrain-${element.terrain_type}` : null,
           {
             'is-interactive': isElementInteractive(element),
             'is-selected': selectedElementId === element.id,
@@ -458,6 +415,53 @@ function hashSeed(seed: string): number {
 
 .local-map-element.kind-stairs {
   color: var(--color-arcane);
+}
+
+.local-map-element.kind-terrain {
+  color: var(--color-parchment-dark);
+}
+
+.local-map-element.kind-terrain.terrain-plaza_paving rect {
+  fill: rgba(247, 236, 208, 0.045);
+  stroke: rgba(247, 236, 208, 0.06);
+  stroke-width: 1;
+}
+
+.local-map-element.kind-terrain.terrain-road line,
+.local-map-element.kind-terrain.terrain-street line,
+.local-map-element.kind-terrain.terrain-path line {
+  stroke-linecap: round;
+  stroke-width: 14;
+  opacity: 0.72;
+}
+
+.local-map-element.kind-terrain.terrain-road rect,
+.local-map-element.kind-terrain.terrain-street rect,
+.local-map-element.kind-terrain.terrain-path rect {
+  fill: rgba(247, 236, 208, 0.12);
+  stroke: rgba(247, 236, 208, 0.14);
+}
+
+.local-map-element.kind-terrain.terrain-street {
+  color: var(--color-gold);
+}
+
+.local-map-element.kind-terrain.terrain-path {
+  color: var(--color-parchment-dark);
+}
+
+.local-map-element.kind-terrain.terrain-water {
+  color: var(--color-teal);
+}
+
+.local-map-element.kind-terrain.terrain-water rect,
+.local-map-element.kind-terrain.terrain-water ellipse {
+  fill: rgba(79, 216, 192, 0.14);
+}
+
+.local-map-element.kind-terrain.terrain-mud rect,
+.local-map-element.kind-terrain.terrain-mud ellipse {
+  fill: rgba(247, 236, 208, 0.07);
 }
 
 .local-map-element.is-interactive:hover,

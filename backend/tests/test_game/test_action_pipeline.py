@@ -862,6 +862,38 @@ class TestPipelineExecutorUnits:
         assert any(element["kind"] == "wall" for element in layout["elements"])
         assert any(element["id"] == "element_stone_door_door" for element in layout["elements"])
 
+    async def test_executor_scene_layout_normalizes_exit_placement(self) -> None:
+        layout = GMResponseExecutor._normalize_scene_layout(
+            {
+                "cols": 12,
+                "rows": 12,
+                "terrain": "settlement",
+                "scene_theme": "city",
+                "description": "Place du Marché Central avec une trappe vers les égouts.",
+                "pois": [],
+                "exits": [
+                    {
+                        "id": "quitter_place",
+                        "label": "Quitter la place",
+                        "position": {"col": 6, "row": 6},
+                    },
+                    {
+                        "id": "trappe_egouts",
+                        "label": "Trappe vers les égouts",
+                        "position": {"col": 6, "row": 7},
+                    },
+                ],
+            }
+        )
+
+        edge_exit = next(exit_ for exit_ in layout["exits"] if exit_["id"] == "quitter_place")
+        embedded_exit = next(exit_ for exit_ in layout["exits"] if exit_["id"] == "trappe_egouts")
+        assert edge_exit["placement"] == "edge"
+        assert edge_exit["position"]["col"] in {0, 11} or edge_exit["position"]["row"] in {0, 11}
+        assert embedded_exit["placement"] == "embedded"
+        assert embedded_exit["position"] == {"col": 6, "row": 7}
+        assert any(element["id"] == embedded_exit["element_id"] for element in layout["elements"])
+
     async def test_executor_scene_layout_filters_duplicate_exit_pois(self) -> None:
         layout = GMResponseExecutor._normalize_scene_layout(
             {

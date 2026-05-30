@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.game.scene_theme import coerce_scene_theme, infer_scene_theme
+from app.services import local_map_service
 
 
 def visual_context_corpus(state_data: dict[str, Any]) -> str:
@@ -57,6 +58,10 @@ def repair_state_visual_coherence(state_data: dict[str, Any]) -> bool:
     changed = False
     if scene.get("scene_theme") != repaired_theme:
         scene["scene_theme"] = repaired_theme
+        changed = True
+    before_scene = deepcopy(scene)
+    local_map_service.enrich_scene_layout(scene)
+    if scene != before_scene:
         changed = True
 
     world_maps = state_data.get("world_maps")

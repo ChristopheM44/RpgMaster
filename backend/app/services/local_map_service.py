@@ -21,6 +21,8 @@ SCENE_ELEMENT_KINDS = {
 }
 SCENE_ELEMENT_GEOMETRIES = {"line", "rect", "ellipse"}
 VISUAL_ASSET_STATUSES = {"prompt_ready", "generating", "ready", "failed"}
+TERRAIN_TYPES = {"road", "street", "path", "plaza_paving", "water", "mud"}
+EXIT_PLACEMENTS = {"edge", "embedded"}
 
 _INTERIOR_WORDS = {
     "interieur",
@@ -46,6 +48,64 @@ _INTERIOR_WORDS = {
     "cellier",
     "atelier",
     "boutique",
+}
+_EMBEDDED_EXIT_WORDS = {
+    "trappe",
+    "égout",
+    "egout",
+    "échelle",
+    "echelle",
+    "escalier",
+    "puits",
+    "cave",
+    "porte",
+    "portail",
+    "quai",
+    "ponton",
+    "batiment",
+    "bâtiment",
+    "entrée",
+    "entree",
+    "ouverture",
+}
+_PLAZA_WORDS = {
+    "place",
+    "marché",
+    "marche",
+    "festival",
+    "cour",
+    "parvis",
+    "plaza",
+    "square",
+}
+_LOCAL_ROAD_CONTEXT_WORDS = {
+    "route",
+    "rue",
+    "avenue",
+    "chemin",
+    "sentier",
+    "piste",
+    "carrefour",
+    "croisée",
+    "croisee",
+    "embranchement",
+    "intersection",
+    "quai",
+    "ponton",
+    "pont",
+    "porte de ville",
+}
+_SUBTERRANEAN_WORDS = {
+    "égout",
+    "egout",
+    "sous-sol",
+    "souterrain",
+    "sous la ville",
+    "vibre",
+    "vibrent",
+    "tremble",
+    "tremblement",
+    "bourdonnement",
 }
 
 
@@ -73,6 +133,9 @@ def normalize_scene_element(raw: Any, cols: int, rows: int) -> dict[str, Any] | 
         "kind": kind,
         "geometry": geometry,
     }
+    terrain_type = _clean_text(raw.get("terrain_type"), max_len=32).lower()
+    if kind == "terrain" and terrain_type in TERRAIN_TYPES:
+        element["terrain_type"] = terrain_type
     description = _clean_text(raw.get("description"), max_len=220)
     if description:
         element["description"] = description
@@ -179,12 +242,16 @@ def enrich_scene_layout(layout: dict[str, Any]) -> dict[str, Any]:
     ]
     by_id = {str(element["id"]): element for element in elements}
 
+    _normalize_exits(layout, by_id, cols, rows)
+
     interior = _is_interior_scene(layout)
     if interior:
         _add_boundary_walls(by_id, cols, rows)
         _add_exit_doors(by_id, layout, cols, rows)
         _add_windows(by_id, layout, cols, rows)
         _add_default_furniture(by_id, layout, cols, rows)
+    elif _is_plaza_scene(layout):
+        _add_plaza_elements(by_id, layout, cols, rows)
 
     _add_poi_elements(by_id, layout, cols, rows)
     layout["elements"] = list(by_id.values())[:96]
@@ -270,7 +337,7 @@ def build_scene_visual_prompt(scene: dict[str, Any]) -> str:
         parts.append(f"Visible scene: {description}")
 
     element_bits = [
-        f"{element.get('kind')}:{element.get('name')}"
+        _element_prompt_bit(element)
         for element in scene.get("elements", [])[:24]
         if isinstance(element, dict)
     ]
@@ -293,6 +360,11 @@ def build_scene_visual_prompt(scene: dict[str, Any]) -> str:
     if exit_bits:
         parts.append("Visible exits: " + ", ".join(exit_bits))
 
+    if _is_plaza_scene(scene) and not _has_explicit_local_road(scene):
+        parts.append(
+            "Open paved town square with stalls, crowd flow and civic decor; "
+            "do not draw a traversing road or path unless it is listed as terrain."
+        )
     parts.append("No labels, no text, no UI, keep doors and obstacles aligned to a square grid.")
     return " ".join(part for part in parts if part)
 
@@ -537,6 +609,283 @@ def _add_poi_elements(
         )
 
 
+def _normalize_exits(
+    layout: dict[str, Any],
+    by_id: dict[str, dict[str, Any]],
+    cols: int,
+    rows: int,
+) -> None:
+    for exit_ in layout.get("exits", []):
+        if not isinstance(exit_, dict):
+            continue
+        pos = exit_.get("position")
+        if not isinstance(pos, dict):
+            continue
+
+        placement = _infer_exit_placement(exit_, by_id, cols, rows)
+        exit_["placement"] = placement
+        if placement == "embedded":
+            _ensure_embedded_exit_element(by_id, exit_, cols, rows)
+        else:
+            exit_["position"] = _edge_exit_position(pos, _exit_corpus(exit_), cols, rows)
+
+
+def _infer_exit_placement(
+    exit_: dict[str, Any],
+    by_id: dict[str, dict[str, Any]],
+    cols: int,
+    rows: int,
+) -> str:
+    explicit = _clean_text(exit_.get("placement"), max_len=24).lower()
+    if explicit in EXIT_PLACEMENTS:
+        return explicit
+
+    pos = exit_.get("position")
+    if isinstance(pos, dict) and _is_border_position(pos, cols, rows):
+        return "edge"
+
+    element_id = _clean_text(exit_.get("element_id"), max_len=80)
+    element = by_id.get(element_id)
+    if isinstance(element, dict) and element.get("kind") in {"door", "stairs"}:
+        return "embedded"
+
+    corpus = _exit_corpus(exit_)
+    if any(word in corpus for word in _EMBEDDED_EXIT_WORDS):
+        return "embedded"
+    return "edge"
+
+
+def _ensure_embedded_exit_element(
+    by_id: dict[str, dict[str, Any]],
+    exit_: dict[str, Any],
+    cols: int,
+    rows: int,
+) -> None:
+    pos = exit_.get("position")
+    if not isinstance(pos, dict):
+        return
+    element_id = _clean_text(exit_.get("element_id"), max_len=80)
+    if element_id and element_id in by_id:
+        return
+
+    corpus = _exit_corpus(exit_)
+    if not element_id:
+        suffix = "stairs" if _exit_access_kind(corpus) == "stairs" else "door"
+        element_id = f"element_{exit_.get('id')}_{suffix}"
+        exit_["element_id"] = element_id
+
+    kind = _exit_access_kind(corpus)
+    by_id.setdefault(
+        element_id,
+        {
+            "id": element_id,
+            "name": exit_.get("label") or "Accès",
+            "kind": kind,
+            "geometry": _embedded_exit_geometry(pos, cols, rows),
+            "description": exit_.get("description") or exit_.get("leads_to") or "",
+            "blocks_movement": False,
+            "opaque": False,
+            "interactive": True,
+        },
+    )
+
+
+def _exit_access_kind(corpus: str) -> str:
+    if any(
+        word in corpus
+        for word in ("trappe", "égout", "egout", "échelle", "echelle", "escalier", "puits", "cave")
+    ):
+        return "stairs"
+    return "door"
+
+
+def _embedded_exit_geometry(pos: dict[str, Any], cols: int, rows: int) -> dict[str, Any]:
+    col = _clamp_float(pos.get("col"), 0.0, float(cols - 1), 0.0)
+    row = _clamp_float(pos.get("row"), 0.0, float(rows - 1), 0.0)
+    return {
+        "type": "rect",
+        "col": round(max(0.0, min(float(cols) - 0.75, col + 0.125)), 3),
+        "row": round(max(0.0, min(float(rows) - 0.75, row + 0.125)), 3),
+        "width": 0.75,
+        "height": 0.75,
+    }
+
+
+def _edge_exit_position(
+    pos: dict[str, Any],
+    corpus: str,
+    cols: int,
+    rows: int,
+) -> dict[str, int]:
+    col = int(_clamp_float(pos.get("col"), 0.0, float(cols - 1), cols - 1))
+    row = int(_clamp_float(pos.get("row"), 0.0, float(rows - 1), rows // 2))
+    if _is_border_position({"col": col, "row": row}, cols, rows):
+        return {"col": col, "row": row}
+
+    if any(word in corpus for word in ("ouest", "west", "gauche")):
+        return {"col": 0, "row": row}
+    if any(word in corpus for word in ("est", "east", "droite")):
+        return {"col": cols - 1, "row": row}
+    if any(word in corpus for word in ("nord", "north", "haut")):
+        return {"col": col, "row": 0}
+    if any(word in corpus for word in ("sud", "south", "bas")):
+        return {"col": col, "row": rows - 1}
+
+    distances = [
+        (col, {"col": 0, "row": row}),
+        (cols - 1 - col, {"col": cols - 1, "row": row}),
+        (row, {"col": col, "row": 0}),
+        (rows - 1 - row, {"col": col, "row": rows - 1}),
+    ]
+    return min(distances, key=lambda item: item[0])[1]
+
+
+def _is_border_position(pos: dict[str, Any], cols: int, rows: int) -> bool:
+    try:
+        col = int(pos.get("col", -1))
+        row = int(pos.get("row", -1))
+    except (TypeError, ValueError):
+        return False
+    return col <= 0 or row <= 0 or col >= cols - 1 or row >= rows - 1
+
+
+def _exit_corpus(exit_: dict[str, Any]) -> str:
+    return " ".join(
+        str(exit_.get(key) or "")
+        for key in ("id", "label", "description", "leads_to", "kind", "type")
+    ).casefold()
+
+
+def _add_plaza_elements(
+    by_id: dict[str, dict[str, Any]],
+    layout: dict[str, Any],
+    cols: int,
+    rows: int,
+) -> None:
+    corpus = _layout_corpus(layout)
+    by_id.setdefault(
+        "pavage_place",
+        {
+            "id": "pavage_place",
+            "name": "Pavés de la place",
+            "kind": "terrain",
+            "terrain_type": "plaza_paving",
+            "geometry": {"type": "rect", "col": 0, "row": 0, "width": cols, "height": rows},
+            "description": "Un sol pavé ouvert, sans route traversante dédiée.",
+            "blocks_movement": False,
+            "opaque": False,
+        },
+    )
+    if any(word in corpus for word in ("marché", "marche", "étal", "etal", "festival")):
+        by_id.setdefault(
+            "etals_marche_ouest",
+            {
+                "id": "etals_marche_ouest",
+                "name": "Étals du marché",
+                "kind": "furniture",
+                "geometry": {"type": "rect", "col": 2.0, "row": 5.6, "width": 1.6, "height": 0.7},
+                "description": "Des tréteaux encombrés structurent la circulation.",
+                "blocks_movement": True,
+                "opaque": False,
+            },
+        )
+        by_id.setdefault(
+            "etals_marche_est",
+            {
+                "id": "etals_marche_est",
+                "name": "Étal couvert",
+                "kind": "furniture",
+                "geometry": {
+                    "type": "rect",
+                    "col": max(4.0, cols - 3.6),
+                    "row": 4.2,
+                    "width": 1.5,
+                    "height": 0.7,
+                },
+                "description": "Une table de marchand offre un couvert léger.",
+                "blocks_movement": True,
+                "opaque": False,
+            },
+        )
+    if any(word in corpus for word in ("pavillon", "festival", "festivités", "festivites")):
+        by_id.setdefault(
+            "pavillon_festivites",
+            {
+                "id": "pavillon_festivites",
+                "name": "Pavillon des festivités",
+                "kind": "cover",
+                "geometry": {
+                    "type": "rect",
+                    "col": max(1.0, cols - 4.2),
+                    "row": 2.8,
+                    "width": 2.2,
+                    "height": 1.4,
+                },
+                "description": "Une estrade textile visible sert de repère et de couvert.",
+                "blocks_movement": True,
+                "opaque": False,
+            },
+        )
+    if "fontaine" in corpus:
+        by_id.setdefault(
+            "fontaine_place",
+            {
+                "id": "fontaine_place",
+                "name": "Fontaine",
+                "kind": "cover",
+                "geometry": {
+                    "type": "ellipse",
+                    "col": cols / 2,
+                    "row": rows / 2,
+                    "radius_col": 0.75,
+                    "radius_row": 0.75,
+                },
+                "description": "Un bassin de pierre occupe la place.",
+                "blocks_movement": True,
+                "opaque": False,
+            },
+        )
+    if any(word in corpus for word in ("foule", "festival", "liesse")):
+        by_id.setdefault(
+            "foule_place",
+            {
+                "id": "foule_place",
+                "name": "Foule dense",
+                "kind": "hazard",
+                "geometry": {
+                    "type": "ellipse",
+                    "col": max(2.0, cols * 0.62),
+                    "row": max(2.0, rows * 0.58),
+                    "radius_col": 1.0,
+                    "radius_row": 0.75,
+                },
+                "description": "Les passants rendent les mouvements brusques incertains.",
+                "blocks_movement": False,
+                "opaque": False,
+            },
+        )
+    if any(word in corpus for word in _SUBTERRANEAN_WORDS):
+        by_id.setdefault(
+            "grille_egout",
+            {
+                "id": "grille_egout",
+                "name": "Grille d'égout",
+                "kind": "stairs",
+                "geometry": {
+                    "type": "rect",
+                    "col": max(1.0, cols * 0.62),
+                    "row": max(1.0, rows * 0.72),
+                    "width": 0.8,
+                    "height": 0.8,
+                },
+                "description": "Une ouverture métallique suggère un accès sous la ville.",
+                "blocks_movement": False,
+                "opaque": False,
+                "interactive": True,
+            },
+        )
+
+
 def _door_geometry(pos: dict[str, Any], cols: int, rows: int) -> dict[str, Any]:
     col = int(pos.get("col", 0))
     row = int(pos.get("row", 0))
@@ -590,6 +939,58 @@ def _is_interior_scene(layout: dict[str, Any]) -> bool:
         "dungeon",
         "cave",
     }
+
+
+def _is_plaza_scene(layout: dict[str, Any]) -> bool:
+    corpus = _layout_corpus(layout)
+    return any(word in corpus for word in _PLAZA_WORDS)
+
+
+def _has_explicit_local_road(scene: dict[str, Any]) -> bool:
+    for element in scene.get("elements", []) or []:
+        if not isinstance(element, dict):
+            continue
+        if element.get("kind") == "terrain" and element.get("terrain_type") in {
+            "road",
+            "street",
+            "path",
+        }:
+            return True
+    return (
+        any(word in _layout_corpus(scene) for word in _LOCAL_ROAD_CONTEXT_WORDS)
+        and not _is_plaza_scene(scene)
+    )
+
+
+def _layout_corpus(layout: dict[str, Any]) -> str:
+    parts: list[Any] = [
+        layout.get("scene_theme"),
+        layout.get("terrain"),
+        layout.get("description"),
+    ]
+    for poi in layout.get("pois", []) or []:
+        if isinstance(poi, dict):
+            parts.extend([poi.get("name"), poi.get("description"), poi.get("action_hint")])
+    for exit_ in layout.get("exits", []) or []:
+        if isinstance(exit_, dict):
+            parts.extend([exit_.get("label"), exit_.get("description"), exit_.get("leads_to")])
+    for element in layout.get("elements", []) or []:
+        if isinstance(element, dict):
+            parts.extend([
+                element.get("name"),
+                element.get("description"),
+                element.get("terrain_type"),
+            ])
+    return " ".join(str(part or "") for part in parts).casefold()
+
+
+def _element_prompt_bit(element: dict[str, Any]) -> str:
+    kind = element.get("kind")
+    terrain_type = element.get("terrain_type")
+    name = element.get("name")
+    if kind == "terrain" and terrain_type:
+        return f"{kind}:{terrain_type}:{name}"
+    return f"{kind}:{name}"
 
 
 def _interior_allows_windows(layout: dict[str, Any]) -> bool:
