@@ -98,6 +98,7 @@ class ActionResolver:
         scene_poi_id: str | None = None,
         scene_interaction_id: str | None = None,
         scene_interaction_intent: str | None = None,
+        travel_intent: dict[str, Any] | None = None,
     ) -> Any:
         """Exécute le pipeline complet pour une action.
 
@@ -129,6 +130,7 @@ class ActionResolver:
                 scene_poi_id=scene_poi_id,
                 scene_interaction_id=scene_interaction_id,
                 scene_interaction_intent=scene_interaction_intent,
+                travel_intent=travel_intent,
             ),
             active,
             db,

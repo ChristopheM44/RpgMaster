@@ -222,6 +222,48 @@ def _extract_scene_anchor(game_state: dict[str, Any]) -> dict[str, Any]:
         npc_states = {}
     present_npcs, absent_npcs, unknown_npcs = _compute_npc_attendance(npc_states, scene, journal)
 
+    # --- Sorties disponibles de la scène courante ---
+    available_exits: list[dict[str, str]] = []
+    for exit_data in scene.get("exits") or []:
+        if not isinstance(exit_data, dict):
+            continue
+        available_exits.append({
+            "id": str(exit_data.get("id") or ""),
+            "label": str(exit_data.get("label") or ""),
+            "leads_to": str(exit_data.get("leads_to") or ""),
+            "description": str(exit_data.get("description") or ""),
+        })
+
+    # --- Noeuds proches sur la carte régionale ---
+    nearby_map_nodes: list[dict[str, str]] = []
+    world_maps = game_state.get("world_maps") or {}
+    if not isinstance(world_maps, dict):
+        world_maps = {}
+    region_map = world_maps.get("region_map") or {}
+    if not isinstance(region_map, dict):
+        region_map = {}
+    current_node_id = str(region_map.get("current_node_id") or "")
+    region_nodes: list[dict[str, Any]] = list(region_map.get("nodes") or [])
+    region_edges: list[dict[str, Any]] = list(region_map.get("edges") or [])
+    if current_node_id:
+        for edge in region_edges:
+            if not isinstance(edge, dict):
+                continue
+            from_id = str(edge.get("from") or "")
+            to_id = str(edge.get("to") or "")
+            if from_id == current_node_id or to_id == current_node_id:
+                dest_id = to_id if from_id == current_node_id else from_id
+                for node in region_nodes:
+                    if isinstance(node, dict) and str(node.get("id") or "") == dest_id:
+                        nearby_map_nodes.append({
+                            "id": dest_id,
+                            "name": str(node.get("name") or dest_id),
+                            "kind": str(node.get("kind") or ""),
+                            "travel_hint": str(edge.get("travel_hint") or ""),
+                        })
+                        break
+        nearby_map_nodes = nearby_map_nodes[:8]
+
     return {
         "location_place": location_place,
         "location_venue": location_venue,
@@ -234,6 +276,8 @@ def _extract_scene_anchor(game_state: dict[str, Any]) -> dict[str, Any]:
         "present_npcs": present_npcs,
         "absent_npcs": absent_npcs,
         "unknown_location_npcs": unknown_npcs,
+        "available_exits": available_exits,
+        "nearby_map_nodes": nearby_map_nodes,
     }
 
 
@@ -273,6 +317,7 @@ class GMAgent(BaseAgent):
                 player_action=context.player_action,
                 messages=context.messages,
                 roll_results=context.roll_results or None,
+                travel_intent=getattr(context, "travel_intent", None),
             )
         return AgentResponse(
             content=gm_resp.narration,
@@ -291,6 +336,7 @@ class GMAgent(BaseAgent):
         player_action: str | None = None,
         messages: list | None = None,
         roll_results: dict[str, Any] | None = None,
+        travel_intent: dict[str, Any] | None = None,
     ) -> GMResponse:
         """Génère une narration d'exploration / générale."""
         user_prompt = self._render_prompt(
@@ -303,6 +349,7 @@ class GMAgent(BaseAgent):
                 "player_action": delimit_user_input(player_action),
                 "roll_results": json.dumps(roll_results or {}, ensure_ascii=False, indent=2),
                 "recent_messages": self._format_messages(messages),
+                "travel_intent": travel_intent,
             },
         )
         return await self._call_and_parse(user_prompt, context_manager)

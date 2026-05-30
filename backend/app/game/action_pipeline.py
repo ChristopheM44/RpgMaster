@@ -87,6 +87,7 @@ class ActionRequest(BaseModel):
     scene_interaction_id: str | None = None
     scene_interaction_intent: str | None = None
     scene_interaction_context: dict[str, Any] = Field(default_factory=dict)
+    travel_intent: dict[str, Any] | None = None
 
 
 class ResolvedAction(BaseModel):
@@ -293,6 +294,7 @@ class ActionPipeline:
                 player_action=prompt_action_text,
                 roll_results=roll_results or {},
                 messages=recent_messages,
+                travel_intent=request.travel_intent,
             )
 
             try:
@@ -450,6 +452,7 @@ class ActionPipeline:
                     player_action=prompt_action_text,
                     roll_results=roll_results or {},
                     messages=[],
+                    travel_intent=request.travel_intent,
                 )
             outcome_response = await self._narrate_outcome(
                 request.session_id,

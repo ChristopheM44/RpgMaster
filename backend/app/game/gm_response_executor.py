@@ -13,6 +13,17 @@ import uuid
 from decimal import Decimal
 from typing import Any
 
+# Progression naturelle du Moment dans la journée.
+# Utilisé quand un changement de lieu est détecté sans que le MJ n'ait
+# explicitement mis à jour l'heure.
+_TIME_OF_DAY_NEXT: dict[str, str] = {
+    "dawn": "morning",
+    "morning": "afternoon",
+    "afternoon": "dusk",
+    "dusk": "night",
+    "night": "dawn",
+}
+
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -554,6 +565,10 @@ class GMResponseExecutor:
                 "weather": None,
             },
         )
+        # Sauvegarder l'ancien lieu pour détecter un changement de localisation
+        old_place = str(journal.get("location_place") or "").strip()
+        old_venue = str(journal.get("location_venue") or "").strip()
+
         for key in (
             "location_region",
             "location_place",
@@ -565,6 +580,21 @@ class GMResponseExecutor:
         ):
             if key in params and params[key] is not None:
                 journal[key] = params[key]
+
+        # Si le lieu a changé mais que l'heure n'a pas été mise à jour par le MJ,
+        # avancer automatiquement le Moment d'un cran.
+        new_place = str(journal.get("location_place") or "").strip()
+        new_venue = str(journal.get("location_venue") or "").strip()
+        location_changed = (old_place != new_place) or (old_venue != new_venue)
+        time_was_updated = "time_of_day" in params
+
+        if location_changed and not time_was_updated:
+            current_time = str(journal.get("time_of_day", "morning")).strip().lower()
+            next_time = _TIME_OF_DAY_NEXT.get(current_time, "afternoon")
+            journal["time_of_day"] = next_time
+            if next_time == "dawn":
+                journal["day_number"] = int(journal.get("day_number", 1)) + 1
+
         active.mark_dirty()
         await self._event_bus.publish_to_session(
             session_id,

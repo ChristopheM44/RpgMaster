@@ -55,6 +55,7 @@ class PlayerActionMessage(WsBaseMessage):
     scene_poi_id: str | None = None
     scene_interaction_id: str | None = None
     scene_interaction_intent: str | None = Field(default=None, max_length=32)
+    exit_id: str | None = None
 
     @field_validator("action_type")
     @classmethod
@@ -90,6 +91,7 @@ class PlayerActionMessage(WsBaseMessage):
         "scene_id",
         "scene_poi_id",
         "scene_interaction_id",
+        "exit_id",
     )
     @classmethod
     def validate_optional_id(cls, value: str | None, info) -> str | None:

@@ -76,6 +76,7 @@ class AgentContext(BaseModel):
     game_state: dict[str, Any] = Field(default_factory=dict)
     player_action: str | None = None
     roll_results: dict[str, Any] = Field(default_factory=dict)
+    travel_intent: dict[str, Any] | None = None
 
 
 class AgentResponse(BaseModel):

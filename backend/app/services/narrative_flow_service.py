@@ -34,6 +34,7 @@ from app.game.social_scene_state import (
     publish_impossible_hostile_action,
     resolve_scene_clock_crises,
 )
+from app.game.travel_detection import TravelIntent, detect_travel_intent, travel_intent_as_dict
 from app.game.visible_events import publish_visible_entry
 from app.services.message_service import load_recent_messages, persist_narration
 
@@ -185,6 +186,22 @@ class NarrativeFlowService:
                 addressed_to=None,
                 reason="npc_target",
             )
+        # --- Détection d'intention de voyage ---
+        travel_intent = detect_travel_intent(text, active.state_data)
+        # Vérifier aussi si le joueur a cliqué sur une sortie de scène
+        exit_id = getattr(action, "exit_id", None)
+        if exit_id and not travel_intent.is_travel:
+            scene = active.state_data.get("current_scene") or {}
+            if isinstance(scene, dict):
+                for exit_data in scene.get("exits") or []:
+                    if isinstance(exit_data, dict) and str(exit_data.get("id") or "") == exit_id:
+                        travel_intent = TravelIntent(
+                            is_travel=True,
+                            destination=str(exit_data.get("label") or ""),
+                            destination_node_id=str(exit_data.get("leads_to") or ""),
+                            confidence="explicit",
+                        )
+                        break
         trigger_character_id = getattr(action, "character_id", None)
         target_ids = list(detection.target_ids)
         if detection.audience in {"party", "mixed"}:
@@ -323,6 +340,7 @@ class NarrativeFlowService:
                 scene_poi_id=getattr(action, "scene_poi_id", None),
                 scene_interaction_id=getattr(action, "scene_interaction_id", None),
                 scene_interaction_intent=getattr(action, "scene_interaction_intent", None),
+                travel_intent=travel_intent_as_dict(travel_intent),
             )
             if npc_target_id:
                 roll_results = getattr(resolved, "mechanics", None)
@@ -387,6 +405,7 @@ class NarrativeFlowService:
                 scene_poi_id=getattr(action, "scene_poi_id", None),
                 scene_interaction_id=getattr(action, "scene_interaction_id", None),
                 scene_interaction_intent=getattr(action, "scene_interaction_intent", None),
+                travel_intent=travel_intent_as_dict(travel_intent),
             )
             exchange.gm_arbitrated = True
         return exchange
