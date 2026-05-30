@@ -1,16 +1,31 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useSessionStore } from '../../stores/session'
+import { useGameStore } from '../../stores/game'
 import { useExplorationParty } from '../../composables/useExplorationParty'
 import { useExplorationPois } from '../../composables/useExplorationPois'
 
 const sessionStore = useSessionStore()
+const gameStore = useGameStore()
 const { party } = useExplorationParty()
 const { reperes, sorties } = useExplorationPois()
 
 const heroes = computed(() => party.value)
 const pois = computed(() => reperes.value)
 const exits = computed(() => sorties.value)
+const decorItems = computed(() => {
+  const elements = gameStore.currentScene?.elements ?? []
+  const kinds = new Set(
+    elements
+      .filter((element) => element.visibility !== 'hidden')
+      .map((element) => element.kind),
+  )
+  const items: Array<{ id: string; icon: string; label: string }> = []
+  if (kinds.has('hazard')) items.push({ id: 'hazard', icon: '⚠', label: 'Danger' })
+  if (kinds.has('cover') || kinds.has('furniture')) items.push({ id: 'cover', icon: '◆', label: 'Couvert' })
+  if (kinds.has('stairs') || kinds.has('door')) items.push({ id: 'access', icon: '↧', label: 'Accès' })
+  return items
+})
 
 function isHighlighted(id: string) {
   return sessionStore.highlightedIds.includes(id)
@@ -78,6 +93,17 @@ function poiSymbol(kind: string) {
     </div>
 
     <span v-if="pois.length" class="map-legend-divider" />
+
+    <!-- Décor -->
+    <div v-if="decorItems.length" class="map-legend-group">
+      <div
+        v-for="item in decorItems"
+        :key="item.id"
+        class="map-legend-chip is-passive"
+      >{{ item.icon }} {{ item.label }}</div>
+    </div>
+
+    <span v-if="decorItems.length" class="map-legend-divider" />
 
     <!-- Exits -->
     <div v-if="exits.length" class="map-legend-group">
@@ -182,5 +208,9 @@ function poiSymbol(kind: string) {
   background: rgba(240, 199, 100, 0.15);
   border-color: var(--color-gold);
   color: var(--color-gold);
+}
+
+.map-legend-chip.is-passive {
+  cursor: default;
 }
 </style>

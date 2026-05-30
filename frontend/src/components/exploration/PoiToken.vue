@@ -10,7 +10,11 @@ const props = defineProps<{
   highlighted: boolean
 }>()
 
-const emit = defineEmits<{ click: [id: string] }>()
+const emit = defineEmits<{
+  click: [id: string]
+  tooltipShow: [id: string]
+  tooltipHide: []
+}>()
 
 const isSortie = computed(() => props.poi.kind === 'sortie')
 const symbol = computed(() => {
@@ -73,7 +77,16 @@ const style = computed(() => ({
   <div
     class="poi-token"
     :style="style"
+    role="button"
+    tabindex="0"
+    :aria-label="`${poi.title}, ${poi.label}`"
     @click.stop="emit('click', poi.id)"
+    @keydown.enter.prevent="emit('click', poi.id)"
+    @keydown.space.prevent="emit('click', poi.id)"
+    @pointerenter="emit('tooltipShow', poi.id)"
+    @pointerleave="emit('tooltipHide')"
+    @focus="emit('tooltipShow', poi.id)"
+    @blur="emit('tooltipHide')"
   >
     <RpgMapIcon
       v-if="poi.iconId"
@@ -113,6 +126,11 @@ const style = computed(() => ({
   justify-content: center;
   cursor: pointer;
   transition: transform 120ms, box-shadow 120ms;
+}
+
+.poi-token:focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 3px;
 }
 
 .poi-token-icon {

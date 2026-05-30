@@ -95,17 +95,22 @@ _LOCAL_ROAD_CONTEXT_WORDS = {
     "pont",
     "porte de ville",
 }
-_SUBTERRANEAN_WORDS = {
+_EXPLICIT_SUBTERRANEAN_ACCESS_WORDS = {
+    "trappe",
     "égout",
     "egout",
+    "grille",
+    "bouche",
+    "ouverture",
+    "échelle",
+    "echelle",
+    "escalier",
+    "puits",
+    "accès souterrain",
+    "acces souterrain",
+    "entrée souterraine",
+    "entree souterraine",
     "sous-sol",
-    "souterrain",
-    "sous la ville",
-    "vibre",
-    "vibrent",
-    "tremble",
-    "tremblement",
-    "bourdonnement",
 }
 
 
@@ -151,6 +156,11 @@ def normalize_scene_element(raw: Any, cols: int, rows: int) -> dict[str, Any] | 
         element["interactive"] = raw["interactive"]
     elif kind in {"door", "window", "stairs", "furniture", "hazard", "light"}:
         element["interactive"] = True
+    visibility = _clean_text(raw.get("visibility"), max_len=24).lower()
+    if visibility in {"visible", "subtle", "hidden"}:
+        element["visibility"] = visibility
+    if isinstance(raw.get("discovered"), bool):
+        element["discovered"] = raw["discovered"]
     return element
 
 
@@ -254,6 +264,7 @@ def enrich_scene_layout(layout: dict[str, Any]) -> dict[str, Any]:
         _add_plaza_elements(by_id, layout, cols, rows)
 
     _add_poi_elements(by_id, layout, cols, rows)
+    _strip_unrevealed_subterranean_access(by_id, layout)
     layout["elements"] = list(by_id.values())[:96]
     return layout
 
@@ -339,7 +350,7 @@ def build_scene_visual_prompt(scene: dict[str, Any]) -> str:
     element_bits = [
         _element_prompt_bit(element)
         for element in scene.get("elements", [])[:24]
-        if isinstance(element, dict)
+        if isinstance(element, dict) and element.get("visibility") != "hidden"
     ]
     if element_bits:
         parts.append("Physical layout: " + ", ".join(element_bits))
@@ -762,7 +773,7 @@ def _add_plaza_elements(
     cols: int,
     rows: int,
 ) -> None:
-    corpus = _layout_corpus(layout)
+    corpus = _layout_public_corpus(layout)
     by_id.setdefault(
         "pavage_place",
         {
@@ -864,7 +875,7 @@ def _add_plaza_elements(
                 "opaque": False,
             },
         )
-    if any(word in corpus for word in _SUBTERRANEAN_WORDS):
+    if _has_explicit_subterranean_access(corpus):
         by_id.setdefault(
             "grille_egout",
             {
@@ -884,6 +895,42 @@ def _add_plaza_elements(
                 "interactive": True,
             },
         )
+
+
+def _has_explicit_subterranean_access(corpus: str) -> bool:
+    if any(word in corpus for word in _EXPLICIT_SUBTERRANEAN_ACCESS_WORDS):
+        return True
+    return bool(
+        re.search(
+            r"(acc[eè]s|entrée|entree|ouverture).{0,32}"
+            r"(souterrain|sous-sol|sous la ville|égout|egout)",
+            corpus,
+        )
+    )
+
+
+def _strip_unrevealed_subterranean_access(
+    by_id: dict[str, dict[str, Any]],
+    layout: dict[str, Any],
+) -> None:
+    element = by_id.get("grille_egout")
+    if not isinstance(element, dict):
+        return
+    if element.get("discovered") is True or element.get("visibility") == "visible":
+        return
+    if _is_element_linked(layout, "grille_egout"):
+        return
+    if _has_explicit_subterranean_access(_layout_public_corpus(layout)):
+        return
+    by_id.pop("grille_egout", None)
+
+
+def _is_element_linked(layout: dict[str, Any], element_id: str) -> bool:
+    for collection_name in ("pois", "exits"):
+        for item in layout.get(collection_name, []) or []:
+            if isinstance(item, dict) and item.get("element_id") == element_id:
+                return True
+    return False
 
 
 def _door_geometry(pos: dict[str, Any], cols: int, rows: int) -> dict[str, Any]:
@@ -963,6 +1010,22 @@ def _has_explicit_local_road(scene: dict[str, Any]) -> bool:
 
 
 def _layout_corpus(layout: dict[str, Any]) -> str:
+    parts = _layout_public_corpus_parts(layout)
+    for element in layout.get("elements", []) or []:
+        if isinstance(element, dict):
+            parts.extend([
+                element.get("name"),
+                element.get("description"),
+                element.get("terrain_type"),
+            ])
+    return " ".join(str(part or "") for part in parts).casefold()
+
+
+def _layout_public_corpus(layout: dict[str, Any]) -> str:
+    return " ".join(str(part or "") for part in _layout_public_corpus_parts(layout)).casefold()
+
+
+def _layout_public_corpus_parts(layout: dict[str, Any]) -> list[Any]:
     parts: list[Any] = [
         layout.get("scene_theme"),
         layout.get("terrain"),
@@ -974,14 +1037,7 @@ def _layout_corpus(layout: dict[str, Any]) -> str:
     for exit_ in layout.get("exits", []) or []:
         if isinstance(exit_, dict):
             parts.extend([exit_.get("label"), exit_.get("description"), exit_.get("leads_to")])
-    for element in layout.get("elements", []) or []:
-        if isinstance(element, dict):
-            parts.extend([
-                element.get("name"),
-                element.get("description"),
-                element.get("terrain_type"),
-            ])
-    return " ".join(str(part or "") for part in parts).casefold()
+    return parts
 
 
 def _element_prompt_bit(element: dict[str, Any]) -> str:

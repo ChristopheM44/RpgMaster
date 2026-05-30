@@ -85,6 +85,44 @@ describe('LocalMapCanvas', () => {
     })
   })
 
+  it('emits hover state for inspectable SVG elements', async () => {
+    const wrapper = mount(LocalMapCanvas, {
+      props: { scene, cell: 40 },
+    })
+
+    await wrapper.find('[data-testid="local-map-element-desk_element"]').trigger('pointerenter')
+    await wrapper.find('[data-testid="local-map-element-desk_element"]').trigger('pointerleave')
+
+    expect(wrapper.emitted('elementHover')?.[0]?.[0]).toMatchObject({
+      id: 'desk_element',
+      name: 'Bureau fermé',
+    })
+    expect(wrapper.emitted('elementHover')?.[1]?.[0]).toBeNull()
+  })
+
+  it('does not render hidden scene elements', () => {
+    const wrapper = mount(LocalMapCanvas, {
+      props: {
+        scene: {
+          ...scene,
+          elements: [
+            ...scene.elements!,
+            {
+              id: 'secret_stairs',
+              name: 'Escalier secret',
+              kind: 'stairs',
+              visibility: 'hidden',
+              geometry: { type: 'rect', col: 5, row: 5, width: 1, height: 1 },
+            },
+          ],
+        },
+        cell: 40,
+      },
+    })
+
+    expect(wrapper.find('[data-testid="local-map-element-secret_stairs"]').exists()).toBe(false)
+  })
+
   it('does not infer a path only because exits exist', () => {
     const wrapper = mount(LocalMapCanvas, {
       props: {

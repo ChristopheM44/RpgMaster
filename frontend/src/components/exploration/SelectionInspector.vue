@@ -3,10 +3,16 @@ import { computed } from 'vue'
 import { useSessionStore } from '../../stores/session'
 import { useExplorationParty } from '../../composables/useExplorationParty'
 import { useExplorationPois } from '../../composables/useExplorationPois'
+import {
+  entityForElement,
+  useMapInspectables,
+  type MapInspectableEntity,
+} from '../../composables/useMapInspectables'
 
 const sessionStore = useSessionStore()
 const { findHero } = useExplorationParty()
 const { findPoi } = useExplorationPois()
+const { findElement, linkedEntityIdForElement } = useMapInspectables()
 
 const emit = defineEmits<{
   act: [id: string]
@@ -15,16 +21,28 @@ const emit = defineEmits<{
 
 const hero = computed(() => findHero(sessionStore.selectedId))
 const poi = computed(() => findPoi(sessionStore.selectedId))
+const element = computed(() => {
+  if (hero.value || poi.value) return undefined
+  return findElement(sessionStore.selectedId)
+})
+const elementInfo = computed<MapInspectableEntity | null>(() => (
+  element.value
+    ? entityForElement(element.value, linkedEntityIdForElement(element.value.id))
+    : null
+))
 
 const isHero = computed(() => !!hero.value)
 const isSortie = computed(() => poi.value?.kind === 'sortie')
 const isPoi = computed(() => !!poi.value && !isSortie.value)
+const isElement = computed(() => !!elementInfo.value)
+const isSquareAvatar = computed(() => isSortie.value || isElement.value)
 
 const tone = computed<'gold' | 'arcane' | 'blood' | 'teal' | 'text'>(() => {
   if (hero.value) {
     if (hero.value.isMe) return 'gold'
     return hero.value.ai ? 'arcane' : 'teal'
   }
+  if (elementInfo.value) return elementInfo.value.tone
   if (!poi.value) return 'text'
   if (poi.value.kind === 'sortie') return 'gold'
   return poi.value.tone === 'text' ? 'text' : poi.value.tone
@@ -46,6 +64,7 @@ const eyebrow = computed(() => {
     if (hero.value!.isMe) return 'Vous'
     return hero.value!.ai ? 'Compagnon IA' : 'Allié'
   }
+  if (elementInfo.value) return elementInfo.value.label
   if (isSortie.value) return 'Sortie'
   switch (poi.value?.kind) {
     case 'npc': return 'PNJ'
@@ -65,9 +84,26 @@ const eyebrow = computed(() => {
   }
 })
 
-const position = computed(() => hero.value?.pos ?? poi.value?.label ?? '')
-const title = computed(() => hero.value?.name ?? poi.value?.title ?? '')
-const poiSymbol = computed(() => {
+const title = computed(() => hero.value?.name ?? poi.value?.title ?? elementInfo.value?.title ?? '')
+const position = computed(() => (
+  hero.value?.pos
+  ?? poi.value?.label
+  ?? elementInfo.value?.coordinate
+  ?? ''
+))
+const inspectorSymbol = computed(() => {
+  if (element.value) {
+    switch (element.value.kind) {
+      case 'door': return '▭'
+      case 'window': return '◇'
+      case 'stairs': return '↧'
+      case 'hazard': return '⚠'
+      case 'cover':
+      case 'furniture': return '◆'
+      case 'light': return '✦'
+      default: return '✦'
+    }
+  }
   if (poi.value?.iconSymbol) return poi.value.iconSymbol
   switch (poi.value?.kind) {
     case 'npc': return '◉'
@@ -79,6 +115,7 @@ const poiSymbol = computed(() => {
     default: return '✦'
   }
 })
+const description = computed(() => poi.value?.desc ?? elementInfo.value?.description ?? '')
 const poiActionLabel = computed(() => (
   poi.value?.actionLabel
   ?? poi.value?.skill
@@ -108,7 +145,7 @@ function act() {
 
 <template>
   <div
-    v-if="hero || poi"
+    v-if="hero || poi || elementInfo"
     class="inspector"
     :style="{
       borderColor: `${toneHex}55`,
@@ -120,7 +157,7 @@ function act() {
     <header class="inspector-header">
       <div
         class="inspector-avatar"
-        :class="{ 'is-square': isSortie }"
+        :class="{ 'is-square': isSquareAvatar }"
         :style="{
           background: hero
             ? `radial-gradient(circle at 30% 30%, ${hero.color}, ${hero.color}aa)`
@@ -130,7 +167,7 @@ function act() {
         }"
       >
         <span v-if="hero">{{ hero.token }}</span>
-        <span v-else>{{ poiSymbol }}</span>
+        <span v-else>{{ inspectorSymbol }}</span>
       </div>
       <div class="inspector-meta">
         <div class="inspector-eyebrow" :style="{ color: toneVar }">
@@ -146,6 +183,9 @@ function act() {
         </div>
         <div v-else-if="isSortie && poi" class="inspector-sub">
           Destination : <span class="inspector-skill" :style="{ color: toneVar }">{{ poi.dest }}</span>
+        </div>
+        <div v-else-if="isElement && elementInfo" class="inspector-sub">
+          Nature : <span class="inspector-skill" :style="{ color: toneVar }">{{ elementInfo.label }}</span>
         </div>
       </div>
     </header>
@@ -167,10 +207,10 @@ function act() {
     </div>
 
     <!-- POI desc -->
-    <p v-if="poi" class="inspector-desc">{{ poi.desc }}</p>
+    <p v-if="description" class="inspector-desc">{{ description }}</p>
 
     <!-- Actions -->
-    <div class="inspector-actions">
+    <div v-if="hero || poi" class="inspector-actions">
       <template v-if="hero?.isMe">
         <button
           class="inspector-btn-primary"

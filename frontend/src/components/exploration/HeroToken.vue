@@ -9,7 +9,11 @@ const props = defineProps<{
   highlighted: boolean
 }>()
 
-const emit = defineEmits<{ click: [id: string] }>()
+const emit = defineEmits<{
+  click: [id: string]
+  tooltipShow: [id: string]
+  tooltipHide: []
+}>()
 
 const hpPct = computed(() => (props.hero.hp / Math.max(1, props.hero.hpMax)) * 100)
 const hpColor = computed(() => {
@@ -42,7 +46,16 @@ const style = computed(() => ({
   <div
     class="hero-token"
     :style="style"
+    role="button"
+    tabindex="0"
+    :aria-label="`${hero.name}, ${hero.pos}`"
     @click.stop="emit('click', hero.id)"
+    @keydown.enter.prevent="emit('click', hero.id)"
+    @keydown.space.prevent="emit('click', hero.id)"
+    @pointerenter="emit('tooltipShow', hero.id)"
+    @pointerleave="emit('tooltipHide')"
+    @focus="emit('tooltipShow', hero.id)"
+    @blur="emit('tooltipHide')"
   >
     <span
       class="hero-token-label"
@@ -70,6 +83,11 @@ const style = computed(() => ({
   justify-content: center;
   cursor: pointer;
   transition: transform 120ms, box-shadow 120ms;
+}
+
+.hero-token:focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 3px;
 }
 
 .hero-token-label {

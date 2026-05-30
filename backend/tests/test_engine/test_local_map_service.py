@@ -102,12 +102,68 @@ def test_plaza_enrichment_does_not_create_local_roads() -> None:
     assert road_elements == []
     assert any(element["id"] == "pavage_place" for element in layout["elements"])
     assert any(element["id"] == "pavillon_festivites" for element in layout["elements"])
-    assert any(element["id"] == "grille_egout" for element in layout["elements"])
+    assert not any(element["id"] == "grille_egout" for element in layout["elements"])
     assert all(exit_["placement"] == "edge" for exit_ in layout["exits"])
     assert all(
         exit_["position"]["col"] in {0, 11} or exit_["position"]["row"] in {0, 11}
         for exit_ in layout["exits"]
     )
+
+
+def test_plaza_enrichment_keeps_explicit_sewer_access_visible() -> None:
+    layout = {
+        "cols": 12,
+        "rows": 12,
+        "terrain": "settlement",
+        "scene_theme": "city",
+        "description": (
+            "Place du Marché Central pendant le festival. Une grille d'égout disjointe "
+            "frémit près du bord de la place."
+        ),
+        "pois": [],
+        "exits": [],
+    }
+
+    enrich_scene_layout(layout)
+
+    linked = next(element for element in layout["elements"] if element["id"] == "grille_egout")
+    assert linked["kind"] == "stairs"
+    assert linked["interactive"] is True
+
+
+def test_plaza_enrichment_strips_legacy_inferred_sewer_access() -> None:
+    layout = {
+        "cols": 12,
+        "rows": 12,
+        "terrain": "settlement",
+        "scene_theme": "city",
+        "description": "La foule du festival s'agite et le sol vibre sous les pavés.",
+        "pois": [
+            {
+                "id": "vibration_sol",
+                "name": "Vibration anormale",
+                "kind": "clue",
+                "position": {"col": 4, "row": 4},
+                "description": "Une onde légère parcourt le sol.",
+            },
+        ],
+        "exits": [],
+        "elements": [
+            {
+                "id": "grille_egout",
+                "name": "Grille d'égout",
+                "kind": "stairs",
+                "geometry": {"type": "rect", "col": 7, "row": 8, "width": 0.8, "height": 0.8},
+                "description": "Une ouverture métallique suggère un accès sous la ville.",
+                "interactive": True,
+            },
+        ],
+    }
+
+    enrich_scene_layout(layout)
+
+    assert not any(element["id"] == "grille_egout" for element in layout["elements"])
+    assert any(element["id"] == "element_vibration_sol" for element in layout["elements"])
 
 
 def test_embedded_exit_stays_internal_and_gets_element_link() -> None:

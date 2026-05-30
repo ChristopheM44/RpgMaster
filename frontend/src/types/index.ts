@@ -633,6 +633,8 @@ export interface SceneElement {
   blocks_movement?: boolean
   opaque?: boolean
   interactive?: boolean
+  visibility?: 'visible' | 'subtle' | 'hidden'
+  discovered?: boolean
 }
 
 export interface SceneLayoutChangedPayload {

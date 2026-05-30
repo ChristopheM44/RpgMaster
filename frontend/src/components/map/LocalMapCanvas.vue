@@ -28,6 +28,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   elementClick: [element: SceneElement]
+  elementHover: [element: SceneElement | null]
 }>()
 
 interface BiomeStyle {
@@ -145,7 +146,7 @@ const widthPx = computed(() => cols.value * props.cell)
 const heightPx = computed(() => rows.value * props.cell)
 const theme = computed(() => props.scene?.scene_theme ?? props.themeFallback)
 const biome = computed(() => BIOMES[theme.value] ?? BIOMES.forest)
-const elements = computed(() => props.scene?.elements ?? [])
+const elements = computed(() => (props.scene?.elements ?? []).filter((element) => element.visibility !== 'hidden'))
 const elementLinks = computed(() => {
   const links = new Set<string>()
   for (const poi of props.scene?.pois ?? []) {
@@ -166,9 +167,20 @@ function isElementInteractive(element: SceneElement): boolean {
   return Boolean(element.interactive || elementLinks.value.has(element.id))
 }
 
+function isElementInspectable(element: SceneElement): boolean {
+  if (isElementInteractive(element)) return true
+  if (element.kind === 'terrain' || element.kind === 'decor' || element.kind === 'wall') return false
+  return Boolean(element.name)
+}
+
 function onElementClick(element: SceneElement) {
   if (!isElementInteractive(element)) return
   emit('elementClick', element)
+}
+
+function onElementHover(element: SceneElement | null) {
+  if (element && !isElementInspectable(element)) return
+  emit('elementHover', element)
 }
 
 function shapeForGeometry(geometry: SceneElementGeometry) {
@@ -240,7 +252,9 @@ function hashSeed(seed: string): number {
           element.terrain_type ? `terrain-${element.terrain_type}` : null,
           {
             'is-interactive': isElementInteractive(element),
+            'is-inspectable': isElementInspectable(element),
             'is-selected': selectedElementId === element.id,
+            'is-subtle': element.visibility === 'subtle' && !element.discovered,
           },
         ]"
         :role="isElementInteractive(element) ? 'button' : undefined"
@@ -248,6 +262,11 @@ function hashSeed(seed: string): number {
         :data-testid="`local-map-element-${element.id}`"
         @click.stop="onElementClick(element)"
         @keydown.enter.prevent="onElementClick(element)"
+        @keydown.space.prevent="onElementClick(element)"
+        @pointerenter="onElementHover(element)"
+        @pointerleave="onElementHover(null)"
+        @focus="onElementHover(element)"
+        @blur="onElementHover(null)"
       >
         <title>{{ element.name }}</title>
         <line
@@ -348,9 +367,18 @@ function hashSeed(seed: string): number {
   pointer-events: none;
 }
 
+.local-map-element.is-inspectable {
+  cursor: help;
+  pointer-events: auto;
+}
+
 .local-map-element.is-interactive {
   cursor: pointer;
-  pointer-events: auto;
+}
+
+.local-map-element.is-subtle {
+  opacity: 0.42;
+  filter: saturate(0.72);
 }
 
 .local-map-element line,
@@ -465,6 +493,8 @@ function hashSeed(seed: string): number {
 }
 
 .local-map-element.is-interactive:hover,
+.local-map-element.is-inspectable:hover,
+.local-map-element.is-interactive:focus-visible,
 .local-map-element.is-selected {
   filter: drop-shadow(0 0 8px currentColor);
 }
