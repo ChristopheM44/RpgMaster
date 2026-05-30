@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from urllib.parse import urlsplit, urlunsplit
 
 from pydantic_settings import BaseSettings
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -132,7 +135,10 @@ def _load_runtime_llm() -> None:
     if runtime_file.exists():
         try:
             _runtime_llm = json.loads(runtime_file.read_text(encoding="utf-8"))
-        except Exception:
+        except Exception as exc:
+            logger.warning(
+                "Config LLM runtime illisible (%s), réinitialisée: %s", runtime_file, exc
+            )
             _runtime_llm = {}
 
 

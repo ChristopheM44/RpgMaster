@@ -37,6 +37,7 @@ from app.game.visible_events import publish_visible_entry
 from app.llm.budget import (
     is_sober_mode,
 )
+from app.logging_utils import log_degraded
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -919,7 +920,8 @@ class AIPlayerManager:
             from app.game.social_resolution import resolve_npc_target_id
 
             target_id = resolve_npc_target_id(text, state_data)
-        except Exception:
+        except Exception as exc:
+            log_degraded(logger, "résolution cible PNJ", exc, text=text)
             target_id = None
         if target_id and target_id in present_ids:
             return target_id

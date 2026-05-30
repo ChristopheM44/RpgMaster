@@ -22,6 +22,7 @@ from app.game.session_manager import ActiveSession
 from app.game.social_scene_state import finalize_npc_dialogue_state, prepare_npc_dialogue_state
 from app.game.visible_events import publish_visible_entry
 from app.llm.voxtral_client import tts_router
+from app.logging_utils import log_degraded
 from app.services import campaign_dossier_service
 
 logger = logging.getLogger(__name__)
@@ -236,9 +237,11 @@ class ActionResolver:
                     )
                 )
             except Exception as map_exc:
-                logger.debug(
-                    "resolve_npc_dialogue : contexte cartes indisponible : %s",
+                log_degraded(
+                    logger,
+                    "contexte cartes (resolve_npc_dialogue)",
                     map_exc,
+                    session_id=session_id,
                 )
 
         try:
@@ -337,9 +340,11 @@ class ActionResolver:
                         )
                     )
                 except Exception as map_exc:
-                    logger.debug(
-                        "resolve_npc_dialogue (step 2) : contexte cartes indisponible : %s",
+                    log_degraded(
+                        logger,
+                        "contexte cartes (resolve_npc_dialogue step 2)",
                         map_exc,
+                        session_id=session_id,
                     )
 
             try:
@@ -457,11 +462,11 @@ class ActionResolver:
                         )
                         return persona
             except Exception as exc:
-                logger.debug(
-                    "resolve_npc_dialogue: lookup persona échoué pour %s : %s — "
-                    "fallback hint legacy",
-                    npc_id,
+                log_degraded(
+                    logger,
+                    "lookup persona (fallback hint legacy)",
                     exc,
+                    npc_id=npc_id,
                 )
         return str(npc.get("personality_hint", "indifferent"))
 
@@ -495,9 +500,11 @@ class ActionResolver:
                         )
                     )
                 except Exception as map_exc:
-                    logger.debug(
-                        "ActionResolver.social_conclude : cartes indisponibles : %s",
+                    log_degraded(
+                        logger,
+                        "contexte cartes (social_conclude)",
                         map_exc,
+                        session_id=session_id,
                     )
             gm_resp = await self._gm.narrate_social_conclude(
                 game_state=game_state,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
 
@@ -12,9 +13,12 @@ from app.game.tactical_combat import (
     combatant_attack_range_m,
     combatant_reach_m,
 )
+from app.logging_utils import log_degraded
 from app.models.character import Character
 from app.services.encounter_service import encounter_service
 from app.services.rest_service import normalize_character_hit_dice
+
+logger = logging.getLogger(__name__)
 
 
 def build_session_state_payload(
@@ -30,8 +34,8 @@ def build_session_state_payload(
 
         if repair_state_visual_coherence(active.state_data):
             active.mark_dirty()
-    except Exception:
-        pass
+    except Exception as exc:
+        log_degraded(logger, "cohérence visuelle (session_state)", exc, session_id=session_id)
 
     turn_data = active.turn_manager.to_dict()
 
@@ -90,8 +94,10 @@ async def build_session_state_payload_enriched(
             if changed:
                 active.mark_dirty()
                 await session_manager.save_state(session_id, db)
-        except Exception:
-            pass
+        except Exception as exc:
+            log_degraded(
+                logger, "cohérence visuelle (session_state enrichi)", exc, session_id=session_id
+            )
     payload = build_session_state_payload(session_id, active)
     try:
         from app.services import campaign_dossier_service
@@ -103,7 +109,8 @@ async def build_session_state_payload_enriched(
                 active.state_data if active is not None else None,
             )
         )
-    except Exception:
+    except Exception as exc:
+        log_degraded(logger, "cartes de campagne (session_state)", exc, session_id=session_id)
         payload.setdefault("region_map", None)
         payload.setdefault("city_maps", {})
         payload.setdefault("active_city_id", None)
