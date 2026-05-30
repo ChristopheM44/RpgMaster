@@ -37,6 +37,8 @@ def execute_roll_request(
     skill_name = str(params.get("skill", "")).lower().replace(" ", "_").replace("-", "_")
     ability_str = str(params.get("ability", "")).lower()
     check_type = params.get("type", "check")
+    if params.get("save") is True:
+        check_type = "save"
     dc = params.get("dc")
     target_id = params.get("target") or fallback_actor_id
 

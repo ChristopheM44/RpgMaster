@@ -1111,6 +1111,7 @@ function selectPoiAction(action: ResolvedScenePoiInteraction) {
     ...(action.prompt ? { prompt: action.prompt } : {}),
     ...(action.icon ? { icon: action.icon } : {}),
     ...(action.default !== undefined ? { default: action.default } : {}),
+    ...(action.mechanics ? { mechanics: action.mechanics } : {}),
   }
   emit('scenePoi', current.id, current.name, interaction)
 }

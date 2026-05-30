@@ -561,6 +561,21 @@ export interface ScenePoiInteraction {
   prompt?: string
   icon?: string
   default?: boolean
+  mechanics?: ScenePoiInteractionMechanics
+}
+
+export interface ScenePoiRollMechanic {
+  type?: 'check' | 'save'
+  ability: 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha'
+  skill?: string
+  dc: number
+  reason?: string
+}
+
+export interface ScenePoiInteractionMechanics {
+  roll?: ScenePoiRollMechanic
+  safe_observation?: boolean
+  reveal_tier?: 'surface' | 'interpreted' | 'deep'
 }
 
 export interface SceneExit {
@@ -643,7 +658,14 @@ export interface SceneLayoutChangedPayload {
 }
 
 export type SceneClockSeverity = 'low' | 'medium' | 'high' | 'critical'
-export type SceneClockStatus = 'active' | 'paused' | 'filled' | 'resolved'
+export type SceneClockStatus = 'active' | 'paused' | 'filled' | 'resolving' | 'resolved'
+
+export interface SceneClockOnFill {
+  mode?: 'roll' | 'narrative' | 'transition'
+  roll?: ScenePoiRollMechanic
+  narration?: string
+  next_clock?: Partial<SceneClock>
+}
 
 export interface SceneClock {
   id: string
@@ -655,6 +677,7 @@ export interface SceneClock {
   status: SceneClockStatus
   tick_on?: string
   linked_quest_id?: string | null
+  on_fill?: SceneClockOnFill
 }
 
 export type ClockUpdatedPayload = SceneClock

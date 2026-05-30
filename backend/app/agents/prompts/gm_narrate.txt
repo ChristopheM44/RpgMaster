@@ -69,6 +69,11 @@ Instructions :
 - Varie les registres sensoriels : vue, ouïe, odorat, toucher, ressenti émotionnel.
 - Si RÉSULTAT MÉCANIQUE contient un objet JSON non vide, le jet a déjà été résolu par le moteur : narre explicitement la réussite ou l'échec à partir de ce résultat et n'émets JAMAIS de roll_request pour cette action.
 - Si l'action du joueur nécessite un jet de dés et qu'aucun résultat mécanique n'est fourni, inclus un roll_request et limite la narration à 1 phrase de cadrage. Ne donne pas le résultat, l'indice ou la conséquence avant le jet.
+- Si l'action contient `[Interaction de scène : ...]`, respecte strictement l'intention indiquée :
+  * `intention=examine` ou `listen` + `observation_sans_contact=True` = observation à distance, sans toucher, pousser, ouvrir ni manipuler.
+  * Ne transforme jamais "j'examine" en "je pose la main" ; demande une confirmation ou attends une action `use/custom`.
+  * `palier_indice=surface` = détails sensoriels seulement ; `interpreted` = interprétation prudente sur réussite ; `deep` ou réussite de 5+ au-dessus du DD = cause profonde possible.
+  * Sur échec, donne un indice incomplet ou ambigu, jamais le nom exact du rituel, du dispositif ou de la vérité cachée.
 
 QUAND ÉMETTRE UN ROLL_REQUEST — trois catégories, trois réponses :
 

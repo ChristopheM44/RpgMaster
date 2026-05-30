@@ -52,6 +52,9 @@ class PlayerActionMessage(WsBaseMessage):
     addressed_to: str | None = None
     audience: str | None = Field(default=None, max_length=32)
     scene_id: str | None = None
+    scene_poi_id: str | None = None
+    scene_interaction_id: str | None = None
+    scene_interaction_intent: str | None = Field(default=None, max_length=32)
 
     @field_validator("action_type")
     @classmethod
@@ -85,10 +88,21 @@ class PlayerActionMessage(WsBaseMessage):
         "item_id",
         "addressed_to",
         "scene_id",
+        "scene_poi_id",
+        "scene_interaction_id",
     )
     @classmethod
     def validate_optional_id(cls, value: str | None, info) -> str | None:
         return _validate_identifier(value, info.field_name)
+
+    @field_validator("scene_interaction_intent")
+    @classmethod
+    def validate_scene_interaction_intent(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if value not in {"approach", "talk", "examine", "listen", "search", "use", "custom"}:
+            raise ValueError("scene_interaction_intent invalide.")
+        return value
 
     @field_validator("hit_dice_spend")
     @classmethod

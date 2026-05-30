@@ -113,6 +113,18 @@ describe('useGameStore map decoration state', () => {
 
     expect(store.sceneClocks).toHaveLength(1)
     expect(store.sceneClocks[0]?.current).toBe(1)
+
+    store.applyClockUpdated({
+      id: 'menace_docks',
+      label: 'Menace aux docks',
+      scope: 'scene',
+      current: 4,
+      max: 4,
+      severity: 'high',
+      status: 'resolved',
+    })
+
+    expect(store.sceneClocks).toEqual([])
   })
 
   it('logs disconnection only on connected to disconnected transitions', () => {

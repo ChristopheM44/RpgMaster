@@ -118,6 +118,10 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function applyClockUpdated(payload: ClockUpdatedPayload) {
+    if (payload.status === 'resolved') {
+      sceneClocks.value = sceneClocks.value.filter((clock) => clock.id !== payload.id)
+      return
+    }
     const index = sceneClocks.value.findIndex((clock) => clock.id === payload.id)
     if (index >= 0) {
       sceneClocks.value[index] = { ...sceneClocks.value[index]!, ...payload }
@@ -185,7 +189,11 @@ export const useGameStore = defineStore('game', () => {
     if (payload.quests) quests.value = payload.quests
     if (payload.chronicle) chronicle.value = payload.chronicle
     if ('current_scene' in payload) currentScene.value = payload.current_scene ?? null
-    if ('scene_clocks' in payload) sceneClocks.value = payload.scene_clocks ?? []
+    if ('scene_clocks' in payload) {
+      sceneClocks.value = (payload.scene_clocks ?? []).filter(
+        (clock) => clock.status !== 'resolved',
+      )
+    }
     if ('region_map' in payload) regionMap.value = payload.region_map ?? null
     if ('city_maps' in payload) cityMaps.value = payload.city_maps ?? {}
     if ('active_city_id' in payload) activeCityId.value = payload.active_city_id ?? null

@@ -162,6 +162,7 @@ function sanitizeSceneInteractions(value: unknown): ResolvedScenePoiInteraction[
       ...(prompt ? { prompt } : {}),
       ...(typeof item.icon === 'string' && item.icon.trim() ? { icon: item.icon.trim() } : {}),
       ...(typeof item.default === 'boolean' ? { default: item.default } : {}),
+      ...(item.mechanics ? { mechanics: item.mechanics } : {}),
       iconId: resolveInteractionIcon(item.icon, intent),
     })
   })

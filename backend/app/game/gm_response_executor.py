@@ -27,7 +27,7 @@ from app.game.event_bus import EventType, event_bus
 from app.game.scene_theme import coerce_scene_theme
 from app.game.session_manager import ActiveSession
 from app.game.social_resolution import SocialResolution
-from app.game.social_scene_state import start_scene_clock
+from app.game.social_scene_state import enrich_scene_poi_mechanics, start_scene_clock
 from app.game.state_sync import sync_character_state
 from app.models.character import Character
 from app.schemas.campaign_content import normalize_content_id
@@ -649,6 +649,7 @@ class GMResponseExecutor:
             logger.warning("scene_layout ignore : params invalides - %s", params)
             return
 
+        enrich_scene_poi_mechanics(layout)
         self._filter_absent_npc_pois(layout, active)
         active.state_data["current_scene"] = layout
         self._register_scene_npcs(layout, active)
@@ -1599,12 +1600,49 @@ class GMResponseExecutor:
                 interaction["icon"] = icon
             if isinstance(raw.get("default"), bool):
                 interaction["default"] = raw["default"]
+            mechanics = cls._normalize_poi_interaction_mechanics(raw.get("mechanics"))
+            if mechanics:
+                interaction["mechanics"] = mechanics
 
             interactions.append(interaction)
             if len(interactions) >= 5:
                 break
 
         return interactions
+
+    @classmethod
+    def _normalize_poi_interaction_mechanics(cls, value: Any) -> dict[str, Any]:
+        if not isinstance(value, dict):
+            return {}
+        mechanics: dict[str, Any] = {}
+        roll = value.get("roll")
+        if isinstance(roll, dict):
+            ability = cls._clean_optional_text(roll.get("ability"), max_len=12)
+            if ability:
+                ability = ability.lower()[:3]
+            if ability in {"str", "dex", "con", "int", "wis", "cha"}:
+                roll_type = cls._clean_optional_text(roll.get("type"), max_len=12) or "check"
+                roll_type = "save" if roll.get("save") is True else roll_type.lower()
+                if roll_type not in {"check", "save"}:
+                    roll_type = "check"
+                normalized_roll: dict[str, Any] = {
+                    "type": roll_type,
+                    "ability": ability,
+                    "dc": cls._clamp_int(roll.get("dc"), default=12, minimum=5, maximum=30),
+                }
+                skill = cls._clean_optional_text(roll.get("skill"), max_len=40)
+                reason = cls._clean_optional_text(roll.get("reason"), max_len=80)
+                if skill:
+                    normalized_roll["skill"] = skill
+                if reason:
+                    normalized_roll["reason"] = reason
+                mechanics["roll"] = normalized_roll
+        if isinstance(value.get("safe_observation"), bool):
+            mechanics["safe_observation"] = value["safe_observation"]
+        reveal_tier = cls._clean_optional_text(value.get("reveal_tier"), max_len=16)
+        if reveal_tier in {"surface", "interpreted", "deep"}:
+            mechanics["reveal_tier"] = reveal_tier
+        return mechanics
 
     @classmethod
     def _is_duplicate_exit_poi(

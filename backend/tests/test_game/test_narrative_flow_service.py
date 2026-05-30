@@ -681,6 +681,104 @@ async def test_impossible_hostile_action_refuses_effect_and_marks_npc_wary() -> 
 
 
 @pytest.mark.asyncio
+async def test_filled_scene_clock_triggers_crisis_roll_and_resolves() -> None:
+    active = ActiveSession(
+        session_id="scene-1",
+        phase=SessionStatus.EXPLORATION,
+        state_data={
+            "characters": {
+                "human_1": {
+                    "name": "Aria",
+                    "level": 1,
+                    "ability_scores": {"dex": 14},
+                    "save_proficiencies": [],
+                }
+            },
+            "scene_clocks": [
+                {
+                    "id": "menace_docks",
+                    "label": "Menace aux docks",
+                    "scope": "scene",
+                    "current": 3,
+                    "max": 4,
+                    "severity": "high",
+                    "status": "active",
+                    "tick_on": "player_action",
+                    "linked_quest_id": None,
+                }
+            ],
+        },
+    )
+    resolver = MagicMock()
+    resolver.resolve = AsyncMock()
+    resolver.resolve_npc_dialogue = AsyncMock()
+    resolver.social_conclude = AsyncMock()
+    published: list[tuple[str, dict]] = []
+
+    async def capture(_session_id, event_type, payload, source=None):
+        published.append((event_type, payload))
+
+    with patch("app.services.narrative_flow_service.event_bus.publish_to_session", new=capture):
+        await NarrativeFlowService().handle_exploration_action(
+            session_id="scene-1",
+            action=_action("J'examine la porte qui vibre."),
+            active=active,
+            action_resolver=resolver,
+            db=None,
+        )
+
+    assert active.state_data["scene_clocks"][0]["status"] == "resolved"
+    clock_updates = [payload for event, payload in published if event == EventType.CLOCK_UPDATED]
+    assert [payload["status"] for payload in clock_updates[:2]] == ["resolving", "resolved"]
+    assert any(event == EventType.ROLL_RESULT for event, _ in published)
+    assert any("point critique" in payload["text"] for event, payload in published
+               if event == EventType.NARRATION)
+
+
+@pytest.mark.asyncio
+async def test_resolved_scene_clock_does_not_retrigger_crisis() -> None:
+    active = ActiveSession(
+        session_id="scene-1",
+        phase=SessionStatus.EXPLORATION,
+        state_data={
+            "characters": {"human_1": {"name": "Aria", "level": 1}},
+            "scene_clocks": [
+                {
+                    "id": "menace_docks",
+                    "label": "Menace aux docks",
+                    "scope": "scene",
+                    "current": 4,
+                    "max": 4,
+                    "severity": "high",
+                    "status": "resolved",
+                    "tick_on": "player_action",
+                }
+            ],
+        },
+    )
+    resolver = MagicMock()
+    resolver.resolve = AsyncMock()
+    resolver.resolve_npc_dialogue = AsyncMock()
+    resolver.social_conclude = AsyncMock()
+    published: list[tuple[str, dict]] = []
+
+    async def capture(_session_id, event_type, payload, source=None):
+        published.append((event_type, payload))
+
+    with patch("app.services.narrative_flow_service.event_bus.publish_to_session", new=capture):
+        await NarrativeFlowService().handle_exploration_action(
+            session_id="scene-1",
+            action=_action("J'examine la porte."),
+            active=active,
+            action_resolver=resolver,
+            db=None,
+        )
+
+    assert not any(event == EventType.ROLL_RESULT for event, _ in published)
+    assert not any(event == EventType.CLOCK_UPDATED for event, _ in published)
+
+
+@pytest.mark.asyncio
 async def test_direct_npc_social_check_keeps_roll_then_dialogue_only() -> None:
     active = ActiveSession(
         session_id="scene-1",

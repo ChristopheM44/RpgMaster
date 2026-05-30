@@ -30,6 +30,11 @@ _SPELL_BLOCK_TEMPLATES = [
 # ---------------------------------------------------------------------------
 # Verbes qui signalent une action physiquement risquée ou à efficacité incertaine.
 # Le pattern est volontairement conservateur pour éviter les faux positifs.
+_DANGEROUS_OBJECT_PATTERN = (
+    r"(?:electr|électr|ardent|brul|brûl|corros|poison|vibr|lumines|instable|"
+    r"surchauff|chaud|brillant|lueur|ozone|soufre|siphon)"
+)
+
 _RISKY_ACTION_PATTERN = re.compile(
     r"""
     (?:
@@ -45,7 +50,14 @@ _RISKY_ACTION_PATTERN = re.compile(
         |
         (?:crocheter|forcer|fracturer|défoncer)\s+(?:la|le|les)
         |
-        (?:toucher|saisir|attraper|empoigner)\s+(?:la|le|les|l')\s+\w*(?:électr|ardent|brûl|corros|poison)
+        (?:toucher|saisir|attraper|empoigner|manipuler|ouvrir)\s+
+            (?:la|le|les|l'|un|une|des|mon|ma|mes)\s+
+            [^.?!]{0,80}
+            """ + _DANGEROUS_OBJECT_PATTERN + r"""
+        |
+        pose(?:r)?\s+(?:ma|la|une)\s+main\s+sur\s+
+            [^.?!]{0,80}
+            """ + _DANGEROUS_OBJECT_PATTERN + r"""
     )
     """,
     re.IGNORECASE | re.VERBOSE,
@@ -53,16 +65,24 @@ _RISKY_ACTION_PATTERN = re.compile(
 
 # Skills par défaut selon le type de risque détecté (conservateur)
 _RISKY_SKILL_DEFAULTS = {
-    "trancher": ("Athletics", "str", 13),
-    "enflammer": ("Arcana", "int", 12),
-    "enfoncer": ("Acrobatics", "dex", 13),
-    "escalader": ("Athletics", "str", 12),
-    "grimper": ("Athletics", "str", 12),
-    "sauter": ("Athletics", "str", 12),
-    "bondir": ("Athletics", "str", 12),
-    "crocheter": ("SleightOfHand", "dex", 15),
-    "forcer": ("Athletics", "str", 14),
-    "fracturer": ("Athletics", "str", 14),
+    "trancher": ("Athletics", "str", 13, "check"),
+    "enflammer": ("Arcana", "int", 12, "check"),
+    "enfoncer": ("Acrobatics", "dex", 13, "check"),
+    "escalader": ("Athletics", "str", 12, "check"),
+    "grimper": ("Athletics", "str", 12, "check"),
+    "sauter": ("Athletics", "str", 12, "check"),
+    "bondir": ("Athletics", "str", 12, "check"),
+    "crocheter": ("SleightOfHand", "dex", 15, "check"),
+    "forcer": ("Athletics", "str", 14, "check"),
+    "fracturer": ("Athletics", "str", 14, "check"),
+    "toucher": ("Acrobatics", "dex", 14, "save"),
+    "saisir": ("Acrobatics", "dex", 14, "save"),
+    "attraper": ("Acrobatics", "dex", 14, "save"),
+    "empoigner": ("Acrobatics", "dex", 14, "save"),
+    "manipuler": ("Acrobatics", "dex", 14, "save"),
+    "ouvrir": ("Acrobatics", "dex", 14, "save"),
+    "pose": ("Acrobatics", "dex", 14, "save"),
+    "poser": ("Acrobatics", "dex", 14, "save"),
 }
 
 
@@ -76,7 +96,7 @@ def _infer_risky_roll_request(content: str) -> dict[str, Any] | None:
         return None
     normalized = content.lower()
     # Cherche le premier verbe déclencheur pour adapter le skill
-    for keyword, (skill, ability, dc) in _RISKY_SKILL_DEFAULTS.items():
+    for keyword, (skill, ability, dc, roll_type) in _RISKY_SKILL_DEFAULTS.items():
         if keyword in normalized:
             if _RISKY_ACTION_PATTERN.search(content):
                 return {
@@ -86,6 +106,7 @@ def _infer_risky_roll_request(content: str) -> dict[str, Any] | None:
                         "skill": skill,
                         "ability": ability,
                         "dc": dc,
+                        "type": roll_type,
                         "reason": "action_risquee_libre",
                     },
                 }

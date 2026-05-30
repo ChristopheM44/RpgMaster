@@ -32,6 +32,7 @@ from app.game.social_scene_state import (
     advance_scene_clocks,
     detect_impossible_hostile_action,
     publish_impossible_hostile_action,
+    resolve_scene_clock_crises,
 )
 from app.game.visible_events import publish_visible_entry
 from app.services.message_service import load_recent_messages, persist_narration
@@ -199,12 +200,37 @@ class NarrativeFlowService:
             player_text=text,
             target_ids=target_ids,
         )
-        await advance_scene_clocks(
+        filled_clocks = await advance_scene_clocks(
             session_id=session_id,
             active=active,
             event_bus=event_bus,
             source="narrative_flow",
         )
+        clock_crisis_happened = False
+        if filled_clocks:
+            resolved_clocks = await resolve_scene_clock_crises(
+                session_id=session_id,
+                active=active,
+                event_bus=event_bus,
+                clocks=filled_clocks,
+                actor_id=getattr(action, "character_id", None),
+                db=db,
+                source="narrative_flow",
+            )
+            if resolved_clocks:
+                clock_crisis_happened = True
+                await self._react_after_world_action(
+                    session_id=session_id,
+                    active=active,
+                    action_resolver=action_resolver,
+                    trigger_character_id=getattr(action, "character_id", None),
+                    db=db,
+                    action_text=(
+                        "Une horloge de menace vient d'atteindre son point critique. "
+                        "Réagis en une phrase courte, seulement comme avertissement "
+                        "ou conseil."
+                    ),
+                )
 
         should_ask_companions = detection.audience in {"companion", "party", "mixed"}
         should_arbitrate_world = detection.audience in {"gm", "world", "mixed"}
@@ -294,6 +320,9 @@ class NarrativeFlowService:
                 slot_level=getattr(action, "slot_level", None),
                 persist_actor_action=detection.audience != "mixed",
                 suppress_gm_narration=bool(npc_target_id),
+                scene_poi_id=getattr(action, "scene_poi_id", None),
+                scene_interaction_id=getattr(action, "scene_interaction_id", None),
+                scene_interaction_intent=getattr(action, "scene_interaction_intent", None),
             )
             if npc_target_id:
                 roll_results = getattr(resolved, "mechanics", None)
@@ -327,7 +356,7 @@ class NarrativeFlowService:
                     trigger_character_id=getattr(action, "character_id", None),
                     db=db,
                 )
-            else:
+            elif not clock_crisis_happened:
                 # Action monde sans PNJ (examiner un monolithe, se déplacer, fouiller…)
                 # Laisser un compagnon réagir spontanément au résultat du MJ —
                 # comme à une vraie table où les autres PJ observent et commentent.
@@ -355,6 +384,9 @@ class NarrativeFlowService:
                 db=db,
                 spell_id=getattr(action, "spell_id", None),
                 slot_level=getattr(action, "slot_level", None),
+                scene_poi_id=getattr(action, "scene_poi_id", None),
+                scene_interaction_id=getattr(action, "scene_interaction_id", None),
+                scene_interaction_intent=getattr(action, "scene_interaction_intent", None),
             )
             exchange.gm_arbitrated = True
         return exchange

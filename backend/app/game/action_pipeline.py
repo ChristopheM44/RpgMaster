@@ -35,6 +35,7 @@ from app.game.social_resolution import (
     _normalized_skill_proficiencies,
     resolve_npc_target_id,
 )
+from app.game.social_scene_state import resolve_scene_interaction_context
 from app.game.tactical_combat import (
     apply_tactical_move,
     calculate_reachable_cells,
@@ -82,6 +83,10 @@ class ActionRequest(BaseModel):
     display_text: str | None = None
     persist_actor_action: bool = True
     suppress_gm_narration: bool = False
+    scene_poi_id: str | None = None
+    scene_interaction_id: str | None = None
+    scene_interaction_intent: str | None = None
+    scene_interaction_context: dict[str, Any] = Field(default_factory=dict)
 
 
 class ResolvedAction(BaseModel):
@@ -158,6 +163,14 @@ class ActionPipeline:
         target_name = self._combatant_name(active.state_data, target_id)
         display_text = self._display_text(request, actor_name, target_name)
         phase_value = self._phase_value(active).upper()
+        scene_interaction_context = resolve_scene_interaction_context(
+            active,
+            poi_id=request.scene_poi_id,
+            interaction_id=request.scene_interaction_id,
+            interaction_intent=request.scene_interaction_intent,
+        )
+        if scene_interaction_context:
+            request.scene_interaction_context = scene_interaction_context
 
         roll_results: dict[str, Any] | None = None
         roll_events: list[dict[str, Any]] = []
@@ -216,6 +229,13 @@ class ActionPipeline:
                 return err_act
         elif request.action_type == "free_text" and _is_social_exploration_text(request.content):
             roll_results = self._resolve_social_check(request, active)
+        elif (
+            phase_value == "EXPLORATION"
+            and request.action_type == "free_text"
+            and request.actor_kind == "player"
+            and scene_interaction_context
+        ):
+            roll_results = self._resolve_scene_interaction_roll(request, active)
 
         # 2. Persistance visible puis contexte GM avec resume mecanique.
         if request.persist_actor_action:
@@ -398,6 +418,7 @@ class ActionPipeline:
                     "player_action": request.content or "",
                     "recent_messages": (context.messages if context is not None else []),
                     "roll_results": roll_results or {},
+                    "scene_interaction": request.scene_interaction_context,
                 },
             )
             pending_rolls.extend(exec_result.pending_rolls)
@@ -780,6 +801,12 @@ class ActionPipeline:
             "actor_kind": request.actor_kind,
             "target": target_id,
         }
+        if request.scene_poi_id:
+            metadata["scene_poi_id"] = request.scene_poi_id
+        if request.scene_interaction_id:
+            metadata["scene_interaction_id"] = request.scene_interaction_id
+        if request.scene_interaction_intent:
+            metadata["scene_interaction_intent"] = request.scene_interaction_intent
         if request.actor_kind == "companion":
             metadata["is_ai_player"] = True
 
@@ -928,6 +955,44 @@ class ActionPipeline:
         return roll_results
 
     @staticmethod
+    def _resolve_scene_interaction_roll(
+        request: ActionRequest,
+        active: ActiveSession,
+    ) -> dict[str, Any] | None:
+        context = request.scene_interaction_context or {}
+        mechanics = context.get("mechanics")
+        if not isinstance(mechanics, dict):
+            return None
+        roll_params = mechanics.get("roll")
+        if not isinstance(roll_params, dict):
+            return None
+
+        from app.game.roll_executor import execute_roll_request
+
+        payload = execute_roll_request(roll_params, request.actor_id, active)
+        if not payload:
+            return None
+        success_label = "réussite" if payload.get("success") else "échec"
+        label = str(payload.get("label") or "Jet")
+        payload.update(
+            {
+                "type": "skill_check",
+                "actor_id": request.actor_id,
+                "scene_poi_id": context.get("poi_id"),
+                "scene_poi_name": context.get("poi_name"),
+                "scene_interaction_id": context.get("interaction_id"),
+                "scene_interaction_intent": context.get("interaction_intent"),
+                "safe_observation": mechanics.get("safe_observation"),
+                "reveal_tier": mechanics.get("reveal_tier"),
+                "summary": (
+                    f"{label} : {payload.get('total')} vs DD {payload.get('dc')} "
+                    f"({success_label})"
+                ),
+            }
+        )
+        return payload
+
+    @staticmethod
     def _without_redundant_social_roll_requests(
         response: AgentResponse,
         roll_results: dict[str, Any],
@@ -974,6 +1039,15 @@ class ActionPipeline:
         enriched["actor_kind"] = request.actor_kind
         enriched["action_type"] = request.action_type
         enriched["target_id"] = target_id
+        if request.scene_interaction_context:
+            enriched["scene_poi_id"] = request.scene_interaction_context.get("poi_id")
+            enriched["scene_poi_name"] = request.scene_interaction_context.get("poi_name")
+            enriched["scene_interaction_id"] = request.scene_interaction_context.get(
+                "interaction_id"
+            )
+            enriched["scene_interaction_intent"] = request.scene_interaction_context.get(
+                "interaction_intent"
+            )
         return enriched
 
     @classmethod
@@ -993,6 +1067,20 @@ class ActionPipeline:
             ):
                 target_id = request.target_id or "unknown"
                 text = f"{text} [Cible sociale : {target_name} ({target_id})]"
+            if request.scene_interaction_context:
+                ctx = request.scene_interaction_context
+                mechanics = ctx.get("mechanics") if isinstance(ctx.get("mechanics"), dict) else {}
+                safe_observation = mechanics.get("safe_observation")
+                reveal_tier = mechanics.get("reveal_tier")
+                parts = [
+                    f"POI={ctx.get('poi_name')}",
+                    f"intention={ctx.get('interaction_intent')}",
+                ]
+                if safe_observation is not None:
+                    parts.append(f"observation_sans_contact={bool(safe_observation)}")
+                if reveal_tier:
+                    parts.append(f"palier_indice={reveal_tier}")
+                text = f"{text} [Interaction de scène : {' ; '.join(parts)}]"
         elif request.action_type == "attack" and target_name:
             if request.actor_kind == "monster":
                 text = f"[Tour du monstre] {actor_name} attaque {target_name}."

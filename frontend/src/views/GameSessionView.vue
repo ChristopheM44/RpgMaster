@@ -274,12 +274,23 @@ function handleLevelUp(characterId: string) {
 }
 
 function handleSceneExit(_exitId: string, label: string) {
-  handleAction('free_text', `Je me dirige vers ${label}.`)
+  handleAction('free_text', `Je me dirige vers ${cleanExitLabel(label)}.`)
 }
 
 function handleScenePoi(poiId: string, name: string, interaction?: ScenePoiInteraction) {
   const targetId = interaction?.intent === 'talk' ? poiId : undefined
-  handleAction('free_text', buildScenePoiInteractionPrompt(name, interaction), targetId)
+  handleAction('free_text', buildScenePoiInteractionPrompt(name, interaction), targetId, {
+    scene_poi_id: poiId,
+    scene_interaction_id: interaction?.id,
+    scene_interaction_intent: interaction?.intent,
+  })
+}
+
+function cleanExitLabel(label: string): string {
+  return label
+    .trim()
+    .replace(/^(?:vers|direction|aller à|aller a|se diriger vers)\s+/i, '')
+    .trim()
 }
 
 const mobileIsMyTurn = computed(() => gameStore.currentTurnId === charStore.myCharacter?.id)
@@ -355,20 +366,37 @@ const contextMeta = computed(() => {
     dusk: 'crépuscule',
     night: 'nuit',
   }
+  const WEATHER_LABEL: Record<string, string> = {
+    sunny: 'ensoleillé',
+    clear: 'dégagé',
+    cloudy: 'nuageux',
+    overcast: 'couvert',
+    rainy: 'pluvieux',
+    rain: 'pluie',
+    stormy: 'orageux',
+    foggy: 'brumeux',
+    snowy: 'neigeux',
+    windy: 'venteux',
+  }
   const time = TIME_LABEL[journal.time_of_day] ?? journal.time_of_day
+  const weather = journal.weather
+    ? WEATHER_LABEL[journal.weather.toLowerCase()] ?? journal.weather
+    : null
 
   const parts = [
     `Jour ${journal.day_number}`,
     time,
-    journal.weather
+    weather,
   ].filter(Boolean)
 
   return parts.join(' · ')
 })
 const primarySceneClock = computed(() =>
-  gameStore.sceneClocks.find((clock) => ['active', 'filled'].includes(clock.status)) ?? null,
+  gameStore.sceneClocks.find((clock) => ['active', 'filled', 'resolving'].includes(clock.status))
+    ?? null,
 )
 const primarySceneClockClass = computed(() => {
+  if (primarySceneClock.value?.status === 'resolving') return 'is-resolving'
   const severity = primarySceneClock.value?.severity
   if (severity === 'critical') return 'is-critical'
   if (severity === 'high') return 'is-high'
@@ -796,6 +824,10 @@ onUnmounted(() => { disconnect() })
 .exph-pill-clock.is-medium { color: var(--color-gold); }
 .exph-pill-clock.is-high { color: var(--color-ember); }
 .exph-pill-clock.is-critical { color: var(--color-blood); }
+.exph-pill-clock.is-resolving {
+  color: var(--color-blood);
+  text-shadow: 0 0 8px color-mix(in srgb, var(--color-blood) 45%, transparent);
+}
 
 .exph-pill-thinking {
   font-size: 10px;

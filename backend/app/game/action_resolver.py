@@ -95,6 +95,9 @@ class ActionResolver:
         display_text: str | None = None,
         persist_actor_action: bool = True,
         suppress_gm_narration: bool = False,
+        scene_poi_id: str | None = None,
+        scene_interaction_id: str | None = None,
+        scene_interaction_intent: str | None = None,
     ) -> Any:
         """Exécute le pipeline complet pour une action.
 
@@ -123,6 +126,9 @@ class ActionResolver:
                 display_text=display_text,
                 persist_actor_action=persist_actor_action,
                 suppress_gm_narration=suppress_gm_narration,
+                scene_poi_id=scene_poi_id,
+                scene_interaction_id=scene_interaction_id,
+                scene_interaction_intent=scene_interaction_intent,
             ),
             active,
             db,

@@ -60,6 +60,65 @@ _CLOCK_TRIGGER_PATTERNS = (
     r"\b(?:rituel|incendie|bombe|explosion|poursuite|fuite)\b",
 )
 
+_SCENE_INTERACTION_INTENTS = {
+    "approach",
+    "talk",
+    "examine",
+    "listen",
+    "search",
+    "use",
+    "custom",
+}
+
+_MAGIC_CLUE_MARKERS = (
+    "abyssal",
+    "arcane",
+    "azur",
+    "energie",
+    "énergie",
+    "faille",
+    "fissure",
+    "luminescent",
+    "lueur",
+    "magie",
+    "magique",
+    "ozone",
+    "rituel",
+    "rune",
+    "siphon",
+    "soufre",
+    "vortex",
+)
+
+_HIDDEN_CLUE_MARKERS = (
+    "cache",
+    "caché",
+    "dissimul",
+    "indice",
+    "mecanisme",
+    "mécanisme",
+    "piege",
+    "piège",
+    "secret",
+    "serrure",
+    "trace",
+)
+
+_DANGEROUS_INTERACTION_MARKERS = (
+    "brule",
+    "brûle",
+    "chaud",
+    "corros",
+    "electr",
+    "électr",
+    "instable",
+    "luminescent",
+    "ozone",
+    "siphon",
+    "soufre",
+    "vibr",
+)
+
 
 def normalize_text(value: str | None) -> str:
     text = unicodedata.normalize("NFD", value or "")
@@ -219,6 +278,217 @@ def _state_text_sources(active: ActiveSession) -> list[str]:
                     for key in ("name", "description", "action_hint")
                 )
     return sources
+
+
+def enrich_scene_poi_mechanics(scene: dict[str, Any]) -> None:
+    """Ajoute des mécaniques conservatrices aux interactions POI à enjeu clair."""
+    for poi in scene.get("pois", []) or []:
+        if not isinstance(poi, dict):
+            continue
+        interactions = poi.get("interactions")
+        if not isinstance(interactions, list):
+            continue
+        for interaction in interactions:
+            if not isinstance(interaction, dict):
+                continue
+            mechanics = infer_poi_interaction_mechanics(
+                poi,
+                str(interaction.get("intent") or "custom"),
+                interaction,
+            )
+            if mechanics:
+                interaction["mechanics"] = mechanics
+
+
+def resolve_scene_interaction_context(
+    active: ActiveSession,
+    *,
+    poi_id: str | None,
+    interaction_id: str | None,
+    interaction_intent: str | None,
+) -> dict[str, Any] | None:
+    """Retrouve l'interaction de scène côté backend et infère ses mécaniques."""
+    if not poi_id:
+        return None
+    scene = active.state_data.get("current_scene")
+    if not isinstance(scene, dict):
+        return None
+    poi = _find_poi(scene, poi_id)
+    if not poi:
+        return None
+    interaction = _find_poi_interaction(poi, interaction_id, interaction_intent)
+    intent = str(
+        (interaction or {}).get("intent")
+        or interaction_intent
+        or "custom"
+    ).strip().lower()
+    if intent not in _SCENE_INTERACTION_INTENTS:
+        intent = "custom"
+    mechanics = infer_poi_interaction_mechanics(poi, intent, interaction)
+    return {
+        "poi_id": str(poi.get("id") or poi_id),
+        "poi_name": str(poi.get("name") or poi_id),
+        "interaction_id": str((interaction or {}).get("id") or interaction_id or intent),
+        "interaction_label": str((interaction or {}).get("label") or intent),
+        "interaction_intent": intent,
+        "mechanics": mechanics or {},
+    }
+
+
+def infer_poi_interaction_mechanics(
+    poi: dict[str, Any],
+    intent: str,
+    interaction: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    explicit = interaction.get("mechanics") if isinstance(interaction, dict) else None
+    if isinstance(explicit, dict):
+        return _normalize_poi_mechanics(explicit)
+
+    text = _poi_text(poi)
+    kind = normalize_text(str(poi.get("kind") or ""))
+    normalized_intent = normalize_text(intent)
+    if normalized_intent in {"talk", "approach"}:
+        return {}
+
+    safe_observation = normalized_intent in {"examine", "listen", "search"}
+    mechanics: dict[str, Any] = {"safe_observation": safe_observation}
+
+    is_dangerous = kind == "hazard" or _contains_any(text, _DANGEROUS_INTERACTION_MARKERS)
+    if is_dangerous and normalized_intent in {"use", "custom"}:
+        mechanics["safe_observation"] = False
+        mechanics["roll"] = {
+            "type": "save",
+            "ability": "dex",
+            "skill": "Acrobatics",
+            "dc": 14,
+            "reason": "scene_poi_hazard",
+        }
+        mechanics["reveal_tier"] = "surface"
+        return mechanics
+
+    if _contains_any(text, _MAGIC_CLUE_MARKERS):
+        mechanics["roll"] = {
+            "type": "check",
+            "ability": "int",
+            "skill": "Arcana",
+            "dc": 12,
+            "reason": "scene_poi_magic",
+        }
+        mechanics["reveal_tier"] = "interpreted"
+        return mechanics
+
+    if is_dangerous and normalized_intent in {"examine", "search"}:
+        mechanics["roll"] = {
+            "type": "check",
+            "ability": "int",
+            "skill": "Investigation",
+            "dc": 13,
+            "reason": "scene_poi_hazard_observation",
+        }
+        mechanics["reveal_tier"] = "interpreted"
+        return mechanics
+
+    if _contains_any(text, _HIDDEN_CLUE_MARKERS) or normalized_intent == "search":
+        mechanics["roll"] = {
+            "type": "check",
+            "ability": "int",
+            "skill": "Investigation",
+            "dc": 14,
+            "reason": "scene_poi_search",
+        }
+        mechanics["reveal_tier"] = "interpreted"
+        return mechanics
+
+    return {}
+
+
+def _find_poi(scene: dict[str, Any], poi_id: str) -> dict[str, Any] | None:
+    for poi in scene.get("pois", []) or []:
+        if isinstance(poi, dict) and str(poi.get("id") or "") == str(poi_id):
+            return poi
+    return None
+
+
+def _find_poi_interaction(
+    poi: dict[str, Any],
+    interaction_id: str | None,
+    interaction_intent: str | None,
+) -> dict[str, Any] | None:
+    interactions = poi.get("interactions")
+    if not isinstance(interactions, list):
+        return None
+    if interaction_id:
+        for interaction in interactions:
+            if (
+                isinstance(interaction, dict)
+                and str(interaction.get("id") or "") == str(interaction_id)
+            ):
+                return interaction
+    if interaction_intent:
+        normalized_intent = normalize_text(interaction_intent)
+        for interaction in interactions:
+            if (
+                isinstance(interaction, dict)
+                and normalize_text(str(interaction.get("intent") or "")) == normalized_intent
+            ):
+                return interaction
+    return None
+
+
+def _normalize_poi_mechanics(value: dict[str, Any]) -> dict[str, Any]:
+    mechanics: dict[str, Any] = {}
+    roll = _normalize_roll_params(value.get("roll"))
+    if roll:
+        mechanics["roll"] = roll
+    if isinstance(value.get("safe_observation"), bool):
+        mechanics["safe_observation"] = value["safe_observation"]
+    reveal_tier = str(value.get("reveal_tier") or "").strip().lower()
+    if reveal_tier in {"surface", "interpreted", "deep"}:
+        mechanics["reveal_tier"] = reveal_tier
+    return mechanics
+
+
+def _normalize_roll_params(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    ability = str(value.get("ability") or "").strip().lower()[:3]
+    if ability not in {"str", "dex", "con", "int", "wis", "cha"}:
+        return None
+    roll_type = str(value.get("type") or "check").strip().lower()
+    if value.get("save") is True:
+        roll_type = "save"
+    if roll_type not in {"check", "save"}:
+        roll_type = "check"
+    try:
+        dc = int(value.get("dc") or 12)
+    except (TypeError, ValueError):
+        dc = 12
+    normalized = {
+        "type": roll_type,
+        "ability": ability,
+        "dc": max(5, min(dc, 30)),
+    }
+    skill = str(value.get("skill") or "").strip()
+    if skill:
+        normalized["skill"] = skill[:40]
+    reason = str(value.get("reason") or "").strip()
+    if reason:
+        normalized["reason"] = reason[:80]
+    return normalized
+
+
+def _poi_text(poi: dict[str, Any]) -> str:
+    return normalize_text(
+        " ".join(
+            str(poi.get(key) or "")
+            for key in ("name", "kind", "description", "action_hint", "icon")
+        )
+    )
+
+
+def _contains_any(text: str, markers: tuple[str, ...]) -> bool:
+    normalized = normalize_text(text)
+    return any(normalize_text(marker) in normalized for marker in markers)
 
 
 def detect_impossible_hostile_action(
@@ -401,6 +671,7 @@ def infer_clock_start_from_opening(
         "severity": "high",
         "status": "active",
         "tick_on": "player_action",
+        "on_fill": _default_clock_on_fill(label),
     }
 
 
@@ -437,13 +708,26 @@ async def advance_scene_clocks(
     active: ActiveSession,
     event_bus: Any,
     source: str,
-) -> None:
+) -> list[dict[str, Any]]:
     clocks = _clock_list(active, create=False)
     if not clocks:
-        return
+        return []
     changed = False
+    newly_filled: list[dict[str, Any]] = []
     for clock in clocks:
-        if str(clock.get("status") or "active") != "active":
+        status = str(clock.get("status") or "active")
+        if status == "filled":
+            clock["status"] = "resolving"
+            newly_filled.append(clock)
+            changed = True
+            await event_bus.publish_to_session(
+                session_id,
+                EventType.CLOCK_UPDATED,
+                dict(clock),
+                source=source,
+            )
+            continue
+        if status != "active":
             continue
         if str(clock.get("tick_on") or "player_action") != "player_action":
             continue
@@ -453,7 +737,8 @@ async def advance_scene_clocks(
             continue
         clock["current"] = current
         if current >= maximum:
-            clock["status"] = "filled"
+            clock["status"] = "resolving"
+            newly_filled.append(clock)
         changed = True
         await event_bus.publish_to_session(
             session_id,
@@ -463,6 +748,76 @@ async def advance_scene_clocks(
         )
     if changed:
         active.mark_dirty()
+    return newly_filled
+
+
+async def resolve_scene_clock_crises(
+    *,
+    session_id: str,
+    active: ActiveSession,
+    event_bus: Any,
+    clocks: list[dict[str, Any]],
+    actor_id: str | None,
+    db: Any | None = None,
+    source: str,
+) -> list[dict[str, Any]]:
+    resolved: list[dict[str, Any]] = []
+    for clock in clocks:
+        if str(clock.get("status") or "") != "resolving":
+            continue
+        if clock.get("resolved_at_turn") is not None:
+            continue
+        on_fill = _normalize_clock_on_fill(clock.get("on_fill"), str(clock.get("label") or ""))
+        mode = str(on_fill.get("mode") or "roll")
+        narration = str(on_fill.get("narration") or _default_clock_crisis_text(clock)).strip()
+        if narration:
+            await _publish_clock_narration(session_id, event_bus, narration, db, source)
+
+        roll_payload: dict[str, Any] | None = None
+        if mode == "roll":
+            roll_payload = _execute_clock_roll(on_fill.get("roll"), active, actor_id)
+            if roll_payload:
+                roll_payload["clock_id"] = clock.get("id")
+                roll_payload["clock_label"] = clock.get("label")
+                await event_bus.publish_to_session(
+                    session_id,
+                    EventType.ROLL_RESULT,
+                    roll_payload,
+                    source=source,
+                )
+                if db is not None:
+                    from app.services.message_service import persist_roll_result
+
+                    await persist_roll_result(session_id, roll_payload, db)
+                outcome = _clock_roll_outcome_text(clock, roll_payload)
+                await _publish_clock_narration(session_id, event_bus, outcome, db, source)
+
+        next_clock = on_fill.get("next_clock")
+        clock["status"] = "resolved"
+        clock["resolved_at_turn"] = active.turn_number
+        if roll_payload:
+            clock["resolution"] = {
+                "success": roll_payload.get("success"),
+                "total": roll_payload.get("total"),
+                "dc": roll_payload.get("dc"),
+            }
+        active.mark_dirty()
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.CLOCK_UPDATED,
+            dict(clock),
+            source=source,
+        )
+        resolved.append(clock)
+        if isinstance(next_clock, dict):
+            await start_scene_clock(
+                session_id=session_id,
+                active=active,
+                event_bus=event_bus,
+                params=next_clock,
+                source=source,
+            )
+    return resolved
 
 
 def normalize_clock(params: dict[str, Any]) -> dict[str, Any] | None:
@@ -484,9 +839,9 @@ def normalize_clock(params: dict[str, Any]) -> dict[str, Any] | None:
     if severity not in {"low", "medium", "high", "critical"}:
         severity = "medium"
     status = str(params.get("status") or "active").strip().lower()
-    if status not in {"active", "paused", "filled", "resolved"}:
+    if status not in {"active", "paused", "filled", "resolving", "resolved"}:
         status = "active"
-    return {
+    clock = {
         "id": clock_id[:80],
         "label": label[:120],
         "scope": str(params.get("scope") or "scene")[:40],
@@ -497,6 +852,119 @@ def normalize_clock(params: dict[str, Any]) -> dict[str, Any] | None:
         "tick_on": str(params.get("tick_on") or "player_action")[:40],
         "linked_quest_id": params.get("linked_quest_id"),
     }
+    on_fill = (
+        _normalize_clock_on_fill(params.get("on_fill"), label)
+        if isinstance(params.get("on_fill"), dict)
+        else None
+    )
+    if on_fill:
+        clock["on_fill"] = on_fill
+    return clock
+
+
+def _default_clock_on_fill(label: str) -> dict[str, Any]:
+    return {
+        "mode": "roll",
+        "roll": {
+            "type": "save",
+            "ability": "dex",
+            "skill": "Acrobatics",
+            "dc": 14,
+            "reason": "scene_clock_crisis",
+        },
+        "narration": _default_clock_crisis_text({"label": label}),
+    }
+
+
+def _normalize_clock_on_fill(value: Any, label: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return _default_clock_on_fill(label)
+    mode = str(value.get("mode") or "roll").strip().lower()
+    if mode not in {"roll", "narrative", "transition"}:
+        mode = "roll"
+    normalized: dict[str, Any] = {"mode": mode}
+    roll = _normalize_roll_params(value.get("roll"))
+    if roll:
+        normalized["roll"] = roll
+    elif mode == "roll":
+        normalized["roll"] = _default_clock_on_fill(label)["roll"]
+    narration = str(value.get("narration") or "").strip()
+    if narration:
+        normalized["narration"] = narration[:600]
+    elif mode == "roll":
+        normalized["narration"] = _default_clock_crisis_text({"label": label})
+    next_clock = value.get("next_clock")
+    if isinstance(next_clock, dict):
+        normalized["next_clock"] = next_clock
+    return normalized
+
+
+def _execute_clock_roll(
+    roll: Any,
+    active: ActiveSession,
+    actor_id: str | None,
+) -> dict[str, Any] | None:
+    roll_params = _normalize_roll_params(roll)
+    if not roll_params:
+        return None
+    from app.game.roll_executor import execute_roll_request
+
+    payload = execute_roll_request(roll_params, actor_id, active)
+    if not payload:
+        return None
+    success_label = "réussite" if payload.get("success") else "échec"
+    label = str(payload.get("label") or "Jet de sauvegarde")
+    payload.setdefault(
+        "summary",
+        f"{label} : {payload.get('total')} vs DD {payload.get('dc')} ({success_label})",
+    )
+    return payload
+
+
+def _default_clock_crisis_text(clock: dict[str, Any]) -> str:
+    label = str(clock.get("label") or "la menace").strip()
+    return (
+        f"{label} atteint son point critique. L'instabilité se libère d'un coup ; "
+        "le personnage exposé doit réagir immédiatement."
+    )
+
+
+def _clock_roll_outcome_text(clock: dict[str, Any], roll_payload: dict[str, Any]) -> str:
+    name = str(roll_payload.get("character_name") or "Le personnage")
+    label = str(clock.get("label") or "la menace")
+    if roll_payload.get("success"):
+        return (
+            f"{name} encaisse le contrecoup de {label} sans perdre pied, juste assez vite "
+            "pour éviter le pire."
+        )
+    return (
+        f"{name} est pris dans le contrecoup de {label}. La crise est passée, mais la "
+        "position est devenue nettement plus dangereuse."
+    )
+
+
+async def _publish_clock_narration(
+    session_id: str,
+    event_bus: Any,
+    text: str,
+    db: Any | None,
+    source: str,
+) -> None:
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.NARRATION,
+        {
+            "text": text,
+            "speaker": "Maître du Jeu",
+            "speaker_kind": "gm",
+            "entry_kind": "narration",
+        },
+        source=source,
+    )
+    if db is not None:
+        from app.services.message_service import persist_narration
+
+        await persist_narration(session_id, text, "Maître du Jeu", db)
 
 
 def _clock_list(active: ActiveSession, *, create: bool = True) -> list[dict[str, Any]]:

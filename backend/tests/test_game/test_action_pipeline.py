@@ -94,6 +94,9 @@ def _mock_gm(narration: str = "Le combat fait rage !") -> MagicMock:
     gm = MagicMock()
     gm.think = AsyncMock(return_value=AgentResponse(content=narration, actions=[]))
     gm.run_combat_turn = AsyncMock(return_value=GMResponse(narration=narration, actions=[]))
+    gm.narrate_outcome_response = AsyncMock(
+        return_value=GMResponse(narration=narration, actions=[])
+    )
     return gm
 
 
@@ -1259,6 +1262,104 @@ class TestHumanPlayerPipeline:
 
         resolver._gm.think.assert_awaited_once()
         assert _narrations(published)
+
+    async def test_scene_poi_examine_runs_backend_arcana_roll(self) -> None:
+        active = ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.EXPLORATION,
+            state_data={
+                "characters": {
+                    "hero_1": {
+                        "name": "Aria",
+                        "level": 1,
+                        "ability_scores": {"int": 14, "wis": 10, "dex": 12},
+                        "skill_proficiencies": ["arcana"],
+                    }
+                },
+                "current_scene": {
+                    "scene_id": "scene_docks",
+                    "pois": [
+                        {
+                            "id": "fissure",
+                            "name": "Fissure luminescente",
+                            "kind": "clue",
+                            "icon": "clue",
+                            "position": {"col": 4, "row": 4},
+                            "description": "Une lueur azur pulse avec une odeur d'ozone.",
+                        }
+                    ],
+                    "exits": [],
+                    "party_positions": {},
+                },
+            },
+        )
+        gm = _mock_gm("La fissure livre des indices prudents.")
+        resolver = ActionResolver(gm_agent=gm)
+        published, capture = _event_collector()
+
+        with (
+            patch("app.game.action_resolver.event_bus.publish_to_session", new=capture),
+            patch("app.game.action_resolver.tts_router.synthesize_and_broadcast", new=AsyncMock()),
+        ):
+            await resolver.resolve(
+                session_id=SESSION_ID,
+                action_type="free_text",
+                content="J'examine : Fissure luminescente.",
+                character_id="hero_1",
+                target_id=None,
+                active=active,
+                db=None,
+                scene_poi_id="fissure",
+                scene_interaction_id="examine",
+                scene_interaction_intent="examine",
+            )
+
+        rolls = [payload for event, payload in published if event == EventType.ROLL_RESULT]
+        assert rolls
+        assert "arcana" in rolls[0]["label"].lower()
+        assert rolls[0]["scene_poi_id"] == "fissure"
+        gm.think.assert_awaited_once()
+        player_action = gm.think.await_args.args[0].player_action
+        assert "observation_sans_contact=True" in player_action
+        assert "palier_indice=interpreted" in player_action
+
+    async def test_dangerous_touch_fallback_requests_save_when_gm_forgets(self) -> None:
+        active = ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.EXPLORATION,
+            state_data={
+                "characters": {
+                    "hero_1": {
+                        "name": "Aria",
+                        "level": 1,
+                        "ability_scores": {"dex": 14},
+                        "save_proficiencies": [],
+                    }
+                }
+            },
+        )
+        resolver = ActionResolver(gm_agent=_mock_gm("La porte vibre sous sa main."))
+        published, capture = _event_collector()
+
+        with (
+            patch("app.game.action_resolver.event_bus.publish_to_session", new=capture),
+            patch("app.game.action_resolver.tts_router.synthesize_and_broadcast", new=AsyncMock()),
+        ):
+            await resolver.resolve(
+                session_id=SESSION_ID,
+                action_type="free_text",
+                content="Je pose la main sur la porte qui vibre.",
+                character_id="hero_1",
+                target_id=None,
+                active=active,
+                db=None,
+            )
+
+        rolls = [payload for event, payload in published if event == EventType.ROLL_RESULT]
+        assert rolls
+        assert rolls[0]["dc"] == 14
+        label = str(rolls[0]["label"]).lower()
+        assert "dex" in label or "dext" in label
 
     async def test_social_prompt_skips_gm_and_sets_party_intent(self) -> None:
         """En mode sober, un prompt social pur vers les compagnons doit bypasser le MJ.
