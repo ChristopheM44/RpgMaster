@@ -28,6 +28,11 @@ from app.game.companion_visibility import (
 )
 from app.game.event_bus import EventType, event_bus
 from app.game.session_manager import ActiveSession
+from app.game.social_scene_state import (
+    advance_scene_clocks,
+    detect_impossible_hostile_action,
+    publish_impossible_hostile_action,
+)
 from app.game.visible_events import publish_visible_entry
 from app.services.message_service import load_recent_messages, persist_narration
 
@@ -194,6 +199,12 @@ class NarrativeFlowService:
             player_text=text,
             target_ids=target_ids,
         )
+        await advance_scene_clocks(
+            session_id=session_id,
+            active=active,
+            event_bus=event_bus,
+            source="narrative_flow",
+        )
 
         should_ask_companions = detection.audience in {"companion", "party", "mixed"}
         should_arbitrate_world = detection.audience in {"gm", "world", "mixed"}
@@ -201,6 +212,39 @@ class NarrativeFlowService:
 
         if db is not None and (pure_social or detection.audience == "mixed"):
             await self._persist_player_message(session_id, action, active, detection, db, scene_id)
+
+        impossible_weapon = detect_impossible_hostile_action(
+            text,
+            active,
+            getattr(action, "character_id", None),
+        )
+        if impossible_weapon:
+            npc_target_id = self._present_npc_target_id(
+                text,
+                active,
+                getattr(action, "target_id", None),
+            )
+            if db is not None and detection.audience not in {"companion", "party", "mixed"}:
+                await self._persist_player_message(
+                    session_id,
+                    action,
+                    active,
+                    detection,
+                    db,
+                    scene_id,
+                )
+            await publish_impossible_hostile_action(
+                session_id=session_id,
+                active=active,
+                event_bus=event_bus,
+                player_text=text,
+                actor_id=getattr(action, "character_id", None),
+                npc_id=npc_target_id,
+                weapon_marker=impossible_weapon,
+                db=db,
+            )
+            exchange.gm_arbitrated = True
+            return exchange
 
         if should_ask_companions:
             exchange.companion_responses = await self._run_companion_responses(

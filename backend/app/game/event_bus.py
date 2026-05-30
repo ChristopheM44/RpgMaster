@@ -90,6 +90,7 @@ class EventType(str):
     CHRONICLE_UPDATED = "chronicle_updated"
     SCENE_LAYOUT_CHANGED = "scene_layout_changed"
     SOCIAL_OUTCOME = "social_outcome"
+    CLOCK_UPDATED = "clock_updated"
     REGION_MAP_UPDATED = "region_map_updated"
     CITY_MAP_UPDATED = "city_map_updated"
 

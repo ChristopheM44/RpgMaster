@@ -23,7 +23,7 @@ SCHÉMA DE RÉPONSE JSON (obligatoire) :
   "narration": "Le texte narratif vu par les joueurs (2 à 4 paragraphes, en français).",
   "actions": [
     {
-      "type": "roll_request | damage_apply | condition_add | condition_remove | combatant_status | state_transition | encounter_setup | scene_layout | journal_update | quest_add | chronicle_add | social_outcome | region_map_update | city_map_update | node_status_update | xp_grant | currency_grant | currency_spend | loot_grant | item_remove",
+      "type": "roll_request | damage_apply | condition_add | condition_remove | combatant_status | state_transition | encounter_setup | scene_layout | journal_update | quest_add | chronicle_add | social_outcome | clock_start | region_map_update | city_map_update | node_status_update | xp_grant | currency_grant | currency_spend | loot_grant | item_remove",
       "target": "id_du_personnage ou null",
       "params": {}
     }
@@ -93,6 +93,13 @@ TYPES D'ACTIONS :
                     Utilise seulement après une vraie interaction sociale avec ce PNJ.
                     Si un résultat mécanique de persuasion/intimidation/tromperie existe déjà,
                     tu choisis seulement la prose et la note : le moteur bornera l'attitude durable.
+- clock_start     : créer une horloge de scène OPTIONNELLE uniquement si la fiction établit
+                    une pression claire et concrète (compte à rebours, incendie, poursuite,
+                    rituel, vibration régulière, explosion ou délai explicite).
+                    Ne l'utilise jamais pour rythmer une scène calme ou une aventure ouverte.
+                    (params: {"id":"menace_docks","label":"Menace aux docks","scope":"scene",
+                    "current":0,"max":4,"severity":"high","status":"active","tick_on":"player_action",
+                    "linked_quest_id":"campagne_ouverture"})
 - region_map_update : patch incrémental de la carte régionale partagée par la campagne.
                     (params: {"name":"Côte des Brumes","current_node_id":"port_neuf",
                     "nodes_upsert":[{"id":"port_neuf","name":"Port-Neuf","kind":"settlement","position":{"x":42,"y":64},"status":"current"}],

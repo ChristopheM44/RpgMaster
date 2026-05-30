@@ -19,6 +19,7 @@ from app.game.action_mechanics import ActionMechanics
 from app.game.action_orchestrator import ActionOrchestrator
 from app.game.event_bus import event_bus
 from app.game.session_manager import ActiveSession
+from app.game.social_scene_state import finalize_npc_dialogue_state, prepare_npc_dialogue_state
 from app.game.visible_events import publish_visible_entry
 from app.llm.voxtral_client import tts_router
 from app.services import campaign_dossier_service
@@ -213,6 +214,7 @@ class ActionResolver:
             roll_results.setdefault("social_target_id", npc_id)
 
         npc_name = str(npc.get("name", npc_id))
+        prepare_npc_dialogue_state(active, npc_id, content)
         npc_personality: Any = await self._resolve_npc_persona_or_hint(
             session_id=session_id,
             npc_id=npc_id,
@@ -257,6 +259,15 @@ class ActionResolver:
 
         if not dialogue_text and not has_roll_request:
             return False
+        finalize_npc_dialogue_state(active, npc_id, content)
+        current_scene = active.state_data.get("current_scene")
+        if isinstance(current_scene, dict):
+            await event_bus.publish_to_session(
+                session_id,
+                "scene_layout_changed",
+                {"scene": current_scene},
+                source="action_resolver",
+            )
 
         published_visible = False
         if dialogue_text:

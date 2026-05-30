@@ -87,6 +87,47 @@ describe('useGameStore map decoration state', () => {
     expect(store.activeCityId).toBe('camp')
   })
 
+  it('hydrates and updates optional scene clocks only when present', () => {
+    const store = useGameStore()
+
+    store.applySessionState({
+      session_id: 'session-1',
+      phase: 'exploration',
+      turn_number: 1,
+      round_number: 0,
+      turn_order: [],
+      current_turn_index: 0,
+      valid_transitions: [],
+    })
+    expect(store.sceneClocks).toEqual([])
+
+    store.applyClockUpdated({
+      id: 'menace_docks',
+      label: 'Menace aux docks',
+      scope: 'scene',
+      current: 1,
+      max: 4,
+      severity: 'high',
+      status: 'active',
+    })
+
+    expect(store.sceneClocks).toHaveLength(1)
+    expect(store.sceneClocks[0]?.current).toBe(1)
+  })
+
+  it('logs disconnection only on connected to disconnected transitions', () => {
+    const store = useGameStore()
+
+    store.setConnected(false)
+    expect(store.narrativeLog).toHaveLength(0)
+
+    store.setConnected(true)
+    store.setConnected(false)
+    store.setConnected(false)
+
+    expect(store.narrativeLog.filter((entry) => entry.text === 'Déconnecté du serveur.')).toHaveLength(1)
+  })
+
   it('restores dialogue history as dialogue entries', () => {
     const store = useGameStore()
 

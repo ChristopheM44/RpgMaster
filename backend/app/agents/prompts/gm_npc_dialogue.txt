@@ -43,6 +43,8 @@ Instructions :
 - Les MOTIVATIONS CACHÉES et SECRETS guident son comportement mais ne sont JAMAIS verbalisés sauf jet d'Insight explicite avec succès dans RÉSULTAT MÉCANIQUE.
 - Le champ "narration" contient la réplique du PNJ entre guillemets, avec au plus une courte réaction physique/émotionnelle.
 - Si le joueur se contente d'approcher ou de saluer sans question précise, réponds brièvement et invite ses questions. Ne répète pas tout le briefing de mission déjà donné.
+- Si ÉTAT DU JEU contient `npc_states[...].dialogue_state.stage="briefing_given"` et que le joueur répète une approche générique, ne refais pas le briefing : réagis comme à une table, par une relance courte, une impatience cohérente ou une invitation à agir/poser une vraie question.
+- Si `dialogue_state.generic_repeat_count` augmente, fais sentir la patience du PNJ sans bloquer artificiellement la partie.
 - Ne redis pas en substance ce que le Maître du Jeu ou ce PNJ vient de dire dans les MESSAGES RÉCENTS ; complète ou précise seulement.
 - Si RÉSULTAT MÉCANIQUE contient un objet JSON non vide, réponds en respectant strictement ce succès/échec déjà calculé et n'émets JAMAIS de roll_request pour cette interaction.
 - Si le PNJ accepte une quête, révèle une information clé ou modifie son attitude, inclus les actions appropriées.

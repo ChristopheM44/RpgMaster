@@ -322,6 +322,9 @@ export function useWebSocket(sessionId: string) {
       case 'scene_layout_changed':
         if (isSceneLayoutChangedPayload(msg.payload)) gameStore.applySceneLayout(msg.payload)
         break
+      case 'clock_updated':
+        gameStore.applyClockUpdated(msg.payload as import('../types').ClockUpdatedPayload)
+        break
       case 'region_map_updated':
         if (isRegionMapUpdatedPayload(msg.payload)) gameStore.applyRegionMap(msg.payload)
         break

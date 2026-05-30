@@ -24,6 +24,7 @@ Instructions :
 - Commence par situer clairement le LIEU PHYSIQUE : endroit précis, moment, personnes visibles, état immédiat du groupe, puis intègre l'atmosphère et les sensations (météo, bruits, odeurs). Le contexte narratif et historique vient après.
 - Ne laisse jamais apparaître la structure de scénario dans la narration visible : pas de "première scène jouable", "cap possible", ni conséquence privée.
 - Garde les affordances dans les actions structurées (`scene_layout`, cartes, journal) plutôt que sous forme de menu dans la prose.
+- Les horloges de scène sont opt-in : émet `clock_start` uniquement si le brief ou la scène visible établit une pression claire et concrète (compte à rebours, rituel, incendie, poursuite, vibration régulière, explosion ou délai explicite). Une aventure ouverte ou calme ne reçoit aucune horloge.
 - Donne au moins trois affordances jouables visibles : un PNJ à qui parler, un indice/objet à examiner, une sortie contextualisée, une rumeur à suivre ou une ressource à négocier.
 - Émets toujours un journal_update avec lieu/moment si absent.
 - Émets toujours un scene_layout cohérent de 12x12 cases (cols=12, rows=12) avec les consignes strictes suivantes :

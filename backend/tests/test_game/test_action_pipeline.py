@@ -19,6 +19,7 @@ from app.game.ai_player_manager import AIPlayerManager
 from app.game.event_bus import EventType
 from app.game.gm_response_executor import GMResponseExecutor
 from app.game.session_manager import ActiveSession
+from app.game.social_scene_state import infer_clock_start_from_opening
 from app.game.turn_manager import TurnEntry
 from app.models.character import Character
 from app.models.session import SessionStatus
@@ -567,6 +568,80 @@ class TestPipelineExecutorUnits:
         assert scene["exits"][0]["position"] == {"col": 7, "row": 4}
         assert bus.published[-1][0] == EventType.SCENE_LAYOUT_CHANGED
         assert bus.published[-1][1]["scene"] == scene
+
+    async def test_clock_start_is_opt_in_and_publishes_clock_update(self) -> None:
+        active = ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.EXPLORATION,
+            state_data={},
+        )
+        bus = _FakeBus()
+
+        await GMResponseExecutor(bus).execute_gm_response(
+            GMResponse(
+                narration="Les pavés vibrent à intervalle fixe.",
+                actions=[
+                    GMAction(
+                        type="clock_start",
+                        params={
+                            "id": "menace_docks",
+                            "label": "Menace aux docks",
+                            "max": 4,
+                            "severity": "high",
+                        },
+                    )
+                ],
+            ),
+            active,
+            session_id=SESSION_ID,
+        )
+
+        assert active.state_data["scene_clocks"] == [
+            {
+                "id": "menace_docks",
+                "label": "Menace aux docks",
+                "scope": "scene",
+                "current": 0,
+                "max": 4,
+                "severity": "high",
+                "status": "active",
+                "tick_on": "player_action",
+                "linked_quest_id": None,
+            }
+        ]
+        assert bus.published[-1][0] == EventType.CLOCK_UPDATED
+
+    async def test_response_without_clock_start_does_not_create_clock(self) -> None:
+        active = ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.EXPLORATION,
+            state_data={},
+        )
+        bus = _FakeBus()
+
+        await GMResponseExecutor(bus).execute_gm_response(
+            GMResponse(narration="La route est calme.", actions=[]),
+            active,
+            session_id=SESSION_ID,
+        )
+
+        assert "scene_clocks" not in active.state_data
+        assert not any(event == EventType.CLOCK_UPDATED for event, _ in bus.published)
+
+    def test_opening_with_periodic_vibration_infers_opt_in_clock(self) -> None:
+        active = ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.EXPLORATION,
+            state_data={},
+        )
+
+        clock = infer_clock_start_from_opening(
+            "Toutes les trente secondes, un bourdonnement fait vibrer les docks.",
+            active,
+        )
+
+        assert clock is not None
+        assert clock["label"] == "Menace aux docks"
 
     async def test_social_outcome_failure_cannot_improve_attitude(self) -> None:
         active = ActiveSession(

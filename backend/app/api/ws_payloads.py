@@ -68,6 +68,7 @@ def build_session_state_payload(
         "quests": active.state_data.get("quests", []),
         "chronicle": active.state_data.get("chronicle", []),
         "current_scene": active.state_data.get("current_scene"),
+        "scene_clocks": active.state_data.get("scene_clocks", []),
     }
     if active.phase.value == "combat":
         payload.update(build_combat_start_payload(active))

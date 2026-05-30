@@ -577,6 +577,107 @@ async def test_direct_npc_dialogue_skips_redundant_gm_narration() -> None:
     dialogues = [payload for event, payload in published if event == EventType.DIALOGUE]
     assert len(dialogues) == 1
     assert dialogues[0]["speaker"] == "Syndra Silvane"
+    dialogue_state = active.state_data["npc_states"]["syndra_silvane"]["dialogue_state"]
+    assert dialogue_state["stage"] == "briefing_given"
+    assert active.state_data["current_scene"]["pois"][0]["interactions"][0]["id"] == "ask_details"
+
+
+@pytest.mark.asyncio
+async def test_repeated_generic_npc_talk_updates_dialogue_state_without_world_narration() -> None:
+    active = ActiveSession(
+        session_id="scene-1",
+        phase=SessionStatus.EXPLORATION,
+        state_data={
+            "characters": {"human_1": {"name": "Thorvald", "is_ai": False}},
+            "current_scene": {
+                "scene_id": "scene_market",
+                "pois": [{"id": "mayor", "name": "Maire Valerius", "kind": "npc", "icon": "npc"}],
+            },
+            "npc_states": {"mayor": {"name": "Maire Valerius", "attitude": "indifferent"}},
+        },
+    )
+    gm = MagicMock()
+    gm.think = AsyncMock(return_value=GMResponse(narration="Narration redondante.", actions=[]))
+    gm.run_npc_dialogue = AsyncMock(
+        return_value=GMResponse(narration="« Posez une vraie question, vite. »", actions=[])
+    )
+    resolver = ActionResolver(gm_agent=gm)
+
+    async def capture(_session_id, _event_type, _payload, source=None):
+        return None
+
+    action = _action(
+        "Je m'approche de Maire Valerius et lui adresse la parole.",
+        target_id="mayor",
+    )
+    with patch("app.game.action_resolver.event_bus.publish_to_session", new=capture):
+        await NarrativeFlowService().handle_exploration_action(
+            session_id="scene-1",
+            action=action,
+            active=active,
+            action_resolver=resolver,
+            db=None,
+        )
+        await NarrativeFlowService().handle_exploration_action(
+            session_id="scene-1",
+            action=action,
+            active=active,
+            action_resolver=resolver,
+            db=None,
+        )
+
+    dialogue_state = active.state_data["npc_states"]["mayor"]["dialogue_state"]
+    assert dialogue_state["stage"] == "briefing_given"
+    assert dialogue_state["talk_count"] == 2
+    assert dialogue_state["generic_repeat_count"] == 1
+    assert gm.think.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_impossible_hostile_action_refuses_effect_and_marks_npc_wary() -> None:
+    active = ActiveSession(
+        session_id="scene-1",
+        phase=SessionStatus.EXPLORATION,
+        state_data={
+            "characters": {"human_1": {"name": "Oaken", "is_ai": False}},
+            "current_scene": {
+                "scene_id": "scene_market",
+                "pois": [{"id": "mayor", "name": "Maire Valerius", "kind": "npc", "icon": "npc"}],
+            },
+            "npc_states": {"mayor": {"name": "Maire Valerius", "attitude": "indifferent"}},
+        },
+    )
+    resolver = MagicMock()
+    resolver.resolve = AsyncMock()
+    resolver.resolve_npc_dialogue = AsyncMock()
+    resolver.social_conclude = AsyncMock()
+    published: list[tuple[str, dict]] = []
+
+    async def capture(_session_id, event_type, payload, source=None):
+        published.append((event_type, payload))
+
+    with patch("app.services.narrative_flow_service.event_bus.publish_to_session", new=capture):
+        exchange = await NarrativeFlowService().handle_exploration_action(
+            session_id="scene-1",
+            action=_action(
+                "Je sors mon bazouka et je tire une roquette sur le maire.",
+                target_id="mayor",
+            ),
+            active=active,
+            action_resolver=resolver,
+            db=None,
+        )
+
+    resolver.resolve.assert_not_called()
+    resolver.resolve_npc_dialogue.assert_not_called()
+    assert exchange.gm_arbitrated is True
+    assert active.state_data["npc_states"]["mayor"]["attitude"] == "unfriendly"
+    assert active.state_data["npc_states"]["mayor"]["dialogue_state"]["stage"] == "angered"
+    assert active.state_data["pending_clarification"]["type"] == "impossible_hostile_action"
+    assert not active.state_data.get("scene_clocks")
+    assert any(event == EventType.SOCIAL_OUTCOME for event, _ in published)
+    narrations = [payload for event, payload in published if event == EventType.NARRATION]
+    assert "n'existe pas" in narrations[-1]["text"]
 
 
 @pytest.mark.asyncio

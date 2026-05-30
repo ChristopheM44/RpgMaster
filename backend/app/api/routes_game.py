@@ -23,6 +23,7 @@ from app.game.event_bus import EventType, event_bus
 from app.game.gm_response_executor import GMResponseExecutor
 from app.game.runtime import session_manager
 from app.game.scene_theme import infer_scene_theme
+from app.game.social_scene_state import infer_clock_start_from_opening
 from app.game.turn_manager import CombatantInfo
 from app.models.character import Character
 from app.models.game_state import GameState
@@ -1402,6 +1403,10 @@ async def _publish_opening_scene(
         response.narration,
         active.state_data,
     )
+    if not any(action.type == "clock_start" for action in response.actions):
+        inferred_clock = infer_clock_start_from_opening(response.narration, active)
+        if inferred_clock:
+            response.actions.append(GMAction(type="clock_start", params=inferred_clock))
     executor = GMResponseExecutor(event_bus, source="routes_game")
     await executor.execute_gm_response(response, active, db, session_id=session_id)
 

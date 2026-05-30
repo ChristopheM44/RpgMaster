@@ -485,6 +485,7 @@ export const WS_EVENT_TYPES_LIST = [
   'chronicle_updated',
   'scene_layout_changed',
   'social_outcome',
+  'clock_updated',
   'region_map_updated',
   'city_map_updated',
 ] as const
@@ -641,6 +642,23 @@ export interface SceneLayoutChangedPayload {
   scene: SceneLayout
 }
 
+export type SceneClockSeverity = 'low' | 'medium' | 'high' | 'critical'
+export type SceneClockStatus = 'active' | 'paused' | 'filled' | 'resolved'
+
+export interface SceneClock {
+  id: string
+  label: string
+  scope: string
+  current: number
+  max: number
+  severity: SceneClockSeverity
+  status: SceneClockStatus
+  tick_on?: string
+  linked_quest_id?: string | null
+}
+
+export type ClockUpdatedPayload = SceneClock
+
 export interface SessionStatePayload {
   session_id: string
   phase: string
@@ -657,6 +675,7 @@ export interface SessionStatePayload {
   quests?: Quest[]
   chronicle?: ChronicleEntry[]
   current_scene?: SceneLayout | null
+  scene_clocks?: SceneClock[]
   region_map?: RegionMap | null
   city_maps?: Record<string, CityMap>
   active_city_id?: string | null

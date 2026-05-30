@@ -27,6 +27,7 @@ from app.game.event_bus import EventType, event_bus
 from app.game.scene_theme import coerce_scene_theme
 from app.game.session_manager import ActiveSession
 from app.game.social_resolution import SocialResolution
+from app.game.social_scene_state import start_scene_clock
 from app.game.state_sync import sync_character_state
 from app.models.character import Character
 from app.schemas.campaign_content import normalize_content_id
@@ -49,6 +50,7 @@ CANON_DIRTY_ACTIONS = {
     "chronicle_add",
     "state_transition",
     "social_outcome",
+    "clock_start",
     "region_map_update",
     "city_map_update",
     "node_status_update",
@@ -348,6 +350,14 @@ class GMResponseExecutor:
             await self._apply_scene_layout(session_id, params, active)
         elif action_type == "social_outcome":
             await self._apply_social_outcome(session_id, params, active)
+        elif action_type == "clock_start":
+            await start_scene_clock(
+                session_id=session_id,
+                active=active,
+                event_bus=self._event_bus,
+                params=params,
+                source=self._source,
+            )
         elif action_type == "region_map_update":
             await self._apply_region_map_update(session_id, params, active, db)
         elif action_type == "city_map_update":

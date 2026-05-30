@@ -18,6 +18,7 @@ import type {
   AdventureJournal,
   Quest,
   ChronicleEntry,
+  ClockUpdatedPayload,
   SceneLayout,
   SceneLayoutChangedPayload,
   GridDecoration,
@@ -67,6 +68,7 @@ export const useGameStore = defineStore('game', () => {
   const quests = ref<Quest[]>([])
   const chronicle = ref<ChronicleEntry[]>([])
   const currentScene = ref<SceneLayout | null>(null)
+  const sceneClocks = ref<ClockUpdatedPayload[]>([])
   const regionMap = ref<RegionMap | null>(null)
   const cityMaps = ref<Record<string, CityMap>>({})
   const activeCityId = ref<string | null>(null)
@@ -113,6 +115,15 @@ export const useGameStore = defineStore('game', () => {
 
   function applySceneLayout(payload: SceneLayoutChangedPayload | SceneLayout) {
     currentScene.value = 'scene' in payload ? payload.scene : payload
+  }
+
+  function applyClockUpdated(payload: ClockUpdatedPayload) {
+    const index = sceneClocks.value.findIndex((clock) => clock.id === payload.id)
+    if (index >= 0) {
+      sceneClocks.value[index] = { ...sceneClocks.value[index]!, ...payload }
+    } else {
+      sceneClocks.value.push(payload)
+    }
   }
 
   function applyRegionMap(payload: RegionMapUpdatedPayload | RegionMap | null) {
@@ -174,6 +185,7 @@ export const useGameStore = defineStore('game', () => {
     if (payload.quests) quests.value = payload.quests
     if (payload.chronicle) chronicle.value = payload.chronicle
     if ('current_scene' in payload) currentScene.value = payload.current_scene ?? null
+    if ('scene_clocks' in payload) sceneClocks.value = payload.scene_clocks ?? []
     if ('region_map' in payload) regionMap.value = payload.region_map ?? null
     if ('city_maps' in payload) cityMaps.value = payload.city_maps ?? {}
     if ('active_city_id' in payload) activeCityId.value = payload.active_city_id ?? null
@@ -388,8 +400,9 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function setConnected(val: boolean) {
+    const wasConnected = connected.value
     connected.value = val
-    if (!val) addSystemEntry('Déconnecté du serveur.')
+    if (wasConnected && !val) addSystemEntry('Déconnecté du serveur.')
   }
 
   function setError(msg: string | null) {
@@ -530,6 +543,7 @@ export const useGameStore = defineStore('game', () => {
     quests.value = []
     chronicle.value = []
     currentScene.value = null
+    sceneClocks.value = []
     regionMap.value = null
     cityMaps.value = {}
     activeCityId.value = null
@@ -552,6 +566,7 @@ export const useGameStore = defineStore('game', () => {
     quests,
     chronicle,
     currentScene,
+    sceneClocks,
     regionMap,
     cityMaps,
     activeCityId,
@@ -568,6 +583,7 @@ export const useGameStore = defineStore('game', () => {
     applyQuestUpdated,
     applyChronicleUpdated,
     applySceneLayout,
+    applyClockUpdated,
     applyRegionMap,
     applyCityMap,
     applyNodeStatus,

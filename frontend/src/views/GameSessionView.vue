@@ -277,8 +277,9 @@ function handleSceneExit(_exitId: string, label: string) {
   handleAction('free_text', `Je me dirige vers ${label}.`)
 }
 
-function handleScenePoi(_poiId: string, name: string, interaction?: ScenePoiInteraction) {
-  handleAction('free_text', buildScenePoiInteractionPrompt(name, interaction))
+function handleScenePoi(poiId: string, name: string, interaction?: ScenePoiInteraction) {
+  const targetId = interaction?.intent === 'talk' ? poiId : undefined
+  handleAction('free_text', buildScenePoiInteractionPrompt(name, interaction), targetId)
 }
 
 const mobileIsMyTurn = computed(() => gameStore.currentTurnId === charStore.myCharacter?.id)
@@ -364,6 +365,16 @@ const contextMeta = computed(() => {
 
   return parts.join(' · ')
 })
+const primarySceneClock = computed(() =>
+  gameStore.sceneClocks.find((clock) => ['active', 'filled'].includes(clock.status)) ?? null,
+)
+const primarySceneClockClass = computed(() => {
+  const severity = primarySceneClock.value?.severity
+  if (severity === 'critical') return 'is-critical'
+  if (severity === 'high') return 'is-high'
+  if (severity === 'low') return 'is-low'
+  return 'is-medium'
+})
 
 const showLoader = computed(() => !gameStore.currentScene)
 
@@ -432,6 +443,16 @@ onUnmounted(() => { disconnect() })
           <template v-if="contextMeta">
             <span class="exph-pill-sep">·</span>
             <span class="exph-pill-meta">{{ contextMeta }}</span>
+          </template>
+          <template v-if="primarySceneClock">
+            <span class="exph-pill-sep">·</span>
+            <span
+              class="exph-pill-clock"
+              :class="primarySceneClockClass"
+              :title="primarySceneClock.label"
+            >
+              ◷ {{ primarySceneClock.label }} {{ primarySceneClock.current }}/{{ primarySceneClock.max }}
+            </span>
           </template>
           <template v-if="gameStore.isInCombat">
             <span class="exph-pill-sep">·</span>
@@ -760,6 +781,21 @@ onUnmounted(() => { disconnect() })
   color: var(--color-gold);
   font-size: 11px;
 }
+
+.exph-pill-clock {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exph-pill-clock.is-low { color: var(--color-teal); }
+.exph-pill-clock.is-medium { color: var(--color-gold); }
+.exph-pill-clock.is-high { color: var(--color-ember); }
+.exph-pill-clock.is-critical { color: var(--color-blood); }
 
 .exph-pill-thinking {
   font-size: 10px;
