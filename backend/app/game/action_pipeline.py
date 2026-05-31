@@ -302,6 +302,18 @@ class ActionPipeline:
                 gm_agent = self._gm_for_phase(phase_value)
                 gm_candidate = await gm_agent.think(context)
                 gm_response = self._as_agent_response(gm_candidate)
+                if gm_response and gm_response.content == _FALLBACK_NARRATION:
+                    err_msg = (
+                        "Le serveur LLM local (Ollama) ou l'API distante est injoignable. "
+                        "Veuillez vérifier que le service Ollama est bien démarré "
+                        "et que le modèle configuré est installé."
+                    )
+                    await self._event_bus.publish_to_session(
+                        request.session_id,
+                        EventType.ERROR,
+                        {"message": err_msg},
+                        source=self._source,
+                    )
             except Exception as exc:
                 logger.error("ActionPipeline : GMAgent echoue : %s", exc)
             finally:
@@ -779,6 +791,22 @@ class ActionPipeline:
                 outcome_response = GMResponse(narration=str(outcome_candidate))
         except Exception as exc:
             logger.error("ActionPipeline : narrate_outcome echoue : %s", exc)
+            from app.llm.ollama_client import OllamaError
+            from app.llm.openai_compatible_client import OpenAICompatibleError
+            if isinstance(exc, (OllamaError, OpenAICompatibleError)):
+                err_msg = (
+                    "Le serveur LLM local (Ollama) ou l'API distante est injoignable. "
+                    "Veuillez vérifier que le service Ollama est bien démarré "
+                    "et que le modèle configuré est installé."
+                )
+            else:
+                err_msg = f"Le Maître du Jeu a rencontré une erreur : {type(exc).__name__}"
+            await self._event_bus.publish_to_session(
+                session_id,
+                EventType.ERROR,
+                {"message": err_msg},
+                source=self._source,
+            )
         finally:
             await self._publish_ai_thinking(session_id, False)
         return outcome_response

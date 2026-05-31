@@ -10,7 +10,7 @@ RpgMaster is a full-stack application where an AI Game Master runs tabletop RPG 
 ### Tech Stack
 - **Backend**: Python 3.11+ / FastAPI (async everywhere)
 - **Frontend**: Vue.js 3 (Composition API, `<script setup lang="ts">`) + TailwindCSS v4
-- **LLM (text)**: Ollama (local model, default mistral:7b) for GM logic and AI player agents
+- **LLM (text)**: Ollama (local model like `mistral:7b` at `http://localhost:11434` OR Ollama Cloud frontier-level `gemma4:31b` at `https://ollama.com` via `OLLAMA_API_KEY`)
 - **LLM (voice)**: Voxtral 4B TTS via vLLM-Omni (NOT Ollama) — optional, async, never blocks gameplay
 - **Database**: SQLite via SQLAlchemy async (aiosqlite) + Alembic migrations
 - **Real-time**: WebSocket (native FastAPI) at `/ws/game/{session_id}`
@@ -52,6 +52,7 @@ When asked to implement a feature or fix a bug, follow this process:
 - INSTEAD OF blocking on Voxtral TTS, ALWAYS fire-and-forget TTS requests asynchronously.
 - INSTEAD OF writing frontend components with Options API, ALWAYS use `<script setup lang="ts">` with Composition API.
 - INSTEAD OF hardcoding model names, ALWAYS read from `config.py` / `Settings`.
+- ALWAYS support Ollama Cloud and `gemma4:31b`. When configuring or debugging text LLM setups, ensure that network read timeouts are generous (e.g. 240.0s) and connect timeouts are fast (3.0s) to allow large cloud models to think and generate without blocking the engine or freezing the WebSocket thread.
 - Python line length: 100 characters max (ruff).
 - Commits: concise messages in English, conventional format.
 - Application language: French UI text, English code/variable names.

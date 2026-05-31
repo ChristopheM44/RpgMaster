@@ -11,12 +11,19 @@ Application de jeu de role avec un Maitre de Jeu IA, utilisant les regles D&D SR
 | Backend | Python 3.11+ / FastAPI | Async, app factory dans `backend/app/main.py` |
 | Frontend | Vue.js 3 / TypeScript | Composition API, `<script setup>`, Pinia, Vue Router |
 | CSS | TailwindCSS v4 | Tokens `@theme` + classes `.rpg-*` dans `src/assets/main.css` |
-| LLM texte | Ollama | Modele local configurable (default: mistral:7b) |
+| LLM texte | Ollama | Modele local configurable (default: mistral:7b) OU Cloud (`https://ollama.com`) |
 | LLM voix | Voxtral 4B TTS | Via vLLM-Omni (PAS Ollama), optionnel, port 8091 |
 | TTS local | Kokoro-ONNX | Subprocess Python 3.11 dans `tts_service/`, voix paramétrable |
 | Voix Realtime | OpenAI Realtime API | Optionnel, voice-to-voice bidi pour PNJ "rich" |
 | Base de donnees | SQLite | Via SQLAlchemy async (aiosqlite) + Alembic |
 | Temps reel | WebSocket | Natif FastAPI, `/ws/game/{session_id}` + `/ws/dialogue/{session_id}/{persona_id}` |
+
+### Support Ollama Cloud & Gemma 4
+
+Le projet supporte officiellement l'API **Ollama Cloud** directe (hébergée sur `https://ollama.com`) :
+- **Modèle de référence Cloud** : `gemma4:31b` (frontier-level, 31B paramètres, tag `cloud`).
+- **Authentification** : Passe par la clé d'API via la variable d'environnement `OLLAMA_API_KEY` transmise au format `Authorization: Bearer <key>`.
+- **Délai de traitement (Timeout)** : La configuration applique un connect timeout rapide de `3.0s` (détection immédiate de panne réseau) et un read timeout généreux de `240.0s` (4 minutes) pour laisser tout le temps nécessaire à Gemma 4 de générer des pavés narratifs complets.
 
 ## Lancer le stack
 
@@ -35,8 +42,9 @@ Copier `.env.example` vers `backend/.env`.
 
 | Variable | Defaut | Note |
 |----------|--------|------|
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | |
-| `GM_MODEL` / `PLAYER_MODEL` | `mistral:7b` | |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Renseigner `https://ollama.com` pour Ollama Cloud |
+| `OLLAMA_API_KEY` | `` | Clé d'API requise si `https://ollama.com` est utilisé |
+| `GM_MODEL` / `PLAYER_MODEL` | `mistral:7b` | Modèle texte (ex. `gemma4:31b` sur Ollama Cloud) |
 | `DATABASE_URL` | `sqlite+aiosqlite:///./rpgmaster.db` | |
 | `VOXTRAL_ENABLED` | `false` | Garder `false` si vLLM-Omni non démarré |
 | `VOXTRAL_BASE_URL` | `http://localhost:8091` | Si TTS active |

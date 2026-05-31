@@ -73,12 +73,13 @@ def with_llm_retry(
                     if attempt == max_retries:
                         break
 
+                    err_msg = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
                     retry_logger.warning(
                         "%s tentative %d/%d échouée : %s — retry dans %.1fs",
                         provider_name,
                         attempt,
                         max_retries,
-                        exc,
+                        err_msg,
                         delay,
                     )
                     await _notify_retry_observer(

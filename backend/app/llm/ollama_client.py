@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 _MAX_RETRIES = 3
 _BASE_DELAY = 1.0  # seconds, doubles on each retry
-_LLM_TIMEOUT = 120.0  # seconds before giving up on a single LLM call
+_LLM_TIMEOUT = httpx.Timeout(240.0, connect=3.0)  # fast connect, very generous read timeout for large cloud models like Gemma 4 31B
 _SEMAPHORES: dict[tuple[int, int], asyncio.Semaphore] = {}
 
 
