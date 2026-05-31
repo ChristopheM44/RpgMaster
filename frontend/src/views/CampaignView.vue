@@ -14,17 +14,19 @@ import type {
 } from '../types'
 import ConfirmDialog from '../components/common/ConfirmDialog.vue'
 import CampaignForgeModal from './CampaignForgeModal.vue'
+import CampaignCharacterPanel from '../components/campaign/CampaignCharacterPanel.vue'
 
 const router = useRouter()
 const campaignStore = useCampaignStore()
 const gameStore = useGameStore()
 
-type DetailTab = 'sessions' | 'scenario' | 'notes'
+type DetailTab = 'sessions' | 'scenario' | 'notes' | 'groupe'
 
 const DETAIL_TABS: Array<{ id: DetailTab; label: string; icon: string }> = [
   { id: 'sessions', label: 'Sessions', icon: '◆' },
   { id: 'scenario', label: 'Scénario', icon: '✦' },
   { id: 'notes', label: 'Notes du MJ', icon: '❦' },
+  { id: 'groupe', label: 'Groupe', icon: '⚔' },
 ]
 const STATUS_META: Record<SessionStatus, { label: string; tone: string; live: boolean }> = {
   lobby: { label: 'Préparation', tone: 'rpg-tone-muted', live: false },
@@ -647,7 +649,7 @@ function itemDetail(item: unknown): string {
           </template>
         </div>
 
-        <div v-else class="space-y-4">
+        <div v-else-if="activeTab === 'notes'" class="space-y-4">
           <div class="rounded-lg border border-border bg-surface p-4">
             <div class="flex items-center justify-between gap-3">
               <div>
@@ -803,6 +805,13 @@ function itemDetail(item: unknown): string {
           <button class="w-full rounded-lg border border-blood/25 bg-transparent px-4 py-2.5 font-display text-[11px] font-bold uppercase tracking-[0.12em] text-blood/70" @click="confirmDeleteId = selectedCampaign.id">
             Supprimer la chronique
           </button>
+        </div>
+
+        <div v-else-if="activeTab === 'groupe'">
+          <CampaignCharacterPanel
+            :session-id="currentSession?.id ?? null"
+            :campaign-id="selectedCampaign.id"
+          />
         </div>
       </div>
 
