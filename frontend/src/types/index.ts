@@ -594,6 +594,7 @@ export interface SceneExit {
   type?: string
   element_id?: string
   placement?: 'edge' | 'embedded'
+  active?: boolean
 }
 
 export type SceneTheme =

@@ -16,6 +16,7 @@ const { findElement, linkedEntityIdForElement } = useMapInspectables()
 
 const emit = defineEmits<{
   act: [id: string]
+  approach: [id: string]
   openSheet: [id: string]
 }>()
 
@@ -272,6 +273,7 @@ function act() {
           v-if="poi.kind !== 'npc'"
           class="inspector-btn-outline"
           :style="{ color: 'var(--color-teal)', borderColor: 'rgba(79,216,192,0.4)', background: 'rgba(79,216,192,0.14)' }"
+          @click="emit('approach', poi.id)"
         >
           ✥ Approcher
         </button>

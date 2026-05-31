@@ -116,4 +116,37 @@ describe('SelectionInspector', () => {
     expect(wrapper.text()).toContain('Fait')
     expect(wrapper.text()).toContain('Un courant d’air vient du dessous.')
   })
+
+  it('emits approach from the approach button', async () => {
+    const gameStore = useGameStore()
+    const sessionStore = useSessionStore()
+    gameStore.applySceneLayout({
+      scene: {
+        cols: 12,
+        rows: 12,
+        cell_size_m: 1.5,
+        scene_theme: 'desert',
+        pois: [
+          {
+            id: 'dalle_fendue',
+            name: 'Dalle fendue',
+            kind: 'clue',
+            icon: 'clue',
+            position: { col: 6, row: 7 },
+            description: 'Une pierre plus claire accroche le regard.',
+          },
+        ],
+        exits: [],
+        party_positions: {},
+      },
+    })
+    sessionStore.selectEntity('dalle_fendue')
+
+    const wrapper = mount(SelectionInspector)
+    const button = wrapper.findAll('button').find((item) => item.text().includes('Approcher'))
+    expect(button).toBeTruthy()
+    await button!.trigger('click')
+
+    expect(wrapper.emitted('approach')).toEqual([['dalle_fendue']])
+  })
 })

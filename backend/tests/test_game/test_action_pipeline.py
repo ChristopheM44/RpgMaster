@@ -128,6 +128,222 @@ def _narrations(published) -> list[dict]:
 
 
 class TestPipelineExecutorUnits:
+    async def test_stealth_event_success_applies_npc_update_without_visible_roll(self) -> None:
+        active = ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.EXPLORATION,
+            state_data={
+                "characters": {
+                    "hero_1": {"name": "Thorvald", "ability_scores": {"wis": 10}},
+                },
+                "current_scene": {
+                    "scene_id": "camp",
+                    "cols": 12,
+                    "rows": 12,
+                    "cell_size_m": 1.5,
+                    "scene_theme": "forest",
+                    "pois": [
+                        {
+                            "id": "guide",
+                            "name": "Guide",
+                            "kind": "npc",
+                            "position": {"col": 5, "row": 5},
+                        }
+                    ],
+                    "exits": [],
+                    "party_positions": {},
+                },
+            },
+        )
+        bus = _FakeBus()
+
+        result = await GMResponseExecutor(bus).execute_gm_response(
+            GMResponse(
+                narration="Une ombre glisse derrière le camp.",
+                actions=[
+                    GMAction(
+                        type="stealth_event",
+                        params={
+                            "actor_id": "shadow",
+                            "actor_kind": "npc",
+                            "event_type": "abduction",
+                            "stealth_total_override": 20,
+                            "target_npc_ids": ["guide"],
+                            "npc_status_on_success": "abducted",
+                        },
+                    )
+                ],
+            ),
+            active,
+            db=None,
+        )
+
+        assert result.pending_rolls[0]["type"] == "stealth_event"
+        assert result.pending_rolls[0]["stealth_succeeded"] is True
+        assert active.state_data["npc_states"]["guide"]["status"] == "abducted"
+        assert not [payload for event, payload in bus.published if event == EventType.ROLL_RESULT]
+        assert [
+            payload for event, payload in bus.published if event == EventType.SCENE_LAYOUT_CHANGED
+        ]
+
+    async def test_stealth_event_failure_does_not_apply_npc_update(self) -> None:
+        active = ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.EXPLORATION,
+            state_data={
+                "characters": {
+                    "hero_1": {"name": "Thorvald", "ability_scores": {"wis": 16}},
+                },
+                "current_scene": {
+                    "scene_id": "camp",
+                    "cols": 12,
+                    "rows": 12,
+                    "cell_size_m": 1.5,
+                    "scene_theme": "forest",
+                    "pois": [
+                        {
+                            "id": "guide",
+                            "name": "Guide",
+                            "kind": "npc",
+                            "position": {"col": 5, "row": 5},
+                        }
+                    ],
+                    "exits": [],
+                    "party_positions": {},
+                },
+            },
+        )
+        bus = _FakeBus()
+
+        result = await GMResponseExecutor(bus).execute_gm_response(
+            GMResponse(
+                narration="Une ombre tente d'agir en silence.",
+                actions=[
+                    GMAction(
+                        type="stealth_event",
+                        params={
+                            "actor_id": "shadow",
+                            "actor_kind": "npc",
+                            "event_type": "abduction",
+                            "stealth_total_override": 5,
+                            "target_npc_ids": ["guide"],
+                            "npc_status_on_success": "abducted",
+                        },
+                    )
+                ],
+            ),
+            active,
+            db=None,
+        )
+
+        assert result.pending_rolls[0]["stealth_succeeded"] is False
+        assert "guide" not in active.state_data.get("npc_states", {})
+        assert not [payload for event, payload in bus.published if event == EventType.ROLL_RESULT]
+        assert not [
+            payload for event, payload in bus.published if event == EventType.SCENE_LAYOUT_CHANGED
+        ]
+
+    async def test_hide_action_rolls_stealth_and_consumes_combat_action(self) -> None:
+        active = _make_combat_active()
+        active.state_data["combatants"]["hero_1"].update(
+            {
+                "level": 3,
+                "ability_scores": {"dex": 14},
+                "skill_proficiencies": ["stealth"],
+            }
+        )
+        active.state_data["combatants"]["goblin_1"]["passive_perception"] = 10
+        bus = _FakeBus()
+        gm = _mock_gm("Aria se fond dans les ombres.")
+
+        pipeline = ActionPipeline(gm, bus, mechanics=ActionResolver(gm_agent=gm))
+        with patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast", new=AsyncMock()):
+            result = await pipeline.resolve_and_publish(
+                ActionRequest(
+                    session_id=SESSION_ID,
+                    actor_id="hero_1",
+                    actor_name="Aria",
+                    actor_kind="player",
+                    action_type="hide",
+                    content="Je me cache derrière les pierres.",
+                ),
+                active,
+            )
+
+        assert result.mechanics["skill"] == "stealth"
+        assert result.mechanics["modifier"] == 4
+        assert result.mechanics["observers"][0]["id"] == "goblin_1"
+        assert active.turn_manager.current_turn.action_economy.action is False
+        roll_payloads = [
+            payload for event_type, payload in bus.published if event_type == EventType.ROLL_RESULT
+        ]
+        assert roll_payloads
+        assert roll_payloads[0]["label"] == "DEX (Stealth)"
+
+    async def test_pipeline_defers_stealth_event_narration_until_outcome(self) -> None:
+        active = ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.EXPLORATION,
+            state_data={
+                "characters": {
+                    "hero_1": {"name": "Thorvald", "ability_scores": {"wis": 12}},
+                },
+                "current_scene": {
+                    "scene_id": "camp",
+                    "cols": 12,
+                    "rows": 12,
+                    "cell_size_m": 1.5,
+                    "scene_theme": "forest",
+                    "pois": [],
+                    "exits": [],
+                    "party_positions": {},
+                },
+            },
+        )
+        bus = _FakeBus()
+        gm = MagicMock()
+        gm.think = AsyncMock(
+            return_value=AgentResponse(
+                content="Une ombre tente de filer.",
+                actions=[
+                    GMAction(
+                        type="stealth_event",
+                        params={
+                            "actor_id": "shadow",
+                            "actor_kind": "npc",
+                            "event_type": "escape",
+                            "stealth_total_override": 3,
+                        },
+                    )
+                ],
+            )
+        )
+        gm.narrate_outcome_response = AsyncMock(
+            return_value=GMResponse(
+                narration="Thorvald perçoit un froissement dans les fougères.",
+                actions=[],
+            )
+        )
+
+        pipeline = ActionPipeline(gm, bus, mechanics=ActionResolver(gm_agent=gm))
+        with patch("app.game.action_pipeline.tts_router.synthesize_and_broadcast", new=AsyncMock()):
+            await pipeline.resolve_and_publish(
+                ActionRequest(
+                    session_id=SESSION_ID,
+                    actor_id="hero_1",
+                    actor_name="Thorvald",
+                    actor_kind="player",
+                    action_type="free_text",
+                    content="Je surveille les environs.",
+                ),
+                active,
+            )
+
+        narrations = [
+            payload["text"] for event, payload in bus.published if event == EventType.NARRATION
+        ]
+        assert narrations == ["Thorvald perçoit un froissement dans les fougères."]
+
     async def test_free_text_ask_azaka_uses_single_social_skill_check(self) -> None:
         active = ActiveSession(
             session_id=SESSION_ID,

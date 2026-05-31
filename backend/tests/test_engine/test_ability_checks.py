@@ -10,6 +10,7 @@ from app.engine.ability_checks import (
     Proficiency,
     ability_check,
     ability_modifier,
+    compute_passive_perception,
     proficiency_bonus,
     saving_throw,
     skill_check,
@@ -54,6 +55,22 @@ class TestProficiencyBonus:
     def test_level_21_raises(self):
         with pytest.raises(ValueError):
             proficiency_bonus(21)
+
+
+# ---------------------------------------------------------------------------
+# passive perception
+# ---------------------------------------------------------------------------
+
+class TestPassivePerception:
+    def test_no_proficiency(self):
+        assert compute_passive_perception(10) == 10
+        assert compute_passive_perception(8) == 9
+
+    def test_proficiency(self):
+        assert compute_passive_perception(14, level=5, proficiency=Proficiency.PROFICIENT) == 15
+
+    def test_expertise(self):
+        assert compute_passive_perception(20, level=9, proficiency=Proficiency.EXPERT) == 23
 
 
 # ---------------------------------------------------------------------------

@@ -179,6 +179,20 @@ class GMResponseExecutor:
                 )
                 continue
 
+            if gm_action.type == "stealth_event":
+                stealth_evt = self._resolve_stealth_event(params, active)
+                result.pending_rolls.append(stealth_evt)
+                if stealth_evt.get("stealth_succeeded") and await self._apply_stealth_success(
+                    actual_session_id,
+                    params,
+                    active,
+                ):
+                    result.canon_dirty = True
+                result.executed_actions.append(
+                    {"type": gm_action.type, "target": gm_action.target, "params": params}
+                )
+                continue
+
             if gm_action.type == "social_outcome":
                 applied_npc_id = await self._apply_social_outcome(
                     actual_session_id,
@@ -332,6 +346,64 @@ class GMResponseExecutor:
         from app.game.roll_executor import execute_roll_request
 
         return execute_roll_request(params, fallback_actor_id, active)
+
+    @staticmethod
+    def _resolve_stealth_event(
+        params: dict[str, Any],
+        active: ActiveSession,
+    ) -> dict[str, Any]:
+        from app.game.stealth_resolution import resolve_stealth_event
+
+        return resolve_stealth_event(active, params)
+
+    async def _apply_stealth_success(
+        self,
+        session_id: str,
+        params: dict[str, Any],
+        active: ActiveSession,
+    ) -> bool:
+        raw_targets = params.get("target_npc_ids") or params.get("target_npc_id")
+        if isinstance(raw_targets, str):
+            target_ids = [raw_targets]
+        elif isinstance(raw_targets, list):
+            target_ids = [
+                str(item).strip()
+                for item in raw_targets
+                if item is not None and str(item).strip()
+            ]
+        else:
+            target_ids = []
+        if not target_ids:
+            return False
+
+        event_type = str(params.get("event_type") or "").strip().lower()
+        status = str(params.get("npc_status_on_success") or "").strip().lower()
+        if not status:
+            status = {
+                "abduction": "abducted",
+                "escape": "missing",
+                "hide": "hidden",
+                "move_unnoticed": "hidden",
+            }.get(event_type, "missing")
+        if status not in {"missing", "hidden", "abducted", "absent", "left"}:
+            status = "missing"
+
+        note = str(params.get("note_on_success") or params.get("note") or "").strip()
+        npc_updates = [
+            {
+                "id": npc_id,
+                "status": status,
+                **({"note": note} if note else {}),
+            }
+            for npc_id in target_ids
+        ]
+        before = active.state_data.get("current_scene")
+        await self._apply_scene_update(
+            session_id,
+            {"npc_updates": npc_updates},
+            active,
+        )
+        return isinstance(before, dict)
 
     async def execute_action(
         self,
@@ -1592,6 +1664,8 @@ class GMResponseExecutor:
             placement = cls._clean_optional_text(exit_data.get("placement"), max_len=24)
             if placement in {"edge", "embedded"}:
                 normalized_exit["placement"] = placement
+            if isinstance(exit_data.get("active"), bool):
+                normalized_exit["active"] = exit_data["active"]
             layout["exits"].append(normalized_exit)
 
         party_positions = raw.get("party_positions") or {}

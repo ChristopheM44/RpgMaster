@@ -15,6 +15,7 @@ import CarnetPopover from './CarnetPopover.vue'
 
 const emit = defineEmits<{
   act: [id: string]
+  approach: [id: string]
   openSheet: [id: string]
 }>()
 
@@ -98,6 +99,7 @@ function toggleCarnet() {
       <SelectionInspector
         v-if="sessionStore.selectedId"
         @act="(id: string) => emit('act', id)"
+        @approach="(id: string) => emit('approach', id)"
         @open-sheet="(id) => emit('openSheet', id)"
       />
 

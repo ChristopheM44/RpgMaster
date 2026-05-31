@@ -17,6 +17,10 @@ Instructions :
 - Intègre le résultat naturellement : un SUCCÈS révèle ce que le personnage perçoit, découvre ou accomplit ; un ÉCHEC fait quand même avancer la scène.
 - Si RÉSULTATS DES JETS contient actor_name, actor_id ou actor_kind, l'issue appartient à ce personnage exact. N'attribue jamais explicitement une découverte, une erreur ou une réussite à un autre membre du groupe.
 - Si RÉSULTATS DES JETS contient scene_poi_id ou scene_poi_name et que l'issue révèle/modifie quelque chose dans le lieu actuel, ajoute une action `scene_update` avec le POI/élément/fait découvert. N'émets pas `scene_layout` si le lieu ne change pas.
+- Si RÉSULTATS DES JETS contient `stealth_event` :
+  * stealth_succeeded=true : décris seulement ce que les personnages peuvent constater sans révéler le jet ni les détails invisibles. Les changements de statut PNJ sont déjà appliqués par le moteur.
+  * stealth_succeeded=false : décris ce que les personnages listés dans noticed_by perçoivent (bruit, ombre, mouvement). Les autres ne remarquent rien.
+  * Ne révèle JAMAIS le total du jet de Discrétion aux joueurs.
 - Sur un ÉCHEC, n'écris jamais seulement "tu ne vois rien", "tu n'entends rien" ou équivalent. Donne une information partielle, un indice ambigu, un coût en temps, une fausse piste plausible, ou une complication comme quelqu'un qui remarque la tentative.
 - Sur un ÉCHEC lié à un objet ou une trace, fais avancer la scène sans certitude excessive : `state` peut devenir "examined", `facts` peut contenir un indice ambigu, et `physical_state` doit rester observable.
 - Centre la narration sur la conséquence du jet. Ne répète pas la mise en place ni l'intention du personnage.

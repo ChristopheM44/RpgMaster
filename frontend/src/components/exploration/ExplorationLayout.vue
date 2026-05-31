@@ -16,6 +16,18 @@ const emit = defineEmits<{
 const sessionStore = useSessionStore()
 const { findPoi } = useExplorationPois()
 
+function scenePoiExtra(
+  poiId: string,
+  interactionId?: string,
+  intent?: string,
+): Record<string, unknown> {
+  return {
+    scene_poi_id: poiId,
+    ...(interactionId ? { scene_interaction_id: interactionId } : {}),
+    ...(intent ? { scene_interaction_intent: intent } : {}),
+  }
+}
+
 function onAct(id: string) {
   const poi = findPoi(id)
   if (!poi) return
@@ -27,8 +39,26 @@ function onAct(id: string) {
       ?? (poi.kind === 'npc'
         ? `Je parle à ${poi.title}.`
         : `J'examine : ${poi.title}${poi.dc ? ` (${poi.actionLabel ?? poi.skill ?? 'Examiner'} DD ${poi.dc})` : ''}.`)
-    emit('action', 'free_text', content, poi.kind === 'npc' ? poi.id : undefined)
+    emit(
+      'action',
+      'free_text',
+      content,
+      poi.kind === 'npc' ? poi.id : undefined,
+      scenePoiExtra(poi.id, poi.interactionId, poi.intent),
+    )
   }
+}
+
+function onApproach(id: string) {
+  const poi = findPoi(id)
+  if (!poi || poi.kind === 'sortie') return
+  emit(
+    'action',
+    'free_text',
+    `Je m'approche de ${poi.title} pour mieux voir ce qu'il y a là-bas.`,
+    undefined,
+    scenePoiExtra(poi.id, undefined, 'approach'),
+  )
 }
 
 function onDecide(optionId: string) {
@@ -59,6 +89,7 @@ onUnmounted(() => { document.removeEventListener('keydown', onKey) })
     <div class="exploration-body">
       <MapColumn
         @act="onAct"
+        @approach="onApproach"
         @open-sheet="(id) => emit('openSheet', id)"
       />
       <NarrativeColumn @decide="onDecide" />

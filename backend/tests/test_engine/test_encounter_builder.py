@@ -29,6 +29,7 @@ GOBLIN: dict[str, Any] = {
     "ac": 15,
     "hp": 7,
     "ability_scores": {"dexterity": 14},
+    "senses": {"passive_perception": 9, "darkvision_m": 18},
     "actions": [
         {"name": "Scimitar", "type": "melee_attack", "attack_bonus": 4, "damage_dice": "1d6+2"}
     ],
@@ -43,6 +44,7 @@ HOBGOBLIN: dict[str, Any] = {
     "ac": 18,
     "hp": 11,
     "ability_scores": {"dexterity": 12},
+    "senses": {"passive_perception": 10},
     "actions": [
         {"name": "Longsword", "type": "melee_attack", "attack_bonus": 3, "damage_dice": "1d8+1"}
     ],
@@ -57,6 +59,7 @@ OGRE: dict[str, Any] = {
     "ac": 11,
     "hp": 59,
     "ability_scores": {"dexterity": 8},
+    "senses": {"passive_perception": 8},
     "actions": [
         {"name": "Greatclub", "type": "melee_attack", "attack_bonus": 6, "damage_dice": "2d8+4"}
     ],
@@ -280,6 +283,16 @@ class TestExpandToCombatants:
         result = expand_to_combatants(self._make_encounter([entry]), {"goblin": GOBLIN})
         assert result[0]["is_player"] is False
         assert result[0]["is_ai"] is True
+
+    def test_expanded_combatant_carries_srd_senses_and_abilities(self):
+        entry = EncounterEntry(
+            monster_id="goblin", count=1, name_fr="Gobelin",
+            cr=0.25, xp_each=50, ac=15, hp=7, attack_bonus=4, damage_notation="1d6+2",
+        )
+        result = expand_to_combatants(self._make_encounter([entry]), {"goblin": GOBLIN})
+        assert result[0]["ability_scores"] == {"dexterity": 14}
+        assert result[0]["senses"] == {"passive_perception": 9, "darkvision_m": 18}
+        assert result[0]["passive_perception"] == 9
 
     def test_multi_entry_encounter(self):
         entries = [

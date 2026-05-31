@@ -545,31 +545,7 @@ class GMAgent(BaseAgent):
         roll_results: list[dict[str, Any]],
     ) -> GMResponse:
         """Narre l'issue de jets et conserve les actions mécaniques éventuelles."""
-        rolls_text = "\n".join(
-            "- {actor}{label}: {breakdown}{target}{margin} → {outcome}".format(
-                actor=(f"{r.get('actor_name')} — " if r.get("actor_name") else ""),
-                label=r.get("label", "Jet"),
-                breakdown=r.get("breakdown", ""),
-                target=(
-                    f" [cible sociale: {r.get('social_target_id')}]"
-                    if r.get("social_target_id")
-                    else ""
-                ),
-                margin=(
-                    f" [marge: {r.get('margin')}]"
-                    if r.get("margin") is not None
-                    else ""
-                ),
-                outcome=(
-                    "SUCCÈS"
-                    if r.get("success") is True
-                    else "ÉCHEC"
-                    if r.get("success") is False
-                    else str(r.get("total", "?"))
-                ),
-            )
-            for r in roll_results
-        )
+        rolls_text = "\n".join(self._format_outcome_roll(r) for r in roll_results)
         user_prompt = self._render_prompt(
             "gm_narrate_outcome.txt",
             {
@@ -584,6 +560,47 @@ class GMAgent(BaseAgent):
     # -------------------------------------------------------------------------
     # Helpers privés
     # -------------------------------------------------------------------------
+
+    @staticmethod
+    def _format_outcome_roll(result: dict[str, Any]) -> str:
+        if result.get("type") == "stealth_event":
+            noticed_by = ", ".join(
+                str(item.get("name") or item.get("id"))
+                for item in result.get("noticed_by", [])
+                if isinstance(item, dict)
+            ) or "personne"
+            return (
+                "- stealth_event "
+                f"actor={result.get('actor_name') or result.get('actor_id')} "
+                f"event_type={result.get('event_type')} "
+                f"stealth_succeeded={bool(result.get('stealth_succeeded'))} "
+                f"noticed_by=[{noticed_by}] "
+                f"total={result.get('total')} "
+                f"summary={result.get('summary', '')}"
+            )
+
+        target = (
+            f" [cible sociale: {result.get('social_target_id')}]"
+            if result.get("social_target_id")
+            else ""
+        )
+        margin = (
+            f" [marge: {result.get('margin')}]"
+            if result.get("margin") is not None
+            else ""
+        )
+        outcome = (
+            "SUCCÈS"
+            if result.get("success") is True
+            else "ÉCHEC"
+            if result.get("success") is False
+            else str(result.get("total", "?"))
+        )
+        actor = f"{result.get('actor_name')} — " if result.get("actor_name") else ""
+        return (
+            f"- {actor}{result.get('label', 'Jet')}: "
+            f"{result.get('breakdown', '')}{target}{margin} → {outcome}"
+        )
 
     async def _call_and_parse(
         self,

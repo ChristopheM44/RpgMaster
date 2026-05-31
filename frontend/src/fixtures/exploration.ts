@@ -45,6 +45,7 @@ export interface ExPoi {
   iconId?: string
   iconSymbol?: string
   actionLabel?: string
+  interactionId?: string
   prompt?: string
   intent?: string
   rawKind?: string

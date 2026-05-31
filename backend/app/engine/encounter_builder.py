@@ -236,6 +236,9 @@ def expand_to_combatants(
     """
     result: list[dict[str, Any]] = []
     for entry in encounter.entries:
+        monster_data = monsters_by_id.get(entry.monster_id, {})
+        senses = monster_data.get("senses") if isinstance(monster_data, dict) else {}
+        senses = senses if isinstance(senses, dict) else {}
         for i in range(entry.count):
             suffix = f"_{i + 1}"
             combatant_id = f"{entry.monster_id}{suffix}"
@@ -254,5 +257,8 @@ def expand_to_combatants(
                 "damage_notation": entry.damage_notation,
                 "cr": entry.cr,
                 "xp": entry.xp_each,
+                "ability_scores": monster_data.get("ability_scores", {}),
+                "senses": dict(senses),
+                "passive_perception": senses.get("passive_perception"),
             })
     return result

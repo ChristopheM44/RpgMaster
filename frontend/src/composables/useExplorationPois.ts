@@ -112,6 +112,7 @@ function adaptPoi(p: PointOfInterest): ExPoi {
     dc: typeof interactionDc === 'number' ? interactionDc : undefined,
     iconId: iconForPoi(p),
     actionLabel,
+    interactionId: interaction?.id,
     prompt: interaction?.prompt,
     intent: interaction?.intent,
     rawKind: p.kind,
@@ -126,8 +127,9 @@ function adaptPoi(p: PointOfInterest): ExPoi {
   }
 }
 
-function adaptExit(e: SceneExit, isActive: boolean): ExPoi {
+function adaptExit(e: SceneExit): ExPoi {
   const label = `${colLetter(e.position.col)}${e.position.row + 1}`
+  const isActive = e.active ?? true
   return {
     id: e.id,
     kind: 'sortie',
@@ -151,11 +153,11 @@ export function useExplorationPois() {
   const pois = computed<ExPoi[]>(() => {
     const scene = gameStore.currentScene
     if (!scene) return []
-    const adaptedPois = (scene.pois ?? []).map(adaptPoi)
+    const adaptedPois = (scene.pois ?? [])
+      .filter((poi) => poi.visibility !== 'hidden' || poi.discovered === true)
+      .map(adaptPoi)
     const exits = scene.exits ?? []
-    // Première sortie marquée active par défaut tant que le backend ne pousse
-    // pas explicitement d'« exit actif ».
-    const adaptedExits = exits.map((e, idx) => adaptExit(e, idx === exits.length - 1))
+    const adaptedExits = exits.map(adaptExit)
     return [...adaptedPois, ...adaptedExits]
   })
 

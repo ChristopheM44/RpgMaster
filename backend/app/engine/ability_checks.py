@@ -74,6 +74,22 @@ def proficiency_bonus(level: int) -> int:
     return 2 + (level - 1) // 4
 
 
+def compute_passive_perception(
+    wisdom_score: int,
+    level: int = 1,
+    proficiency: Proficiency = Proficiency.NONE,
+) -> int:
+    """Passive Perception = 10 + WIS modifier + proficiency tier bonus."""
+    prof = proficiency_bonus(level)
+    bonus = {
+        Proficiency.NONE: 0,
+        Proficiency.HALF: prof // 2,
+        Proficiency.PROFICIENT: prof,
+        Proficiency.EXPERT: prof * 2,
+    }[proficiency]
+    return 10 + ability_modifier(wisdom_score) + bonus
+
+
 @dataclass
 class CheckResult:
     """Full breakdown of an ability/skill/saving-throw check."""

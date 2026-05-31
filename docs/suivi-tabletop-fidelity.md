@@ -14,6 +14,7 @@ Objectif : rapprocher l'exploration de RPGMaster d'une vraie table de JDR, avec 
 - [x] Fallbacks LLM sortis des voix MJ/PNJ/compagnons et publiés comme messages système.
 - [x] Tests unitaires backend et frontend ciblés ajoutés.
 - [x] Squelette de replays E2E live LLM obligatoire ajouté.
+- [x] Furtivité/Perception passive ajoutée avec jets PNJ cachés, action joueur `hide`, et POI cachés non rendus avant découverte.
 
 ## Lots
 
@@ -72,6 +73,24 @@ Critères d'acceptation :
 - Les replays échouent si Ollama/Ollama Cloud est indisponible.
 - Les invariants d'état et d'événements sont vérifiés sur chaque scénario.
 
+### Lot 6 - Furtivité, Interactions Et Carte
+
+- [x] `stealth_event` ajouté au contrat MJ pour les actions furtives de PNJ/monstres.
+- [x] Résolution moteur DEX(Stealth) vs Perception passive du groupe sans publication `ROLL_RESULT` visible.
+- [x] Action joueur `hide` résolue par le pipeline et publiée comme jet visible.
+- [x] Perception passive SRD ajoutée dans `engine/ability_checks.py`.
+- [x] `ability_scores`, `senses` et `passive_perception` propagés sur les monstres de rencontre.
+- [x] Bouton "Approcher" branché et actions POI desktop alignées avec les métadonnées mobile.
+- [x] POI `visibility="hidden"` masqués jusqu'à `discovered=true`.
+- [x] Sorties basées sur `SceneExit.active ?? true`, plus d'heuristique "dernière sortie active".
+- [x] Prompts MJ mis à jour pour le placement spatial conditionnel et les événements furtifs.
+
+Critères d'acceptation :
+- Un PNJ peut tenter une fuite/enlèvement discret sans révéler de carte de jet aux joueurs.
+- Un personnage qui choisit `hide` lance un jet visible et consomme son action en combat.
+- Un POI caché n'apparaît pas sur la carte tant qu'il n'est pas découvert.
+- Les actions POI desktop transportent `scene_poi_id`, `scene_interaction_id` et `scene_interaction_intent`.
+
 ## Commandes De Test
 
 Backend ciblé :
@@ -79,6 +98,7 @@ Backend ciblé :
 ```bash
 cd backend
 .venv/bin/pytest tests/test_game/test_action_pipeline.py -q
+.venv/bin/pytest tests/test_engine/test_ability_checks.py tests/test_engine/test_encounter_builder.py tests/test_game/test_stealth_resolution.py tests/test_game/test_action_pipeline.py -q
 ```
 
 Frontend ciblé :
@@ -86,6 +106,7 @@ Frontend ciblé :
 ```bash
 cd frontend
 npm run test -- useExplorationPois SelectionInspector game
+npm run test -- SelectionInspector useExplorationPois ExplorationLayout
 ```
 
 Replays live LLM obligatoires :

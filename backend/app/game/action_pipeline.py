@@ -36,6 +36,7 @@ from app.game.social_resolution import (
     resolve_npc_target_id,
 )
 from app.game.social_scene_state import resolve_scene_interaction_context
+from app.game.stealth_resolution import resolve_hide_action
 from app.game.tactical_combat import (
     apply_tactical_move,
     calculate_reachable_cells,
@@ -211,6 +212,17 @@ class ActionPipeline:
             )
             if err_act is not None:
                 return err_act
+        elif request.action_type == "hide":
+            err_act = await self._consume_hide_action(
+                request,
+                active,
+                phase_value,
+                actor_name,
+                target_id,
+            )
+            if err_act is not None:
+                return err_act
+            roll_results = resolve_hide_action(active, request.actor_id)
         elif request.action_type == "cast_spell":
             (
                 target_id,
@@ -369,10 +381,13 @@ class ActionPipeline:
 
         has_gm_roll_request = bool(
             gm_response
-            and any(gm_action.type == "roll_request" for gm_action in gm_response.actions)
+            and any(
+                gm_action.type in {"roll_request", "stealth_event"}
+                for gm_action in gm_response.actions
+            )
         )
 
-        # Garde-fou hors-combat : si le MJ n'a pas émis de roll_request pour une
+        # Garde-fou hors-combat : si le MJ n'a pas émis de résolution différée pour une
         # action libre contenant un verbe risqué (et qu'aucun résultat mécanique
         # n'existe déjà), on injecte un roll_request minimal de sauvegarde.
         # Conservateur : ne s'applique qu'en exploration, sur free_text humain.
@@ -441,7 +456,7 @@ class ActionPipeline:
         if not has_gm_roll_request and narration_text:
             await self._publish_gm_narration(request.session_id, narration_text, actual_db)
 
-        # 4. Actions GM initiales. Si roll_request, l'outcome narrera le resultat.
+        # 4. Actions GM initiales. Si roll_request/stealth_event, l'outcome narrera le resultat.
         pending_rolls: list[dict[str, Any]] = []
         if gm_response:
             exec_result = await self._executor.execute_gm_response(
@@ -1135,10 +1150,12 @@ class ActionPipeline:
         target_id: str | None,
     ) -> dict[str, Any]:
         enriched = dict(payload)
-        enriched.setdefault("character_id", request.actor_id)
-        enriched["actor_id"] = request.actor_id
-        enriched["actor_name"] = actor_name
-        enriched["actor_kind"] = request.actor_kind
+        effective_actor_id = enriched.get("actor_id") or request.actor_id
+        effective_actor_name = str(enriched.get("actor_name") or actor_name)
+        enriched.setdefault("character_id", effective_actor_id)
+        enriched["actor_id"] = effective_actor_id
+        enriched["actor_name"] = effective_actor_name
+        enriched["actor_kind"] = enriched.get("actor_kind") or request.actor_kind
         enriched["action_type"] = request.action_type
         enriched["target_id"] = target_id
         if request.scene_interaction_context:
@@ -1166,10 +1183,12 @@ class ActionPipeline:
         active: ActiveSession,
     ) -> dict[str, Any]:
         enriched = dict(payload)
-        enriched.setdefault("character_id", request.actor_id)
-        enriched["actor_id"] = request.actor_id
-        enriched["actor_name"] = actor_name
-        enriched["actor_kind"] = request.actor_kind
+        effective_actor_id = enriched.get("actor_id") or request.actor_id
+        effective_actor_name = str(enriched.get("actor_name") or actor_name)
+        enriched.setdefault("character_id", effective_actor_id)
+        enriched["actor_id"] = effective_actor_id
+        enriched["actor_name"] = effective_actor_name
+        enriched["actor_kind"] = enriched.get("actor_kind") or request.actor_kind
         enriched["action_type"] = request.action_type
         enriched["target_id"] = target_id
         if request.scene_interaction_context:
@@ -1190,10 +1209,10 @@ class ActionPipeline:
         characters = active.state_data.get("characters", {})
         if isinstance(characters, dict):
             for char_id, data in characters.items():
-                if str(char_id) == str(request.actor_id) or not isinstance(data, dict):
+                if str(char_id) == str(effective_actor_id) or not isinstance(data, dict):
                     continue
                 name = str(data.get("name") or "").strip()
-                if name and name.casefold() != actor_name.casefold():
+                if name and name.casefold() != effective_actor_name.casefold():
                     other_names.append(name)
         if other_names:
             enriched["non_actor_names"] = other_names[:12]
@@ -1204,6 +1223,8 @@ class ActionPipeline:
         response: AgentResponse | GMResponse,
         roll_results: dict[str, Any],
     ) -> AgentResponse | GMResponse:
+        if roll_results.get("type") == "stealth_event":
+            return response
         actor_name = str(roll_results.get("actor_name") or "").strip()
         if not actor_name:
             return response
@@ -1582,6 +1603,48 @@ class ActionPipeline:
             active,
         )
         return roll_results
+
+    async def _consume_hide_action(
+        self,
+        request: ActionRequest,
+        active: ActiveSession,
+        phase_value: str,
+        actor_name: str,
+        target_id: str | None,
+    ) -> ResolvedAction | None:
+        if phase_value != "COMBAT":
+            return None
+
+        current = active.turn_manager.current_turn
+        economy = (
+            current.action_economy
+            if current is not None and current.combatant_id == request.actor_id
+            else None
+        )
+        if economy is None or not economy.use_action():
+            message = "Action déjà utilisée ce tour."
+            await self._event_bus.publish_to_session(
+                request.session_id,
+                EventType.ERROR,
+                {"message": message},
+                source=self._source,
+            )
+            return ResolvedAction(
+                actor_id=request.actor_id,
+                actor_name=actor_name,
+                actor_kind=request.actor_kind,
+                action_type=request.action_type,
+                target_id=target_id,
+                mechanics={"error": True, "summary": message},
+                roll_events=[],
+                narration="",
+                gm_actions=[],
+                canon_dirty=False,
+            )
+
+        active.mark_dirty()
+        await self._publish_action_economy_result(active, request.actor_id)
+        return None
 
     async def _resolve_movement_actions(
         self,

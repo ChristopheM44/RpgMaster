@@ -132,6 +132,12 @@ QUAND ÉMETTRE UN ROLL_REQUEST — trois catégories, trois réponses :
      • La substance absorbe la chaleur (nature de la magie, pas une action volontaire)
      • Une porte est verrouillée (constat, pas un test — le test vient si le PJ ESSAIE d'ouvrir)
 
+  D. ÉVÉNEMENT FURTIF (un acteur tente de ne pas être vu/entendu) → toujours stealth_event.
+     Exemples :
+     • "Le garde tente d'enlever le prisonnier" → {"type":"stealth_event","target":null,"params":{"actor_id":"guard_1","actor_kind":"npc","event_type":"abduction","target_npc_ids":["prisoner_1"],"npc_status_on_success":"abducted"}}
+     • "L'ombre glisse vers la sortie sans un bruit" → {"type":"stealth_event","target":null,"params":{"actor_id":"shadow_figure","actor_kind":"npc","event_type":"escape","stealth_modifier":7}}
+     • "Des gobelins se cachent dans les buissons" → {"type":"stealth_event","target":null,"params":{"actor_id":"goblin_1","actor_kind":"monster","event_type":"ambush","stealth_total_override":12}}
+
   Règle de décision : si tu hésites entre B et C, pose-toi la question — "Est-ce que le PJ AGIT volontairement pour obtenir un résultat incertain ?" Si oui → jet. Si c'est une observation ou une conséquence passive → pas de jet.
 - Si la scène introduit un nouveau lieu ou change l'heure/météo/le jour : émets journal_update avec uniquement les champs qui changent.
 - Si le lieu reste le même mais qu'une dalle, un journal, une trace, un passage, un conduit, un objet ou une position change : émets `scene_update` avec `upsert_pois`, `update_pois`, `upsert_elements`, `update_elements`, `party_positions`, `facts`, `physical_state` ou `discovered_ids` selon le cas. Les POI découverts doivent avoir `discovered: true`, un `state` lisible et une `visibility` cohérente.
@@ -140,7 +146,7 @@ QUAND ÉMETTRE UN ROLL_REQUEST — trois catégories, trois réponses :
   RÈGLES GÉOMÉTRIQUES STRICTES POUR UN RENDU TACTIQUE PREMIUM :
   * Exits (sorties) : Les sorties de voyage ou fuite se placent sur un bord de carte. Une sortie au centre n'est permise que si elle correspond à un élément concret du décor (trappe, égout, échelle, escalier, porte, quai, ponton, ouverture) et doit alors avoir `placement: "embedded"` + `element_id`.
   * Routes/rues/sentiers locaux : N'ajoute une route, rue, piste ou sentier visible dans `elements` que si le récit décrit physiquement une voie traversante, un carrefour, une rue, une porte de ville, un quai ou un chemin. Une place, un marché, une cour ou un festival doit plutôt montrer pavés, étals, foule, bâtiments de bord, pavillon, fontaine ou accès d'égout éventuel, jamais une route reliant artificiellement deux POI.
-  * Party (positions du groupe) : Regroupe TOUJOURS le groupe de joueurs (VOUS et les compagnons IA) dans un cluster serré de 2 cases maximum au centre ou sur la piste (ex: autour de col=5, row=6). Ne les disperse jamais sur toute la carte.
+  * Party (positions du groupe) : Positionne les personnages selon leurs actions décrites. Si un joueur ou compagnon IA s'approche explicitement d'un POI ou d'un lieu, place son jeton à 1-2 cases du POI cible dans party_positions. Si aucune intention de déplacement n'est exprimée, regroupe le groupe dans un cluster de 2 cases maximum au centre ou sur la piste.
   * Couverts et Dangers tactiques : Génère SYSTÉMATIQUEMENT 2 à 4 points d'intérêt jouables représentant des obstacles de combat : des couverts (kind "cover", icon "c-half-cover" comme des rochers ou des troncs d'arbres couchés) et des dangers (kind "hazard", icon "trap-danger" comme des zones de ronces ou des crevasses) pour enrichir la battlemap.
   * La scène doit offrir au moins trois prises jouables visibles au total entre POI tactiques, sorties, PNJ, indices (kind "clue", icon "clue") ou coffres de butin (kind "loot", icon "chest"). Évite les décors à bouton unique.
   * Carte locale partagée : scene_layout est la source unique pour exploration ET combat. Si la scène est intérieure (pièce, salle, taverne, cave, crypte, boutique, temple), ajoute elements avec murs, portes, fenêtres si plausibles, mobilier/couverts, lumières et dangers physiques.

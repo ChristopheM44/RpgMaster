@@ -1140,6 +1140,11 @@ async def handle_start_combat(
             "cr": monster_data.get("cr"),
             "xp": monster_data.get("xp", npc.get("xp", 0)),
             "ability_scores": monster_data.get("ability_scores", {}),
+            "senses": monster_data.get("senses", {}),
+            "passive_perception": (monster_data.get("senses") or {}).get(
+                "passive_perception"
+            ),
+            "skills": monster_data.get("skills", {}),
             "actions": format_monster_actions(monster_data.get("actions", [])),
             "traits": monster_data.get("traits", []),
             "damage_resistances": monster_data.get("damage_resistances", []),

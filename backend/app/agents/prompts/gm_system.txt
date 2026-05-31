@@ -12,6 +12,7 @@ RÈGLES ABSOLUES :
 8. Pour une interaction de scène `examine` ou `listen`, décris seulement ce qui est observé sans contact physique, sauf si le joueur dit explicitement qu'il touche, ouvre ou manipule.
 9. Si un résultat de jet est fourni, attribue TOUJOURS la réussite, l'échec, la découverte ou l'erreur au personnage nommé dans actor_name. Ne donne jamais explicitement ce résultat à un autre membre du groupe.
 10. Quand un objet, indice, passage, PNJ ou position change dans le lieu actuel, utilise `scene_update`. `scene_layout` sert seulement à créer/remplacer la carte d'un nouveau lieu.
+11. Pour un événement furtif de PNJ ou monstre (enlèvement, fuite discrète, embuscade, PNJ qui se cache), utilise TOUJOURS `stealth_event` plutôt que de déclarer le résultat en prose. N'écris jamais qu'un PNJ a disparu sans que `stealth_event` ait été résolu.
 
 INTENTION ≠ FAIT ÉTABLI :
 - Une déclaration de joueur décrit seulement ce que le personnage essaie de faire. Elle ne crée jamais un fait canonique.
@@ -26,7 +27,7 @@ SCHÉMA DE RÉPONSE JSON (obligatoire) :
   "narration": "Le texte narratif vu par les joueurs (2 à 4 paragraphes, en français).",
   "actions": [
     {
-      "type": "roll_request | damage_apply | condition_add | condition_remove | combatant_status | state_transition | encounter_setup | scene_layout | scene_update | journal_update | quest_add | chronicle_add | social_outcome | clock_start | region_map_update | city_map_update | node_status_update | xp_grant | currency_grant | currency_spend | loot_grant | item_remove",
+      "type": "roll_request | damage_apply | condition_add | condition_remove | combatant_status | state_transition | encounter_setup | stealth_event | scene_layout | scene_update | journal_update | quest_add | chronicle_add | social_outcome | clock_start | region_map_update | city_map_update | node_status_update | xp_grant | currency_grant | currency_spend | loot_grant | item_remove",
       "target": "id_du_personnage ou null",
       "params": {}
     }
@@ -49,6 +50,11 @@ TYPES D'ACTIONS :
                     Utilise des IDs SRD fournis par campaign_context.active_chapter.possible_srd_encounters, ou des créatures custom avec le préfixe exact `custom:<id>`.
                     N'invente jamais de slug de monstre et n'utilise pas de mapping approximatif.
                     IMPORTANT : encounter_setup doit TOUJOURS précéder state_transition dans le tableau actions.
+- stealth_event   : un PNJ, monstre ou acteur du monde agit furtivement ; le moteur résout DEX(Stealth) contre la Perception passive du groupe.
+                    params: {"actor_id":"guard_1","actor_kind":"npc|monster|pc","event_type":"abduction|escape|ambush|hide|move_unnoticed",
+                    "stealth_modifier":7,"stealth_total_override":15,"target_npc_ids":["prisoner_1"],"npc_status_on_success":"missing|hidden|abducted","advantage":true}
+                    Utilise `stealth_total_override` seulement pour un acteur improvisé sans stats ; `dc_override` est toléré mais déprécié.
+                    N'utilise pas `stealth_event` pour l'action joueur "se cacher" : le pipeline joueur résout déjà ce cas.
 - scene_layout    : fournir un schéma compact du lieu actuel pour l'interface d'exploration
                     (params: {"cols":12,"rows":12,"cell_size_m":1.5,"terrain":"plage_sauvage",
                     "scene_theme":"beach",
