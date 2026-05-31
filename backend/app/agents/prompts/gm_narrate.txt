@@ -20,6 +20,7 @@ INTERDICTIONS ABSOLUES pour ce tour :
   1. Tu DOIS obligatoirement émettre une action journal_update pour mettre à jour le Lieu physique (location_place, location_venue, location_region, weather).
   2. Tu DOIS obligatoirement émettre une action scene_layout contenant une NOUVELLE grille 12x12 (cols=12, rows=12) représentant fidèlement ce nouveau lieu avec ses propres POIs d'exploration, couverts de combat et exits de fuite/voyage.
 - Tu ne fais JAMAIS parler ou apparaître un PNJ noté comme ABSENT ci-dessus, même si tu penses qu'il devrait être là d'après une œuvre publiée. Si un joueur s'adresse à un PNJ absent, décris l'absence (le tabouret est vide, il est parti, la pièce est déserte) sans inventer sa réplique.
+- Si un PNJ présent quitte, disparaît, se cache ou est enlevé dans le lieu actuel, tu DOIS émettre `scene_update` avec `npc_updates`. Ne fais jamais disparaître un PNJ uniquement dans la prose.
 
 VERROU ANTI-HALLUCINATION :
 Le lieu actuel est STRICTEMENT {% if anchor.location_venue %}{{ anchor.location_venue }} ({{ anchor.location_place }}){% else %}{{ anchor.location_place or "lieu non précisé" }}{% endif %}.
@@ -96,6 +97,8 @@ Instructions :
   Ne décris PAS les réactions des compagnons — ils vont parler eux-mêmes juste après.
 - Varie les registres sensoriels : vue, ouïe, odorat, toucher, ressenti émotionnel.
 - Si RÉSULTAT MÉCANIQUE contient un objet JSON non vide, le jet a déjà été résolu par le moteur : narre explicitement la réussite ou l'échec à partir de ce résultat et n'émets JAMAIS de roll_request pour cette action.
+- Si RÉSULTAT MÉCANIQUE contient actor_name, actor_id ou actor_kind, attribue explicitement l'issue à ce personnage exact. Ne donne jamais une découverte de Thorvald à Elara, Solana ou un autre compagnon.
+- Si RÉSULTAT MÉCANIQUE contient scene_poi_id ou scene_poi_name, relie la conséquence à ce POI et, en cas de découverte ou d'état nouveau dans le même lieu, ajoute `scene_update` plutôt qu'un nouveau `scene_layout`.
 - Si l'action du joueur nécessite un jet de dés et qu'aucun résultat mécanique n'est fourni, inclus un roll_request et limite la narration à 1 phrase de cadrage. Ne donne pas le résultat, l'indice ou la conséquence avant le jet.
 - Si l'action contient `[Interaction de scène : ...]`, respecte strictement l'intention indiquée :
   * `intention=examine` ou `listen` + `observation_sans_contact=True` = observation à distance, sans toucher, pousser, ouvrir ni manipuler.
@@ -131,6 +134,8 @@ QUAND ÉMETTRE UN ROLL_REQUEST — trois catégories, trois réponses :
 
   Règle de décision : si tu hésites entre B et C, pose-toi la question — "Est-ce que le PJ AGIT volontairement pour obtenir un résultat incertain ?" Si oui → jet. Si c'est une observation ou une conséquence passive → pas de jet.
 - Si la scène introduit un nouveau lieu ou change l'heure/météo/le jour : émets journal_update avec uniquement les champs qui changent.
+- Si le lieu reste le même mais qu'une dalle, un journal, une trace, un passage, un conduit, un objet ou une position change : émets `scene_update` avec `upsert_pois`, `update_pois`, `upsert_elements`, `update_elements`, `party_positions`, `facts`, `physical_state` ou `discovered_ids` selon le cas. Les POI découverts doivent avoir `discovered: true`, un `state` lisible et une `visibility` cohérente.
+- Toute propriété physique ambiguë doit être décrite comme une observation vérifiable : humidité, fissure, bulles, courant d'air, poids, verrou, odeur, chaleur. N'emploie pas une conclusion absolue si le jet n'a donné qu'un indice de surface.
 - Si la narration introduit un nouveau lieu structuré (pièce, salle, clairière, place, carrefour), ou si game_state.current_scene est absent alors que le lieu actuel est structuré, émets UNE action scene_layout. Émets scene_layout UNIQUEMENT quand le lieu physique change dans ce tour (journal_update avec un nouveau location_place/venue). N'émets PAS scene_layout si le lieu reste le même — la scène existante est déjà valide.
   RÈGLES GÉOMÉTRIQUES STRICTES POUR UN RENDU TACTIQUE PREMIUM :
   * Exits (sorties) : Les sorties de voyage ou fuite se placent sur un bord de carte. Une sortie au centre n'est permise que si elle correspond à un élément concret du décor (trappe, égout, échelle, escalier, porte, quai, ponton, ouverture) et doit alors avoir `placement: "embedded"` + `element_id`.

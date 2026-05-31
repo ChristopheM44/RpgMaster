@@ -116,6 +116,9 @@ const inspectorSymbol = computed(() => {
   }
 })
 const description = computed(() => poi.value?.desc ?? elementInfo.value?.description ?? '')
+const physicalState = computed(() => poi.value?.physicalState ?? element.value?.physical_state ?? '')
+const stateLabel = computed(() => poi.value?.state ?? element.value?.state ?? '')
+const facts = computed(() => poi.value?.facts ?? element.value?.facts ?? [])
 const poiActionLabel = computed(() => (
   poi.value?.actionLabel
   ?? poi.value?.skill
@@ -208,6 +211,24 @@ function act() {
 
     <!-- POI desc -->
     <p v-if="description" class="inspector-desc">{{ description }}</p>
+    <div v-if="physicalState || stateLabel || facts.length" class="inspector-facts">
+      <div v-if="stateLabel" class="inspector-fact">
+        <span>État</span>
+        <strong>{{ stateLabel }}</strong>
+      </div>
+      <div v-if="physicalState" class="inspector-fact">
+        <span>Matière</span>
+        <strong>{{ physicalState }}</strong>
+      </div>
+      <div
+        v-for="fact in facts"
+        :key="fact"
+        class="inspector-fact is-wide"
+      >
+        <span>Fait</span>
+        <strong>{{ fact }}</strong>
+      </div>
+    </div>
 
     <!-- Actions -->
     <div v-if="hero || poi" class="inspector-actions">
@@ -394,6 +415,46 @@ function act() {
   color: var(--color-parchment-dark);
   margin: 0 0 10px;
   text-wrap: pretty;
+}
+
+.inspector-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+.inspector-fact {
+  min-width: 0;
+  padding: 6px 7px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.inspector-fact.is-wide {
+  grid-column: 1 / -1;
+}
+
+.inspector-fact span {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.inspector-fact strong {
+  display: block;
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+  font-family: var(--font-serif);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--color-parchment);
 }
 
 .inspector-actions {

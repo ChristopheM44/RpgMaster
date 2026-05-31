@@ -117,6 +117,11 @@ function adaptPoi(p: PointOfInterest): ExPoi {
     rawKind: p.kind,
     rawIcon: p.icon,
     elementId: p.element_id,
+    state: p.state,
+    visibility: p.visibility,
+    discovered: p.discovered,
+    physicalState: p.physical_state,
+    facts: p.facts,
     tone: poiTone(role),
   }
 }

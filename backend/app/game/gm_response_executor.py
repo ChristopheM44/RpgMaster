@@ -13,17 +13,6 @@ import uuid
 from decimal import Decimal
 from typing import Any
 
-# Progression naturelle du Moment dans la journée.
-# Utilisé quand un changement de lieu est détecté sans que le MJ n'ait
-# explicitement mis à jour l'heure.
-_TIME_OF_DAY_NEXT: dict[str, str] = {
-    "dawn": "morning",
-    "morning": "afternoon",
-    "afternoon": "dusk",
-    "dusk": "night",
-    "night": "dawn",
-}
-
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -50,6 +39,17 @@ from app.services.xp_service import xp_service
 
 logger = logging.getLogger(__name__)
 
+# Progression naturelle du Moment dans la journée.
+# Utilisé quand un changement de lieu est détecté sans que le MJ n'ait
+# explicitement mis à jour l'heure.
+_TIME_OF_DAY_NEXT: dict[str, str] = {
+    "dawn": "morning",
+    "morning": "afternoon",
+    "afternoon": "dusk",
+    "dusk": "night",
+    "night": "dawn",
+}
+
 # Limites de longueur de texte pour la normalisation des scènes MJ
 _SCENE_DESCRIPTION_MAX_LEN = 1500  # description principale d'une scène (était 320)
 _POI_ACTION_HINT_MAX_LEN   = 300   # hint d'action d'un POI (était 140)
@@ -62,6 +62,7 @@ CANON_DIRTY_ACTIONS = {
     "state_transition",
     "social_outcome",
     "clock_start",
+    "scene_update",
     "region_map_update",
     "city_map_update",
     "node_status_update",
@@ -359,6 +360,8 @@ class GMResponseExecutor:
             await self._apply_chronicle_add(session_id, params, active)
         elif action_type == "scene_layout":
             await self._apply_scene_layout(session_id, params, active)
+        elif action_type == "scene_update":
+            await self._apply_scene_update(session_id, params, active)
         elif action_type == "social_outcome":
             await self._apply_social_outcome(session_id, params, active)
         elif action_type == "clock_start":
@@ -688,6 +691,25 @@ class GMResponseExecutor:
             session_id,
             EventType.SCENE_LAYOUT_CHANGED,
             {"scene": layout},
+            source=self._source,
+        )
+
+    async def _apply_scene_update(
+        self,
+        session_id: str,
+        params: dict[str, Any],
+        active: ActiveSession,
+    ) -> None:
+        from app.game.scene_state_service import apply_scene_update
+
+        scene = apply_scene_update(active, params)
+        if scene is None:
+            logger.warning("scene_update ignore : aucune current_scene - %s", params)
+            return
+        await self._event_bus.publish_to_session(
+            session_id,
+            EventType.SCENE_LAYOUT_CHANGED,
+            {"scene": scene},
             source=self._source,
         )
 
@@ -1490,6 +1512,18 @@ class GMResponseExecutor:
         )
         if raw_description:
             layout["description"] = raw_description
+        for optional_text in ("state", "physical_state"):
+            value = cls._clean_optional_text(raw.get(optional_text), max_len=180)
+            if value:
+                layout[optional_text] = value
+        if isinstance(raw.get("facts"), list):
+            facts = [
+                cls._clean_optional_text(item, max_len=180)
+                for item in raw.get("facts", [])
+            ]
+            facts = [item for item in facts if item]
+            if facts:
+                layout["facts"] = facts[:24]
 
         for idx, poi in enumerate(raw.get("pois", []) or []):
             if not isinstance(poi, dict):
@@ -1514,6 +1548,20 @@ class GMResponseExecutor:
                 normalized_poi["description"] = description
             if action_hint:
                 normalized_poi["action_hint"] = action_hint
+            for optional_text in ("state", "visibility", "physical_state"):
+                value = cls._clean_optional_text(poi.get(optional_text), max_len=160)
+                if value:
+                    normalized_poi[optional_text] = value
+            if isinstance(poi.get("discovered"), bool):
+                normalized_poi["discovered"] = poi["discovered"]
+            if isinstance(poi.get("facts"), list):
+                facts = [
+                    cls._clean_optional_text(item, max_len=180)
+                    for item in poi.get("facts", [])
+                ]
+                facts = [item for item in facts if item]
+                if facts:
+                    normalized_poi["facts"] = facts[:12]
             element_id = cls._clean_optional_text(poi.get("element_id"), max_len=80)
             if element_id:
                 normalized_poi["element_id"] = element_id
@@ -1563,6 +1611,18 @@ class GMResponseExecutor:
         for raw_element in raw.get("elements", []) or []:
             element = local_map_service.normalize_scene_element(raw_element, cols, rows)
             if element:
+                for optional_text in ("state", "physical_state"):
+                    value = cls._clean_optional_text(raw_element.get(optional_text), max_len=160)
+                    if value:
+                        element[optional_text] = value
+                if isinstance(raw_element.get("facts"), list):
+                    facts = [
+                        cls._clean_optional_text(item, max_len=180)
+                        for item in raw_element.get("facts", [])
+                    ]
+                    facts = [item for item in facts if item]
+                    if facts:
+                        element["facts"] = facts[:12]
                 normalized_elements.append(element)
         if normalized_elements:
             layout["elements"] = normalized_elements

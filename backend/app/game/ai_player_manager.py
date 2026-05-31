@@ -24,7 +24,6 @@ import uuid
 from inspect import isawaitable
 from typing import TYPE_CHECKING, Any
 
-from app.agents.player_agent import _NON_JSON_LLM_ERROR
 from app.agents.schemas import PlayerActionChoice
 from app.game.action_mechanics import _load_spells
 from app.game.companion_visibility import (
@@ -417,9 +416,7 @@ class AIPlayerManager:
                         character_name=current.name,
                     )
 
-            # Les erreurs provider doivent rester visibles. Le JSON invalide,
-            # lui, dégrade en attente silencieuse après tentative de réparation.
-            if action.llm_error and action.llm_error != _NON_JSON_LLM_ERROR:
+            if action.llm_error:
                 await event_bus.publish_to_session(
                     session_id,
                     EventType.ERROR,
@@ -427,11 +424,15 @@ class AIPlayerManager:
                         "source": "player_agent",
                         "character": current.name,
                         "message": (
-                            f"L'IA de {current.name} n'a pas pu répondre : {action.llm_error}"
+                            f"Le compagnon IA {current.name} est temporairement indisponible."
                         ),
                     },
                     source="ai_player_manager",
                 )
+                active.turn_manager.next_turn()
+                active.mark_dirty()
+                triggered += 1
+                continue
 
             spell_id: str | None = None
             slot_level: int | None = None
@@ -660,8 +661,7 @@ class AIPlayerManager:
                     character_name=char_name,
                 )
 
-            # Provider error → visible event, skip this companion
-            if action.llm_error and action.llm_error != _NON_JSON_LLM_ERROR:
+            if action.llm_error:
                 await event_bus.publish_to_session(
                     session_id,
                     EventType.ERROR,
@@ -669,7 +669,7 @@ class AIPlayerManager:
                         "source": "player_agent",
                         "character": char_name,
                         "message": (
-                            f"L'IA de {char_name} n'a pas pu répondre : {action.llm_error}"
+                            f"Le compagnon IA {char_name} est temporairement indisponible."
                         ),
                     },
                     source="ai_player_manager",

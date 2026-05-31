@@ -440,7 +440,7 @@ class PlayerAgent(BaseAgent):
                 temperature=0.6,
                 max_tokens=_MAX_TOKENS_PLAYER_DECIDE,
             )
-        except (OllamaError, OpenAICompatibleError) as exc:
+        except (OllamaError, OpenAICompatibleError, ConnectionError, TimeoutError) as exc:
             logger.error("PlayerAgent[%s] : appel LLM échoué : %s", self._character_name, exc)
             return _fallback_action(error=f"{type(exc).__name__}: {exc}")
 
@@ -529,7 +529,7 @@ class PlayerAgent(BaseAgent):
                 temperature=0.0,
                 max_tokens=_MAX_TOKENS_PLAYER_REPAIR,
             )
-        except (OllamaError, OpenAICompatibleError) as exc:
+        except (OllamaError, OpenAICompatibleError, ConnectionError, TimeoutError) as exc:
             logger.warning(
                 "PlayerAgent[%s] : réparation JSON impossible : %s",
                 self._character_name,

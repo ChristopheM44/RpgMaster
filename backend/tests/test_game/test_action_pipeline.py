@@ -572,6 +572,265 @@ class TestPipelineExecutorUnits:
         assert bus.published[-1][0] == EventType.SCENE_LAYOUT_CHANGED
         assert bus.published[-1][1]["scene"] == scene
 
+    async def test_executor_scene_update_merges_discoveries_positions_and_absent_npc(self) -> None:
+        active = ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.EXPLORATION,
+            state_data={
+                "characters": {"hero_1": {"name": "Thorvald"}},
+                "npc_states": {
+                    "khalid_guide": {
+                        "name": "Khalid le Guide",
+                        "status": "present",
+                        "last_location": "oasis_corrompue",
+                    }
+                },
+                "current_scene": {
+                    "scene_id": "oasis_corrompue",
+                    "cols": 12,
+                    "rows": 12,
+                    "cell_size_m": 1.5,
+                    "terrain": "oasis",
+                    "scene_theme": "desert",
+                    "pois": [
+                        {
+                            "id": "khalid_guide",
+                            "name": "Khalid le Guide",
+                            "kind": "npc",
+                            "icon": "npc",
+                            "position": {"col": 5, "row": 5},
+                        }
+                    ],
+                    "exits": [],
+                    "party_positions": {"hero_1": {"col": 5, "row": 6}},
+                },
+            },
+        )
+        bus = _FakeBus()
+
+        await GMResponseExecutor(bus).execute_gm_response(
+            AgentResponse(
+                content="La dalle se révèle, mais Khalid n'est plus là.",
+                actions=[
+                    GMAction(
+                        type="scene_update",
+                        params={
+                            "upsert_pois": [
+                                {
+                                    "id": "dalle_fendue",
+                                    "name": "Dalle fendue",
+                                    "kind": "clue",
+                                    "icon": "clue",
+                                    "position": {"col": 6, "row": 7},
+                                    "description": (
+                                        "Une pierre plus claire laisse passer un souffle."
+                                    ),
+                                    "state": "discovered",
+                                    "visibility": "subtle",
+                                    "discovered": True,
+                                    "physical_state": "pierre humide, joint descellé",
+                                    "facts": ["Un courant d'air vient du dessous."],
+                                }
+                            ],
+                            "party_positions": {"hero_1": {"col": 6, "row": 7}},
+                            "npc_updates": [
+                                {
+                                    "id": "khalid_guide",
+                                    "status": "missing",
+                                    "note": "Ses traces se perdent vers les rochers.",
+                                }
+                            ],
+                            "facts": ["L'oasis cache un passage sous la pierre."],
+                            "physical_state": "eau trouble et pierres instables",
+                        },
+                    )
+                ],
+            ),
+            active,
+            session_id=SESSION_ID,
+            fallback_actor_id="hero_1",
+        )
+
+        scene = active.state_data["current_scene"]
+        pois = {poi["id"]: poi for poi in scene["pois"]}
+        assert "khalid_guide" not in pois
+        assert pois["dalle_fendue"]["state"] == "discovered"
+        assert pois["dalle_fendue"]["visibility"] == "subtle"
+        assert pois["dalle_fendue"]["physical_state"] == "pierre humide, joint descellé"
+        assert pois["dalle_fendue"]["facts"] == ["Un courant d'air vient du dessous."]
+        assert scene["party_positions"]["hero_1"] == {"col": 6, "row": 7}
+        assert scene["physical_state"] == "eau trouble et pierres instables"
+        assert active.state_data["npc_states"]["khalid_guide"]["status"] == "missing"
+        assert active.state_data["npc_states"]["khalid_guide"]["notes"] == [
+            "Ses traces se perdent vers les rochers."
+        ]
+        assert bus.published[-1][0] == EventType.SCENE_LAYOUT_CHANGED
+        assert bus.published[-1][1]["scene"] == scene
+
+    def test_executor_scene_layout_preserves_scene_state_fields(self) -> None:
+        layout = GMResponseExecutor._normalize_scene_layout(
+            {
+                "cols": 8,
+                "rows": 8,
+                "terrain": "cave",
+                "scene_theme": "cave",
+                "state": "examined",
+                "physical_state": "air froid, roche humide",
+                "facts": ["Une ventilation vient du nord."],
+                "pois": [
+                    {
+                        "id": "journal",
+                        "name": "Journal trempé",
+                        "kind": "clue",
+                        "position": {"col": 3, "row": 4},
+                        "state": "discovered",
+                        "visibility": "visible",
+                        "discovered": True,
+                        "physical_state": "papier gonflé d'eau",
+                        "facts": ["La dernière page manque."],
+                    }
+                ],
+                "elements": [
+                    {
+                        "id": "conduit",
+                        "name": "Conduit étroit",
+                        "kind": "stairs",
+                        "geometry": {"type": "rect", "col": 5, "row": 3, "width": 1, "height": 1},
+                        "state": "locked",
+                        "physical_state": "grille rouillée",
+                        "facts": ["Des bulles remontent par intervalles."],
+                    }
+                ],
+            }
+        )
+
+        assert layout["state"] == "examined"
+        assert layout["physical_state"] == "air froid, roche humide"
+        assert layout["facts"] == ["Une ventilation vient du nord."]
+        assert layout["pois"][0]["state"] == "discovered"
+        assert layout["pois"][0]["physical_state"] == "papier gonflé d'eau"
+        assert layout["pois"][0]["facts"] == ["La dernière page manque."]
+        assert layout["elements"][0]["state"] == "locked"
+        assert layout["elements"][0]["physical_state"] == "grille rouillée"
+        assert layout["elements"][0]["facts"] == ["Des bulles remontent par intervalles."]
+
+    def test_actor_attribution_guard_repairs_wrong_companion_discovery(self) -> None:
+        response = AgentResponse(content="Elara découvre les runes sous la dalle.", actions=[])
+        repaired = ActionPipeline._ensure_actor_attribution(
+            response,
+            {
+                "actor_name": "Thorvald",
+                "success": True,
+                "scene_poi_name": "la dalle fendue",
+                "non_actor_names": ["Elara", "Solana"],
+            },
+        )
+
+        assert repaired.content == "Thorvald tire les informations utiles de la dalle fendue."
+        assert "Elara" not in repaired.content
+
+    async def test_empty_llm_fallback_publishes_system_error_without_narration(self) -> None:
+        active = ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.EXPLORATION,
+            state_data={"characters": {"hero_1": {"name": "Thorvald"}}},
+        )
+        gm = _mock_gm("")
+        bus = _FakeBus()
+
+        await ActionPipeline(gm, bus).resolve_and_publish(
+            ActionRequest(
+                session_id=SESSION_ID,
+                actor_id="hero_1",
+                actor_name="Thorvald",
+                actor_kind="player",
+                action_type="free_text",
+                content="J'examine la dalle.",
+                target_id=None,
+            ),
+            active,
+            db=None,
+        )
+
+        assert [payload for event, payload in bus.published if event == EventType.ERROR]
+        assert not [payload for event, payload in bus.published if event == EventType.NARRATION]
+
+    async def test_scene_interaction_roll_adds_update_when_gm_forgets(self) -> None:
+        active = ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.EXPLORATION,
+            state_data={
+                "characters": {"hero_1": {"name": "Thorvald", "ability_scores": {"int": 10}}},
+                "current_scene": {
+                    "scene_id": "oasis_corrompue",
+                    "cols": 12,
+                    "rows": 12,
+                    "cell_size_m": 1.5,
+                    "terrain": "oasis",
+                    "scene_theme": "desert",
+                    "pois": [
+                        {
+                            "id": "journal_cache",
+                            "name": "Journal caché",
+                            "kind": "clue",
+                            "icon": "clue",
+                            "position": {"col": 7, "row": 6},
+                            "visibility": "hidden",
+                            "interactions": [
+                                {
+                                    "id": "fail_search",
+                                    "label": "Inspecter",
+                                    "intent": "search",
+                                    "mechanics": {
+                                        "roll": {
+                                            "type": "check",
+                                            "ability": "int",
+                                            "skill": "Investigation",
+                                            "dc": 99,
+                                        },
+                                        "safe_observation": True,
+                                    },
+                                }
+                            ],
+                        }
+                    ],
+                    "exits": [],
+                    "party_positions": {"hero_1": {"col": 6, "row": 7}},
+                },
+            },
+        )
+        bus = _FakeBus()
+        pipeline = ActionPipeline(_mock_gm("Thorvald obtient un indice ambigu."), bus)
+
+        await pipeline.resolve_and_publish(
+            ActionRequest(
+                session_id=SESSION_ID,
+                actor_id="hero_1",
+                actor_name="Thorvald",
+                actor_kind="player",
+                action_type="free_text",
+                content="J'inspecte vite les traces.",
+                target_id=None,
+                scene_poi_id="journal_cache",
+                scene_interaction_id="fail_search",
+            ),
+            active,
+            db=None,
+        )
+
+        scene = active.state_data["current_scene"]
+        poi = scene["pois"][0]
+        assert poi["state"] == "examined"
+        assert poi["visibility"] == "subtle"
+        assert poi["discovered"] is True
+        assert poi["facts"]
+        assert [payload for event, payload in bus.published if event == EventType.ROLL_RESULT]
+        assert [
+            payload
+            for event, payload in bus.published
+            if event == EventType.SCENE_LAYOUT_CHANGED
+        ]
+
     async def test_clock_start_is_opt_in_and_publishes_clock_update(self) -> None:
         active = ActiveSession(
             session_id=SESSION_ID,

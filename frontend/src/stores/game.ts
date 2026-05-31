@@ -419,7 +419,7 @@ export const useGameStore = defineStore('game', () => {
     thinkingCharacterIds.value = new Set()
     thinkingCharacterNames.value = {}
     error.value = msg
-    if (msg) addSystemEntry(`Erreur : ${msg}`)
+    if (msg) addSystemEntry(msg)
   }
 
   function setProcessing(val: boolean) {

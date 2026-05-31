@@ -41,6 +41,11 @@ describe('useExplorationPois', () => {
             icon: 'clue',
             position: { col: 4, row: 4 },
             description: 'Des veines noires parcourent la peau.',
+            state: 'discovered',
+            visibility: 'subtle',
+            discovered: true,
+            physical_state: 'chair froide, traces noires sèches',
+            facts: ['Les traces convergent vers le puits.'],
           },
         ],
         exits: [
@@ -67,7 +72,16 @@ describe('useExplorationPois', () => {
       prompt: "Je m'approche de Khalid et lui parle.",
       elementId: 'guide_marker',
     })
-    expect(clue).toMatchObject({ kind: 'clue', iconId: 'clue', actionLabel: 'Examiner' })
+    expect(clue).toMatchObject({
+      kind: 'clue',
+      iconId: 'clue',
+      actionLabel: 'Examiner',
+      state: 'discovered',
+      visibility: 'subtle',
+      discovered: true,
+      physicalState: 'chair froide, traces noires sèches',
+      facts: ['Les traces convergent vers le puits.'],
+    })
     expect(reperes.value).toHaveLength(2)
     expect(sorties.value).toHaveLength(1)
   })

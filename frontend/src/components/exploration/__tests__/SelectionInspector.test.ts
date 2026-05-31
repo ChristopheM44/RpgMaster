@@ -76,4 +76,44 @@ describe('SelectionInspector', () => {
     expect(wrapper.text()).toContain("Grille d'égout")
     expect(wrapper.text()).toContain('Une ouverture métallique')
   })
+
+  it('renders discovered state, physical state and facts for a POI', () => {
+    const gameStore = useGameStore()
+    const sessionStore = useSessionStore()
+    gameStore.applySceneLayout({
+      scene: {
+        cols: 12,
+        rows: 12,
+        cell_size_m: 1.5,
+        scene_theme: 'desert',
+        pois: [
+          {
+            id: 'dalle_fendue',
+            name: 'Dalle fendue',
+            kind: 'clue',
+            icon: 'clue',
+            position: { col: 6, row: 7 },
+            description: 'Une pierre plus claire accroche le regard.',
+            state: 'discovered',
+            visibility: 'subtle',
+            discovered: true,
+            physical_state: 'pierre humide, joint descellé',
+            facts: ['Un courant d’air vient du dessous.'],
+          },
+        ],
+        exits: [],
+        party_positions: {},
+      },
+    })
+    sessionStore.selectEntity('dalle_fendue')
+
+    const wrapper = mount(SelectionInspector)
+
+    expect(wrapper.text()).toContain('État')
+    expect(wrapper.text()).toContain('discovered')
+    expect(wrapper.text()).toContain('Matière')
+    expect(wrapper.text()).toContain('pierre humide, joint descellé')
+    expect(wrapper.text()).toContain('Fait')
+    expect(wrapper.text()).toContain('Un courant d’air vient du dessous.')
+  })
 })

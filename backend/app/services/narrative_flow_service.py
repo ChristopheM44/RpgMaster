@@ -16,7 +16,6 @@ from typing import Any, Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.player_agent import _NON_JSON_LLM_ERROR
 from app.agents.schemas import PlayerActionChoice
 from app.game.ai_player_manager import (
     order_companion_spotlight,
@@ -515,14 +514,14 @@ class NarrativeFlowService:
             finally:
                 await self._publish_thinking(session_id, False, char_id, char_name)
 
-            if choice.llm_error and choice.llm_error != _NON_JSON_LLM_ERROR:
+            if choice.llm_error:
                 await event_bus.publish_to_session(
                     session_id,
                     EventType.ERROR,
                     {
                         "source": "player_agent",
                         "character": char_name,
-                        "message": f"L'IA de {char_name} n'a pas pu répondre : {choice.llm_error}",
+                        "message": f"Le compagnon IA {char_name} est temporairement indisponible.",
                     },
                     source="narrative_flow",
                 )
@@ -618,21 +617,17 @@ class NarrativeFlowService:
         npc_target_id: str,
         db: AsyncSession | None,
     ) -> None:
-        text = "Le Maître du Jeu ne parvient pas à faire répondre ce PNJ pour l'instant."
+        text = "Service IA indisponible pour ce PNJ."
         scene = active.state_data.get("current_scene")
         scene_id = str(scene.get("scene_id") or "") if isinstance(scene, dict) else ""
         payload = {
-            "text": text,
-            "speaker": "Maître du Jeu",
-            "speaker_kind": "gm",
-            "entry_kind": "system",
+            "message": text,
+            "source": "npc_dialogue",
             "target_id": npc_target_id,
         }
-        if scene_id:
-            payload["scene_id"] = scene_id
-        await publish_visible_entry(
-            event_bus,
+        await event_bus.publish_to_session(
             session_id,
+            EventType.ERROR,
             payload,
             source="narrative_flow",
         )

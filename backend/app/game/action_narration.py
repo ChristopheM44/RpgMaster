@@ -125,7 +125,4 @@ def _tactical_block_narration(actor_name: str, action_type: str) -> str:
     return template.format(name=actor_name)
 
 
-_FALLBACK_NARRATION = (
-    "Le Maître du Jeu hésite… (Le LLM n'a pas répondu correctement — "
-    "veuillez répéter votre action ou rafraîchir la page.)"
-)
+_FALLBACK_NARRATION = ""

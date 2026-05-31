@@ -227,6 +227,7 @@ describe('useGameStore map decoration state', () => {
 
     expect(store.isPlayerAiThinking).toBe(false)
     expect(store.playerAiThinkingNames).toEqual([])
+    expect(store.narrativeLog.at(-1)?.text).toBe('Erreur test')
   })
 
   it('strips redundant dialogue speaker prefixes', () => {

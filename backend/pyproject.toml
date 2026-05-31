@@ -50,3 +50,6 @@ ignore = []
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "live_llm: requires the configured live LLM provider and fails if it is unavailable",
+]

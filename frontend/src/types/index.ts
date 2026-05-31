@@ -543,6 +543,11 @@ export interface PointOfInterest {
   action_hint?: string
   interactions?: ScenePoiInteraction[]
   element_id?: string
+  state?: string
+  visibility?: 'visible' | 'subtle' | 'hidden'
+  discovered?: boolean
+  physical_state?: string
+  facts?: string[]
 }
 
 export type ScenePoiInteractionIntent =
@@ -618,6 +623,9 @@ export interface SceneLayout {
   scene_id?: string
   region_node_id?: string
   city_node_id?: string
+  state?: string
+  physical_state?: string
+  facts?: string[]
 }
 
 export type SceneElementKind =
@@ -651,6 +659,9 @@ export interface SceneElement {
   interactive?: boolean
   visibility?: 'visible' | 'subtle' | 'hidden'
   discovered?: boolean
+  state?: string
+  physical_state?: string
+  facts?: string[]
 }
 
 export interface SceneLayoutChangedPayload {

@@ -237,6 +237,14 @@ class ActionPipeline:
             and scene_interaction_context
         ):
             roll_results = self._resolve_scene_interaction_roll(request, active)
+        if roll_results:
+            roll_results = self._enrich_mechanics_result(
+                roll_results,
+                request,
+                actor_name,
+                target_id,
+                active,
+            )
 
         # 2. Persistance visible puis contexte GM avec resume mecanique.
         if request.persist_actor_action:
@@ -302,12 +310,17 @@ class ActionPipeline:
                 gm_agent = self._gm_for_phase(phase_value)
                 gm_candidate = await gm_agent.think(context)
                 gm_response = self._as_agent_response(gm_candidate)
-                if gm_response and gm_response.content == _FALLBACK_NARRATION:
-                    err_msg = (
-                        "Le serveur LLM local (Ollama) ou l'API distante est injoignable. "
-                        "Veuillez vérifier que le service Ollama est bien démarré "
-                        "et que le modèle configuré est installé."
+                if gm_response and roll_results:
+                    gm_response = self._ensure_actor_attribution(
+                        gm_response,
+                        roll_results,
                     )
+                if (
+                    gm_response
+                    and gm_response.content == _FALLBACK_NARRATION
+                    and not gm_response.actions
+                ):
+                    err_msg = "Service IA indisponible. Vérifiez le provider LLM configuré."
                     await self._event_bus.publish_to_session(
                         request.session_id,
                         EventType.ERROR,
@@ -316,6 +329,12 @@ class ActionPipeline:
                     )
             except Exception as exc:
                 logger.error("ActionPipeline : GMAgent echoue : %s", exc)
+                await self._event_bus.publish_to_session(
+                    request.session_id,
+                    EventType.ERROR,
+                    {"message": "Le service de narration IA est temporairement indisponible."},
+                    source=self._source,
+                )
             finally:
                 await self._publish_ai_thinking(request.session_id, False)
 
@@ -328,6 +347,11 @@ class ActionPipeline:
             )
         if gm_response and roll_results and roll_results.get("type") == "skill_check":
             gm_response = self._without_redundant_social_roll_requests(
+                gm_response,
+                roll_results,
+            )
+        if gm_response and roll_results and roll_results.get("scene_poi_id"):
+            gm_response = self._with_scene_interaction_update_fallback(
                 gm_response,
                 roll_results,
             )
@@ -435,8 +459,12 @@ class ActionPipeline:
                     "scene_interaction": request.scene_interaction_context,
                 },
             )
-            pending_rolls.extend(exec_result.pending_rolls)
-            roll_events.extend(exec_result.pending_rolls)
+            enriched_pending = [
+                self._enrich_mechanics_result(roll, request, actor_name, target_id, active)
+                for roll in exec_result.pending_rolls
+            ]
+            pending_rolls.extend(enriched_pending)
+            roll_events.extend(enriched_pending)
             executed_actions.extend(exec_result.executed_actions)
             canon_dirty = canon_dirty or exec_result.canon_dirty
 
@@ -473,6 +501,10 @@ class ActionPipeline:
                 gm_agent=self._gm_for_phase(phase_value),
             )
             if outcome_response and outcome_response.narration:
+                outcome_response = self._ensure_actor_attribution(
+                    outcome_response,
+                    pending_rolls[0] if pending_rolls else {},
+                )
                 final_narration = outcome_response.narration
                 prime_combat_from_hostile_narration(
                     active,
@@ -1043,6 +1075,45 @@ class ActionPipeline:
         )
 
     @staticmethod
+    def _with_scene_interaction_update_fallback(
+        response: AgentResponse,
+        roll_results: dict[str, Any],
+    ) -> AgentResponse:
+        if any(action.type == "scene_update" for action in response.actions):
+            return response
+        poi_id = str(roll_results.get("scene_poi_id") or "").strip()
+        if not poi_id:
+            return response
+        poi_name = str(roll_results.get("scene_poi_name") or "ce point").strip()
+        success = roll_results.get("success")
+        state = "discovered" if success is True else "examined"
+        summary = str(roll_results.get("summary") or "").strip()
+        if not summary:
+            summary = (
+                f"{poi_name} livre une information utile."
+                if success is True
+                else f"{poi_name} reste ambigu malgré l'examen."
+            )
+        response.actions.append(
+            GMAction(
+                type="scene_update",
+                params={
+                    "update_pois": [
+                        {
+                            "id": poi_id,
+                            "state": state,
+                            "visibility": "subtle",
+                            "discovered": True,
+                            "facts": [summary],
+                        }
+                    ],
+                    "discovered_ids": [poi_id],
+                },
+            )
+        )
+        return response
+
+    @staticmethod
     def _without_combat_damage_actions(response: AgentResponse) -> AgentResponse:
         actions = [gm_action for gm_action in response.actions if gm_action.type != "damage_apply"]
         if len(actions) == len(response.actions):
@@ -1079,7 +1150,133 @@ class ActionPipeline:
             enriched["scene_interaction_intent"] = request.scene_interaction_context.get(
                 "interaction_intent"
             )
+        if enriched.get("dc") is not None and enriched.get("total") is not None:
+            try:
+                enriched["margin"] = int(enriched["total"]) - int(enriched["dc"])
+            except (TypeError, ValueError):
+                pass
         return enriched
+
+    @staticmethod
+    def _enrich_mechanics_result(
+        payload: dict[str, Any],
+        request: ActionRequest,
+        actor_name: str,
+        target_id: str | None,
+        active: ActiveSession,
+    ) -> dict[str, Any]:
+        enriched = dict(payload)
+        enriched.setdefault("character_id", request.actor_id)
+        enriched["actor_id"] = request.actor_id
+        enriched["actor_name"] = actor_name
+        enriched["actor_kind"] = request.actor_kind
+        enriched["action_type"] = request.action_type
+        enriched["target_id"] = target_id
+        if request.scene_interaction_context:
+            enriched["scene_poi_id"] = request.scene_interaction_context.get("poi_id")
+            enriched["scene_poi_name"] = request.scene_interaction_context.get("poi_name")
+            enriched["scene_interaction_id"] = request.scene_interaction_context.get(
+                "interaction_id"
+            )
+            enriched["scene_interaction_intent"] = request.scene_interaction_context.get(
+                "interaction_intent"
+            )
+        if enriched.get("dc") is not None and enriched.get("total") is not None:
+            try:
+                enriched["margin"] = int(enriched["total"]) - int(enriched["dc"])
+            except (TypeError, ValueError):
+                pass
+        other_names: list[str] = []
+        characters = active.state_data.get("characters", {})
+        if isinstance(characters, dict):
+            for char_id, data in characters.items():
+                if str(char_id) == str(request.actor_id) or not isinstance(data, dict):
+                    continue
+                name = str(data.get("name") or "").strip()
+                if name and name.casefold() != actor_name.casefold():
+                    other_names.append(name)
+        if other_names:
+            enriched["non_actor_names"] = other_names[:12]
+        return enriched
+
+    @staticmethod
+    def _ensure_actor_attribution(
+        response: AgentResponse | GMResponse,
+        roll_results: dict[str, Any],
+    ) -> AgentResponse | GMResponse:
+        actor_name = str(roll_results.get("actor_name") or "").strip()
+        if not actor_name:
+            return response
+        text = (
+            response.content if isinstance(response, AgentResponse) else response.narration
+        )
+        wrong_name = ActionPipeline._misattributed_actor_name(text, actor_name, roll_results)
+        if wrong_name is None:
+            return response
+
+        success = roll_results.get("success")
+        poi_name = str(roll_results.get("scene_poi_name") or "l'indice").strip()
+        if success is True:
+            repaired = f"{actor_name} tire les informations utiles de {poi_name}."
+        elif success is False:
+            repaired = (
+                f"{actor_name} n'obtient qu'une lecture partielle de {poi_name}; "
+                "l'indice reste ambigu et la scène avance avec prudence."
+            )
+        else:
+            repaired = f"{actor_name} porte l'action à son terme."
+        logger.warning(
+            "ActionPipeline : attribution de jet corrigee (%s attribue a %s).",
+            actor_name,
+            wrong_name,
+        )
+        if isinstance(response, AgentResponse):
+            return AgentResponse(
+                content=repaired,
+                actions=response.actions,
+                raw_llm_output=response.raw_llm_output,
+                action_intent=response.action_intent,
+            )
+        return GMResponse(
+            narration=repaired,
+            actions=response.actions,
+            mood=response.mood,
+            inner_reasoning=response.inner_reasoning,
+            action_intent=response.action_intent,
+            start_mode=response.start_mode,
+        )
+
+    @staticmethod
+    def _misattributed_actor_name(
+        text: str,
+        actor_name: str,
+        roll_results: dict[str, Any],
+    ) -> str | None:
+        normalized = text.casefold()
+        actor_norm = actor_name.casefold()
+        if actor_norm in normalized:
+            return None
+        discovery_markers = (
+            "déchiffre",
+            "dechiffre",
+            "découvre",
+            "decouvre",
+            "remarque",
+            "repère",
+            "repere",
+            "trouve",
+            "comprend",
+            "identifie",
+            "perçoit",
+            "percoit",
+        )
+        if not any(marker in normalized for marker in discovery_markers):
+            return None
+        for name in roll_results.get("non_actor_names") or []:
+            candidate = str(name).strip()
+            if candidate and candidate.casefold() in normalized:
+                return candidate
+        return None
 
     @classmethod
     def _prompt_action_text(

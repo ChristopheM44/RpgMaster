@@ -20,10 +20,7 @@ logger = logging.getLogger(__name__)
 # Limite de longueur pour le brief de scène injecté dans le contexte MJ
 _SCENE_BRIEF_MAX_LEN = 600  # était 280
 
-_FALLBACK_NARRATION = (
-    "Le Maître du Jeu réfléchit… "
-    "(Le système LLM est temporairement indisponible. Veuillez réessayer dans un instant.)"
-)
+_FALLBACK_NARRATION = ""
 
 
 def _first_key_location(chapter: dict[str, Any]) -> str:
@@ -549,12 +546,18 @@ class GMAgent(BaseAgent):
     ) -> GMResponse:
         """Narre l'issue de jets et conserve les actions mécaniques éventuelles."""
         rolls_text = "\n".join(
-            "- {label}: {breakdown}{target} → {outcome}".format(
+            "- {actor}{label}: {breakdown}{target}{margin} → {outcome}".format(
+                actor=(f"{r.get('actor_name')} — " if r.get("actor_name") else ""),
                 label=r.get("label", "Jet"),
                 breakdown=r.get("breakdown", ""),
                 target=(
                     f" [cible sociale: {r.get('social_target_id')}]"
                     if r.get("social_target_id")
+                    else ""
+                ),
+                margin=(
+                    f" [marge: {r.get('margin')}]"
+                    if r.get("margin") is not None
                     else ""
                 ),
                 outcome=(
@@ -593,7 +596,7 @@ class GMAgent(BaseAgent):
         try:
             record_llm_call("gm")
             raw = await self._client.chat(messages=messages, temperature=0.75, max_tokens=4096)
-        except (OllamaError, OpenAICompatibleError) as exc:
+        except (OllamaError, OpenAICompatibleError, ConnectionError, TimeoutError) as exc:
             logger.error("GMAgent : appel LLM échoué : %s", exc)
             return GMResponse(narration=_FALLBACK_NARRATION)
 

@@ -10,6 +10,8 @@ RÈGLES ABSOLUES :
 6. N'émets journal_update, quest_add, chronicle_add QUE si quelque chose change pour les joueurs — pas à chaque tour, pas en doublon. Réutilise le même id pour modifier une quête ou entrée existante.
 7. Si tu émets un roll_request, ta narration doit rester une intention/cadrage très bref : ne révèle ni réussite, ni échec, ni indice gagné avant le résultat du moteur.
 8. Pour une interaction de scène `examine` ou `listen`, décris seulement ce qui est observé sans contact physique, sauf si le joueur dit explicitement qu'il touche, ouvre ou manipule.
+9. Si un résultat de jet est fourni, attribue TOUJOURS la réussite, l'échec, la découverte ou l'erreur au personnage nommé dans actor_name. Ne donne jamais explicitement ce résultat à un autre membre du groupe.
+10. Quand un objet, indice, passage, PNJ ou position change dans le lieu actuel, utilise `scene_update`. `scene_layout` sert seulement à créer/remplacer la carte d'un nouveau lieu.
 
 INTENTION ≠ FAIT ÉTABLI :
 - Une déclaration de joueur décrit seulement ce que le personnage essaie de faire. Elle ne crée jamais un fait canonique.
@@ -24,7 +26,7 @@ SCHÉMA DE RÉPONSE JSON (obligatoire) :
   "narration": "Le texte narratif vu par les joueurs (2 à 4 paragraphes, en français).",
   "actions": [
     {
-      "type": "roll_request | damage_apply | condition_add | condition_remove | combatant_status | state_transition | encounter_setup | scene_layout | journal_update | quest_add | chronicle_add | social_outcome | clock_start | region_map_update | city_map_update | node_status_update | xp_grant | currency_grant | currency_spend | loot_grant | item_remove",
+      "type": "roll_request | damage_apply | condition_add | condition_remove | combatant_status | state_transition | encounter_setup | scene_layout | scene_update | journal_update | quest_add | chronicle_add | social_outcome | clock_start | region_map_update | city_map_update | node_status_update | xp_grant | currency_grant | currency_spend | loot_grant | item_remove",
       "target": "id_du_personnage ou null",
       "params": {}
     }
@@ -78,6 +80,21 @@ TYPES D'ACTIONS :
                     Utilise Arcana/Investigation pour les indices magiques ou cachés ; utilise un save DEX/CON pour manipuler un danger physique.
                     À émettre UNIQUEMENT quand le groupe entre dans un nouveau lieu structuré
                     (pièce, salle, clairière, place, carrefour), pas à chaque tour.
+- scene_update    : patch incrémental de la scène actuelle quand le lieu ne change pas.
+                    Utilise-le pour toute découverte, état d'objet, passage révélé, disparition/retour
+                    d'un PNJ, déplacement du groupe ou précision physique dans current_scene.
+                    (params: {"upsert_pois":[{"id":"dalle_fendue","name":"Dalle fendue",
+                    "kind":"clue","position":{"col":6,"row":7},"icon":"clue",
+                    "description":"Une dalle plus claire laisse passer un filet d'air.",
+                    "state":"discovered","visibility":"subtle","discovered":true,
+                    "physical_state":"pierre humide, joint descellé",
+                    "facts":["Un courant d'air vient du dessous."]}],
+                    "update_elements":[{"id":"trappe_est","state":"open","physical_state":"bois gonflé, charnières rouillées"}],
+                    "party_positions":{"thorvald":{"col":6,"row":7}},
+                    "npc_updates":[{"id":"khalid_guide","status":"missing","note":"Ses traces se perdent vers les rochers."}],
+                    "discovered_ids":["dalle_fendue"]})
+                    Ne remplace jamais toute la carte si un patch suffit. Pour un PNJ qui quitte,
+                    disparaît, se cache ou meurt, `scene_update.npc_updates` est obligatoire.
 - journal_update  : mettre à jour le carnet d'aventure (ne mettre que les champs qui changent)
                     (params: {"location_region":"Phandalin","location_place":"Auberge Stonehill",
                     "time_of_day":"dawn|morning|noon|afternoon|dusk|night",
@@ -164,7 +181,7 @@ COMPOSITION DU GROUPE :
 CONTRAINTES DE PRÉSENCE DES PNJ :
 - Si le bloc ANCRAGE DE SCÈNE liste des PNJ ABSENTS, ces PNJ ne sont PAS physiquement présents dans la scène.
 - Ne fais jamais parler un PNJ absent, même si un joueur lui pose une question. Décris l'environnement ou l'absence de réponse.
-- Un PNJ présent peut quitter la scène si son action le justifie. Émets un journal_update pour signaler le changement.
+- Un PNJ présent peut quitter la scène si son action le justifie. Émets `scene_update.npc_updates` avec status "absent", "missing", "hidden", "left", "abducted" ou "dead" selon la fiction.
 - Un PNJ absent ne peut apparaître que si une action explicite (déplacement, voyage, recherche) le permet. Ne le fais pas surgir de nulle part.
 - Si tu introduis un nouveau PNJ, enregistre-le via chronicle_add et assure-toi qu'il figure dans les POI du scene_layout.
 
@@ -177,6 +194,8 @@ CONTINUITÉ NARRATIVE :
 - Fais référence aux événements passés (victoires, découvertes, pertes) pour enrichir la narration.
 - Respecte d'abord le lieu canonique dans l'ÉTAT DU JEU : adventure_journal, current_scene, campaign_context.
 - Ne déplace jamais la scène vers un autre lieu sans action explicite des joueurs et sans journal_update/scene_layout cohérents.
+- Quand le lieu reste le même, conserve `current_scene` et modifie uniquement ce qui change avec `scene_update` : POI découvert, élément ouvert/bloqué, PNJ absent, position du groupe, fait physique confirmé.
+- Si une propriété physique semble ambiguë ou contradictoire, explique-la en termes observables avant d'en tirer une conclusion : par exemple un conduit sous l'eau peut avoir des bulles, une fissure, une poche d'air ou un courant ; ne le transforme pas en certitude magique sans indice gagné.
 - Si current_scene/adventure_journal indique un sous-sol, une cave, un donjon, une salle souterraine ou une chambre de pierre, n'évoque pas le ciel, le vent extérieur, la pluie, le soleil, les rayons du matin ou une girouette, sauf si une ouverture vers l'extérieur a été établie.
 - Si le groupe est sous terre, privilégie torches, braseros, lanternes, humidité, pierre froide, air stagnant, échos, poussière, racines, fissures et obscurité.
 - Les PNJ rencontrés gardent leur personnalité d'une interaction à l'autre.

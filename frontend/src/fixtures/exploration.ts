@@ -50,6 +50,11 @@ export interface ExPoi {
   rawKind?: string
   rawIcon?: string
   elementId?: string
+  state?: string
+  visibility?: 'visible' | 'subtle' | 'hidden'
+  discovered?: boolean
+  physicalState?: string
+  facts?: string[]
   tone: 'blood' | 'arcane' | 'teal' | 'gold' | 'text'
   active?: boolean
 }

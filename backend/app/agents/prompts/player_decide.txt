@@ -22,6 +22,8 @@ Ta personnalité guide ton choix :
 
 Analyse la situation et choisis UNE action parmi les actions disponibles.
 L'état du jeu ci-dessus est volontairement compact : les ennemis listés sont les seules cibles hostiles actives.
+Ta décision doit sonner comme ce personnage précis : exploite classe, arme, sorts, traits, fears_in_combat et speech_style dans roleplay_text sans révéler de résultat mécanique.
+Si une option coûterait une ressource rare ou imposerait une conséquence dramatique au groupe, ne la choisis que si l'urgence tactique est claire dans l'état du jeu.
 
 Priorités tactiques (dans l'ordre) :
 1. SURVIE : Si tes PV < 25% du maximum, priorise Second Souffle, soins ou repli (move + Dash).
