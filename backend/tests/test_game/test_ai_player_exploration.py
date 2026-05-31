@@ -256,8 +256,69 @@ async def test_companion_talk_merely_mentioning_npc_does_not_call_npc_dialogue()
 
 
 @pytest.mark.asyncio
+async def test_companion_environmental_spell_is_arbitrated_with_first_person_visible_text() -> None:
+    active = _make_exploration_session()
+    active.state_data["current_scene"] = {
+        "scene_id": "oasis_corrompue",
+        "pois": [
+            {
+                "id": "eau_noire",
+                "name": "Eau noire",
+                "kind": "hazard",
+                "icon": "trap-danger",
+            }
+        ],
+    }
+    ai_agent = MagicMock()
+    ai_agent.character_name = "Thorin"
+    ai_agent.roleplay = AsyncMock(return_value=PlayerActionChoice(
+        action_type="cast_spell",
+        action_description="lance un trait de feu vers l'eau noire",
+        target="eau_noire",
+        params={"spell_id": "fire_bolt", "slot_level": 0},
+        roleplay_text="Je tends la main vers l'eau noire et je canalise une flamme précise.",
+    ))
+    active.ai_players["ai_1"] = ai_agent
+
+    resolver = MagicMock()
+    resolver.resolve = AsyncMock()
+    publish = AsyncMock()
+
+    with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=publish):
+        reacted, responses = await AIPlayerManager().run_exploration_reactions(
+            "expl_session",
+            active,
+            resolver,
+            trigger_character_id="human_1",
+        )
+
+    assert reacted == 1
+    action_calls = [
+        call
+        for call in publish.await_args_list
+        if call.args[2].get("entry_kind") == "action"
+    ]
+    assert action_calls[-1].args[2]["text"].startswith("Je tends la main")
+    assert responses == [
+        {
+            "speaker": "Thorin",
+            "text": "Je tends la main vers l'eau noire et je canalise une flamme précise.",
+        }
+    ]
+    resolver.resolve.assert_awaited_once()
+    kwargs = resolver.resolve.await_args.kwargs
+    assert kwargs["action_type"] == "cast_spell"
+    assert kwargs["target_id"] == "eau_noire"
+    assert kwargs["spell_id"] == "fire_bolt"
+    assert kwargs["slot_level"] == 0
+    assert kwargs["display_text"].startswith("Je tends la main")
+    assert kwargs["content"].startswith("Thorin lance un trait de feu")
+
+
+@pytest.mark.asyncio
 async def test_exploration_reactions_hide_unplayed_campaign_context_from_ai() -> None:
     active = _make_exploration_session()
+    active.state_data["_gm_prompt_context"] = {"global_secrets": ["SECRET_CHAPITRE"]}
     active.state_data["campaign_context"] = {
         "player_contract": {
             "hook": "Une amie se meurt d'une malédiction liée à Omu.",
@@ -301,6 +362,8 @@ async def test_exploration_reactions_hide_unplayed_campaign_context_from_ai() ->
 
     assert reacted == 1
     serialized = str(captured_state)
+    assert "_gm_prompt_context" not in captured_state
+    assert "SECRET_CHAPITRE" not in serialized
     assert "player_contract" not in serialized
     assert "active_chapter" not in serialized
     assert "Omu" not in serialized
@@ -414,8 +477,7 @@ async def test_exploration_reactions_attack_with_pending_encounter_triggers_comb
     narration_calls = [
         call for call in publish.await_args_list if call.args[1] == "narration"
     ]
-    assert narration_calls[-1].args[2]["text"] == "Thorin attaque la menace la plus proche."
-    assert "se jette dans la mêlée" not in narration_calls[-1].args[2]["text"]
+    assert narration_calls[-1].args[2]["text"] == "Thorin dégaine et se jette dans la mêlée."
     assert responses == []
 
 
@@ -463,10 +525,13 @@ async def test_exploration_reactions_examine_triggers_gm_arbitrage() -> None:
     narration_calls = [
         call for call in publish.await_args_list if call.args[1] == "narration"
     ]
-    assert narration_calls[-1].args[2]["text"] == "Thorin examine la porte suspecte."
-    assert "s'approche lentement" not in narration_calls[-1].args[2]["text"]
+    assert (
+        narration_calls[-1].args[2]["text"]
+        == "Thorin s'approche lentement et inspecte la porte."
+    )
+    assert call_kwargs["display_text"] == "Thorin s'approche lentement et inspecte la porte."
     assert responses == [
-        {"speaker": "Thorin", "text": "Thorin examine la porte suspecte."}
+        {"speaker": "Thorin", "text": "Thorin s'approche lentement et inspecte la porte."}
     ]
 
 

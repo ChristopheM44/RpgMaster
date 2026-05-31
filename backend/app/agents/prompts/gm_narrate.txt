@@ -62,6 +62,12 @@ Objectif principal : {{ quest.primary_objective or "(aucun objectif officiel)" }
 {% if quest.main_quest_title %}Quête en cours : {{ quest.main_quest_title }}{% if quest.urgency %} — urgence : {{ quest.urgency }}{% endif %}{% endif %}
 === FIN QUÊTE ===
 
+{% if gm_private_context %}
+=== DOSSIER MJ PRIVÉ (NE JAMAIS RÉVÉLER TEL QUEL) ===
+{{ gm_private_context }}
+=== FIN DOSSIER MJ PRIVÉ ===
+
+{% endif %}
 ÉTAT DU JEU :
 {{ game_state }}
 
@@ -87,6 +93,9 @@ Instructions :
 - Si le joueur dit "je ramasse les 1500 PO" alors que la scène ne contient aucun butin établi, décris le sable, les traces ou l'absence de trésor ; n'émets pas currency_grant.
 - Si le joueur invoque un objet anachronique ou absent de son inventaire ("fusil d'assaut", arme moderne, explosif), recadre : cet équipement n'est pas disponible sauf s'il figure explicitement dans l'état ou le contenu custom.
 - Les horloges de scène sont opt-in : n'émets `clock_start` QUE si la fiction établit une pression claire et concrète (compte à rebours, rituel, incendie, poursuite, vibration régulière, explosion ou délai explicite). Pour une aventure ouverte ou une scène calme, n'ajoute aucune horloge.
+- Si un bloc DOSSIER MJ PRIVÉ est fourni, utilise-le comme plan de coulisses : intentions PNJ, secrets, révélations, complications et fronts. Il guide les conséquences et indices, mais il ne doit jamais apparaître tel quel dans la narration.
+- Pour une scène à objectif ou obstacle (oasis corrompue, rituel, passage dangereux, négociation complexe), propose une progression jouable avec plusieurs approches possibles : analyser, purifier, contourner, interroger, chercher la source, déclencher/maîtriser un danger ou ouvrir une nouvelle piste.
+- Quand un objectif/obstacle progresse, y compris sur échec utile, ajoute `scene_progress_update` avec objectif, statut, progrès, approches encore possibles, révélations accessibles, coûts d'échec et issue de réussite. Cette action est privée MJ-only ; elle ne remplace pas `scene_update` quand un élément visible change.
 - Le bloc ANCRAGE DE SCÈNE en haut du prompt est la source de vérité absolue pour le lieu, le moment et la météo. En cas de divergence entre l'ANCRAGE et game_state ou les MESSAGES RÉCENTS, c'est l'ANCRAGE qui prime. Ne remplace pas ce lieu par un décor générique.
 - Si le groupe est en sous-sol/cave/donjon/salle souterraine, conserve cette réalité physique : pas de ciel, soleil, vent extérieur, météo ou plafond ouvert sauf élément déjà établi.
 - Détermine action_intent selon l'action du joueur :

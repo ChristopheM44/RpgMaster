@@ -31,7 +31,8 @@ Contraintes importantes :
   - Si `options.scope` est absent ou inconnu, traite-le comme `mini-chronique`.
 - Si `options.options_5_acts` est fourni, utilise ses valeurs (Ambiance/Univers, Biome, Climat, Ton, Inspirations libres) de manière riche et créative pour façonner l'intrigue et l'atmosphère globale.
 - Les titres publics de chapitres doivent être créatifs et thématiques en français (ex: 'L'Ombre sur la Forge'), sans mentionner explicitement 'Introduction', 'Nœud de l'intrigue' ou 'Acte' dans le titre.
-- "hook" explique pourquoi les PJ sont concernés.
+- "hook" est le prologue public de table : explique concrètement pourquoi les PJ sont là, d'où vient la mission, qui les a mandatés ou alertés si c'est établi, et quel enjeu immédiat les pousse à agir. Il ne décrit pas ce qu'ils voient physiquement et ne révèle aucun secret.
+- "known_objectives" contient au moins un objectif public jouable, formulé comme une tâche claire que les PJ peuvent poursuivre dès l'ouverture.
 - "initial_state" résume le contexte narratif du chapitre.
 - "opening_scene" décrit uniquement ce que les PJ voient physiquement au début : lieu précis, PNJ réellement présents, indices visibles et sorties immédiates.
 - Écris de la prose de table concrète, pas des rôles fonctionnels. Interdits : "présent pour accueillir le groupe", "hôte du lieu", "se tient face au groupe pour exposer l'urgence", "présent pour soutenir la scène".
@@ -52,7 +53,7 @@ Réponds avec ce JSON exact :
     "pitch_public": "Pitch public sans spoiler",
     "tones": ["Mystère"],
     "duration": "3-5 sessions",
-    "hook": "Pourquoi les PJ sont concernés par l'aventure, sans décrire ce qu'ils voient physiquement",
+    "hook": "Prologue public : pourquoi les PJ sont là, d'où vient la mission, enjeu immédiat, sans décrire ce qu'ils voient physiquement",
     "visible_chapters": [
       {
         "id": "chapter_1",

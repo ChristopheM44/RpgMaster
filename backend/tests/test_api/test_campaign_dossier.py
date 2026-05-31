@@ -301,7 +301,11 @@ async def _forge_and_validate(async_client) -> dict:
         json={"player_contract": contract},
     )
     assert validated.status_code == 200
-    return {"campaign_id": campaign_id, "contract": contract, "session_id": campaign["session_ids"][0]}
+    return {
+        "campaign_id": campaign_id,
+        "contract": contract,
+        "session_id": campaign["session_ids"][0],
+    }
 
 
 async def _poll_forge_job(async_client, campaign_id: str, job_id: str) -> dict:
@@ -581,9 +585,15 @@ def test_resolve_duration_scratch_scope_is_authoritative():
     svc = campaign_dossier_service
     base = {"narrative_structure": "epic_5_acts"}
     # En scratch / 5 actes, le scope dérive la durée et écrase la valeur du LLM.
-    assert svc._resolve_duration({"duration": "9 sessions"}, {}, {**base, "scope": "one-shot"}, 1) == "1 session"
+    assert (
+        svc._resolve_duration({"duration": "9 sessions"}, {}, {**base, "scope": "one-shot"}, 1)
+        == "1 session"
+    )
     assert svc._resolve_duration({}, {}, {**base, "scope": "mini-chronique"}, 3) == "3-5 sessions"
-    assert svc._resolve_duration({}, {}, {**base, "scope": "chronique longue"}, 5) == "6-10 sessions"
+    assert (
+        svc._resolve_duration({}, {}, {**base, "scope": "chronique longue"}, 5)
+        == "6-10 sessions"
+    )
 
 
 def test_resolve_duration_import_derives_from_chapter_count():
@@ -653,7 +663,10 @@ async def test_forge_job_records_phase_retries(async_client, monkeypatch):
     job = await _poll_forge_job(async_client, campaign["id"], started.json()["job_id"])
     assert job["status"] == "completed"
     assert job["retry_count"] >= 1
-    assert any(event["type"] == "phase_retry" and "JSON tronqué" in event["error"] for event in job["events"])
+    assert any(
+        event["type"] == "phase_retry" and "JSON tronqué" in event["error"]
+        for event in job["events"]
+    )
 
 
 @pytest.mark.asyncio
@@ -700,6 +713,35 @@ async def test_campaign_gm_dossier_endpoint_exposes_author_notes_only(async_clie
     assert data["gm_dossier"]["chapters"][0]["secrets"] == [SECRET]
     assert SECRET in serialized
     assert "import_sources" not in serialized
+
+
+@pytest.mark.asyncio
+async def test_gm_prompt_context_contains_private_chapter_and_npcs(
+    async_client,
+    db_session,
+):
+    forged = await _forge_and_validate(async_client)
+    session_id = forged["session_id"]
+
+    public_context = await campaign_dossier_service.compile_campaign_context_for_session(
+        session_id,
+        db_session,
+    )
+    private_context = await campaign_dossier_service.build_gm_prompt_context(
+        session_id,
+        db_session,
+        {"gm_scene_state": {"scene_1": {"goal": "Comprendre la brume."}}},
+    )
+
+    public_serialized = json.dumps(public_context, ensure_ascii=False)
+    private_serialized = json.dumps(private_context, ensure_ascii=False)
+
+    assert public_context is not None
+    assert SECRET not in public_serialized
+    assert private_context["active_chapter"]["secrets"] == [SECRET]
+    assert any(npc["name"] == "Bram" for npc in private_context["important_npcs"])
+    assert private_context["gm_scene_state"]["scene_1"]["goal"] == "Comprendre la brume."
+    assert SECRET in private_serialized
 
 
 @pytest.mark.asyncio

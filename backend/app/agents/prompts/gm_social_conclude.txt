@@ -1,6 +1,3 @@
-ÉTAT DU JEU :
-{{ game_state }}
-
 {% set anchor = scene_anchor|default({}) %}
 === ANCRAGE DE SCÈNE (RÈGLES DURES) ===
 Lieu actuel : {% if anchor.location_venue %}{{ anchor.location_venue }} — {{ anchor.location_place }}{% else %}{{ anchor.location_place or "lieu non précisé" }}{% endif %}{% if anchor.location_region %} (région : {{ anchor.location_region }}){% endif %}
@@ -10,6 +7,15 @@ Ambiance établie : {{ anchor.scene_brief or "(aucun décor détaillé établi)"
 PNJ présents : {% for npc in anchor.present_npcs or [] %}{{ npc.name }}{% if not loop.last %}, {% endif %}{% else %}aucun PNJ nommé{% endfor %}
 {% if anchor.absent_npcs %}PNJ absents : {% for npc in anchor.absent_npcs %}{{ npc.name }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}
 === FIN ANCRAGE ===
+
+{% if gm_private_context %}
+=== DOSSIER MJ PRIVÉ (NE JAMAIS RÉVÉLER TEL QUEL) ===
+{{ gm_private_context }}
+=== FIN DOSSIER MJ PRIVÉ ===
+
+{% endif %}
+ÉTAT DU JEU :
+{{ game_state }}
 
 ACTION DU JOUEUR :
 {{ player_action }}

@@ -243,6 +243,57 @@ class TestPipelineExecutorUnits:
             payload for event, payload in bus.published if event == EventType.SCENE_LAYOUT_CHANGED
         ]
 
+    async def test_scene_progress_update_stays_private_and_updates_internal_state(self) -> None:
+        active = ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.EXPLORATION,
+            state_data={
+                "current_scene": {
+                    "scene_id": "oasis_corrompue",
+                    "cols": 12,
+                    "rows": 12,
+                    "scene_theme": "desert",
+                    "pois": [],
+                    "exits": [],
+                    "party_positions": {},
+                },
+            },
+        )
+        bus = _FakeBus()
+
+        result = await GMResponseExecutor(bus).execute_gm_response(
+            GMResponse(
+                narration="L'eau noire frémit sous l'analyse.",
+                actions=[
+                    GMAction(
+                        type="scene_progress_update",
+                        params={
+                            "scene_id": "oasis_corrompue",
+                            "goal": "Comprendre et neutraliser la source.",
+                            "status": "active",
+                            "obstacle_id": "eau_noire",
+                            "progress": 1,
+                            "max_progress": 3,
+                            "approaches": ["analyser", "purifier", "contourner"],
+                            "revelations": ["La corruption vient d'un conduit enterré."],
+                            "failure_costs": ["La soif avance."],
+                            "success_outcome": "La piste du puits ancien s'ouvre.",
+                        },
+                    )
+                ],
+            ),
+            active,
+            db=None,
+        )
+
+        scene_state = active.state_data["gm_scene_state"]["oasis_corrompue"]
+        obstacle = scene_state["obstacles"]["eau_noire"]
+        assert result.executed_actions[0]["type"] == "scene_progress_update"
+        assert scene_state["goal"] == "Comprendre et neutraliser la source."
+        assert obstacle["progress"] == 1
+        assert "purifier" in obstacle["approaches"]
+        assert bus.published == []
+
     async def test_hide_action_rolls_stealth_and_consumes_combat_action(self) -> None:
         active = _make_combat_active()
         active.state_data["combatants"]["hero_1"].update(

@@ -287,7 +287,7 @@ class PlayerAgent(BaseAgent):
             user_prompt,
             context_manager,
             game_state=game_state,
-            available_actions=("talk", "move", "use_item", "wait", "examine", "help"),
+            available_actions=("talk", "move", "use_item", "wait", "examine", "help", "cast_spell"),
             combat_mode=False,
         )
 
@@ -329,7 +329,7 @@ class PlayerAgent(BaseAgent):
             user_prompt,
             context_manager,
             game_state=game_state,
-            available_actions=("talk", "move", "use_item", "wait", "examine", "help"),
+            available_actions=("talk", "move", "use_item", "wait", "examine", "help", "cast_spell"),
             combat_mode=False,
         )
 
@@ -355,12 +355,18 @@ class PlayerAgent(BaseAgent):
 
         # Vérification des sorts : l'emplacement doit être disponible
         if action.action_type == "cast_spell":
-            spell_name = action.params.get("spell_name")
-            if not spell_name:
-                return False, "cast_spell sans spell_name dans params"
-            spell_slots = character_data.get("spell_slots", {})
-            if not self._has_available_spell_slot(spell_slots):
-                return False, f"{self._character_name} n'a plus d'emplacements de sorts"
+            spell_ref = action.params.get("spell_name") or action.params.get("spell_id")
+            if not spell_ref:
+                return False, "cast_spell sans spell_id/spell_name dans params"
+            requested_level = action.params.get("slot_level") or action.params.get("level")
+            if requested_level is not None:
+                try:
+                    if int(requested_level) > 0 and not self._has_available_spell_slot(
+                        character_data.get("spell_slots", {})
+                    ):
+                        return False, f"{self._character_name} n'a plus d'emplacements de sorts"
+                except (TypeError, ValueError):
+                    return False, "slot_level invalide pour cast_spell"
 
         # Vérification de l'utilisation d'objet : l'objet doit être dans l'inventaire
         if action.action_type == "use_item":

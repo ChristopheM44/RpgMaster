@@ -25,6 +25,7 @@ Contraintes absolues :
 - Si ce chapitre est le SEUL de la campagne (`chapter_total == 1`, cas one-shot), il doit porter l'arc dramatique COMPLET : `secrets`, `complications`, `stakes` et `objective` doivent couvrir la montée en tension, le climax et une résolution possible — pas seulement une scène d'introduction.
 - "initial_state" résume le contexte narratif privé du chapitre.
 - "opening_scene" décrit seulement ce que les PJ voient physiquement au début du chapitre.
+- L'ouverture doit pouvoir servir un prologue public clair avec le contrat joueur : si un PNJ commanditaire/guide est présent ou attendu, indique-le dans `present_npcs` uniquement s'il est physiquement là, sinon garde-le dans le contexte (`initial_state`, `involved_npcs`) sans l'ajouter à la scène.
 - "opening_scene.description" doit être un paragraphe concret de 2-3 phrases avec au moins deux registres sensoriels.
 - "present_npcs[].description" décrit apparence visible, posture et/ou voix en 1-2 phrases.
 - "visible_clues[].description" doit être sensoriel et examinable.

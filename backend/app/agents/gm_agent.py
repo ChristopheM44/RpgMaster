@@ -21,6 +21,36 @@ logger = logging.getLogger(__name__)
 _SCENE_BRIEF_MAX_LEN = 600  # était 280
 
 _FALLBACK_NARRATION = ""
+_GM_PROMPT_CONTEXT_KEY = "_gm_prompt_context"
+
+
+def _extract_gm_prompt_context(game_state: dict[str, Any] | None) -> dict[str, Any]:
+    """Return transient GM-only context injected by backend orchestrators."""
+    if not isinstance(game_state, dict):
+        return {}
+    context = game_state.get(_GM_PROMPT_CONTEXT_KEY)
+    return context if isinstance(context, dict) else {}
+
+
+def _public_game_state_for_prompt(game_state: dict[str, Any] | None) -> dict[str, Any]:
+    """Serialize prompt state without transient private GM-only keys."""
+    if not isinstance(game_state, dict):
+        return {}
+    public_state = dict(game_state)
+    public_state.pop(_GM_PROMPT_CONTEXT_KEY, None)
+    public_state.pop("gm_scene_state", None)
+    return public_state
+
+
+def _dump_game_state_for_prompt(game_state: dict[str, Any] | None) -> str:
+    return json.dumps(_public_game_state_for_prompt(game_state), ensure_ascii=False, indent=2)
+
+
+def _dump_gm_prompt_context(game_state: dict[str, Any] | None) -> str:
+    context = _extract_gm_prompt_context(game_state)
+    if not context:
+        return ""
+    return json.dumps(context, ensure_ascii=False, indent=2)
 
 
 def _first_key_location(chapter: dict[str, Any]) -> str:
@@ -342,7 +372,8 @@ class GMAgent(BaseAgent):
                 "scene_anchor": _extract_scene_anchor(game_state),
                 "active_quest_brief": _extract_active_quest_brief(game_state),
                 "next_spotlight_candidate": _select_spotlight_candidate(game_state, messages),
-                "game_state": json.dumps(game_state, ensure_ascii=False, indent=2),
+                "gm_private_context": _dump_gm_prompt_context(game_state),
+                "game_state": _dump_game_state_for_prompt(game_state),
                 "player_action": delimit_user_input(player_action),
                 "roll_results": json.dumps(roll_results or {}, ensure_ascii=False, indent=2),
                 "recent_messages": self._format_messages(messages),
@@ -363,7 +394,8 @@ class GMAgent(BaseAgent):
         user_prompt = self._render_prompt(
             "gm_combat.txt",
             {
-                "game_state": json.dumps(game_state, ensure_ascii=False, indent=2),
+                "gm_private_context": _dump_gm_prompt_context(game_state),
+                "game_state": _dump_game_state_for_prompt(game_state),
                 "player_action": delimit_user_input(player_action),
                 "roll_results": json.dumps(roll_results or {}, ensure_ascii=False),
                 "recent_messages": self._format_messages(messages),
@@ -382,7 +414,8 @@ class GMAgent(BaseAgent):
         user_prompt = self._render_prompt(
             "gm_encounter_intro.txt",
             {
-                "game_state": json.dumps(game_state, ensure_ascii=False, indent=2),
+                "gm_private_context": _dump_gm_prompt_context(game_state),
+                "game_state": _dump_game_state_for_prompt(game_state),
                 "combatants": json.dumps(combatants, ensure_ascii=False, indent=2),
                 "recent_messages": self._format_messages(messages),
             },
@@ -403,7 +436,8 @@ class GMAgent(BaseAgent):
             template_name,
             {
                 "active_quest_brief": _extract_active_quest_brief(game_state),
-                "game_state": json.dumps(game_state, ensure_ascii=False, indent=2),
+                "gm_private_context": _dump_gm_prompt_context(game_state),
+                "game_state": _dump_game_state_for_prompt(game_state),
                 "opening_brief": delimit_user_input(opening_brief),
                 "recent_messages": self._format_messages(messages),
             },
@@ -423,7 +457,8 @@ class GMAgent(BaseAgent):
         user_prompt = self._render_prompt(
             "gm_encounter_end.txt",
             {
-                "game_state": json.dumps(game_state, ensure_ascii=False, indent=2),
+                "gm_private_context": _dump_gm_prompt_context(game_state),
+                "game_state": _dump_game_state_for_prompt(game_state),
                 "combat_summary": json.dumps(
                     combat_summary,
                     ensure_ascii=False,
@@ -475,7 +510,8 @@ class GMAgent(BaseAgent):
             {
                 "scene_anchor": _extract_scene_anchor(state),
                 "active_quest_brief": _extract_active_quest_brief(state),
-                "game_state": json.dumps(state, ensure_ascii=False, indent=2),
+                "gm_private_context": _dump_gm_prompt_context(state),
+                "game_state": _dump_game_state_for_prompt(state),
                 "npc_persona": npc_persona,
                 "player_message": delimit_user_input(player_message),
                 "roll_results": json.dumps(roll_results or {}, ensure_ascii=False, indent=2),
@@ -502,7 +538,8 @@ class GMAgent(BaseAgent):
             "gm_monster_combat.txt",
             {
                 "monster_persona": monster_persona,
-                "game_state": json.dumps(game_state, ensure_ascii=False, indent=2),
+                "gm_private_context": _dump_gm_prompt_context(game_state),
+                "game_state": _dump_game_state_for_prompt(game_state),
                 "roll_results": json.dumps(roll_results or {}, ensure_ascii=False, indent=2),
                 "recent_messages": self._format_messages(messages),
             },
@@ -523,7 +560,8 @@ class GMAgent(BaseAgent):
             {
                 "scene_anchor": _extract_scene_anchor(game_state),
                 "active_quest_brief": _extract_active_quest_brief(game_state),
-                "game_state": json.dumps(game_state, ensure_ascii=False, indent=2),
+                "gm_private_context": _dump_gm_prompt_context(game_state),
+                "game_state": _dump_game_state_for_prompt(game_state),
                 "player_action": delimit_user_input(player_action),
                 "companion_responses": responses_text,
             },
@@ -549,7 +587,8 @@ class GMAgent(BaseAgent):
         user_prompt = self._render_prompt(
             "gm_narrate_outcome.txt",
             {
-                "game_state": json.dumps(context.game_state, ensure_ascii=False, indent=2),
+                "gm_private_context": _dump_gm_prompt_context(context.game_state),
+                "game_state": _dump_game_state_for_prompt(context.game_state),
                 "recent_messages": self._format_messages(context.messages or []),
                 "player_action": delimit_user_input(context.player_action),
                 "roll_results": rolls_text,

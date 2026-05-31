@@ -5,6 +5,12 @@ TU NARRES LE TOUR DE COMBAT D'UN MONSTRE INTELLIGENT.
 {{ P.render_persona(monster_persona, include_hidden=True) }}
 === FIN FICHE PERSONA ===
 
+{% if gm_private_context %}
+=== DOSSIER MJ PRIVÉ (NE JAMAIS RÉVÉLER TEL QUEL) ===
+{{ gm_private_context }}
+=== FIN DOSSIER MJ PRIVÉ ===
+
+{% endif %}
 ÉTAT DU COMBAT :
 {{ game_state }}
 

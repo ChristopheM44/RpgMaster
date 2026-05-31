@@ -29,9 +29,20 @@ async def send_welcome_narration(session_id: str, active: Any, db: AsyncSession)
             source="ws_game",
         )
         from app.game.action_resolver import ActionResolver
+        from app.services import campaign_dossier_service
+
+        game_state = dict(active.state_data)
+        gm_prompt_context = await campaign_dossier_service.build_gm_prompt_context(
+            session_id,
+            db,
+            active.state_data,
+        )
+        if gm_prompt_context:
+            game_state["_gm_prompt_context"] = gm_prompt_context
+
         action_resolver = ActionResolver()
         gm_response = await action_resolver._gm.narrate(
-            game_state=active.state_data,
+            game_state=game_state,
             player_action=None,
         )
         welcome_text = (

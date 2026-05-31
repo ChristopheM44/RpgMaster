@@ -53,12 +53,12 @@ _WAIT_ACTION = PlayerActionChoice(
     inner_reasoning="Fallback : aucune action valide disponible.",
 )
 
-_COMBAT_STARTING_ACTIONS = {"attack", "cast_spell", "shove"}
+_COMBAT_STARTING_ACTIONS = {"attack", "shove"}
 _COMPANION_SPOTLIGHT_KEY = "_companion_spotlight_recent"
 
 # Actions d'exploration qui nécessitent un arbitrage MJ (résolution moteur + narration).
 # talk/wait sont purement narratifs et ne déclenchent PAS le pipeline MJ.
-_EXPLORATION_ARBITRAGE_ACTIONS = {"examine", "move", "use_item", "help"}
+_EXPLORATION_ARBITRAGE_ACTIONS = {"examine", "move", "use_item", "help", "cast_spell"}
 _MECHANICAL_ACTION_TYPES = (
     _COMBAT_STARTING_ACTIONS
     | _EXPLORATION_ARBITRAGE_ACTIONS
@@ -561,8 +561,10 @@ class AIPlayerManager:
         type d'action :
           - talk / wait : publication + persistance, pas de pipeline MJ.
           - examine / move / use_item / help : pipeline MJ complet.
-          - attack / cast_spell / shove : transition COMBAT si pending_encounter,
+          - attack / shove : transition COMBAT si pending_encounter,
             sinon remplacement par une hésitation prudente.
+          - cast_spell : arbitrage MJ en exploration quand le sort cible un
+            obstacle, danger, POI ou effet environnemental.
 
         Le contexte (recent_messages, scene_context) est **rechargé après chaque
         réaction** pour que chaque compagnon voit ce que le précédent vient de dire.
@@ -772,6 +774,14 @@ class AIPlayerManager:
 
             # GM pipeline only for actions requiring world arbitration
             if action.action_type in _EXPLORATION_ARBITRAGE_ACTIONS:
+                spell_id = self._choice_spell_id(action)
+                slot_level = self._choice_slot_level(action)
+                if action.action_type == "cast_spell":
+                    spell_choice = self._resolve_spell_choice(action, char_id, active.state_data)
+                    if spell_choice is not None:
+                        spell_id, spell_name, slot_level = spell_choice
+                        action.params["spell_id"] = spell_id
+                        action.params["spell_name"] = spell_name
                 try:
                     await action_resolver.resolve(
                         session_id=session_id,
@@ -781,6 +791,8 @@ class AIPlayerManager:
                         target_id=action.target,
                         active=active,
                         db=db,
+                        spell_id=spell_id,
+                        slot_level=slot_level,
                         actor_kind="companion",
                         actor_name=char_name,
                         display_text=visible_text,
@@ -1415,20 +1427,18 @@ class AIPlayerManager:
 
     @classmethod
     def _visible_action_text(cls, action: PlayerActionChoice, character_name: str) -> str:
-        if action.action_type == "wait" and str(action.roleplay_text or "").strip():
-            return sanitize_companion_visible_text(
-                action.roleplay_text,
-                character_name=character_name,
-            )
+        roleplay = str(action.roleplay_text or "").strip()
+        if roleplay:
+            return sanitize_companion_visible_text(roleplay, character_name=character_name)
         if action.action_type not in _MECHANICAL_ACTION_TYPES:
             return sanitize_companion_visible_text(
-                action.roleplay_text,
+                roleplay,
                 character_name=character_name,
             )
 
         description = str(action.action_description or "").strip()
         if not description:
-            return action.roleplay_text
+            return sanitize_companion_visible_text(roleplay, character_name=character_name)
 
         if description.casefold().startswith(character_name.casefold()):
             text = description
@@ -1437,6 +1447,27 @@ class AIPlayerManager:
         if text[-1] not in ".!?…":
             text += "."
         return sanitize_companion_visible_text(text, character_name=character_name)
+
+    @staticmethod
+    def _choice_spell_id(action: PlayerActionChoice) -> str | None:
+        spell_id = str(
+            action.params.get("spell_id")
+            or action.params.get("spell_name")
+            or ""
+        ).strip()
+        return spell_id or None
+
+    @staticmethod
+    def _choice_slot_level(action: PlayerActionChoice) -> int | None:
+        raw_level = action.params.get("slot_level")
+        if raw_level is None:
+            raw_level = action.params.get("level")
+        if raw_level is None or raw_level == "":
+            return None
+        try:
+            return int(raw_level)
+        except (TypeError, ValueError):
+            return None
 
     @classmethod
     def _companion_action_prompt(

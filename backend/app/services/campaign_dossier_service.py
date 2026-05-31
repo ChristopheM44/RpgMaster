@@ -794,6 +794,70 @@ async def compile_campaign_context_for_session(
     }
 
 
+async def build_gm_prompt_context(
+    session_id: str,
+    db: AsyncSession | None,
+    state_data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return private GM-only campaign context for prompt construction.
+
+    This helper is intentionally separate from ``compile_campaign_context_for_session``:
+    the compiled session context is persisted in ``state_data`` and can be surfaced
+    through public session APIs, while this dict is injected only into transient GM
+    prompts. Do not store the returned value in ``state_data``.
+    """
+    if db is None:
+        return {}
+    campaign = await campaign_for_session(session_id, db)
+    if campaign is None:
+        return {}
+    dossier = await get_dossier(campaign.id, db)
+    if dossier is None or dossier.generation_status != "validated":
+        return {}
+
+    contract = sanitize_player_contract(dossier.player_contract or {}, campaign, brief={})
+    gm_dossier = sanitize_gm_dossier(dossier.gm_dossier or {}, campaign, contract)
+    canon = sanitize_played_canon(dossier.played_canon or {})
+    active_chapter = _private_active_chapter_for_context(
+        gm_dossier,
+        contract,
+        dossier.active_chapter_id,
+    )
+
+    context: dict[str, Any] = {
+        "campaign_id": campaign.id,
+        "title": contract.get("title") or campaign.name,
+        "narrative_arc": gm_dossier.get("narrative_arc") or "",
+        "active_chapter_id": dossier.active_chapter_id,
+        "active_chapter": active_chapter,
+        "global_secrets": list(gm_dossier.get("secrets") or []),
+        "revelations": list(gm_dossier.get("revelations") or []),
+        "fronts": list(gm_dossier.get("fronts") or []),
+        "factions": list(gm_dossier.get("factions") or []),
+        "important_npcs": list(gm_dossier.get("important_npcs") or []),
+        "locations": list(gm_dossier.get("locations") or []),
+        "items": list(gm_dossier.get("items") or []),
+        "custom_monsters": list(gm_dossier.get("custom_monsters") or []),
+        "quests": list(gm_dossier.get("quests") or []),
+        "complications": list(gm_dossier.get("complications") or []),
+        "clues": list(gm_dossier.get("clues") or []),
+        "light_mechanics": list(gm_dossier.get("light_mechanics") or []),
+        "played_canon": {
+            "established_facts": list(canon.get("established_facts") or []),
+            "player_decisions": list(canon.get("player_decisions") or []),
+            "npc_relationships": list(canon.get("npc_relationships") or []),
+            "revealed_secrets": list(canon.get("revealed_secrets") or []),
+            "plan_changes": list(canon.get("plan_changes") or []),
+            "rolling_summary": canon.get("rolling_summary") or "",
+        },
+    }
+    if isinstance(state_data, dict):
+        gm_scene_state = state_data.get("gm_scene_state")
+        if gm_scene_state:
+            context["gm_scene_state"] = gm_scene_state
+    return {key: value for key, value in context.items() if value not in ("", [], {}, None)}
+
+
 def _is_initial_campaign_session(campaign: Campaign, session_id: str) -> bool:
     session_ids = list(campaign.session_ids or [])
     return bool(
@@ -1771,6 +1835,41 @@ def _active_chapter_for_context(
         "key_locations",
         "involved_npcs",
         "clues",
+        "complications",
+        "possible_exits",
+        "indicative_dcs",
+        "possible_srd_encounters",
+        "possible_custom_encounters",
+    }
+    return {key: value for key, value in chapter.items() if key in allowed}
+
+
+def _private_active_chapter_for_context(
+    gm_dossier: dict[str, Any],
+    contract: dict[str, Any],
+    active_chapter_id: str,
+) -> dict[str, Any]:
+    """Return the active chapter with GM-only fields preserved for prompts."""
+    chapters = gm_dossier.get("chapters") if isinstance(gm_dossier, dict) else []
+    chapter = None
+    if isinstance(chapters, list):
+        chapter = next((ch for ch in chapters if ch.get("id") == active_chapter_id), None)
+        chapter = chapter or next((ch for ch in chapters if ch.get("state") == "active"), None)
+    if not isinstance(chapter, dict):
+        chapter = _current_public_chapter(contract.get("visible_chapters", []), active_chapter_id)
+
+    allowed = {
+        "id",
+        "title",
+        "state",
+        "objective",
+        "stakes",
+        "initial_state",
+        "opening_scene",
+        "key_locations",
+        "involved_npcs",
+        "clues",
+        "secrets",
         "complications",
         "possible_exits",
         "indicative_dcs",

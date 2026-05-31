@@ -234,23 +234,12 @@ class ActionResolver:
         if db is not None:
             from app.services.message_service import load_recent_messages
             recent_messages = await load_recent_messages(session_id, db)
-        game_state = dict(active.state_data)
-        if db is not None:
-            try:
-                game_state["world_maps"] = (
-                    await campaign_dossier_service.map_context_for_session(
-                        session_id,
-                        db,
-                        active.state_data,
-                    )
-                )
-            except Exception as map_exc:
-                log_degraded(
-                    logger,
-                    "contexte cartes (resolve_npc_dialogue)",
-                    map_exc,
-                    session_id=session_id,
-                )
+        game_state = await self._game_state_for_gm_prompt(
+            session_id,
+            active,
+            db,
+            log_label="resolve_npc_dialogue",
+        )
 
         try:
             gm_resp = await self._gm.run_npc_dialogue(
@@ -337,23 +326,12 @@ class ActionResolver:
             if isinstance(first_roll, dict):
                 first_roll.setdefault("type", "skill_check")
                 first_roll.setdefault("social_target_id", npc_id)
-            game_state_2 = dict(active.state_data)
-            if db is not None:
-                try:
-                    game_state_2["world_maps"] = (
-                        await campaign_dossier_service.map_context_for_session(
-                            session_id,
-                            db,
-                            active.state_data,
-                        )
-                    )
-                except Exception as map_exc:
-                    log_degraded(
-                        logger,
-                        "contexte cartes (resolve_npc_dialogue step 2)",
-                        map_exc,
-                        session_id=session_id,
-                    )
+            game_state_2 = await self._game_state_for_gm_prompt(
+                session_id,
+                active,
+                db,
+                log_label="resolve_npc_dialogue step 2",
+            )
 
             try:
                 gm_resp_2 = await self._gm.run_npc_dialogue(
@@ -430,6 +408,49 @@ class ActionResolver:
                 logger.warning("Synthese canon campagne ignoree apres dialogue PNJ : %s", exc)
         return published_visible or bool(exec_result.pending_rolls)
 
+    async def _game_state_for_gm_prompt(
+        self,
+        session_id: str,
+        active: ActiveSession,
+        db: Any | None,
+        *,
+        log_label: str,
+    ) -> dict[str, Any]:
+        game_state = dict(active.state_data)
+        if db is None:
+            return game_state
+
+        try:
+            game_state["world_maps"] = await campaign_dossier_service.map_context_for_session(
+                session_id,
+                db,
+                active.state_data,
+            )
+        except Exception as map_exc:
+            log_degraded(
+                logger,
+                f"contexte cartes ({log_label})",
+                map_exc,
+                session_id=session_id,
+            )
+
+        try:
+            gm_prompt_context = await campaign_dossier_service.build_gm_prompt_context(
+                session_id,
+                db,
+                active.state_data,
+            )
+            if gm_prompt_context:
+                game_state["_gm_prompt_context"] = gm_prompt_context
+        except Exception as context_exc:
+            log_degraded(
+                logger,
+                f"dossier MJ privé ({log_label})",
+                context_exc,
+                session_id=session_id,
+            )
+        return game_state
+
     # ------------------------------------------------------------------
     # Helpers Personas
     # ------------------------------------------------------------------
@@ -497,23 +518,12 @@ class ActionResolver:
         """
         try:
             await self._orchestrator.publish_ai_thinking(session_id, True)
-            game_state = dict(active.state_data)
-            if db is not None:
-                try:
-                    game_state["world_maps"] = (
-                        await campaign_dossier_service.map_context_for_session(
-                            session_id,
-                            db,
-                            active.state_data,
-                        )
-                    )
-                except Exception as map_exc:
-                    log_degraded(
-                        logger,
-                        "contexte cartes (social_conclude)",
-                        map_exc,
-                        session_id=session_id,
-                    )
+            game_state = await self._game_state_for_gm_prompt(
+                session_id,
+                active,
+                db,
+                log_label="social_conclude",
+            )
             gm_resp = await self._gm.narrate_social_conclude(
                 game_state=game_state,
                 player_action=player_action,

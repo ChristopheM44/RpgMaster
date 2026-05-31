@@ -631,6 +631,67 @@ async def test_publish_opening_scene_normalizes_path_closer_and_clears_flag(monk
 
 
 @pytest.mark.asyncio
+async def test_publish_opening_scene_prefixes_missing_public_quest_contract(monkeypatch) -> None:
+    from app.agents.schemas import GMResponse
+    from app.api import routes_game
+    from app.game.event_bus import EventType
+
+    published: list[tuple[str, dict]] = []
+
+    class FakeExecutor:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def execute_gm_response(self, response, active, db, *, session_id=None):
+            return None
+
+    async def fake_publish(session_id, event_type, payload, source=None):
+        published.append((event_type, payload))
+
+    active = SimpleNamespace(
+        state_data={
+            "campaign_context": {
+                "player_contract": {
+                    "hook": "Khalid a engagé le groupe pour retrouver une source perdue.",
+                    "known_objectives": ["Atteindre l'oasis avant la nuit"],
+                },
+                "active_chapter": {"opening_scene": {"place": "Désert"}},
+            },
+        },
+        mark_dirty=lambda: None,
+    )
+
+    monkeypatch.setattr(routes_game, "GMResponseExecutor", FakeExecutor)
+    monkeypatch.setattr(routes_game.session_manager, "save_state", AsyncMock())
+    monkeypatch.setattr(routes_game.event_bus, "publish_to_session", fake_publish)
+    monkeypatch.setattr(
+        routes_game,
+        "_build_session_state_payload_with_maps",
+        AsyncMock(return_value={}),
+    )
+    monkeypatch.setattr("app.services.message_service.persist_narration", AsyncMock())
+
+    await routes_game._publish_opening_scene(
+        "session-1",
+        active,
+        db=None,
+        response=GMResponse(
+            narration="Le sable se lève en nappes pâles autour des outres presque vides.",
+            actions=[],
+        ),
+        quest_changed=False,
+    )
+
+    narration_payload = next(
+        payload for event, payload in published if event == EventType.NARRATION
+    )
+    assert narration_payload["text"].startswith("Accroche : Khalid a engagé")
+    assert "Mission confiée au groupe : Atteindre l'oasis avant la nuit." in (
+        narration_payload["text"]
+    )
+
+
+@pytest.mark.asyncio
 async def test_create_save_requires_name_schema(async_client) -> None:
     session_resp = await async_client.post("/api/sessions/", json={"name": "Save Test"})
     session_id = session_resp.json()["id"]

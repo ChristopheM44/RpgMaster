@@ -27,7 +27,7 @@ SCHÉMA DE RÉPONSE JSON (obligatoire) :
   "narration": "Le texte narratif vu par les joueurs (2 à 4 paragraphes, en français).",
   "actions": [
     {
-      "type": "roll_request | damage_apply | condition_add | condition_remove | combatant_status | state_transition | encounter_setup | stealth_event | scene_layout | scene_update | journal_update | quest_add | chronicle_add | social_outcome | clock_start | region_map_update | city_map_update | node_status_update | xp_grant | currency_grant | currency_spend | loot_grant | item_remove",
+      "type": "roll_request | damage_apply | condition_add | condition_remove | combatant_status | state_transition | encounter_setup | stealth_event | scene_layout | scene_update | scene_progress_update | journal_update | quest_add | chronicle_add | social_outcome | clock_start | region_map_update | city_map_update | node_status_update | xp_grant | currency_grant | currency_spend | loot_grant | item_remove",
       "target": "id_du_personnage ou null",
       "params": {}
     }
@@ -101,6 +101,17 @@ TYPES D'ACTIONS :
                     "discovered_ids":["dalle_fendue"]})
                     Ne remplace jamais toute la carte si un patch suffit. Pour un PNJ qui quitte,
                     disparaît, se cache ou meurt, `scene_update.npc_updates` est obligatoire.
+- scene_progress_update : note privée MJ-only sur l'objectif et les obstacles de la scène.
+                    Cette action ne publie aucun événement joueur et sert à te rappeler les prises
+                    jouables, progrès, révélations, coûts et issues d'un obstacle.
+                    (params: {"scene_id":"oasis_corrompue","goal":"Comprendre et neutraliser la source",
+                    "status":"active","obstacle_id":"eau_noire","name":"Eau corrompue","progress":1,
+                    "max_progress":3,"approaches":["analyser","purifier","contourner","interroger Khalid"],
+                    "revelations":["La corruption vient d'un conduit enterré."],
+                    "failure_costs":["La soif avance; un prédateur est attiré."],
+                    "success_outcome":"La piste vers le puits ancien devient évidente."})
+                    Utilise-le quand une scène à objectif progresse, même sur échec. Ne révèle pas
+                    les secrets dans la narration visible avant une action, un indice ou un jet.
 - journal_update  : mettre à jour le carnet d'aventure (ne mettre que les champs qui changent)
                     (params: {"location_region":"Phandalin","location_place":"Auberge Stonehill",
                     "time_of_day":"dawn|morning|noon|afternoon|dusk|night",

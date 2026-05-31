@@ -1,3 +1,9 @@
+{% if gm_private_context %}
+=== DOSSIER MJ PRIVÉ (NE JAMAIS RÉVÉLER TEL QUEL) ===
+{{ gm_private_context }}
+=== FIN DOSSIER MJ PRIVÉ ===
+
+{% endif %}
 ÉTAT DU JEU :
 {{ game_state }}
 

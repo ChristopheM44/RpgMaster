@@ -95,6 +95,27 @@ async def _build_session_state_payload_with_maps(session_id: str, db: AsyncSessi
     )
 
 
+async def _game_state_for_opening_prompt(
+    session_id: str,
+    active: Any,
+    db: AsyncSession | None,
+) -> dict[str, Any]:
+    from app.services import campaign_dossier_service
+
+    game_state = dict(active.state_data)
+    try:
+        gm_prompt_context = await campaign_dossier_service.build_gm_prompt_context(
+            session_id,
+            db,
+            active.state_data,
+        )
+        if gm_prompt_context:
+            game_state["_gm_prompt_context"] = gm_prompt_context
+    except Exception as exc:
+        logger.debug("Opening GM private context unavailable: %s", exc)
+    return game_state
+
+
 def _hook_context_text(campaign_context: dict[str, Any]) -> str:
     """Pourquoi le groupe est ici — contexte public connu des personnages."""
     if not isinstance(campaign_context, dict):
@@ -156,6 +177,38 @@ def _party_briefing_text(campaign_context: dict[str, Any]) -> str:
         cleaned_objective = objective.rstrip(" .!?")
         parts.append(f"Mission confiée au groupe : {cleaned_objective}.")
     return " ".join(parts)
+
+
+def _contract_words_present(narration: str, contract_text: str) -> bool:
+    normalized = _normalize_for_match(narration)
+    words = [
+        word
+        for word in _normalize_for_match(contract_text).split()
+        if len(word) > 3 and word not in _STOPWORDS
+    ]
+    if not words:
+        return True
+    present = sum(1 for word in set(words) if word in normalized)
+    return present >= min(3, max(1, len(set(words)) // 2))
+
+
+def _ensure_opening_public_prologue(narration: str, state_data: dict[str, Any]) -> str:
+    """Prefix the opening with the public quest contract if the LLM omitted it."""
+    campaign_context = state_data.get("campaign_context") if isinstance(state_data, dict) else None
+    if not isinstance(campaign_context, dict):
+        return narration
+    prologue = _party_briefing_text(campaign_context).strip()
+    if not prologue:
+        return narration
+
+    text = str(narration or "").strip()
+    hook = _hook_context_text(campaign_context)
+    objective = _opening_objective(campaign_context)
+    missing_hook = bool(hook) and not _contract_words_present(text, hook)
+    missing_objective = bool(objective) and not _contract_words_present(text, objective)
+    if not missing_hook and not missing_objective:
+        return text
+    return f"{prologue}\n\n{text}" if text else prologue
 
 
 def _campaign_opening_text(campaign_context: dict[str, Any]) -> str:
@@ -1234,8 +1287,9 @@ async def _send_campaign_opening_narration(
         source="routes_game",
     )
     try:
+        prompt_state = await _game_state_for_opening_prompt(session_id, active, db)
         llm_response = await GMAgent().open_scene(
-            game_state=active.state_data,
+            game_state=prompt_state,
             opening_brief=_build_opening_brief(active.state_data),
             messages=None,
         )
@@ -1313,6 +1367,7 @@ async def _send_free_opening_narration(
         source="routes_game",
     )
     try:
+        prompt_state = await _game_state_for_opening_prompt(session_id, active, db)
         if script:
             opening_brief = (
                 f"Script de départ fourni par le joueur : {script}. "
@@ -1335,7 +1390,7 @@ async def _send_free_opening_narration(
             )
 
         llm_response = await GMAgent().open_scene(
-            game_state=active.state_data,
+            game_state=prompt_state,
             opening_brief=(
                 _build_opening_brief(active.state_data)
                 + f"\n\n## INSTRUCTIONS DE DÉPART\n{opening_brief}"
@@ -1399,6 +1454,10 @@ async def _publish_opening_scene(
 ) -> None:
     from app.services.message_service import persist_narration
 
+    response.narration = _ensure_opening_public_prologue(
+        response.narration,
+        active.state_data,
+    )
     response.narration = _normalize_opening_narration_closer(
         response.narration,
         active.state_data,

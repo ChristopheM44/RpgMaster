@@ -615,6 +615,16 @@ class ActionPipeline:
                 )
             except Exception as exc:
                 logger.debug("ActionPipeline : contexte cartes indisponible : %s", exc)
+            try:
+                gm_prompt_context = await campaign_dossier_service.build_gm_prompt_context(
+                    session_id,
+                    db,
+                    active.state_data,
+                )
+                if gm_prompt_context:
+                    game_state["_gm_prompt_context"] = gm_prompt_context
+            except Exception as exc:
+                logger.debug("ActionPipeline : dossier MJ privé indisponible : %s", exc)
         return game_state
 
     @staticmethod

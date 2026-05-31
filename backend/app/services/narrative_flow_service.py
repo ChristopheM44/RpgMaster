@@ -56,7 +56,7 @@ _DIRECT_ACTION_TYPES = {
     "death_save",
     "stabilize",
 }
-_COMPANION_ARBITRAGE_ACTIONS = {"examine", "move", "use_item", "help"}
+_COMPANION_ARBITRAGE_ACTIONS = {"examine", "move", "use_item", "help", "cast_spell"}
 _MAX_GROUP_COMPANION_RESPONSES = 2
 _SOCIAL_MARKERS = (
     "compagnon",
@@ -573,6 +573,8 @@ class NarrativeFlowService:
                     target_id=choice.target,
                     active=active,
                     db=db,
+                    spell_id=self._choice_spell_id(choice),
+                    slot_level=self._choice_slot_level(choice),
                     actor_kind="companion",
                     actor_name=char_name,
                     display_text=visible_text,
@@ -625,6 +627,20 @@ class NarrativeFlowService:
             "source": "npc_dialogue",
             "target_id": npc_target_id,
         }
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.NARRATION,
+            {
+                "text": text,
+                "message": text,
+                "speaker": "Système",
+                "speaker_kind": "system",
+                "entry_kind": "system",
+                "target_id": npc_target_id,
+                "scene_id": scene_id or None,
+            },
+            source="narrative_flow",
+        )
         await event_bus.publish_to_session(
             session_id,
             EventType.ERROR,
@@ -840,6 +856,27 @@ class NarrativeFlowService:
             NarrativeFlowService._companion_action_prompt(choice, character_name),
             character_name=character_name,
         )
+
+    @staticmethod
+    def _choice_spell_id(choice: PlayerActionChoice) -> str | None:
+        spell_id = str(
+            choice.params.get("spell_id")
+            or choice.params.get("spell_name")
+            or ""
+        ).strip()
+        return spell_id or None
+
+    @staticmethod
+    def _choice_slot_level(choice: PlayerActionChoice) -> int | None:
+        raw_level = choice.params.get("slot_level")
+        if raw_level is None:
+            raw_level = choice.params.get("level")
+        if raw_level is None or raw_level == "":
+            return None
+        try:
+            return int(raw_level)
+        except (TypeError, ValueError):
+            return None
 
     @staticmethod
     def _companion_action_prompt(choice: PlayerActionChoice, character_name: str) -> str:

@@ -31,7 +31,8 @@ Contraintes :
 - Les titres et résumés publics ne doivent pas révéler de secrets, twists, plans d'antagonistes ou contenu privé.
 - Chaque chapitre doit avoir un `id` stable `chapter_1`, `chapter_2`, etc. dans l'ordre de jeu.
 - Le premier chapitre est `active`, tous les suivants sont `planned`, sauf information jouée explicite.
-- `hook` explique pourquoi les PJ sont concernés, sans décrire ce qu'ils voient physiquement.
+- `hook` est le prologue public de table : explique concrètement pourquoi les PJ sont là, d'où vient la mission, qui les a mandatés ou alertés si c'est établi, et quel enjeu immédiat les pousse à agir. Il ne décrit pas ce qu'ils voient physiquement et ne révèle aucun secret.
+- `known_objectives` contient au moins un objectif public jouable, formulé comme une tâche claire que les PJ peuvent poursuivre dès l'ouverture.
 
 Réponds avec un seul objet JSON valide, sans markdown :
 {
@@ -40,7 +41,7 @@ Réponds avec un seul objet JSON valide, sans markdown :
     "pitch_public": "Pitch public sans spoiler",
     "tones": ["Mystère"],
     "duration": "Durée estimée",
-    "hook": "Pourquoi les PJ sont concernés par l'aventure",
+    "hook": "Prologue public : pourquoi les PJ sont là, d'où vient la mission, enjeu immédiat",
     "visible_chapters": [
       {
         "id": "chapter_1",

@@ -160,6 +160,37 @@ async def test_narrate_injects_scene_anchor_in_prompt(gm_agent: GMAgent) -> None
     assert user_prompt.index("ANCRAGE DE SCÈNE") < user_prompt.index("ÉTAT DU JEU")
 
 
+async def test_narrate_injects_private_gm_context_outside_public_state(
+    gm_agent: GMAgent,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    async def _capture(**kwargs):
+        captured["messages"] = kwargs.get("messages", [])
+        return _valid_gm_json()
+
+    with patch.object(gm_agent._client, "chat", new=_capture):
+        await gm_agent.narrate(
+            game_state={
+                "phase": "EXPLORATION",
+                "gm_scene_state": {"scene_1": {"goal": "Note privée"}},
+                "_gm_prompt_context": {
+                    "active_chapter": {"secrets": ["SECRET_CHAPITRE"]},
+                    "important_npcs": [{"name": "Bram", "secrets": ["SECRET_PNJ"]}],
+                },
+            },
+            player_action="J'observe.",
+        )
+
+    user_prompt = captured["messages"][-1]["content"]
+    public_state_block = user_prompt.split("ÉTAT DU JEU :", 1)[1]
+    assert "DOSSIER MJ PRIVÉ" in user_prompt
+    assert "SECRET_CHAPITRE" in user_prompt
+    assert "SECRET_PNJ" in user_prompt
+    assert "_gm_prompt_context" not in public_state_block
+    assert "gm_scene_state" not in public_state_block
+
+
 @pytest.mark.parametrize(
     "player_action",
     [

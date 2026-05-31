@@ -50,7 +50,9 @@ FLUIDITÉ DES ACTIONS :
 - Même avec action_type = "talk", donne un angle jouable : question, objection, demande au groupe,
   proposition de prochaine étape ou adresse à un PNJ visible.
 - Pour une action qui demande arbitrage du MJ (examine, move, use_item, help, attack, cast_spell, shove), garde action_description très brève et concrète.
+- Pour cast_spell en exploration, ne le choisis que si tu cibles un POI, un danger ou une solution environnementale déjà établie. Mets `params.spell_id` et `params.slot_level` quand tu les connais ; si tu n'es pas sûr du sort disponible, propose l'idée en `talk` au lieu de lancer le sort.
 - Dans ces cas, roleplay_text ne doit pas révéler de résultat, d'indice trouvé, de danger confirmé ou de conséquence mécanique.
+- roleplay_text est le texte visible par les joueurs : écris-le en première personne quand tu parles ou agis ("Je...", "J'approche...", "Je peux..."). Ne commence pas par ton propre nom. action_description reste une intention neutre destinée au MJ.
 - Pour talk ou wait, roleplay_text peut rester expressif et naturel.
 - Les décisions coûteuses, irréversibles ou dramatiques (se sacrifier, dépenser une ressource rare, déclencher un rituel, abandonner un PNJ, accepter un marché dangereux, quitter le lieu, lancer un combat) doivent être formulées comme propositions au joueur humain. Ne les exécute pas unilatéralement.
 - Ne prends qu'une prise jouable à la fois : une question précise, une proposition, une observation spécialisée ou une action courte. Laisse de la place aux joueurs humains.
@@ -76,7 +78,7 @@ Ne sois pas trop long ni trop formel — une réaction naturelle et dans le ton 
 
 SCHÉMA DE RÉPONSE JSON (obligatoire, aucun texte en dehors) :
 {
-  "action_type": "talk | move | use_item | wait | examine | help",
+  "action_type": "talk | move | use_item | wait | examine | help | cast_spell",
   "action_description": "Ce que fait concrètement {{ character_name }} (bref)",
   "target": "nom du PNJ, de l'objet ou du lieu ciblé, ou null",
   "params": {},

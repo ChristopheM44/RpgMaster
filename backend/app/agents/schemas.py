@@ -14,7 +14,7 @@ class GMAction(BaseModel):
             "Type d'action : roll_request | damage_apply | "
             "condition_add | condition_remove | combatant_status | "
             "state_transition | encounter_setup | stealth_event | "
-            "scene_layout | scene_update | "
+            "scene_layout | scene_update | scene_progress_update | "
             "journal_update | quest_add | chronicle_add | social_outcome | "
             "clock_start | "
             "region_map_update | city_map_update | node_status_update | "
@@ -141,7 +141,7 @@ class PlayerActionChoice(BaseModel):
     target: str | None = Field(None, description="ID de la cible, ou null")
     params: dict[str, Any] = Field(
         default_factory=dict,
-        description="Paramètres : weapon, spell_name, item_name, move_to…",
+        description="Paramètres : weapon, spell_id/spell_name, slot_level, item_name, move_to…",
     )
     roleplay_text: str = Field(
         ..., description="Ce que le personnage dit ou fait (texte narratif, en français)"

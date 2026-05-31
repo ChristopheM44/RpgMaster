@@ -434,6 +434,8 @@ class GMResponseExecutor:
             await self._apply_scene_layout(session_id, params, active)
         elif action_type == "scene_update":
             await self._apply_scene_update(session_id, params, active)
+        elif action_type == "scene_progress_update":
+            await self._apply_scene_progress_update(session_id, params, active)
         elif action_type == "social_outcome":
             await self._apply_social_outcome(session_id, params, active)
         elif action_type == "clock_start":
@@ -742,6 +744,128 @@ class GMResponseExecutor:
             {"chronicle": list(chronicle)},
             source=self._source,
         )
+
+    async def _apply_scene_progress_update(
+        self,
+        session_id: str,
+        params: dict[str, Any],
+        active: ActiveSession,
+    ) -> None:
+        """Store GM-only objective progress for the current scene.
+
+        The state is intentionally internal: no event is published to players.
+        """
+        del session_id
+        if not isinstance(params, dict):
+            return
+
+        scene_state = active.state_data.get("gm_scene_state")
+        if not isinstance(scene_state, dict):
+            scene_state = {}
+            active.state_data["gm_scene_state"] = scene_state
+
+        current_scene = active.state_data.get("current_scene")
+        if not isinstance(current_scene, dict):
+            current_scene = {}
+        scene_id = str(
+            params.get("scene_id")
+            or current_scene.get("scene_id")
+            or current_scene.get("id")
+            or "current"
+        ).strip() or "current"
+
+        scene_entry = scene_state.get(scene_id)
+        if not isinstance(scene_entry, dict):
+            scene_entry = {"scene_id": scene_id, "obstacles": {}}
+            scene_state[scene_id] = scene_entry
+        scene_entry.setdefault("scene_id", scene_id)
+        obstacles = scene_entry.get("obstacles")
+        if not isinstance(obstacles, dict):
+            obstacles = {}
+            scene_entry["obstacles"] = obstacles
+
+        self._merge_progress_fields(
+            scene_entry,
+            params,
+            {
+                "goal": ("goal", "scene_goal", "objective"),
+                "status": ("status", "scene_status"),
+                "summary": ("summary", "scene_summary"),
+                "progress": ("progress", "scene_progress"),
+                "max_progress": ("max_progress", "scene_max_progress"),
+                "approaches": ("approaches", "visible_options", "options"),
+                "revelations": ("revelations",),
+                "failure_costs": ("failure_costs", "costs_on_failure"),
+                "success_outcome": ("success_outcome", "outcome_on_success"),
+                "next_hooks": ("next_hooks", "hooks"),
+                "notes": ("notes", "gm_notes"),
+            },
+        )
+
+        obstacle_inputs: list[dict[str, Any]] = []
+        raw_obstacles = params.get("obstacles")
+        if isinstance(raw_obstacles, list):
+            obstacle_inputs.extend(item for item in raw_obstacles if isinstance(item, dict))
+        if any(
+            key in params
+            for key in (
+                "obstacle_id",
+                "id",
+                "name",
+                "linked_poi_id",
+                "failure_costs",
+                "success_outcome",
+            )
+        ):
+            obstacle_inputs.append(params)
+
+        for obstacle_data in obstacle_inputs:
+            obstacle_id = str(
+                obstacle_data.get("obstacle_id")
+                or obstacle_data.get("id")
+                or obstacle_data.get("linked_poi_id")
+                or obstacle_data.get("name")
+                or "main"
+            ).strip() or "main"
+            obstacle_entry = obstacles.get(obstacle_id)
+            if not isinstance(obstacle_entry, dict):
+                obstacle_entry = {"id": obstacle_id}
+                obstacles[obstacle_id] = obstacle_entry
+            obstacle_entry.setdefault("id", obstacle_id)
+            self._merge_progress_fields(
+                obstacle_entry,
+                obstacle_data,
+                {
+                    "name": ("name", "label"),
+                    "status": ("status",),
+                    "progress": ("progress",),
+                    "max_progress": ("max_progress",),
+                    "approaches": ("approaches", "visible_options", "options"),
+                    "revelations": ("revelations",),
+                    "failure_costs": ("failure_costs", "costs_on_failure"),
+                    "success_outcome": ("success_outcome", "outcome_on_success"),
+                    "linked_poi_id": ("linked_poi_id", "poi_id"),
+                    "notes": ("notes", "gm_notes"),
+                },
+            )
+
+        active.mark_dirty()
+
+    @staticmethod
+    def _merge_progress_fields(
+        target: dict[str, Any],
+        source: dict[str, Any],
+        aliases: dict[str, tuple[str, ...]],
+    ) -> None:
+        for output_key, input_keys in aliases.items():
+            for input_key in input_keys:
+                if input_key not in source:
+                    continue
+                value = source.get(input_key)
+                if value in (None, ""):
+                    continue
+                target[output_key] = value
+                break
 
     async def _apply_scene_layout(
         self,
