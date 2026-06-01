@@ -167,9 +167,66 @@ class SessionManager:
         from app.game.ai_player_manager import rebuild_ai_players
         rebuild_ai_players(active)
 
+        # Reconcile append-only guard lists from the authoritative DB dossier.
+        # save_state can lag a deterministic DB commit (record_granted_unique_items)
+        # across a crash, so the reloaded blob mirror may be stale. Union-merge
+        # only the guard lists DB→mirror so guards never under-read and re-grant.
+        await self._reconcile_guard_lists_from_dossier(active, db)
+
         self._sessions[session_id] = active
         logger.info("Session %s opened (phase=%s).", session_id, active.phase.value)
         return active
+
+    @staticmethod
+    async def _reconcile_guard_lists_from_dossier(
+        active: ActiveSession,
+        db: AsyncSession,
+    ) -> None:
+        """Union-merge append-only guard lists from the DB dossier into the mirror.
+
+        Only ``granted_unique_items`` (fail-unsafe: a stale mirror lets the loot
+        guard re-grant a unique item) and ``revealed_secrets`` are reconciled.
+        Union direction only — never empties, never touches synthesis-owned fields
+        (``rolling_summary``/``established_facts``/…) so the initial-session reset
+        class of bugs cannot recur. No-op unless both the dossier and the mirror
+        are present, so this is safe on session 1 and never calls ``compile``.
+        """
+        context = active.state_data.get("campaign_context")
+        if not isinstance(context, dict):
+            return
+        campaign_id = str(context.get("campaign_id") or "").strip()
+        if not campaign_id:
+            return
+
+        from app.services import campaign_dossier_service
+
+        try:
+            dossier = await campaign_dossier_service.get_dossier(campaign_id, db)
+        except Exception:  # pragma: no cover - defensive: never block session open
+            logger.warning("guard-list reconcile skipped: dossier load failed.", exc_info=True)
+            return
+        if dossier is None:
+            return
+
+        db_canon = dossier.played_canon or {}
+        mirror = context.setdefault("played_canon", {})
+        if not isinstance(mirror, dict):
+            return
+        changed = False
+        for field_name in ("granted_unique_items", "revealed_secrets"):
+            db_values = db_canon.get(field_name)
+            if not isinstance(db_values, list) or not db_values:
+                continue
+            merged = list(mirror.get(field_name) or [])
+            seen = set(merged)
+            for value in db_values:
+                if value not in seen:
+                    merged.append(value)
+                    seen.add(value)
+                    changed = True
+            mirror[field_name] = merged
+        if changed:
+            active.mark_dirty()
 
     async def close_session(self, session_id: str, db: AsyncSession) -> None:
         """Persist state and remove the session from the in-memory registry.

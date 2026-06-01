@@ -185,28 +185,38 @@ sequenceDiagram
     CV->>POI: anonymize_npc → known_to_party absent = True<br/>NOM REEL EXPOSE ❌
 ```
 
-### 2.6 Canon joué — double-écriture et risque de perte
+### 2.6 Canon joué — double-écriture et réconciliation au reload
+
+> **Correction 2026-05-31** : une version antérieure de ce diagramme indiquait que les écritures en session n'allaient que dans le miroir et étaient « perdues au reload ». **Faux** — vérifié dans le code : les listes-gardes (`granted_unique_items`, `revealed_secrets`) sont **doublement écrites** (miroir + DB) au moment de l'action. Le seul vrai risque résiduel était le **reload d'un blob périmé** (si `save_state` est en retard sur le commit DB lors d'un crash) → corrigé par A3.
 
 ```mermaid
 flowchart TB
-    subgraph SESSION["En session"]
-        ME["_mark_unique_items_in_state<br/>gm_response_executor:1519"]
-        ME -->|ecrit SEULEMENT| MIR["state_data.campaign_context.played_canon"]
+    subgraph SESSION["En session — écriture déterministe"]
+        GR["loot_grant / revelation"]
+        GR -->|"miroir (lu par le garde / compagnon)"| MIR["state_data.campaign_context.played_canon"]
+        GR -->|"DB (record_granted_unique_items / record_revealed_secret)"| DBC[("CampaignDossier.played_canon<br/>AUTORITE")]
     end
 
-    subgraph SYNTH["Synthese periodique (seuil/LLM)"]
-        SY["synthesize_canon_for_session<br/>:500"]
-        SY -->|ecrit| DBC[("CampaignDossier.played_canon<br/>AUTORITE")]
-        SY -->|recopie| MIR
+    subgraph SYNTH["Synthese periodique (LLM)"]
+        SY["synthesize_canon_for_session"]
+        SY -->|"ecrit + union-merge gardes"| DBC
+        SY -->|"recopie tout le played_canon"| MIR
     end
 
-    DBC -->|"reload → compile"| MIR
+    DBC -->|"open_session → _reconcile_guard_lists_from_dossier<br/>(union-merge gardes, A3)"| MIR
 
-    MIR -. "si synthese non declenchee<br/>avant reload" .-x LOSS["ecritures en session PERDUES<br/>(ex: granted_unique_items)"]
-
-    style LOSS fill:#3a1a1a,stroke:#e84545,color:#fff
     style DBC fill:#1a2a2a,stroke:#6fd96f,color:#fff
+    style MIR fill:#1a2a3a,stroke:#4fd8c0,color:#fff
 ```
+
+**Autorité par champ (vérifiée)** :
+
+| Champ | Écriture en session | Lecture en jeu | Reload |
+|---|---|---|---|
+| `granted_unique_items` | miroir **+ DB** | miroir (garde loot) | réconcilié DB→miroir (A3) |
+| `revealed_secrets` | miroir **+ DB** (A5) | miroir (compagnon) + DB (MJ) | réconcilié DB→miroir (A3) |
+| `npc_personas` | **DB seule** (`upsert_npc_persona`) | **DB** (`get_npc_persona`) | cohérent (jamais via miroir) |
+| `established_facts` / `player_decisions` / `rolling_summary` | synthèse → DB, recopie miroir | miroir (compagnon) | recompilé / auto-réparé à la synthèse |
 
 ---
 
@@ -225,9 +235,15 @@ flowchart TB
 
 **Statut** : ✅ corrigé (A1 + A1bis, 2026-05-31).
 
-### 3.2 🟠 Double-stockage du canon joué — divergence DB ↔ blob
+### 3.2 🟠 Double-stockage du canon joué — miroir vs DB *(re-vérifié, corrigé A3)*
 
-`played_canon` est écrit en session **dans le miroir** `state_data.campaign_context.played_canon` (`_mark_unique_items_in_state:1519`), mais l'autorité est la **colonne DB**, reconstruite au reload via `compile_campaign_context_for_session`. La réconciliation ne passe que par `synthesize_canon_for_session` (déclenchée par seuil/périodicité). Si un reload survient avant une synthèse, les écritures en session (typiquement `granted_unique_items`) **sont perdues** → risque de re-don d'objet unique. `record_granted_unique_items` (écriture DB) existe mais n'est pas le chemin emprunté par l'exécuteur en session.
+> **Re-vérification 2026-05-31** : l'analyse initiale (« écrit seulement le miroir, perdu au reload, `record_granted_unique_items` non emprunté ») était **fausse**. Le code (`gm_response_executor.py:1468-1475`) écrit **les deux** : miroir (`_mark_unique_items_in_state`) **et** DB (`record_granted_unique_items`). A5 a rendu `revealed_secrets` dual de la même façon. Voir la table d'autorité §2.6.
+
+Le canon joué vit en deux endroits : la **DB** (`CampaignDossier.played_canon`, autorité) et un **miroir** dans le blob (`state_data.campaign_context.played_canon`, lu en jeu par les gardes et le filtre compagnon). En jeu vivant le miroir ne peut pas diverger : chaque écriture déterministe est dual, et la synthèse recopie tout le `played_canon` DB→miroir.
+
+**Le seul vrai risque** était le **reload d'un blob périmé** : `record_granted_unique_items` commit la DB immédiatement, mais `save_state` (qui persiste le miroir) peut être en retard lors d'un crash. Au reload, `open_session` restaurait alors un miroir sans l'objet → la garde loot (`_granted_unique_items`, qui lit le miroir) pouvait **re-donner un objet unique** (fail-unsafe, visible joueur). `revealed_secrets` périmé est au contraire fail-safe (le compagnon en sait juste moins, auto-réparé à la synthèse suivante).
+
+**Statut** : ✅ corrigé (A3, 2026-05-31) — `SessionManager._reconcile_guard_lists_from_dossier` union-merge les listes-gardes DB→miroir à `open_session`. Union uniquement (jamais de vidage, jamais les champs de synthèse), no-op sans dossier+contexte → sûr en session 1, n'appelle jamais `compile`.
 
 ### 3.3 🟠 Identité PNJ éclatée sur 4 représentations
 
@@ -265,8 +281,9 @@ MJ = denylist, compagnon/joueur = allowlist (cf. 2.3). Robuste aujourd'hui, mais
 ### Priorité 2 — Invariant de frontière (🟡→🔴 en prévention) — ✅ FAIT
 - **A2.** Test d'invariant : aucun champ secret (`_gm_prompt_context`, `gm_scene_state`, `secrets`, `motivations.hidden`, `hook`, `quest_hooks`) dans `companion_visible_game_state()` **ni** `build_session_state_payload()`. Toute régression future est attrapée par un test unique.
 
-### Priorité 3 — Canon joué à écriture disciplinée (🟠) — à décider
-- **A3.** Décider l'autorité par champ et la documenter. Pour les écritures déterministes en session (`granted_unique_items`, révélations), écrire **DB + miroir** (réutiliser `record_granted_unique_items`), ou persister le miroir au `save_state` et réconcilier au reload. But : zéro perte au reload.
+### Priorité 3 — Canon joué à écriture disciplinée (🟠) — ✅ FAIT
+- **A3.** Re-vérification : la double-écriture (miroir + DB) existait **déjà** pour `granted_unique_items` et `revealed_secrets` (A5). Le résidu réel = reload d'un blob périmé → garde loot fail-unsafe (re-don d'objet unique). Corrigé par `SessionManager._reconcile_guard_lists_from_dossier` : **union-merge** des listes-gardes DB→miroir à `open_session`. Strictement borné (2 listes append-only, union uniquement, jamais les champs de synthèse, no-op sans dossier) — l'option « recompiler au reload » a été **écartée** car `compile_campaign_context_for_session` applique le reset session-initiale qui **viderait** un canon de mi-session-1 déjà commité en DB. Autorité par champ documentée en §2.6.
+- **Tests** : `tests/test_game/test_guard_list_reconcile.py` (prouvé : échoue sans le fix, passe avec — pas de re-don après reload périmé).
 
 ### Priorité 4 — Unifier l'identité PNJ (🟠, structurel) — ✅ FAIT
 - **A4.** `npc_states[id]` devient l'**autorité d'identité** du PNJ. `current_scene.pois` reste la **projection visible** (le payload joueur sérialise `current_scene` brut → on ne peut pas vider `name` du POI sans casser la vue humaine). Une fonction unique `reconcile_scene_npcs(active, scene)` (`scene_state_service.py`) projette `known_to_party` (npc_states gagne) et `name` (npc_states gagne si défini, sinon le POI amorce) sur le POI **après chaque écriture de scène** — branchée dans `apply_scene_update` et `_apply_scene_layout`. Les writers ne touchent plus que `npc_states` ; le POI suit. Réduit la désync `pois ↔ npc_states` à zéro et rend A1bis structurel.
@@ -295,6 +312,8 @@ cd backend && source .venv/bin/activate
 # Révélation événementielle (A5) + reset canon initial (A6)
 .venv/bin/pytest tests/test_game/test_gm_loot_actions.py -v
 .venv/bin/pytest tests/test_api/test_campaign_dossier.py -v
+# Réconciliation des listes-gardes au reload (A3)
+.venv/bin/pytest tests/test_game/test_guard_list_reconcile.py -v
 ```
 - **A1** : test compagnon sur PNJ introduit en cours de scène (nom anonymisé dans `pois` ET `npc_states`).
 - **A2** : test d'invariant unique (aucune clé secrète dans les deux vues publiques).
