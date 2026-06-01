@@ -218,7 +218,7 @@ onMounted(async () => {
           ]"
           @click="provider = 'ollama'"
         >
-          Ollama (local)
+          Ollama (local / cloud)
         </button>
         <button
           :class="[
