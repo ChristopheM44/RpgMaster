@@ -1,7 +1,14 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import { adminApi } from '../services/api'
-import type { TtsSettings, TtsHealthResponse, TtsBackend } from '../types'
+import type { TtsSettings, TtsHealthResponse, TtsBackend, TtsVoiceSettings } from '../types'
+
+const DEFAULT_GM_VOICE: TtsVoiceSettings = {
+  preset_id: 'ff_siwis',
+  voice_id_local: 'ff_siwis',
+  lang: 'fr-fr',
+  speed: 0.9,
+}
 
 export const useSettingsStore = defineStore('settings', () => {
   const ttsEnabled = ref(false)
@@ -9,6 +16,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const ttsAsync = ref(true)
   const voxtralBaseUrl = ref('http://localhost:8091')
   const voxtralModel = ref('mistralai/Voxtral-4B-TTS-2603')
+  const gmVoice = ref<TtsVoiceSettings>({ ...DEFAULT_GM_VOICE })
+  const npcVoiceEnabled = ref(true)
 
   const health = ref<TtsHealthResponse>({ kokoro: false, vllm: false })
   const loading = ref(false)
@@ -20,6 +29,8 @@ export const useSettingsStore = defineStore('settings', () => {
     ttsAsync.value = s.tts_async
     voxtralBaseUrl.value = s.voxtral_base_url
     voxtralModel.value = s.voxtral_model
+    gmVoice.value = { ...DEFAULT_GM_VOICE, ...s.gm_voice }
+    npcVoiceEnabled.value = s.npc_voice_enabled
   }
 
   async function fetchSettings() {
@@ -63,6 +74,8 @@ export const useSettingsStore = defineStore('settings', () => {
     ttsAsync,
     voxtralBaseUrl,
     voxtralModel,
+    gmVoice,
+    npcVoiceEnabled,
     health,
     loading,
     error,

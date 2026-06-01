@@ -1030,17 +1030,35 @@ export interface CombatActionPayload {
 
 export type TtsBackend = 'kokoro' | 'vllm'
 
+export interface TtsVoiceSettings {
+  preset_id: string
+  voice_id_local: string
+  lang: string
+  speed: number
+}
+
 export interface TtsSettings {
   tts_enabled: boolean
   tts_backend: TtsBackend
   tts_async: boolean
   voxtral_base_url: string
   voxtral_model: string
+  gm_voice: TtsVoiceSettings
+  npc_voice_enabled: boolean
 }
 
 export interface TtsHealthResponse {
   kokoro: boolean
   vllm: boolean
+}
+
+export interface TtsPreviewRequest {
+  text: string
+  gm_voice?: TtsVoiceSettings
+}
+
+export interface TtsPreviewResponse {
+  audio_b64: string
 }
 
 export interface AudioPayload {

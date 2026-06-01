@@ -20,6 +20,8 @@ import type {
   SaveSlotListResponse,
   HistoryResponse,
   TtsSettings,
+  TtsPreviewRequest,
+  TtsPreviewResponse,
   TtsHealthResponse,
   OllamaHealthResponse,
   OllamaModelInfo,
@@ -325,6 +327,12 @@ export const adminApi = {
     }),
 
   getTtsHealth: () => request<TtsHealthResponse>('/admin/tts/health'),
+
+  previewTts: (data: TtsPreviewRequest) =>
+    request<TtsPreviewResponse>('/admin/tts/preview', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 
   getLlmHealth: () => request<OllamaHealthResponse>('/admin/llm/health'),
 

@@ -57,9 +57,52 @@ class VoxtralError(Exception):
 
 AudioPublisher = Callable[[str, dict[str, Any]], Awaitable[None]]
 
+DEFAULT_GM_VOICE: dict[str, Any] = {
+    "preset_id": "ff_siwis",
+    "voice_id_local": "ff_siwis",
+    "lang": "fr-fr",
+    "speed": 0.9,
+}
+DEFAULT_NPC_VOICE_ENABLED = True
+MIN_TTS_SPEED = 0.5
+MAX_TTS_SPEED = 1.5
+
 
 async def _noop_audio_publisher(session_id: str, payload: dict[str, Any]) -> None:
     return None
+
+
+def _bounded_speed(value: Any, default: float = DEFAULT_GM_VOICE["speed"]) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        parsed = default
+    return min(MAX_TTS_SPEED, max(MIN_TTS_SPEED, parsed))
+
+
+def normalize_voice_settings(raw: dict[str, Any] | None) -> dict[str, Any]:
+    """Return a complete, safe local voice config from runtime/user input."""
+    merged = dict(DEFAULT_GM_VOICE)
+    if isinstance(raw, dict):
+        merged.update(raw)
+
+    voice_id = str(merged.get("voice_id_local") or DEFAULT_GM_VOICE["voice_id_local"]).strip()
+    lang = str(merged.get("lang") or DEFAULT_GM_VOICE["lang"]).strip().lower()
+    preset_id = str(merged.get("preset_id") or voice_id).strip()
+
+    if not voice_id:
+        voice_id = DEFAULT_GM_VOICE["voice_id_local"]
+    if not lang:
+        lang = DEFAULT_GM_VOICE["lang"]
+    if not preset_id:
+        preset_id = voice_id
+
+    return {
+        "preset_id": preset_id,
+        "voice_id_local": voice_id,
+        "lang": lang,
+        "speed": _bounded_speed(merged.get("speed")),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -185,12 +228,19 @@ class VLLMVoxtralClient:
         self.base_url = (base_url or settings.voxtral_base_url).rstrip("/")
         self.model = model or settings.voxtral_model
 
-    async def synthesize(self, text: str, voice: str | None = None) -> bytes:
+    async def synthesize(
+        self,
+        text: str,
+        voice: str | None = None,
+        lang: str | None = None,
+        speed: float | None = None,
+    ) -> bytes:
         """Synthétise *text* via vLLM-Omni et retourne les bytes WAV.
 
         Raises:
             VoxtralError: Si le serveur est injoignable ou retourne une erreur.
         """
+        _ = (lang, speed)
         payload = {
             "model": self.model,
             "input": text,
@@ -291,6 +341,8 @@ class TtsRouter:
         self,
         enabled: bool | None = None,
         backend: str | None = None,
+        gm_voice: dict[str, Any] | None = None,
+        npc_voice_enabled: bool | None = None,
     ) -> None:
         """Met à jour la configuration TTS en mémoire et la persiste."""
         if enabled is not None:
@@ -299,6 +351,10 @@ class TtsRouter:
             if backend not in ("kokoro", "vllm"):
                 raise ValueError(f"Backend inconnu : {backend!r}. Valeurs : 'kokoro', 'vllm'")
             self._runtime["tts_backend"] = backend
+        if gm_voice is not None:
+            self._runtime["gm_voice"] = normalize_voice_settings(gm_voice)
+        if npc_voice_enabled is not None:
+            self._runtime["npc_voice_enabled"] = bool(npc_voice_enabled)
         self._save_runtime()
 
     @property
@@ -309,6 +365,14 @@ class TtsRouter:
     def tts_backend(self) -> str:
         return self._runtime.get("tts_backend", settings.tts_backend)
 
+    @property
+    def gm_voice(self) -> dict[str, Any]:
+        return normalize_voice_settings(self._runtime.get("gm_voice"))
+
+    @property
+    def npc_voice_enabled(self) -> bool:
+        return bool(self._runtime.get("npc_voice_enabled", DEFAULT_NPC_VOICE_ENABLED))
+
     def get_settings(self) -> dict:
         """Retourne l'état courant des paramètres TTS (pour l'API admin)."""
         return {
@@ -317,6 +381,8 @@ class TtsRouter:
             "tts_async": settings.tts_async,
             "voxtral_base_url": settings.voxtral_base_url,
             "voxtral_model": settings.voxtral_model,
+            "gm_voice": self.gm_voice,
+            "npc_voice_enabled": self.npc_voice_enabled,
         }
 
     def _get_client(self):
@@ -324,6 +390,33 @@ class TtsRouter:
         if self.tts_backend == "kokoro":
             return self._kokoro
         return self._vllm
+
+    async def synthesize_bytes(
+        self,
+        text: str,
+        *,
+        voice: str | None = None,
+        lang: str | None = None,
+        speed: float | None = None,
+    ) -> bytes:
+        """Synthétise *text* via le backend actif et retourne les bytes WAV."""
+        client = self._get_client()
+        return await client.synthesize(text, voice=voice, lang=lang, speed=speed)
+
+    async def preview(
+        self,
+        text: str,
+        *,
+        gm_voice: dict[str, Any] | None = None,
+    ) -> bytes:
+        """Generate preview audio without requiring TTS to be enabled globally."""
+        voice_settings = normalize_voice_settings(gm_voice) if gm_voice else self.gm_voice
+        return await self.synthesize_bytes(
+            text,
+            voice=voice_settings["voice_id_local"],
+            lang=voice_settings["lang"],
+            speed=voice_settings["speed"],
+        )
 
     # ------------------------------------------------------------------
     # Synthèse fire-and-forget
@@ -335,6 +428,8 @@ class TtsRouter:
         session_id: str,
         narration_id: str | None = None,
         voice: str | None = None,
+        lang: str | None = None,
+        speed: float | None = None,
     ) -> None:
         """Synthétise *text* et publie un événement AUDIO sur le bus.
 
@@ -347,10 +442,13 @@ class TtsRouter:
             return
 
         narration_id = narration_id or str(uuid.uuid4())
-        client = self._get_client()
-
         try:
-            wav_bytes = await client.synthesize(text, voice=voice)
+            wav_bytes = await self.synthesize_bytes(
+                text,
+                voice=voice,
+                lang=lang,
+                speed=speed,
+            )
             audio_b64 = base64.b64encode(wav_bytes).decode("ascii")
 
             await self._publish_audio(

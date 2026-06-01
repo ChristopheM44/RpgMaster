@@ -76,6 +76,24 @@ export function useAudio() {
     }
   }
 
+  async function unlockAudio() {
+    error.value = null
+    try {
+      const ctx = getAudioContext()
+      if (ctx.state === 'suspended') {
+        await ctx.resume()
+      }
+
+      const buffer = ctx.createBuffer(1, 1, ctx.sampleRate)
+      const source = ctx.createBufferSource()
+      source.buffer = buffer
+      source.connect(ctx.destination)
+      source.start()
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Erreur initialisation audio'
+    }
+  }
+
   function cancelAll() {
     _queue.splice(0)
     if (_currentSource) {
@@ -92,7 +110,7 @@ export function useAudio() {
     isPlaying.value = false
   }
 
-  return { isPlaying, error, playAudioB64, cancelAll }
+  return { isPlaying, error, playAudioB64, unlockAudio, cancelAll }
 }
 
 function installVisibilityResume() {

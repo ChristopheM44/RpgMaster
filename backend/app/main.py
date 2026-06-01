@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,7 +19,8 @@ from app.api.ws_dialogue import router as ws_dialogue_router
 from app.api.ws_game import router as ws_router
 from app.config import get_cors_origins
 from app.db.database import async_session
-from app.game.event_bus import EventType, event_bus
+from app.game.async_tasks import create_logged_task
+from app.game.event_bus import EventType, GameEvent, event_bus
 from app.llm.voxtral_client import tts_router
 from app.security import (
     access_token_required,
@@ -27,6 +29,106 @@ from app.security import (
     request_has_valid_admin_access_token,
     validate_access_token_configuration,
 )
+from app.services import campaign_dossier_service
+from app.voice.local_provider import kokoro_speed_for, kokoro_voice_for
+
+
+def _is_gm_narration_payload(payload: dict) -> bool:
+    speaker_kind = payload.get("speaker_kind")
+    if speaker_kind is not None:
+        return speaker_kind == "gm"
+
+    speaker = str(payload.get("speaker") or "").strip().casefold()
+    return speaker in {"maître du jeu", "maitre du jeu", "gm"}
+
+
+def _is_npc_dialogue_payload(payload: dict) -> bool:
+    return payload.get("speaker_kind") == "npc"
+
+
+def _queue_tts_for_visible_event(
+    event: GameEvent,
+    *,
+    db_session_factory: Any = async_session,
+) -> None:
+    payload = event.payload
+    text = payload.get("text")
+    if not isinstance(text, str) or not text.strip():
+        return
+
+    narration_id = str(payload.get("narration_id") or event.event_id)
+    if event.event_type == EventType.NARRATION and _is_gm_narration_payload(payload):
+        voice = tts_router.gm_voice
+        create_logged_task(
+            tts_router.synthesize_and_broadcast(
+                text,
+                event.session_id,
+                narration_id,
+                voice=voice["voice_id_local"],
+                lang=voice["lang"],
+                speed=voice["speed"],
+            ),
+            "tts.gm_narration",
+        )
+        return
+
+    if event.event_type == EventType.DIALOGUE and _is_npc_dialogue_payload(payload):
+        create_logged_task(
+            _synthesize_npc_dialogue(
+                event,
+                text,
+                narration_id,
+                db_session_factory=db_session_factory,
+            ),
+            "tts.npc_dialogue",
+        )
+
+
+async def _synthesize_npc_dialogue(
+    event: GameEvent,
+    text: str,
+    narration_id: str,
+    *,
+    db_session_factory: Any = async_session,
+) -> None:
+    if not tts_router.tts_enabled or not tts_router.npc_voice_enabled:
+        return
+
+    voice_id = "ff_siwis"
+    lang = "fr-fr"
+    speed = 0.95
+    speaker_id = str(event.payload.get("speaker_id") or "").strip()
+
+    if speaker_id:
+        try:
+            async with db_session_factory() as db:
+                campaign = await campaign_dossier_service.campaign_for_session(
+                    event.session_id,
+                    db,
+                )
+                persona = None
+                if campaign is not None:
+                    persona = await campaign_dossier_service.get_npc_persona(
+                        campaign.id,
+                        speaker_id,
+                        db,
+                    )
+        except Exception:
+            persona = None
+
+        if persona is not None:
+            voice = persona.voice
+            voice_id = voice.voice_id_local or kokoro_voice_for(voice, prefer_french=False)
+            speed = kokoro_speed_for(voice)
+
+    await tts_router.synthesize_and_broadcast(
+        text,
+        event.session_id,
+        narration_id,
+        voice=voice_id,
+        lang=lang,
+        speed=speed,
+    )
 
 
 @asynccontextmanager
@@ -43,8 +145,15 @@ async def lifespan(app: FastAPI):
         )
 
     tts_router.configure_audio_publisher(publish_audio)
+    db_session_factory = getattr(app.state, "db_session_factory", async_session)
+    event_bus.configure_event_hook(
+        lambda event: _queue_tts_for_visible_event(
+            event,
+            db_session_factory=db_session_factory,
+        )
+    )
     yield
-    # Shutdown: cleanup
+    event_bus.configure_event_hook(None)
 
 
 def create_app() -> FastAPI:

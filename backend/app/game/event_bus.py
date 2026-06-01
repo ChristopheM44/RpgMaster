@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
@@ -99,6 +100,7 @@ class EventType(str):
 
 
 BACKPRESSURE_ERROR_CODE = "backpressure"
+EventHook = Callable[["GameEvent"], None]
 
 
 # ---------------------------------------------------------------------------
@@ -183,10 +185,27 @@ class InProcessEventBus:
         self._default_maxsize = max(0, int(default_maxsize))
         self._dropped_events: dict[str, int] = {}
         self._max_queue_size: dict[str, int] = {}
+        self._event_hook: EventHook | None = None
 
     # ------------------------------------------------------------------
     # Subscription management
     # ------------------------------------------------------------------
+
+    def configure_event_hook(self, hook: EventHook | None) -> None:
+        """Register an optional side-effect hook for delivered events."""
+        self._event_hook = hook
+
+    def configure_narration_hook(self, hook: EventHook | None) -> None:
+        """Backward-compatible hook limited to delivered narration events."""
+        if hook is None:
+            self._event_hook = None
+            return
+
+        def narration_only(event: GameEvent) -> None:
+            if event.event_type == EventType.NARRATION:
+                hook(event)
+
+        self._event_hook = narration_only
 
     def subscribe(self, session_id: str, maxsize: int | None = None) -> asyncio.Queue:
         """Register a new subscriber for *session_id*.
@@ -273,9 +292,11 @@ class InProcessEventBus:
             )
             return
 
+        delivered = False
         for queue in list(subscribers):  # snapshot to avoid mutation during iteration
             try:
                 queue.put_nowait(event)
+                delivered = True
                 self._max_queue_size[event.session_id] = max(
                     self._max_queue_size.get(event.session_id, 0),
                     queue.qsize(),
@@ -297,6 +318,19 @@ class InProcessEventBus:
             len(subscribers),
             event.session_id,
         )
+        if delivered:
+            self._notify_event_hook(event)
+
+    def _notify_event_hook(self, event: GameEvent) -> None:
+        if self._event_hook is None:
+            return
+        try:
+            self._event_hook(event)
+        except Exception:
+            logger.exception(
+                "EventBus: event hook failed for session %s.",
+                event.session_id,
+            )
 
     def _replace_backlog_with_backpressure_error(
         self,

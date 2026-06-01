@@ -3,13 +3,12 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from app.game.async_tasks import create_logged_task
 from app.game.event_bus import EventType
 from app.game.visible_events import publish_visible_entry
 
 
 class ActionOrchestrator:
-    """Publishes visible action side effects: events, persistence, and TTS."""
+    """Publishes visible action side effects; TTS is handled by the event hook."""
 
     def __init__(self, event_bus_instance: Any, *, source: str, tts_router: Any) -> None:
         self._event_bus = event_bus_instance
@@ -48,12 +47,3 @@ class ActionOrchestrator:
             from app.services.message_service import persist_narration
 
             await persist_narration(session_id, narration_text, "Maître du Jeu", db)
-
-        create_logged_task(
-            self._tts_router.synthesize_and_broadcast(
-                narration_text,
-                session_id,
-                narration_id,
-            ),
-            "action_pipeline.tts_narration",
-        )

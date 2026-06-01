@@ -77,6 +77,45 @@ describe('useAudio', () => {
     vi.unstubAllGlobals()
   })
 
+  it('unlocks audio from a user gesture without starting queued playback', async () => {
+    const source = {
+      buffer: null as AudioBuffer | null,
+      connect: vi.fn(),
+      start: vi.fn(),
+      stop: vi.fn(),
+      onended: null as (() => void) | null,
+    }
+    const ctx = {
+      state: 'suspended',
+      sampleRate: 24000,
+      destination: {},
+      resume: vi.fn(async () => {
+        ctx.state = 'running'
+      }),
+      createBuffer: vi.fn(() => ({ duration: 0 }) as AudioBuffer),
+      createBufferSource: vi.fn(() => source),
+    }
+    class AudioContextMock {
+      constructor() {
+        return ctx
+      }
+    }
+    vi.stubGlobal('AudioContext', AudioContextMock)
+
+    const audio = useAudio()
+    await audio.unlockAudio()
+
+    expect(ctx.resume).toHaveBeenCalled()
+    expect(ctx.createBuffer).toHaveBeenCalledWith(1, 1, ctx.sampleRate)
+    expect(source.connect).toHaveBeenCalledWith(ctx.destination)
+    expect(source.start).toHaveBeenCalled()
+    expect(audio.isPlaying.value).toBe(false)
+    expect(audio.error.value).toBeNull()
+
+    ctx.state = 'closed'
+    vi.unstubAllGlobals()
+  })
+
   it('resumes a suspended AudioContext when the tab becomes visible', async () => {
     const source = {
       buffer: null as AudioBuffer | null,

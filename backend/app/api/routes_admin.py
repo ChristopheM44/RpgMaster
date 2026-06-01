@@ -12,6 +12,7 @@ Endpoints :
 """
 from __future__ import annotations
 
+import base64
 import logging
 import re
 import time
@@ -54,17 +55,44 @@ llm_ping_limiter = FixedWindowRateLimiter(max_requests=5, window_seconds=60.0)
 # ---------------------------------------------------------------------------
 
 
+class TtsVoiceSettings(BaseModel):
+    preset_id: str = Field(default="ff_siwis", min_length=1, max_length=64)
+    voice_id_local: str = Field(default="ff_siwis", min_length=1, max_length=64)
+    lang: str = Field(default="fr-fr", min_length=5, max_length=5)
+    speed: float = Field(default=0.9, ge=0.5, le=1.5)
+
+    @field_validator("preset_id", "voice_id_local")
+    @classmethod
+    def validate_voice_id(cls, v: str) -> str:
+        value = v.strip()
+        if not re.match(r"^[A-Za-z0-9_.-]+$", value):
+            raise ValueError("ID voix invalide")
+        return value
+
+    @field_validator("lang")
+    @classmethod
+    def validate_lang(cls, v: str) -> str:
+        value = v.strip().lower()
+        if not re.match(r"^[a-z]{2}-[a-z]{2}$", value):
+            raise ValueError("lang doit être au format fr-fr")
+        return value
+
+
 class TtsSettingsResponse(BaseModel):
     tts_enabled: bool
     tts_backend: str
     tts_async: bool
     voxtral_base_url: str
     voxtral_model: str
+    gm_voice: TtsVoiceSettings
+    npc_voice_enabled: bool
 
 
 class TtsSettingsUpdate(BaseModel):
     tts_enabled: bool | None = None
     tts_backend: str | None = None
+    gm_voice: TtsVoiceSettings | None = None
+    npc_voice_enabled: bool | None = None
 
     @field_validator("tts_backend")
     @classmethod
@@ -72,6 +100,19 @@ class TtsSettingsUpdate(BaseModel):
         if v is not None and v not in ("kokoro", "vllm"):
             raise ValueError("tts_backend doit être 'kokoro' ou 'vllm'")
         return v
+
+
+class TtsPreviewRequest(BaseModel):
+    text: str = Field(
+        default="La torche tremble, et les ombres semblent attendre votre prochain pas.",
+        min_length=1,
+        max_length=500,
+    )
+    gm_voice: TtsVoiceSettings | None = None
+
+
+class TtsPreviewResponse(BaseModel):
+    audio_b64: str
 
 
 class TtsHealthResponse(BaseModel):
@@ -231,10 +272,29 @@ async def update_settings(body: TtsSettingsUpdate) -> TtsSettingsResponse:
         tts_router.configure(
             enabled=body.tts_enabled,
             backend=body.tts_backend,
+            gm_voice=body.gm_voice.model_dump(mode="json") if body.gm_voice else None,
+            npc_voice_enabled=body.npc_voice_enabled,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     return TtsSettingsResponse(**tts_router.get_settings())
+
+
+@router.post("/tts/preview", response_model=TtsPreviewResponse)
+async def preview_tts(body: TtsPreviewRequest) -> TtsPreviewResponse:
+    """Génère un extrait audio TTS pour prévisualiser la voix configurée."""
+    try:
+        wav_bytes = await tts_router.preview(
+            body.text.strip(),
+            gm_voice=body.gm_voice.model_dump(mode="json") if body.gm_voice else None,
+        )
+    except Exception as exc:
+        logger.warning("TTS preview failed: %s", exc)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Prévisualisation TTS impossible: {type(exc).__name__}: {exc}",
+        ) from exc
+    return TtsPreviewResponse(audio_b64=base64.b64encode(wav_bytes).decode("ascii"))
 
 
 @router.get("/tts/health", response_model=TtsHealthResponse)

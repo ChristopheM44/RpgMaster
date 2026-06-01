@@ -103,6 +103,60 @@ class TestPublish:
         assert bus.dropped_event_count("session-1") == 1
         assert bus.stats("session-1")["max_queue_size"] == 1
 
+    async def test_event_hook_runs_for_delivered_visible_events(
+        self,
+        bus: EventBus,
+    ) -> None:
+        bus.subscribe("session-1")
+        seen: list[GameEvent] = []
+        bus.configure_event_hook(seen.append)
+
+        await bus.publish_to_session(
+            "session-1",
+            EventType.NARRATION,
+            {"text": "Le vent se lève."},
+        )
+        await bus.publish_to_session(
+            "session-1",
+            EventType.DIALOGUE,
+            {"text": "Par ici.", "speaker_kind": "npc"},
+        )
+
+        assert len(seen) == 2
+        assert seen[0].payload["text"] == "Le vent se lève."
+        assert seen[1].payload["text"] == "Par ici."
+
+    async def test_event_hook_ignores_non_delivered_events(
+        self,
+        bus: EventBus,
+    ) -> None:
+        seen: list[GameEvent] = []
+        bus.configure_event_hook(seen.append)
+
+        await bus.publish_to_session(
+            "ghost-session",
+            EventType.NARRATION,
+            {"text": "Personne ne l'entend."},
+        )
+
+        assert seen == []
+
+    async def test_legacy_narration_hook_ignores_other_event_types(
+        self,
+        bus: EventBus,
+    ) -> None:
+        bus.subscribe("session-1")
+        seen: list[GameEvent] = []
+        bus.configure_narration_hook(seen.append)
+
+        await bus.publish_to_session(
+            "session-1",
+            EventType.ROLL_RESULT,
+            {"text": "12"},
+        )
+
+        assert seen == []
+
 
 # ---------------------------------------------------------------------------
 # publish_to_session (convenience wrapper)
