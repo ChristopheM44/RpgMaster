@@ -43,7 +43,12 @@ def _is_gm_narration_payload(payload: dict) -> bool:
 
 
 def _is_npc_dialogue_payload(payload: dict) -> bool:
-    return payload.get("speaker_kind") == "npc"
+    speaker_kind = payload.get("speaker_kind")
+    if speaker_kind is not None:
+        return speaker_kind == "npc"
+    return payload.get("entry_kind") == "dialogue" and bool(
+        str(payload.get("speaker") or "").strip()
+    )
 
 
 def _queue_tts_for_visible_event(
@@ -67,6 +72,8 @@ def _queue_tts_for_visible_event(
                 voice=voice["voice_id_local"],
                 lang=voice["lang"],
                 speed=voice["speed"],
+                speaker=str(payload.get("speaker") or "Maître du Jeu"),
+                speaker_kind="gm",
             ),
             "tts.gm_narration",
         )
@@ -128,6 +135,8 @@ async def _synthesize_npc_dialogue(
         voice=voice_id,
         lang=lang,
         speed=speed,
+        speaker=str(event.payload.get("speaker") or ""),
+        speaker_kind="npc",
     )
 
 

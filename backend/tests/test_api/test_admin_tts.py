@@ -4,6 +4,7 @@ import base64
 from unittest.mock import AsyncMock
 
 from app.api import routes_admin
+from app.llm.voxtral_client import TtsRouter
 
 
 async def test_tts_settings_apply_voice_defaults(async_client, monkeypatch) -> None:
@@ -89,3 +90,51 @@ async def test_tts_preview_returns_audio_base64(async_client, monkeypatch) -> No
     assert response.status_code == 200
     assert response.json()["audio_b64"] == base64.b64encode(b"WAV_BYTES").decode("ascii")
     preview.assert_awaited_once()
+
+
+async def test_tts_router_publishes_generation_status(monkeypatch) -> None:
+    published: list[tuple[str, dict]] = []
+
+    async def publish_audio(session_id: str, payload: dict) -> None:
+        published.append((session_id, payload))
+
+    router = TtsRouter(publish_audio=publish_audio)
+    monkeypatch.setattr(
+        router,
+        "_runtime",
+        {"tts_enabled": True, "tts_backend": "kokoro"},
+    )
+    monkeypatch.setattr(router, "synthesize_bytes", AsyncMock(return_value=b"WAV_BYTES"))
+
+    await router.synthesize_and_broadcast(
+        "Bonjour.",
+        "session-1",
+        "narration-1",
+        voice="ff_siwis",
+        lang="fr-fr",
+        speed=0.9,
+        speaker="Maire Valerius",
+        speaker_kind="npc",
+    )
+
+    assert published == [
+        (
+            "session-1",
+            {
+                "narration_id": "narration-1",
+                "status": "generating",
+                "speaker": "Maire Valerius",
+                "speaker_kind": "npc",
+            },
+        ),
+        (
+            "session-1",
+            {
+                "narration_id": "narration-1",
+                "status": "ready",
+                "speaker": "Maire Valerius",
+                "speaker_kind": "npc",
+                "audio_b64": base64.b64encode(b"WAV_BYTES").decode("ascii"),
+            },
+        ),
+    ]

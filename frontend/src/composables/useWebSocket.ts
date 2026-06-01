@@ -147,12 +147,18 @@ export function useWebSocket(sessionId: string) {
         if (isSessionStatePayload(msg.payload)) gameStore.applySessionState(msg.payload)
         break
       case 'narration':
-        if (isNarrationPayload(msg.payload)) gameStore.addNarration(msg.payload)
+        if (isNarrationPayload(msg.payload)) {
+          gameStore.addNarration({
+            ...msg.payload,
+            narration_id: msg.payload.narration_id ?? msg.event_id,
+          })
+        }
         break
       case 'dialogue':
         if (isNarrationPayload(msg.payload)) {
           gameStore.addNarration({
             ...msg.payload,
+            narration_id: msg.payload.narration_id ?? msg.event_id,
             entry_kind: msg.payload.entry_kind ?? 'dialogue',
           })
         }
@@ -305,7 +311,10 @@ export function useWebSocket(sessionId: string) {
         gameStore.setProcessing(false)
         break
       case 'audio':
-        if (isAudioPayload(msg.payload)) audio.playAudioB64(msg.payload.audio_b64)
+        if (isAudioPayload(msg.payload)) {
+          gameStore.applyAudioStatus(msg.payload)
+          if (msg.payload.audio_b64) audio.playAudioB64(msg.payload.audio_b64)
+        }
         break
       case 'error':
         if (isErrorPayload(msg.payload)) gameStore.setError(msg.payload.message)
@@ -651,7 +660,20 @@ function isCityMapUpdatedPayload(value: unknown): value is CityMapUpdatedPayload
 }
 
 function isAudioPayload(value: unknown): value is AudioPayload {
-  return isRecord(value) && typeof value.audio_b64 === 'string'
+  return (
+    isRecord(value)
+    && typeof value.narration_id === 'string'
+    && (
+      value.audio_b64 === undefined
+      || typeof value.audio_b64 === 'string'
+    )
+    && (
+      value.status === undefined
+      || value.status === 'generating'
+      || value.status === 'ready'
+      || value.status === 'error'
+    )
+  )
 }
 
 function isErrorPayload(value: unknown): value is { message: string } {

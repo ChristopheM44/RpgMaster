@@ -6,6 +6,7 @@ import { useSessionStore } from '../../stores/session'
 import { useCharacterStore } from '../../stores/character'
 import DiceRollResult from './DiceRollResult.vue'
 import NarrativeEntry from '../exploration/NarrativeEntry.vue'
+import type { NarrativeEntry as NarrativeEntryModel } from '../../types'
 
 withDefaults(defineProps<{
   /**
@@ -33,6 +34,16 @@ const thinkingLabel = computed(() =>
     ? 'Le joueur IA réfléchit'
     : 'Le Maître du Jeu réfléchit',
 )
+
+function audioStatusFor(entry: NarrativeEntryModel) {
+  return entry.narration_id ? gameStore.audioStatusByNarrationId[entry.narration_id] : undefined
+}
+
+function audioStatusLabel(entry: NarrativeEntryModel): string {
+  const status = audioStatusFor(entry)
+  if (!status) return ''
+  return status.status === 'error' ? 'Voix indisponible' : 'Voix en génération'
+}
 
 watch(
   () => narrativeStore.entries.length + gameStore.narrativeLog.length + (hasThinkingEntry.value ? 1 : 0),
@@ -118,8 +129,17 @@ watch(
 
         <!-- Narration GM -->
         <div v-if="entry.type === 'narration'" class="space-y-3">
-          <div class="rpg-eyebrow">
-            ✦ {{ entry.speaker ?? 'Maître du Jeu' }}
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="rpg-eyebrow">
+              ✦ {{ entry.speaker ?? 'Maître du Jeu' }}
+            </div>
+            <span
+              v-if="audioStatusFor(entry)"
+              class="rpg-audio-status"
+              :class="{ 'is-error': audioStatusFor(entry)?.status === 'error' }"
+            >
+              {{ audioStatusLabel(entry) }}
+            </span>
           </div>
           <p
             class="rpg-text-secondary font-serif leading-[1.8] text-[17px] text-pretty"
@@ -160,6 +180,13 @@ watch(
               class="mr-2 text-sm font-display font-semibold"
               :class="entry.speaker_kind === 'companion' ? 'rpg-text-arcane' : 'rpg-text-teal'"
             >{{ entry.speaker_kind === 'companion' ? '◈' : '❦' }} {{ entry.speaker }} </span>
+            <span
+              v-if="audioStatusFor(entry)"
+              class="rpg-audio-status mr-2"
+              :class="{ 'is-error': audioStatusFor(entry)?.status === 'error' }"
+            >
+              {{ audioStatusLabel(entry) }}
+            </span>
             <span class="rpg-text-main text-sm leading-relaxed">{{ entry.text }}</span>
           </div>
         </div>
@@ -353,8 +380,46 @@ watch(
   animation: bounce 1s infinite;
 }
 
+.rpg-audio-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid color-mix(in srgb, var(--color-gold) 35%, transparent);
+  border-radius: var(--radius-sm);
+  color: var(--color-gold);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  padding: 4px 6px;
+  text-transform: uppercase;
+}
+
+.rpg-audio-status::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: currentColor;
+  animation: rpg-audio-pulse 900ms ease-in-out infinite;
+}
+
+.rpg-audio-status.is-error {
+  border-color: color-mix(in srgb, var(--color-blood) 45%, transparent);
+  color: var(--color-blood);
+}
+
+.rpg-audio-status.is-error::before {
+  animation: none;
+}
+
 @keyframes bounce {
   0%, 100% { transform: translateY(0); }
   50%       { transform: translateY(-4px); }
+}
+
+@keyframes rpg-audio-pulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1); }
 }
 </style>

@@ -729,6 +729,7 @@ export interface TurnEntry {
 
 export interface NarrationPayload {
   text: string
+  narration_id?: string
   speaker?: string
   speaker_id?: string
   speaker_kind?: 'gm' | 'human' | 'companion' | 'npc' | 'monster'
@@ -845,6 +846,7 @@ export interface NarrativeEntry {
   id: string
   type: NarrativeEntryType
   text?: string
+  narration_id?: string
   speaker?: string
   speaker_id?: string
   speaker_kind?: NarrationPayload['speaker_kind']
@@ -1062,8 +1064,12 @@ export interface TtsPreviewResponse {
 }
 
 export interface AudioPayload {
-  audio_b64: string
   narration_id: string
+  status?: 'generating' | 'ready' | 'error'
+  audio_b64?: string
+  speaker?: string
+  speaker_kind?: NarrationPayload['speaker_kind']
+  message?: string
 }
 
 // ─── Save / Load ──────────────────────────────────────────────────────────────

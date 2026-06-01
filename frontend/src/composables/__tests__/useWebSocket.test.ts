@@ -144,7 +144,49 @@ describe('useWebSocket', () => {
     expect(gameStore.narrativeLog.at(-1)).toMatchObject({
       type: 'dialogue',
       text: 'Je reste avec toi.',
+      narration_id: undefined,
       speaker: 'Elara',
+    })
+
+    socket.disconnect()
+    vi.unstubAllGlobals()
+  })
+
+  it('links audio generation status to the matching dialogue event id', () => {
+    const socket = useWebSocket('session-1')
+    const gameStore = useGameStore()
+
+    socket.connect('hero-1')
+    WebSocketMock.instances[0]!.open()
+
+    WebSocketMock.instances[0]!.onmessage?.({
+      data: JSON.stringify({
+        event_type: 'dialogue',
+        event_id: 'dialogue-event-1',
+        payload: {
+          text: 'Je peux vous guider.',
+          speaker: 'Azaka',
+          speaker_kind: 'npc',
+        },
+      }),
+    })
+    WebSocketMock.instances[0]!.onmessage?.({
+      data: JSON.stringify({
+        event_type: 'audio',
+        payload: {
+          narration_id: 'dialogue-event-1',
+          status: 'generating',
+          speaker_kind: 'npc',
+        },
+      }),
+    })
+
+    expect(gameStore.narrativeLog.at(-1)).toMatchObject({
+      narration_id: 'dialogue-event-1',
+      type: 'dialogue',
+    })
+    expect(gameStore.audioStatusByNarrationId['dialogue-event-1']).toEqual({
+      status: 'generating',
     })
 
     socket.disconnect()

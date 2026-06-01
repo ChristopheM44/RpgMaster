@@ -430,6 +430,8 @@ class TtsRouter:
         voice: str | None = None,
         lang: str | None = None,
         speed: float | None = None,
+        speaker: str | None = None,
+        speaker_kind: str | None = None,
     ) -> None:
         """Synthétise *text* et publie un événement AUDIO sur le bus.
 
@@ -442,7 +444,17 @@ class TtsRouter:
             return
 
         narration_id = narration_id or str(uuid.uuid4())
+        status_payload = {
+            "narration_id": narration_id,
+            "status": "generating",
+        }
+        if speaker:
+            status_payload["speaker"] = speaker
+        if speaker_kind:
+            status_payload["speaker_kind"] = speaker_kind
+
         try:
+            await self._publish_audio(session_id, status_payload)
             wav_bytes = await self.synthesize_bytes(
                 text,
                 voice=voice,
@@ -454,8 +466,9 @@ class TtsRouter:
             await self._publish_audio(
                 session_id,
                 {
+                    **status_payload,
+                    "status": "ready",
                     "audio_b64": audio_b64,
-                    "narration_id": narration_id,
                 },
             )
             logger.debug(
@@ -468,9 +481,25 @@ class TtsRouter:
                 "TTS échec (session=%s backend=%s) : %s — jeu continue sans audio.",
                 session_id, self.tts_backend, exc,
             )
+            await self._publish_audio(
+                session_id,
+                {
+                    **status_payload,
+                    "status": "error",
+                    "message": str(exc),
+                },
+            )
         except Exception as exc:
             logger.error(
                 "TTS erreur inattendue (session=%s) : %s", session_id, exc
+            )
+            await self._publish_audio(
+                session_id,
+                {
+                    **status_payload,
+                    "status": "error",
+                    "message": str(exc),
+                },
             )
 
     async def health(self) -> dict:

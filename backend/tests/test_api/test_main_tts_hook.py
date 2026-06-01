@@ -31,6 +31,7 @@ def test_is_gm_narration_payload_rejects_system_entries() -> None:
 def test_is_npc_dialogue_payload_accepts_only_npc_kind() -> None:
     assert _is_npc_dialogue_payload({"speaker_kind": "npc"}) is True
     assert _is_npc_dialogue_payload({"speaker_kind": "companion"}) is False
+    assert _is_npc_dialogue_payload({"entry_kind": "dialogue", "speaker": "Azaka"}) is True
 
 
 def test_queue_tts_for_gm_narration(monkeypatch) -> None:
@@ -64,6 +65,7 @@ def test_queue_tts_for_gm_narration(monkeypatch) -> None:
         event_id="event-1",
         payload={
             "text": "La torche tremble.",
+            "speaker": "Maître du Jeu",
             "speaker_kind": "gm",
             "narration_id": "narration-1",
         },
@@ -78,6 +80,8 @@ def test_queue_tts_for_gm_narration(monkeypatch) -> None:
         voice="am_michael",
         lang="fr-fr",
         speed=0.85,
+        speaker="Maître du Jeu",
+        speaker_kind="gm",
     )
     assert captured["name"] == "tts.gm_narration"
 
@@ -157,7 +161,7 @@ async def test_npc_dialogue_uses_persona_voice(monkeypatch) -> None:
     event = GameEvent(
         event_type=EventType.DIALOGUE,
         session_id="session-1",
-        payload={"speaker_id": "azaka", "speaker_kind": "npc"},
+        payload={"speaker": "Azaka", "speaker_id": "azaka", "speaker_kind": "npc"},
     )
 
     await _synthesize_npc_dialogue(
@@ -174,6 +178,8 @@ async def test_npc_dialogue_uses_persona_voice(monkeypatch) -> None:
         voice="am_michael",
         lang="fr-fr",
         speed=0.92,
+        speaker="Azaka",
+        speaker_kind="npc",
     )
 
 
@@ -201,4 +207,6 @@ async def test_npc_dialogue_falls_back_without_persona(monkeypatch) -> None:
         voice="ff_siwis",
         lang="fr-fr",
         speed=0.95,
+        speaker="",
+        speaker_kind="npc",
     )

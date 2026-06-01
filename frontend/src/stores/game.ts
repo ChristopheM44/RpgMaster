@@ -26,6 +26,7 @@ import type {
   CityMap,
   RegionMapUpdatedPayload,
   CityMapUpdatedPayload,
+  AudioPayload,
   NodeStatus,
   ReachableCells,
 } from '../types'
@@ -62,6 +63,9 @@ export const useGameStore = defineStore('game', () => {
 
   // ─── Narrative log ──────────────────────────────────────────────────────────
   const narrativeLog = ref<NarrativeEntry[]>([])
+  const audioStatusByNarrationId = ref<
+    Record<string, { status: 'generating' | 'error'; message?: string }>
+  >({})
 
   // ─── World state ────────────────────────────────────────────────────────────
   const adventureJournal = ref<AdventureJournal | null>(null)
@@ -238,6 +242,7 @@ export const useGameStore = defineStore('game', () => {
       id: crypto.randomUUID(),
       type,
       text: type === 'dialogue' ? stripSpeakerPrefix(payload.text, payload.speaker) : payload.text,
+      narration_id: payload.narration_id,
       speaker: payload.speaker,
       speaker_id: payload.speaker_id,
       speaker_kind: payload.speaker_kind,
@@ -263,6 +268,34 @@ export const useGameStore = defineStore('game', () => {
       text,
       timestamp: new Date().toISOString(),
     })
+  }
+
+  function applyAudioStatus(payload: AudioPayload) {
+    const narrationId = payload.narration_id
+    if (!narrationId) return
+
+    if (payload.status === 'error') {
+      audioStatusByNarrationId.value = {
+        ...audioStatusByNarrationId.value,
+        [narrationId]: {
+          status: 'error',
+          message: payload.message,
+        },
+      }
+      return
+    }
+
+    if (payload.status === 'generating') {
+      audioStatusByNarrationId.value = {
+        ...audioStatusByNarrationId.value,
+        [narrationId]: { status: 'generating' },
+      }
+      return
+    }
+
+    const next = { ...audioStatusByNarrationId.value }
+    delete next[narrationId]
+    audioStatusByNarrationId.value = next
   }
 
   function addCombatAction(payload: CombatActionPayload) {
@@ -521,6 +554,7 @@ export const useGameStore = defineStore('game', () => {
         id: m.id,
         type,
         text: type === 'dialogue' ? stripSpeakerPrefix(m.content, m.speaker) : m.content,
+        narration_id: m.id,
         speaker: m.speaker,
         speaker_id: metadataString('speaker_id') ?? metadataString('character_id'),
         speaker_kind: speakerKind,
@@ -533,6 +567,7 @@ export const useGameStore = defineStore('game', () => {
 
   function reset() {
     narrativeLog.value = []
+    audioStatusByNarrationId.value = {}
     combatants.value = []
     selectedCombatantId.value = null
     gridConfig.value = null
@@ -565,6 +600,7 @@ export const useGameStore = defineStore('game', () => {
     currentTurnId,
     validTransitions,
     narrativeLog,
+    audioStatusByNarrationId,
     combatants,
     selectedCombatantId,
     gridConfig,
@@ -600,6 +636,7 @@ export const useGameStore = defineStore('game', () => {
     addRollResult,
     addSystemEntry,
     addCombatAction,
+    applyAudioStatus,
     addPlayerEntry,
     applyTurnStart,
     applyPhaseChange,

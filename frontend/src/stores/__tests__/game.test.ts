@@ -189,6 +189,33 @@ describe('useGameStore map decoration state', () => {
     })
   })
 
+  it('tracks audio generation status by narration id', () => {
+    const store = useGameStore()
+
+    store.addNarration({
+      text: 'Je peux vous guider.',
+      narration_id: 'event-1',
+      speaker: 'Azaka',
+      speaker_kind: 'npc',
+      entry_kind: 'dialogue',
+    })
+    store.applyAudioStatus({
+      narration_id: 'event-1',
+      status: 'generating',
+    })
+
+    expect(store.narrativeLog[0]?.narration_id).toBe('event-1')
+    expect(store.audioStatusByNarrationId['event-1']).toEqual({ status: 'generating' })
+
+    store.applyAudioStatus({
+      narration_id: 'event-1',
+      status: 'ready',
+      audio_b64: 'UklGRg==',
+    })
+
+    expect(store.audioStatusByNarrationId['event-1']).toBeUndefined()
+  })
+
   it('tracks player AI thinking separately from GM thinking', () => {
     const store = useGameStore()
 
