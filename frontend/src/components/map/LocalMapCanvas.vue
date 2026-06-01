@@ -161,6 +161,9 @@ const visualAsset = computed<MapVisualAsset | undefined>(() => props.scene?.visu
 const visualAssetReady = computed(() =>
   visualAsset.value?.status === 'ready' && Boolean(visualAsset.value.url),
 )
+const visualAssetGenerating = computed(() =>
+  visualAsset.value?.status === 'prompt_ready' || visualAsset.value?.status === 'generating',
+)
 const patternId = computed(() => `local-map-grid-${hashSeed(props.scene?.scene_id ?? `${cols.value}x${rows.value}`)}`)
 
 function isElementInteractive(element: SceneElement): boolean {
@@ -232,6 +235,9 @@ function hashSeed(seed: string): number {
       alt=""
       draggable="false"
     />
+    <div v-if="visualAssetGenerating" class="local-map-gen-badge" :class="`gen-${visualAsset?.status}`">
+      <span class="gen-spinner" />{{ visualAsset?.status === 'generating' ? 'Génération…' : 'En attente…' }}
+    </div>
     <div
       class="local-map-fog"
       :class="{ 'has-image': visualAssetReady }"
@@ -360,6 +366,44 @@ function hashSeed(seed: string): number {
   z-index: 5;
   pointer-events: none;
   box-shadow: inset 0 0 52px rgba(0, 0, 0, 0.58);
+}
+
+.local-map-gen-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--color-bg-elev);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text-muted);
+  font: 500 10px/1 var(--font-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.local-map-gen-badge.gen-generating {
+  color: var(--color-ember);
+  border-color: var(--color-ember);
+}
+
+.gen-spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--color-border);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: gen-spin 0.8s linear infinite;
+}
+
+@keyframes gen-spin {
+  to { transform: rotate(360deg); }
 }
 
 .local-map-element {

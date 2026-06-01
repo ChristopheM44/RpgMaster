@@ -361,4 +361,13 @@ export const adminApi = {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
+
+  testImageGeneration: () =>
+    request<{
+      available: boolean
+      provider: string
+      model: string
+      latency_ms?: number
+      error?: string
+    }>('/admin/image/test', { method: 'POST' }),
 }

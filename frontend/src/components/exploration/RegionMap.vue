@@ -24,6 +24,9 @@ const visualAsset = computed(() => region.value?.visual_asset)
 const visualAssetReady = computed(() =>
   visualAsset.value?.status === 'ready' && Boolean(visualAsset.value.url),
 )
+const visualAssetGenerating = computed(() =>
+  visualAsset.value?.status === 'prompt_ready' || visualAsset.value?.status === 'generating',
+)
 
 // Corpus pour la détection de biome : IDs + noms de tous les nœuds
 const nodeCorpus = computed(() =>
@@ -109,6 +112,9 @@ function mountainPoints(x: number, y: number, h: number): string {
       alt=""
       draggable="false"
     />
+    <div v-if="visualAssetGenerating" class="map-gen-badge" :class="`gen-${visualAsset?.status}`">
+      <span class="gen-spinner" />{{ visualAsset?.status === 'generating' ? 'Génération…' : 'En attente…' }}
+    </div>
     <svg
       v-if="region"
       viewBox="0 0 100 100"
@@ -330,5 +336,43 @@ function mountainPoints(x: number, y: number, h: number): string {
   font-size: 9px;
   color: var(--color-text-muted);
   font-family: var(--font-mono);
+}
+
+.map-gen-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--color-bg-elev);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text-muted);
+  font: 500 10px/1 var(--font-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.map-gen-badge.gen-generating {
+  color: var(--color-ember);
+  border-color: var(--color-ember);
+}
+
+.gen-spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--color-border);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: gen-spin 0.8s linear infinite;
+}
+
+@keyframes gen-spin {
+  to { transform: rotate(360deg); }
 }
 </style>

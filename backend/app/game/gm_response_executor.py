@@ -6,6 +6,7 @@ retourne les jets en attente pour une narration d'outcome.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import re
@@ -935,9 +936,16 @@ class GMResponseExecutor:
             logger.warning("scene_layout ignore : params invalides - %s", params)
             return
 
-        from app.game.scene_state_service import reconcile_scene_npcs
+        from app.game.scene_state_service import (
+            carry_accompanying_npcs,
+            reconcile_scene_npcs,
+        )
 
+        old_scene = active.state_data.get("current_scene")
         enrich_scene_poi_mechanics(layout)
+        # Carry party-accompanying NPCs (a guide/escort) into the new place before
+        # the absence filter runs, so a travel transition can't silently drop them.
+        carry_accompanying_npcs(active, old_scene, layout)
         self._filter_absent_npc_pois(layout, active)
         active.state_data["current_scene"] = layout
         self._register_scene_npcs(layout, active)
@@ -949,6 +957,7 @@ class GMResponseExecutor:
             {"scene": layout},
             source=self._source,
         )
+        self._trigger_visual_asset_generation(session_id, layout, scope="scene")
 
     async def _apply_scene_update(
         self,
@@ -1170,6 +1179,7 @@ class GMResponseExecutor:
             },
             source=self._source,
         )
+        self._trigger_visual_asset_generation(session_id, region_map, scope="region")
 
     async def _apply_city_map_update(
         self,
@@ -1229,6 +1239,9 @@ class GMResponseExecutor:
                 "active_city_id": public_maps["active_city_id"],
             },
             source=self._source,
+        )
+        self._trigger_visual_asset_generation(
+            session_id, city_maps.get(city_id, {}), scope="city"
         )
 
     async def _apply_node_status_update(
@@ -1644,6 +1657,27 @@ class GMResponseExecutor:
             map_kind=map_kind,
             provider=image_provider,
             model=image_model,
+        )
+
+    @staticmethod
+    def _trigger_visual_asset_generation(
+        session_id: str,
+        data: dict[str, Any],
+        scope: str,
+    ) -> None:
+        """Fire-and-forget background image generation for a prompt_ready visual_asset."""
+        visual_asset = data.get("visual_asset")
+        if not isinstance(visual_asset, dict) or visual_asset.get("status") != "prompt_ready":
+            return
+        from app.game.async_tasks import create_logged_task
+        from app.services.visual_asset_service import generate_visual_asset
+
+        asset_copy = {**visual_asset}
+        if scope == "city":
+            asset_copy["_city_id"] = data.get("id")
+        create_logged_task(
+            generate_visual_asset(session_id, scope, asset_copy),
+            name=f"visual_asset_{scope}_{session_id}",
         )
 
     @staticmethod

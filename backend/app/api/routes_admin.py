@@ -407,6 +407,48 @@ async def update_image_generation_settings(
     )
 
 
+class ImageTestResponse(BaseModel):
+    available: bool
+    provider: str
+    model: str
+    latency_ms: int | None = None
+    error: str | None = None
+
+
+@router.post("/image/test", response_model=ImageTestResponse)
+async def test_image_generation() -> ImageTestResponse:
+    """Teste la connectivité au fournisseur d'images configuré."""
+    from app.llm.image_client import ImageClient, ImageClientError
+
+    provider = get_image_provider()
+    model = get_image_model()
+    client = ImageClient()
+    start = time.monotonic()
+    try:
+        available = await client.is_available()
+        latency_ms = int((time.monotonic() - start) * 1000)
+    except ImageClientError as exc:
+        return ImageTestResponse(
+            available=False,
+            provider=provider,
+            model=model,
+            error=str(exc)[:280],
+        )
+    except Exception as exc:
+        return ImageTestResponse(
+            available=False,
+            provider=provider,
+            model=model,
+            error=f"Erreur inattendue : {exc}"[:280],
+        )
+    return ImageTestResponse(
+        available=available,
+        provider=provider,
+        model=model,
+        latency_ms=latency_ms,
+    )
+
+
 @router.get("/llm/model-info", response_model=OllamaModelInfoResponse)
 async def get_llm_model_info(model: str = Query(..., min_length=1)) -> OllamaModelInfoResponse:
     """Retourne les caractéristiques déclarées par Ollama pour un modèle."""

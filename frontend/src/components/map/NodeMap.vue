@@ -41,6 +41,9 @@ const reachableSet = computed(() => new Set(props.reachableNodeIds))
 const visualAssetReady = computed(() =>
   props.visualAsset?.status === 'ready' && Boolean(props.visualAsset.url),
 )
+const visualAssetGenerating = computed(() =>
+  props.visualAsset?.status === 'prompt_ready' || props.visualAsset?.status === 'generating',
+)
 </script>
 
 <template>
@@ -53,6 +56,9 @@ const visualAssetReady = computed(() =>
       alt=""
       draggable="false"
     />
+    <div v-if="visualAssetGenerating" class="node-map__gen-badge" :class="`gen-${visualAsset?.status}`">
+      <span class="gen-spinner" />{{ visualAsset?.status === 'generating' ? 'Génération…' : 'En attente…' }}
+    </div>
     <svg class="node-map__edges" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
       <path
         v-for="edge in visibleEdges"
@@ -170,5 +176,43 @@ const visualAssetReady = computed(() =>
   display: grid;
   place-items: center;
   color: var(--color-text-muted);
+}
+
+.node-map__gen-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--color-bg-elev);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text-muted);
+  font: 500 10px/1 var(--font-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.node-map__gen-badge.gen-generating {
+  color: var(--color-ember);
+  border-color: var(--color-ember);
+}
+
+.gen-spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--color-border);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: gen-spin 0.8s linear infinite;
+}
+
+@keyframes gen-spin {
+  to { transform: rotate(360deg); }
 }
 </style>

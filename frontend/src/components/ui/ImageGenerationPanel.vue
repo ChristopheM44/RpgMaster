@@ -34,50 +34,49 @@ async function testConnection() {
   loading.value = true
   error.value = null
   health.value = null
-  
-  // Premium simulated latency delay
-  await new Promise((resolve) => setTimeout(resolve, 800))
-  
-  if (!baseUrl.value) {
-    error.value = "L'URL de l'API est requise pour tester la connexion."
+
+  try {
+    const result = await adminApi.testImageGeneration()
+    health.value = {
+      available: result.available,
+      provider: result.provider,
+      model: result.model,
+    }
+  } catch (e) {
+    health.value = {
+      available: false,
+      provider: provider.value,
+      model: model.value || 'default',
+    }
+    error.value = e instanceof Error ? e.message : 'Test de connexion échoué'
+  } finally {
     loading.value = false
-    return
   }
-  
-  health.value = {
-    available: true,
-    provider: provider.value,
-    model: model.value || 'default',
-  }
-  loading.value = false
 }
 
 async function pingImage() {
   pinging.value = true
   pingResult.value = null
-  
-  // Premium simulated API call delay
-  await new Promise((resolve) => setTimeout(resolve, 1500))
-  
-  if (!baseUrl.value) {
+
+  try {
+    const result = await adminApi.testImageGeneration()
+    pingResult.value = {
+      ok: result.available,
+      provider: result.provider === 'local' ? 'Local' : 'Cloud',
+      model: result.model || (provider.value === 'local' ? 'stable-diffusion' : 'dall-e-3'),
+      latency_ms: result.latency_ms,
+      error: result.error,
+    }
+  } catch (e) {
     pingResult.value = {
       ok: false,
       provider: provider.value === 'local' ? 'Local' : 'Cloud',
       model: model.value || 'default',
-      error: 'Configuration incomplète : URL API manquante.',
+      error: e instanceof Error ? e.message : 'Test image échoué',
     }
+  } finally {
     pinging.value = false
-    return
   }
-  
-  pingResult.value = {
-    ok: true,
-    provider: provider.value === 'local' ? 'Local' : 'Cloud',
-    model: model.value || (provider.value === 'local' ? 'stable-diffusion' : 'dall-e-3'),
-    latency_ms: Math.floor(Math.random() * 200) + 120,
-    sample_response: `Carte tactique de taille ${size.value} générée avec succès via ${provider.value === 'local' ? 'Local' : 'Cloud'}.`,
-  }
-  pinging.value = false
 }
 
 async function loadSettings() {
