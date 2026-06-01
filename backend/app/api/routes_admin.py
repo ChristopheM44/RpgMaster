@@ -36,6 +36,7 @@ from app.config import (
     get_openai_base_url,
     get_player_model,
     get_source_max_chars,
+    get_image_api_key,
     is_image_api_key_set,
     is_ollama_api_key_set,
     is_openai_api_key_set,
@@ -411,7 +412,17 @@ class ImageTestResponse(BaseModel):
     available: bool
     provider: str
     model: str
+    models: list[str] = Field(default_factory=list)
     latency_ms: int | None = None
+    error: str | None = None
+
+
+class ImagePingResponse(BaseModel):
+    ok: bool
+    provider: str
+    model: str
+    latency_ms: int | None = None
+    image_url: str | None = None
     error: str | None = None
 
 
@@ -422,6 +433,69 @@ async def test_image_generation() -> ImageTestResponse:
 
     provider = get_image_provider()
     model = get_image_model()
+    base_url = get_image_base_url()
+    models: list[str] = []
+
+    # Pour Ollama, vérifier via /api/tags — cela suffit à confirmer la disponibilité
+    ollama_reachable = False
+    if provider == "local" and base_url:
+        try:
+            image_api_key = get_image_api_key()
+            headers: dict[str, str] | None = (
+                {"Authorization": f"Bearer {image_api_key}"} if image_api_key else None
+            )
+            async with httpx.AsyncClient(
+                timeout=5.0,
+                headers=headers,
+            ) as http:
+                resp = await http.get(f"{base_url}/api/tags")
+                resp.raise_for_status()
+                models = [m["name"] for m in resp.json().get("models", [])]
+                ollama_reachable = True
+        except Exception:
+            pass  # Non-bloquant — on retourne la liste vide
+
+    # Pour les providers cloud, vérifier via le client OpenAI-compatible
+    if provider == "local":
+        # Pour Ollama, la récupération réussie de /api/tags suffit comme test
+        if ollama_reachable:
+            return ImageTestResponse(
+                available=True,
+                provider=provider,
+                model=model,
+                models=models,
+            )
+        # /api/tags a échoué — on tente quand même le client comme fallback
+        client = ImageClient()
+        start = time.monotonic()
+        try:
+            available = await client.is_available()
+            latency_ms = int((time.monotonic() - start) * 1000)
+        except ImageClientError as exc:
+            return ImageTestResponse(
+                available=False,
+                provider=provider,
+                model=model,
+                models=models,
+                error=str(exc)[:280],
+            )
+        except Exception as exc:
+            return ImageTestResponse(
+                available=False,
+                provider=provider,
+                model=model,
+                models=models,
+                error=f"Erreur inattendue : {exc}"[:280],
+            )
+        return ImageTestResponse(
+            available=available,
+            provider=provider,
+            model=model,
+            models=models,
+            latency_ms=latency_ms,
+        )
+
+    # Provider cloud (OpenAI-compatible)
     client = ImageClient()
     start = time.monotonic()
     try:
@@ -432,6 +506,7 @@ async def test_image_generation() -> ImageTestResponse:
             available=False,
             provider=provider,
             model=model,
+            models=models,
             error=str(exc)[:280],
         )
     except Exception as exc:
@@ -439,14 +514,59 @@ async def test_image_generation() -> ImageTestResponse:
             available=False,
             provider=provider,
             model=model,
+            models=models,
             error=f"Erreur inattendue : {exc}"[:280],
         )
     return ImageTestResponse(
         available=available,
         provider=provider,
         model=model,
+        models=models,
         latency_ms=latency_ms,
     )
+
+
+@router.post("/image/ping", response_model=ImagePingResponse)
+async def ping_image_generation(request: Request) -> ImagePingResponse:
+    """Génère une image test minimale pour vérifier la configuration du fournisseur."""
+    llm_ping_limiter.check(f"image_ping:{client_ip(request)}")
+    from app.llm.image_client import ImageClient, ImageClientError
+
+    provider = get_image_provider()
+    model = get_image_model()
+    client = ImageClient()
+    start = time.perf_counter()
+    try:
+        url = await client.generate(
+            "A simple pencil sketch of a wooden door on stone wall, fantasy RPG style"
+        )
+        latency_ms = int((time.perf_counter() - start) * 1000)
+        return ImagePingResponse(
+            ok=True,
+            provider=provider,
+            model=model,
+            latency_ms=latency_ms,
+            image_url=url[:500] if url else None,
+        )
+    except ImageClientError as exc:
+        latency_ms = int((time.perf_counter() - start) * 1000)
+        return ImagePingResponse(
+            ok=False,
+            provider=provider,
+            model=model,
+            latency_ms=latency_ms,
+            error=str(exc)[:280],
+        )
+    except Exception as exc:
+        latency_ms = int((time.perf_counter() - start) * 1000)
+        logger.warning("ping_image: provider=%s model=%s failed: %s", provider, model, exc)
+        return ImagePingResponse(
+            ok=False,
+            provider=provider,
+            model=model,
+            latency_ms=latency_ms,
+            error=f"{type(exc).__name__}: {exc}"[:280],
+        )
 
 
 @router.get("/llm/model-info", response_model=OllamaModelInfoResponse)
