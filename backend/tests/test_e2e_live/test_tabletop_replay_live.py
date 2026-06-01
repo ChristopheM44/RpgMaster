@@ -15,6 +15,7 @@ from app.agents.gm_agent import _FALLBACK_NARRATION, GMAgent
 from app.game.action_pipeline import ActionPipeline, ActionRequest
 from app.game.event_bus import EventType
 from app.game.session_manager import ActiveSession
+from app.game.travel_detection import detect_travel_intent, travel_intent_as_dict
 from app.models.session import SessionStatus
 
 SESSION_ID = "live-tabletop-replay"
@@ -290,3 +291,118 @@ def _wrong_actor_discovery(text: str) -> str | None:
     )
     match = pattern.search(text)
     return match.group(1) if match else None
+
+
+def _travel_state() -> dict[str, Any]:
+    """Party on the amber trail with Khalid *accompanying*, an exit to the oasis."""
+    return {
+        "characters": {
+            "thorvald": {
+                "name": "Thorvald",
+                "level": 1,
+                "is_ai": False,
+                "ability_scores": {"int": 12, "wis": 12, "cha": 10},
+            },
+            "elara": {"name": "Elara", "is_ai": True, "class_name": "Wizard"},
+        },
+        "adventure_journal": {
+            "location_region": "Désert d'Akhdar",
+            "location_place": "Piste d'Ambre",
+            "time_of_day": "morning",
+            "day_number": 1,
+            "weather": "Chaleur sèche",
+        },
+        "current_scene": {
+            "scene_id": "piste_ambre",
+            "cols": 12,
+            "rows": 12,
+            "cell_size_m": 1.5,
+            "terrain": "desert",
+            "scene_theme": "desert",
+            "description": "Une piste de sable bordée de carcasses desséchées de chameaux.",
+            "pois": [
+                {
+                    "id": "khalid_guide",
+                    "name": "Khalid le Guide",
+                    "kind": "npc",
+                    "icon": "npc",
+                    "position": {"col": 5, "row": 6},
+                    "known_to_party": True,
+                }
+            ],
+            "exits": [
+                {
+                    "id": "vers_oasis",
+                    "label": "Oasis d'Émeraude",
+                    "position": {"col": 11, "row": 6},
+                    "leads_to": "oasis_emeraude",
+                }
+            ],
+            "party_positions": {
+                "thorvald": {"col": 5, "row": 7},
+                "elara": {"col": 4, "row": 7},
+            },
+        },
+        "npc_states": {
+            "khalid_guide": {
+                "name": "Khalid le Guide",
+                "status": "present",
+                "disposition": "accompanying",
+                "known_to_party": True,
+                "last_location": "piste_ambre",
+            }
+        },
+    }
+
+
+@pytest.mark.live_llm
+async def test_live_llm_guide_survives_travel_transition() -> None:
+    """P1+P2 acceptance: an imperative travel phrase moves the scene, and the
+    accompanying guide is carried across the transition rather than vanishing.
+
+    Holds regardless of LLM whim: the deterministic travel fallback guarantees a
+    SCENE_LAYOUT_CHANGED, and carry_accompanying_npcs guarantees the guide stays.
+    """
+    active = ActiveSession(
+        session_id=SESSION_ID,
+        phase=SessionStatus.EXPLORATION,
+        state_data=deepcopy(_travel_state()),
+    )
+    bus = _CollectBus()
+    pipeline = ActionPipeline(GMAgent(), bus)
+
+    content = "Très bien, rendons-nous à l'oasis d'Émeraude, ouvrez la route Khalid."
+    travel = travel_intent_as_dict(detect_travel_intent(content, active.state_data))
+    assert travel and travel["is_travel"], "le marqueur impératif doit être détecté"
+
+    await pipeline.resolve_and_publish(
+        ActionRequest(
+            session_id=SESSION_ID,
+            actor_id="thorvald",
+            actor_name="Thorvald",
+            actor_kind="player",
+            action_type="free_text",
+            content=content,
+            travel_intent=travel,
+        ),
+        active,
+        db=None,
+    )
+
+    errors = [payload for event_type, payload in bus.events if event_type == EventType.ERROR]
+    assert not errors, f"erreur système live LLM : {errors!r}"
+
+    # Acceptance #2 — the imperative travel produced a real scene change.
+    scene_changes = [
+        payload for event_type, payload in bus.events
+        if event_type == EventType.SCENE_LAYOUT_CHANGED
+    ]
+    assert scene_changes, "le voyage (« rendons-nous à… ») doit publier une nouvelle scène"
+
+    # Acceptance #1 — the guide is carried, never frozen as "missing" in canon.
+    khalid = active.state_data["npc_states"]["khalid_guide"]
+    assert khalid["status"] == "present", "le guide ne doit pas disparaître au voyage"
+    scene = active.state_data["current_scene"]
+    assert any(p.get("id") == "khalid_guide" for p in scene.get("pois", []) or []), (
+        "le guide doit rester un POI visible dans la nouvelle scène"
+    )

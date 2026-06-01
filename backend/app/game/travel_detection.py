@@ -25,6 +25,35 @@ class TravelIntent:
 # --- Marqueurs de voyage en français et anglais ---
 
 _TRAVEL_MARKERS_EXPLICIT: tuple[str, ...] = (
+    # Impératifs et tournures familières (préfixe long avant court ; on évite les
+    # formes en "... a" sujettes aux faux positifs comme "allons attendre").
+    "rendons nous vers",
+    "rendons nous au",
+    "rendons nous a",
+    "allons vers",
+    "allons au",
+    "conduis nous vers",
+    "conduis nous a",
+    "conduisez nous vers",
+    "conduisez nous a",
+    "mene nous vers",
+    "mene nous a",
+    "menez nous vers",
+    "menez nous a",
+    "guide nous vers",
+    "guide nous a",
+    "guidez nous vers",
+    "guidez nous a",
+    "en avant vers",
+    "en avant pour",
+    "filons vers",
+    "filons a",
+    "cap sur",
+    "on va vers",
+    "on va au",
+    "on part vers",
+    "on part pour",
+    "on y va vers",
     "je me dirige vers",
     "je me dirige a",
     "je vais a",
@@ -104,10 +133,14 @@ _PLACE_ARTICLES: tuple[str, ...] = (
 
 
 def _normalize_text(text: str) -> str:
-    """Normalise le texte pour la comparaison : accents, casse, ponctuation."""
+    """Normalise le texte pour la comparaison : accents, casse, apostrophes, tirets."""
     normalized = unicodedata.normalize("NFKD", text.lower())
     without_accents = "".join(ch for ch in normalized if not unicodedata.combining(ch))
-    return without_accents
+    # Apostrophes et traits d'union deviennent des espaces pour que
+    # "rendons-nous à l'oasis" -> "rendons nous a l oasis" (marqueur + article),
+    # puis on compacte les espaces multiples.
+    cleaned = without_accents.replace("'", " ").replace("’", " ").replace("-", " ")
+    return re.sub(r"\s+", " ", cleaned).strip()
 
 
 def _extract_destination_after_marker(

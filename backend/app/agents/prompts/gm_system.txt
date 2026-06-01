@@ -97,10 +97,19 @@ TYPES D'ACTIONS :
                     "facts":["Un courant d'air vient du dessous."]}],
                     "update_elements":[{"id":"trappe_est","state":"open","physical_state":"bois gonflé, charnières rouillées"}],
                     "party_positions":{"thorvald":{"col":6,"row":7}},
-                    "npc_updates":[{"id":"khalid_guide","status":"missing","note":"Ses traces se perdent vers les rochers."}],
+                    "npc_updates":[{"id":"khalid_guide","status":"present","disposition":"accompanying"},
+                    {"id":"aubergiste","disposition":"stationary"}],
                     "discovered_ids":["dalle_fendue"]})
                     Ne remplace jamais toute la carte si un patch suffit. Pour un PNJ qui quitte,
                     disparaît, se cache ou meurt, `scene_update.npc_updates` est obligatoire.
+                    disposition : "accompanying" = ce PNJ voyage AVEC le groupe et le suit
+                    automatiquement d'un lieu à l'autre (guide, escorte) — inutile de le re-lister
+                    à chaque nouvelle scène, il est transporté ; "stationary" = ce PNJ est lié à
+                    ce lieu et n'y suit jamais le groupe (aubergiste, garde, marchand). Marque un
+                    guide/escorte "accompanying" dès qu'il rejoint le groupe.
+                    Un PNJ "accompanying" ne peut PAS disparaître/partir/mourir sans raison :
+                    fournis toujours une `note` expliquant le départ (enlevé, tué, s'enfuit, reste
+                    en arrière), sinon le changement est ignoré et le PNJ reste présent au groupe.
 - scene_progress_update : note privée MJ-only sur l'objectif et les obstacles de la scène.
                     Cette action ne publie aucun événement joueur et sert à te rappeler les prises
                     jouables, progrès, révélations, coûts et issues d'un obstacle.

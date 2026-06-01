@@ -7,15 +7,25 @@ a real table.
 """
 from __future__ import annotations
 
+import logging
 from copy import deepcopy
 from typing import Any
 
 from app.game.session_manager import ActiveSession
 from app.services import local_map_service
 
+logger = logging.getLogger(__name__)
+
 _VISIBILITIES = {"visible", "subtle", "hidden"}
 _DISCOVERY_STATES = {"undiscovered", "discovered", "examined", "resolved", "locked", "open"}
 _NPC_STATUSES = {"present", "absent", "missing", "hidden", "left", "abducted", "dead"}
+# Statuses that pull the NPC off the scene's visible map (POI removed, location cleared).
+_DEPARTED_STATUSES = {"absent", "missing", "hidden", "left", "abducted", "dead"}
+# Subset meaning the NPC has truly left the party: the P2 guard requires an explicit
+# cause before accepting one of these for an ``accompanying`` NPC ("hidden" stays out —
+# it is a transient stealth state, not a departure).
+_GONE_FROM_PARTY_STATUSES = {"absent", "missing", "left", "abducted", "dead"}
+_DISPOSITIONS = {"accompanying", "stationary", "neutral"}
 
 _POI_TEXT_FIELDS = {
     "name": 120,
@@ -132,6 +142,117 @@ def reconcile_scene_npcs(active: ActiveSession, scene: dict[str, Any]) -> None:
             poi["name"] = npc_name
         elif poi_name:
             npc["name"] = poi_name
+
+
+def carry_accompanying_npcs(
+    active: ActiveSession,
+    old_scene: dict[str, Any] | None,
+    new_layout: dict[str, Any],
+) -> None:
+    """Carry party-accompanying NPCs across a travel transition.
+
+    When the GM replaces the scene with a ``scene_layout`` for a *different*
+    place, NPCs travelling with the party (a hired guide, an escort) must
+    follow. Otherwise they vanish silently: the LLM-authored layout rarely
+    re-lists them and ``_filter_absent_npc_pois`` would drop them anyway —
+    which the GM then rationalises into fiction ("the guide disappeared"), a
+    transition artifact that the canon synthesis later freezes as truth.
+
+    Rule (decision P1-C): any NPC that is a present POI of the *leaving* scene,
+    or already flagged ``disposition="accompanying"``, is carried into the new
+    scene — unless it is ``disposition="stationary"`` or already departed
+    (dead/left/missing/…). Carried NPCs are marked ``accompanying`` and their
+    ``last_location`` is moved to the new scene so the absence filter keeps
+    them, and a POI is injected when the layout omits them.
+
+    Over-carry (a location-bound NPC following once) is intentionally tolerated
+    — it is mild and the GM corrects it (``stationary`` / explicit departure);
+    under-carry breaks the story and contaminates canon, so we bias to carry.
+    No-op when the new layout has no ``scene_id`` or names the same place.
+    """
+    if not isinstance(new_layout, dict):
+        return
+    new_scene_id = str(new_layout.get("scene_id") or "").strip()
+    if not new_scene_id:
+        return  # can't tell this is a distinct place — stay conservative
+    old_scene_id = (
+        str(old_scene.get("scene_id") or "").strip() if isinstance(old_scene, dict) else ""
+    )
+    if old_scene_id and old_scene_id == new_scene_id:
+        return  # same place re-emitted, not a travel transition
+
+    npc_states = active.state_data.setdefault("npc_states", {})
+    if not isinstance(npc_states, dict):
+        npc_states = {}
+        active.state_data["npc_states"] = npc_states
+
+    # NPC ids that were present POIs in the scene being left.
+    candidates: set[str] = set()
+    if isinstance(old_scene, dict):
+        for poi in old_scene.get("pois", []) or []:
+            if not isinstance(poi, dict):
+                continue
+            kind = str(poi.get("kind") or "").strip().casefold()
+            icon = str(poi.get("icon") or "").strip().casefold()
+            poi_id = str(poi.get("id") or "").strip()
+            if poi_id and (kind == "npc" or icon == "npc"):
+                candidates.add(poi_id)
+    # …plus any NPC already travelling with the party.
+    for npc_id, npc in npc_states.items():
+        if isinstance(npc, dict) and str(npc.get("disposition") or "").lower() == "accompanying":
+            candidates.add(str(npc_id))
+
+    existing_poi_ids = {
+        str(poi.get("id") or "").strip()
+        for poi in new_layout.get("pois", []) or []
+        if isinstance(poi, dict)
+    }
+
+    for npc_id in candidates:
+        npc = npc_states.get(npc_id)
+        if not isinstance(npc, dict):
+            continue
+        if str(npc.get("disposition") or "").lower() == "stationary":
+            continue
+        if str(npc.get("status") or "present").lower() in _DEPARTED_STATUSES:
+            continue
+        # Carry it: travelling with the party, now in the new place.
+        npc["status"] = "present"
+        npc["disposition"] = "accompanying"
+        npc["last_location"] = new_scene_id
+        if npc_id in existing_poi_ids:
+            continue
+        pois = new_layout.setdefault("pois", [])
+        if not isinstance(pois, list):
+            continue
+        carried_poi: dict[str, Any] = {
+            "id": npc_id,
+            "name": str(npc.get("name") or npc_id),
+            "kind": "npc",
+            "icon": "npc",
+            "position": _carry_position(new_layout),
+            "state": "present",
+            "visibility": "visible",
+            "discovered": True,
+        }
+        known = npc.get("known_to_party")
+        if isinstance(known, bool):
+            carried_poi["known_to_party"] = known
+        pois.append(carried_poi)
+        existing_poi_ids.add(npc_id)
+
+
+def _carry_position(layout: dict[str, Any]) -> dict[str, int]:
+    """Place a carried NPC next to the party in the new layout, else center."""
+    cols = _clamp_int(layout.get("cols"), default=12, minimum=3, maximum=24)
+    rows = _clamp_int(layout.get("rows"), default=12, minimum=3, maximum=24)
+    party = layout.get("party_positions")
+    if isinstance(party, dict):
+        for raw_position in party.values():
+            position = _normalize_position(raw_position, cols, rows)
+            if position is not None:
+                return {"col": min(position["col"] + 1, cols - 1), "row": position["row"]}
+    return {"col": cols // 2, "row": rows // 2}
 
 
 def _merge_pois(scene: dict[str, Any], params: dict[str, Any], cols: int, rows: int) -> None:
@@ -270,18 +391,52 @@ def _merge_npc_updates(
         name = _clean_text(raw.get("name"), max_len=120)
         if name:
             npc["name"] = name
+
+        disposition = _clean_text(raw.get("disposition"), max_len=20).lower()
+        if disposition in _DISPOSITIONS:
+            npc["disposition"] = disposition
+
+        note = _clean_text(raw.get("note"), max_len=240)
+        cause = note or _clean_text(raw.get("reason") or raw.get("cause"), max_len=240)
+
         status = _clean_text(raw.get("status"), max_len=32).lower()
+        remove_poi = False
         if status in _NPC_STATUSES:
-            npc["status"] = status
-            if status == "present":
-                npc["last_location"] = (
-                    _clean_text(raw.get("last_location"), max_len=80) or scene_id
+            current_disposition = str(npc.get("disposition") or "").lower()
+            # P2 guard: an accompanying NPC cannot leave the party without an
+            # explicit narrative cause — this blocks a transition artifact from
+            # being frozen as "the guide vanished". A genuine departure just has
+            # to say why (note/reason).
+            blocked = (
+                status in _GONE_FROM_PARTY_STATUSES
+                and current_disposition == "accompanying"
+                and not cause
+            )
+            if blocked:
+                logger.warning(
+                    "npc_update: départ '%s' ignoré pour PNJ accompagnant '%s' sans cause "
+                    "explicite (anti-contamination)",
+                    status,
+                    npc_id,
                 )
-            elif status in {"absent", "missing", "hidden", "left", "abducted", "dead"}:
-                npc["last_location"] = _clean_text(raw.get("last_location"), max_len=80) or ""
+            else:
+                npc["status"] = status
+                if status == "present":
+                    npc["last_location"] = (
+                        _clean_text(raw.get("last_location"), max_len=80) or scene_id
+                    )
+                elif status in _DEPARTED_STATUSES:
+                    npc["last_location"] = _clean_text(raw.get("last_location"), max_len=80) or ""
+                    remove_poi = True
+                    # a caused departure ends the accompanying state
+                    if (
+                        current_disposition == "accompanying"
+                        and status in _GONE_FROM_PARTY_STATUSES
+                    ):
+                        npc["disposition"] = "neutral"
+
         if isinstance(raw.get("known_to_party"), bool):
             npc["known_to_party"] = raw["known_to_party"]
-        note = _clean_text(raw.get("note"), max_len=240)
         if note:
             npc["notes"] = _merged_unique(npc.get("notes"), [note], limit=12)
         position = _normalize_position(raw.get("position"), int(scene["cols"]), int(scene["rows"]))
@@ -294,7 +449,7 @@ def _merge_npc_updates(
                 position,
                 known_to_party=npc.get("known_to_party"),
             )
-        if status in {"absent", "missing", "hidden", "left", "abducted", "dead"}:
+        if remove_poi:
             _remove_npc_poi(scene, npc_id)
 
 

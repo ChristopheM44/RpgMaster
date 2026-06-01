@@ -19,6 +19,7 @@ INTERDICTIONS ABSOLUES pour ce tour :
 - Si le joueur choisit explicitement de se déplacer (ex: "Je me dirige vers [Lieu]", "nous partons vers [Lieu]" ou clic/interaction avec une sortie/exit), ou si le groupe voyage :
   1. Tu DOIS obligatoirement émettre une action journal_update pour mettre à jour le Lieu physique (location_place, location_venue, location_region, weather).
   2. Tu DOIS obligatoirement émettre une action scene_layout contenant une NOUVELLE grille 12x12 (cols=12, rows=12) représentant fidèlement ce nouveau lieu avec ses propres POIs d'exploration, couverts de combat et exits de fuite/voyage.
+  3. Les PNJ qui accompagnent le groupe (guide, escorte — `disposition:"accompanying"`) sont transportés AUTOMATIQUEMENT dans le nouveau lieu : ne les fais jamais disparaître à l'arrivée et ne narre jamais leur absence parce que tu ne les as pas re-listés. S'ils doivent réellement partir, émets un `scene_update` `npc_updates` explicite avec une `note` de cause.
 - Tu ne fais JAMAIS parler ou apparaître un PNJ noté comme ABSENT ci-dessus, même si tu penses qu'il devrait être là d'après une œuvre publiée. Si un joueur s'adresse à un PNJ absent, décris l'absence (le tabouret est vide, il est parti, la pièce est déserte) sans inventer sa réplique.
 - Si un PNJ présent quitte, disparaît, se cache ou est enlevé dans le lieu actuel, tu DOIS émettre `scene_update` avec `npc_updates`. Ne fais jamais disparaître un PNJ uniquement dans la prose.
 
