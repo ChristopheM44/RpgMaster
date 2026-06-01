@@ -114,6 +114,18 @@ class ImageClient:
                 prompt, self._size, self._model
             )
         except APIStatusError as exc:
+            # Detect non-API responses (e.g. Ollama HTML homepage on 404)
+            body = getattr(exc, "response", None)
+            content_type = ""
+            if body is not None:
+                ct = getattr(body, "headers", {})
+                content_type = ct.get("content-type", "") if isinstance(ct, dict) else ""
+            if exc.status_code == 404 or "text/html" in content_type:
+                raise ImageClientError(
+                    "Le serveur ne supporte pas la génération d'images. "
+                    "Vérifiez que l'URL pointe vers un service compatible OpenAI "
+                    "(DALL-E, Stable Diffusion WebUI, etc.), pas un serveur LLM texte."
+                ) from exc
             raise ImageClientError(
                 f"Erreur API image {exc.status_code} : {exc.message}"
             ) from exc

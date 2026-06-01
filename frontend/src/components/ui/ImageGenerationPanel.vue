@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { adminApi } from '../../services/api'
 import type { ImageGenerationProvider, ImageGenerationSettingsUpdate } from '../../types'
 
@@ -17,18 +17,26 @@ const apiKeyInput = ref('')
 const apiKeySet = ref(false)
 const clearApiKey = ref(false)
 
-// Image Provider ping and connection test
+// Connection test result
+const health = ref<{ available: boolean; provider: string; model: string; latency_ms?: number; error?: string } | null>(null)
+const availableModels = ref<string[]>([])
+
+// Image generation ping
 const pinging = ref(false)
 const pingResult = ref<{
   ok: boolean
   provider: string
   model: string
   latency_ms?: number
-  sample_response?: string
+  image_url?: string
   error?: string
 } | null>(null)
 
-const health = ref<{ available: boolean; provider: string; model: string } | null>(null)
+const sortedModels = computed(() =>
+  [...availableModels.value].sort((a, b) =>
+    a.localeCompare(b, 'fr', { numeric: true, sensitivity: 'base' }),
+  ),
+)
 
 async function testConnection() {
   loading.value = true
@@ -41,12 +49,16 @@ async function testConnection() {
       available: result.available,
       provider: result.provider,
       model: result.model,
+      latency_ms: result.latency_ms,
+      error: result.error,
     }
+    availableModels.value = result.models ?? []
   } catch (e) {
     health.value = {
       available: false,
       provider: provider.value,
       model: model.value || 'default',
+      error: e instanceof Error ? e.message : 'Test de connexion échoué',
     }
     error.value = e instanceof Error ? e.message : 'Test de connexion échoué'
   } finally {
@@ -59,20 +71,13 @@ async function pingImage() {
   pingResult.value = null
 
   try {
-    const result = await adminApi.testImageGeneration()
-    pingResult.value = {
-      ok: result.available,
-      provider: result.provider === 'local' ? 'Local' : 'Cloud',
-      model: result.model || (provider.value === 'local' ? 'stable-diffusion' : 'dall-e-3'),
-      latency_ms: result.latency_ms,
-      error: result.error,
-    }
+    pingResult.value = await adminApi.pingImageGeneration()
   } catch (e) {
     pingResult.value = {
       ok: false,
-      provider: provider.value === 'local' ? 'Local' : 'Cloud',
+      provider: provider.value,
       model: model.value || 'default',
-      error: e instanceof Error ? e.message : 'Test image échoué',
+      error: e instanceof Error ? e.message : 'Test de génération échoué',
     }
   } finally {
     pinging.value = false
@@ -90,11 +95,6 @@ async function loadSettings() {
     model.value = settings.model
     size.value = settings.size
     apiKeySet.value = settings.api_key_set
-    
-    // Automatically trigger test connection if baseUrl is already defined
-    if (baseUrl.value) {
-      void testConnection()
-    }
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Paramètres image indisponibles'
   } finally {
@@ -127,7 +127,7 @@ async function saveSettings() {
     apiKeyInput.value = ''
     clearApiKey.value = false
     saveSuccess.value = true
-    
+
     // Refresh connection status after save
     await testConnection()
   } catch (e) {
@@ -142,12 +142,19 @@ function handleClearApiKey() {
   apiKeyInput.value = ''
 }
 
-// Clear ping result if configuration changes
-watch([provider, baseUrl, model, size], () => {
+// Clear connection status and ping result when config changes
+watch([provider, baseUrl], () => {
+  availableModels.value = []
+  health.value = null
   pingResult.value = null
 })
 
-onMounted(loadSettings)
+onMounted(async () => {
+  await loadSettings()
+  if (baseUrl.value) {
+    await testConnection()
+  }
+})
 </script>
 
 <template>
@@ -189,7 +196,7 @@ onMounted(loadSettings)
           ]"
           @click="provider = 'local'"
         >
-          Local (Ollama / Local)
+          Ollama / Serveur local
         </button>
         <button
           type="button"
@@ -201,29 +208,31 @@ onMounted(loadSettings)
           ]"
           @click="provider = 'openai_compatible'"
         >
-          Cloud (OpenAI-compatible)
+          Cloud (DALL-E / API compatible)
         </button>
       </div>
     </div>
 
-    <!-- ── Section Local (Ollama / Local) ── -->
+    <!-- ── Section Ollama / Serveur local ── -->
     <template v-if="provider === 'local'">
       <div class="space-y-2">
-        <label class="block text-sm font-medium text-parchment/80">URL du serveur local</label>
+        <label class="block text-sm font-medium text-parchment/80">URL du serveur d'images</label>
         <input
           v-model="baseUrl"
           type="text"
-          placeholder="http://localhost:11434"
+          placeholder="http://localhost:7860"
           class="w-full px-3 py-2 rounded-lg bg-ink/60 border border-parchment/20 text-parchment font-mono text-sm focus:outline-none focus:border-arcane/60"
         />
         <p class="text-xs text-parchment/40">
-          Local : <code class="text-arcane">http://localhost:11434</code> (Ollama) ou votre URL de serveur d'images local.
+          API compatible OpenAI images <code class="text-arcane">/v1/images/generations</code>.
+          Stable Diffusion WebUI, ComfyUI, etc.
         </p>
       </div>
 
+      <!-- Clé API (optionnelle) -->
       <div class="space-y-2">
         <label class="block text-sm font-medium text-parchment/80">
-          Clé API <span class="text-parchment/40 font-normal">(optionnelle — pour serveurs locaux authentifiés)</span>
+          Clé API <span class="text-parchment/40 font-normal">(optionnelle)</span>
         </label>
         <input
           v-model="apiKeyInput"
@@ -248,12 +257,95 @@ onMounted(loadSettings)
           </span>
         </div>
       </div>
+
+      <!-- Statut connexion -->
+      <div class="flex items-center justify-between p-4 rounded-lg bg-ink/40 border border-parchment/10">
+        <div>
+          <p class="font-medium text-parchment">Statut de connexion</p>
+          <p class="text-sm text-parchment/60 font-mono">{{ baseUrl || '—' }}</p>
+        </div>
+        <span
+          v-if="health !== null"
+          :class="[
+            'px-2 py-0.5 rounded-full text-xs font-medium',
+            health.available
+              ? 'bg-green-900/60 text-green-300'
+              : 'bg-red-900/60 text-red-300',
+          ]"
+        >
+          {{ health.available ? 'Connecté' : 'Indisponible' }}
+        </span>
+        <span v-else-if="loading" class="text-xs text-parchment/40">Test…</span>
+        <span v-else class="text-xs text-parchment/40">Non testé</span>
+      </div>
+
+      <!-- Modèles Ollama (dropdown si disponibles) -->
+      <div class="grid grid-cols-2 gap-4">
+        <div class="space-y-1">
+          <label class="block text-sm font-medium text-parchment/80">Modèle d'image</label>
+          <select
+            v-if="sortedModels.length > 0"
+            v-model="model"
+            class="w-full px-3 py-2 rounded-lg bg-ink/60 border border-parchment/20 text-parchment text-sm focus:outline-none focus:border-arcane/60"
+          >
+            <option v-for="m in sortedModels" :key="m" :value="m">{{ m }}</option>
+          </select>
+          <input
+            v-else
+            v-model="model"
+            type="text"
+            placeholder="sd3-medium ou modèle local"
+            class="w-full px-3 py-2 rounded-lg bg-ink/60 border border-parchment/20 text-parchment font-mono text-sm focus:outline-none focus:border-arcane/60"
+          />
+          <span
+            v-if="health && sortedModels.length > 0"
+            :class="[
+              'inline-block px-1.5 py-0.5 rounded text-xs',
+              sortedModels.includes(model)
+                ? 'bg-green-900/40 text-green-300'
+                : 'bg-yellow-900/40 text-yellow-300',
+            ]"
+          >
+            {{ sortedModels.includes(model) ? 'Installé' : 'Non installé' }}
+          </span>
+        </div>
+
+        <div class="space-y-1">
+          <label class="block text-sm font-medium text-parchment/80">Taille de l'image</label>
+          <input
+            v-model="size"
+            type="text"
+            placeholder="1024x1024"
+            class="w-full px-3 py-2 rounded-lg bg-ink/60 border border-parchment/20 text-parchment font-mono text-sm focus:outline-none focus:border-arcane/60"
+          />
+        </div>
+      </div>
+
+      <!-- Liste des modèles disponibles -->
+      <div v-if="health && sortedModels.length > 0" class="space-y-2">
+        <p class="text-sm font-medium text-parchment/70">
+          Modèles disponibles ({{ sortedModels.length }})
+        </p>
+        <ul class="max-h-[11.75rem] space-y-1 overflow-y-auto pr-1">
+          <li
+            v-for="m in sortedModels"
+            :key="m"
+            class="flex items-center gap-2 px-3 py-1.5 rounded bg-ink/20 border border-parchment/5"
+          >
+            <span class="h-1.5 w-1.5 rounded-full bg-green-400 flex-shrink-0" />
+            <span class="font-mono text-sm text-parchment/80">{{ m }}</span>
+          </li>
+        </ul>
+      </div>
+      <div v-else-if="health && health.available && sortedModels.length === 0" class="text-sm text-parchment/50 italic">
+        Aucun modèle d'image détecté. Installez un modèle de génération d'images sur votre serveur.
+      </div>
     </template>
 
-    <!-- ── Section Cloud (OpenAI-compatible) ── -->
+    <!-- ── Section Cloud (DALL-E / API compatible) ── -->
     <template v-else>
       <div class="space-y-2">
-        <label class="block text-sm font-medium text-parchment/80">URL de l'API Cloud</label>
+        <label class="block text-sm font-medium text-parchment/80">URL de l'API</label>
         <input
           v-model="baseUrl"
           type="text"
@@ -261,12 +353,12 @@ onMounted(loadSettings)
           class="w-full px-3 py-2 rounded-lg bg-ink/60 border border-parchment/20 text-parchment font-mono text-sm focus:outline-none focus:border-arcane/60"
         />
         <p class="text-xs text-parchment/40">
-          Compatible : OpenAI DALL-E, ou tout autre service d'images cloud compatible.
+          Compatible : OpenAI DALL-E, Mistral, ou tout service d'images cloud compatible.
         </p>
       </div>
 
       <div class="space-y-2">
-        <label class="block text-sm font-medium text-parchment/80">Clé API Cloud</label>
+        <label class="block text-sm font-medium text-parchment/80">Clé API</label>
         <input
           v-model="apiKeyInput"
           type="password"
@@ -292,88 +384,57 @@ onMounted(loadSettings)
           </span>
         </div>
       </div>
-    </template>
 
-    <!-- Modèle & Taille (Grid commune) -->
-    <div class="grid grid-cols-2 gap-4">
-      <div class="space-y-1">
-        <label class="block text-sm font-medium text-parchment/80">Modèle d'image</label>
-        <input
-          v-model="model"
-          type="text"
-          placeholder="dall-e-3 ou modèle local"
-          class="w-full px-3 py-2 rounded-lg bg-ink/60 border border-parchment/20 text-parchment font-mono text-sm focus:outline-none focus:border-arcane/60"
-        />
-      </div>
-
-      <div class="space-y-1">
-        <label class="block text-sm font-medium text-parchment/80">Taille de l'image</label>
-        <input
-          v-model="size"
-          type="text"
-          placeholder="1024x1024"
-          class="w-full px-3 py-2 rounded-lg bg-ink/60 border border-parchment/20 text-parchment font-mono text-sm focus:outline-none focus:border-arcane/60"
-        />
-      </div>
-    </div>
-
-    <!-- Statut connexion -->
-    <div class="flex items-center justify-between p-4 rounded-lg bg-ink/40 border border-parchment/10">
-      <div>
-        <p class="font-medium text-parchment">Statut de connexion</p>
-        <p class="text-sm text-parchment/60 font-mono">{{ baseUrl || '—' }}</p>
-      </div>
-      <span
-        v-if="health !== null"
-        :class="[
-          'px-2 py-0.5 rounded-full text-xs font-medium',
-          health.available
-            ? 'bg-green-900/60 text-green-300'
-            : 'bg-red-900/60 text-red-300',
-        ]"
-      >
-        {{ health.available ? 'Opérationnel' : 'Hors ligne' }}
-      </span>
-      <span v-else-if="loading" class="text-xs text-parchment/40">Test en cours…</span>
-      <span v-else class="text-xs text-parchment/40">Non testé</span>
-    </div>
-
-    <!-- Caractéristiques du modèle d'image -->
-    <div class="p-4 rounded-lg bg-ink/40 border border-parchment/10 space-y-3">
-      <div class="flex items-center justify-between gap-3">
-        <div>
-          <p class="font-medium text-parchment">Caractéristiques de rendu</p>
-          <p class="text-sm text-parchment/60 font-mono">{{ model || '—' }}</p>
+      <!-- Modèles Cloud (toujours texte libre) -->
+      <div class="grid grid-cols-2 gap-4">
+        <div class="space-y-1">
+          <label class="block text-sm font-medium text-parchment/80">Modèle d'image</label>
+          <input
+            v-model="model"
+            type="text"
+            placeholder="dall-e-3"
+            class="w-full px-3 py-2 rounded-lg bg-ink/60 border border-parchment/20 text-parchment font-mono text-sm focus:outline-none focus:border-arcane/60"
+          />
         </div>
-        <button
-          type="button"
-          class="px-3 py-1.5 rounded border border-parchment/20 text-xs text-parchment/70 hover:border-parchment/40 transition-colors disabled:opacity-50 cursor-pointer"
-          :disabled="loading || !model"
-          @click="testConnection"
+
+        <div class="space-y-1">
+          <label class="block text-sm font-medium text-parchment/80">Taille de l'image</label>
+          <input
+            v-model="size"
+            type="text"
+            placeholder="1024x1024"
+            class="w-full px-3 py-2 rounded-lg bg-ink/60 border border-parchment/20 text-parchment font-mono text-sm focus:outline-none focus:border-arcane/60"
+          />
+        </div>
+      </div>
+
+      <!-- Statut connexion -->
+      <div class="flex items-center justify-between p-4 rounded-lg bg-ink/40 border border-parchment/10">
+        <div>
+          <p class="font-medium text-parchment">Statut de connexion</p>
+          <p class="text-sm text-parchment/60 font-mono">{{ baseUrl || '—' }}</p>
+        </div>
+        <span
+          v-if="health !== null"
+          :class="[
+            'px-2 py-0.5 rounded-full text-xs font-medium',
+            health.available
+              ? 'bg-green-900/60 text-green-300'
+              : 'bg-red-900/60 text-red-300',
+          ]"
         >
-          {{ loading ? 'Lecture…' : 'Rafraîchir' }}
-        </button>
+          {{ health.available ? 'Connecté' : 'Indisponible' }}
+        </span>
+        <span v-else-if="loading" class="text-xs text-parchment/40">Test…</span>
+        <span v-else class="text-xs text-parchment/40">Non testé</span>
       </div>
 
-      <div class="grid grid-cols-2 gap-3 text-sm">
-        <div>
-          <p class="text-xs text-parchment/40 font-mono">Format requis</p>
-          <p class="text-parchment/80 font-mono">{{ size || '1024x1024' }}</p>
-        </div>
-        <div>
-          <p class="text-xs text-parchment/40 font-mono">Fournisseur d'images</p>
-          <p class="text-parchment/80 font-mono">{{ provider === 'local' ? 'Local / Ollama' : 'Cloud API' }}</p>
-        </div>
-        <div>
-          <p class="text-xs text-parchment/40 font-mono">Ratio d'aspect</p>
-          <p class="text-parchment/80 font-mono">1:1 (Carré standard)</p>
-        </div>
-        <div>
-          <p class="text-xs text-parchment/40 font-mono">Mode de rendu</p>
-          <p class="text-parchment/80 font-mono">Grille tactique D&D 5e</p>
-        </div>
+      <div class="p-3 rounded-lg bg-ink/30 border border-parchment/10">
+        <p class="text-xs text-parchment/50">
+          Les changements de fournisseur prennent effet lors de la prochaine session de jeu.
+        </p>
       </div>
-    </div>
+    </template>
 
     <!-- Erreur / succès -->
     <p v-if="error" class="text-blood text-sm">{{ error }}</p>
@@ -393,8 +454,7 @@ onMounted(loadSettings)
           {{ pingResult.ok ? "Générateur d'images opérationnel" : "Générateur d'images inaccessible" }}
           <span v-if="pingResult.latency_ms" class="font-normal opacity-70 ml-2">{{ pingResult.latency_ms }} ms</span>
         </div>
-        <div class="font-mono text-xs opacity-70 mt-0.5">{{ pingResult.provider }} / {{ pingResult.model }}</div>
-        <div v-if="pingResult.sample_response" class="mt-1 opacity-60 text-xs italic">« {{ pingResult.sample_response }} »</div>
+        <div class="font-mono text-xs opacity-70 mt-0.5">{{ pingResult.provider === 'local' ? 'Ollama' : 'Cloud' }} / {{ pingResult.model }}</div>
         <div v-if="pingResult.error" class="mt-1 text-xs">{{ pingResult.error }}</div>
       </div>
     </div>
@@ -407,7 +467,7 @@ onMounted(loadSettings)
         :disabled="loading"
         @click="testConnection"
       >
-        {{ loading ? 'Test en cours…' : 'Tester la connexion' }}
+        {{ loading ? 'Test…' : 'Tester la connexion' }}
       </button>
 
       <button
@@ -416,7 +476,7 @@ onMounted(loadSettings)
         :disabled="pinging"
         @click="pingImage"
       >
-        {{ pinging ? 'Test Image en cours…' : '🖼️ Tester le Générateur' }}
+        {{ pinging ? 'Génération…' : '🖼️ Tester le Générateur' }}
       </button>
 
       <button

@@ -367,7 +367,18 @@ export const adminApi = {
       available: boolean
       provider: string
       model: string
+      models: string[]
       latency_ms?: number
       error?: string
     }>('/admin/image/test', { method: 'POST' }),
+
+  pingImageGeneration: () =>
+    request<{
+      ok: boolean
+      provider: string
+      model: string
+      latency_ms?: number
+      image_url?: string
+      error?: string
+    }>('/admin/image/ping', { method: 'POST' }),
 }
