@@ -97,13 +97,22 @@ _FIRST_PERSON_MARKERS = (
 )
 
 
-def anonymize_npc(npc: dict[str, Any]) -> dict[str, Any]:
+def anonymize_npc(
+    npc: dict[str, Any],
+    *,
+    known_to_party: bool | None = None,
+) -> dict[str, Any]:
     """Return a copy of npc with name/id redacted if not yet known to the party.
 
     A PNJ is considered unknown when ``known_to_party`` is explicitly ``False``.
     Absence of the field (older saves) is treated as ``True`` for backward compat.
+
+    ``known_to_party`` lets the caller pass an authoritative value (typically the
+    matching ``npc_states[id].known_to_party``) so a scene POI can be anonymized
+    from the single source of truth even when the POI never carried the flag.
     """
-    if npc.get("known_to_party", True):
+    is_known = known_to_party if known_to_party is not None else npc.get("known_to_party", True)
+    if is_known:
         return npc
     anon = deepcopy(npc)
     description = str(anon.get("description") or "").strip()
@@ -126,6 +135,22 @@ def companion_visible_game_state(state_data: dict[str, Any]) -> dict[str, Any]:
         if key in state_data:
             visible[key] = deepcopy(state_data[key])
 
+    # Single source of truth for "known to party": npc_states[id]. A scene POI may
+    # never carry the flag (e.g. NPCs introduced mid-scene via scene_update), so we
+    # derive POI anonymization from npc_states rather than trusting the POI itself.
+    raw_npc_states = state_data.get("npc_states")
+    npc_known_lookup: dict[str, bool] = {}
+    if isinstance(raw_npc_states, dict):
+        for npc_id, npc in raw_npc_states.items():
+            if isinstance(npc, dict) and "known_to_party" in npc:
+                npc_known_lookup[str(npc_id)] = bool(npc.get("known_to_party"))
+
+    def _poi_known_to_party(poi: dict[str, Any]) -> bool:
+        npc_id = str(poi.get("id") or "")
+        if npc_id in npc_known_lookup:
+            return npc_known_lookup[npc_id]
+        return bool(poi.get("known_to_party", True))
+
     # Anonymize NPCs in canonical current_scene.pois, plus legacy nested saves.
     current_scene = visible.get("current_scene")
     if isinstance(current_scene, dict):
@@ -135,7 +160,9 @@ def companion_visible_game_state(state_data: dict[str, Any]) -> dict[str, Any]:
             pois = scene_container.get("pois")
             if isinstance(pois, list):
                 scene_container["pois"] = [
-                    anonymize_npc(poi) if poi.get("kind") == "npc" else poi
+                    anonymize_npc(poi, known_to_party=_poi_known_to_party(poi))
+                    if poi.get("kind") == "npc"
+                    else poi
                     for poi in pois
                     if isinstance(poi, dict)
                 ]

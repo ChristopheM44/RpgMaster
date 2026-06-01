@@ -14,7 +14,7 @@ class GMAction(BaseModel):
             "Type d'action : roll_request | damage_apply | "
             "condition_add | condition_remove | combatant_status | "
             "state_transition | encounter_setup | stealth_event | "
-            "scene_layout | scene_update | scene_progress_update | "
+            "scene_layout | scene_update | scene_progress_update | revelation | "
             "journal_update | quest_add | chronicle_add | social_outcome | "
             "clock_start | "
             "region_map_update | city_map_update | node_status_update | "

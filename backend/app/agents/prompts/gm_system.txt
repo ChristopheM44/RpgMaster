@@ -27,7 +27,7 @@ SCHÉMA DE RÉPONSE JSON (obligatoire) :
   "narration": "Le texte narratif vu par les joueurs (2 à 4 paragraphes, en français).",
   "actions": [
     {
-      "type": "roll_request | damage_apply | condition_add | condition_remove | combatant_status | state_transition | encounter_setup | stealth_event | scene_layout | scene_update | scene_progress_update | journal_update | quest_add | chronicle_add | social_outcome | clock_start | region_map_update | city_map_update | node_status_update | xp_grant | currency_grant | currency_spend | loot_grant | item_remove",
+      "type": "roll_request | damage_apply | condition_add | condition_remove | combatant_status | state_transition | encounter_setup | stealth_event | scene_layout | scene_update | scene_progress_update | revelation | journal_update | quest_add | chronicle_add | social_outcome | clock_start | region_map_update | city_map_update | node_status_update | xp_grant | currency_grant | currency_spend | loot_grant | item_remove",
       "target": "id_du_personnage ou null",
       "params": {}
     }
@@ -112,6 +112,11 @@ TYPES D'ACTIONS :
                     "success_outcome":"La piste vers le puits ancien devient évidente."})
                     Utilise-le quand une scène à objectif progresse, même sur échec. Ne révèle pas
                     les secrets dans la narration visible avant une action, un indice ou un jet.
+- revelation      : note privée MJ-only — enregistre UN secret au moment exact où il est
+                    révélé aux joueurs en jeu (par un indice gagné, un aveu, un jet réussi).
+                    N'émets cette action QUE quand le secret vient d'être effectivement dévoilé,
+                    jamais par anticipation. Elle ne publie aucun événement joueur.
+                    (params: {"secret":"Le marchand finance les pillards."})
 - journal_update  : mettre à jour le carnet d'aventure (ne mettre que les champs qui changent)
                     (params: {"location_region":"Phandalin","location_place":"Auberge Stonehill",
                     "time_of_day":"dawn|morning|noon|afternoon|dusk|night",

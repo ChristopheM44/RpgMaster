@@ -485,6 +485,15 @@ async def synthesize_canon(
             if item_id not in granted:
                 granted.append(item_id)
         canon["granted_unique_items"] = granted
+    # Preserve deterministically-recorded revelations (A5): the LLM synthesis
+    # must never drop or reword a secret already revealed in play. Union-merge
+    # the prior revealed_secrets the same way we protect granted_unique_items.
+    if current_canon.get("revealed_secrets"):
+        revealed = list(canon.get("revealed_secrets") or [])
+        for secret in current_canon["revealed_secrets"]:
+            if secret not in revealed:
+                revealed.append(secret)
+        canon["revealed_secrets"] = revealed
     dossier.played_canon = canon
     contract = sanitize_player_contract(dossier.player_contract or {}, campaign, brief={})
     if canon.get("rolling_summary"):
@@ -556,6 +565,32 @@ async def record_granted_unique_items(
             granted.append(normalized)
             seen.add(normalized)
     canon["granted_unique_items"] = granted
+    dossier.played_canon = canon
+    await db.commit()
+    await db.refresh(dossier)
+    return dossier
+
+
+async def record_revealed_secret(
+    campaign_id: str,
+    secret: str,
+    db: AsyncSession,
+) -> CampaignDossier:
+    """Append a secret revealed in play to ``played_canon.revealed_secrets``.
+
+    Deterministic counterpart to the LLM canon synthesis: the secret is recorded
+    the instant the GM reveals it (``revelation`` action), so the trace is exact
+    and immediate rather than inferred a posteriori. Idempotent on the secret text.
+    """
+    secret = str(secret or "").strip()
+    dossier = await get_or_create_dossier(campaign_id, db)
+    if not secret:
+        return dossier
+    canon = sanitize_played_canon(dossier.played_canon or {})
+    revealed = list(canon.get("revealed_secrets") or [])
+    if secret not in revealed:
+        revealed.append(secret)
+    canon["revealed_secrets"] = revealed
     dossier.played_canon = canon
     await db.commit()
     await db.refresh(dossier)
@@ -818,6 +853,12 @@ async def build_gm_prompt_context(
     contract = sanitize_player_contract(dossier.player_contract or {}, campaign, brief={})
     gm_dossier = sanitize_gm_dossier(dossier.gm_dossier or {}, campaign, contract)
     canon = sanitize_played_canon(dossier.played_canon or {})
+    # Align with compile_campaign_context_for_session (A6): on the initial
+    # campaign session nothing has been played yet, so the forge-seeded
+    # played_canon must read empty for the GM too — not just the public view.
+    # gm_dossier (secrets/arc/fronts/NPCs) is untouched, so no planning context is lost.
+    if _is_initial_campaign_session(campaign, session_id):
+        canon = empty_played_canon()
     active_chapter = _private_active_chapter_for_context(
         gm_dossier,
         contract,

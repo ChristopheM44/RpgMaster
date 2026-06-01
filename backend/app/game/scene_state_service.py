@@ -65,11 +65,73 @@ def apply_scene_update(active: ActiveSession, params: dict[str, Any]) -> dict[st
     _merge_scene_fields(updated, params)
     _apply_discoveries(updated, params)
     _merge_npc_updates(active, updated, params)
+    reconcile_scene_npcs(active, updated)
 
     local_map_service.enrich_scene_layout(updated)
     active.state_data["current_scene"] = updated
     active.mark_dirty()
     return updated
+
+
+def reconcile_scene_npcs(active: ActiveSession, scene: dict[str, Any]) -> None:
+    """Project NPC identity from ``npc_states`` (authority) onto scene POIs.
+
+    A single PNJ used to live in up to four places; ``name`` and
+    ``known_to_party`` were duplicated between ``npc_states[id]`` and the scene
+    POI with no single owner, which let the two diverge (real name leaking to
+    companions, stale reveal flags). This function makes ``npc_states[id]`` the
+    identity authority and keeps the POI a consistent *projection*:
+
+    - ``known_to_party`` — npc_states wins on conflict; if only the POI carries
+      it, npc_states adopts it; both ends converge.
+    - ``name`` — npc_states wins when set (so a rename propagates to the visible
+      POI); otherwise the POI name seeds npc_states.
+
+    Writers only need to update ``npc_states``; the POI follows on the next
+    scene write. Idempotent and side-effect-free beyond the passed scene and
+    ``active.state_data['npc_states']``.
+    """
+    if not isinstance(scene, dict):
+        return
+    npc_states = active.state_data.setdefault("npc_states", {})
+    if not isinstance(npc_states, dict):
+        npc_states = {}
+        active.state_data["npc_states"] = npc_states
+
+    for poi in scene.get("pois", []) or []:
+        if not isinstance(poi, dict):
+            continue
+        kind = str(poi.get("kind") or "").strip().casefold()
+        icon = str(poi.get("icon") or "").strip().casefold()
+        if kind != "npc" and icon != "npc":
+            continue
+        npc_id = str(poi.get("id") or "").strip()
+        if not npc_id:
+            continue
+
+        npc = npc_states.get(npc_id)
+        if not isinstance(npc, dict):
+            npc = {}
+            npc_states[npc_id] = npc
+
+        # known_to_party: npc_states authority, converge both ends.
+        if "known_to_party" in npc:
+            resolved_known = bool(npc["known_to_party"])
+        elif "known_to_party" in poi:
+            resolved_known = bool(poi["known_to_party"])
+        else:
+            resolved_known = None
+        if resolved_known is not None:
+            npc["known_to_party"] = resolved_known
+            poi["known_to_party"] = resolved_known
+
+        # name: npc_states authority when set, else POI seeds it.
+        npc_name = _clean_text(npc.get("name"), max_len=120)
+        poi_name = _clean_text(poi.get("name"), max_len=120)
+        if npc_name:
+            poi["name"] = npc_name
+        elif poi_name:
+            npc["name"] = poi_name
 
 
 def _merge_pois(scene: dict[str, Any], params: dict[str, Any], cols: int, rows: int) -> None:
@@ -225,7 +287,13 @@ def _merge_npc_updates(
         position = _normalize_position(raw.get("position"), int(scene["cols"]), int(scene["rows"]))
         if position is not None:
             npc["position"] = position
-            _upsert_npc_poi(scene, npc_id, npc.get("name") or npc_id, position)
+            _upsert_npc_poi(
+                scene,
+                npc_id,
+                npc.get("name") or npc_id,
+                position,
+                known_to_party=npc.get("known_to_party"),
+            )
         if status in {"absent", "missing", "hidden", "left", "abducted", "dead"}:
             _remove_npc_poi(scene, npc_id)
 
@@ -235,6 +303,8 @@ def _upsert_npc_poi(
     npc_id: str,
     name: Any,
     position: dict[str, int],
+    *,
+    known_to_party: bool | None = None,
 ) -> None:
     pois = scene.setdefault("pois", [])
     for poi in pois:
@@ -245,8 +315,10 @@ def _upsert_npc_poi(
                 "icon": "npc",
                 "position": position,
             })
+            if known_to_party is not None:
+                poi["known_to_party"] = known_to_party
             return
-    pois.append({
+    new_poi: dict[str, Any] = {
         "id": npc_id,
         "name": str(name),
         "kind": "npc",
@@ -255,7 +327,10 @@ def _upsert_npc_poi(
         "state": "present",
         "visibility": "visible",
         "discovered": True,
-    })
+    }
+    if known_to_party is not None:
+        new_poi["known_to_party"] = known_to_party
+    pois.append(new_poi)
 
 
 def _remove_npc_poi(scene: dict[str, Any], npc_id: str) -> None:
@@ -309,6 +384,8 @@ def _normalize_poi_patch(raw: dict[str, Any], cols: int, rows: int) -> dict[str,
         patch[field] = value
     if isinstance(raw.get("discovered"), bool):
         patch["discovered"] = raw["discovered"]
+    if isinstance(raw.get("known_to_party"), bool):
+        patch["known_to_party"] = raw["known_to_party"]
     position = _normalize_position(raw.get("position"), cols, rows)
     if position is not None:
         patch["position"] = position

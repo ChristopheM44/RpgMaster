@@ -134,3 +134,69 @@ async def test_gm_loot_grant_uses_custom_item_before_srd_and_tracks_unique(db_se
     assert active.state_data["campaign_context"]["played_canon"]["granted_unique_items"] == [
         "healing_potion"
     ]
+
+
+@pytest.mark.asyncio
+async def test_revelation_action_records_secret_in_mirror_and_dossier(db_session):
+    """A5: the `revelation` action writes the secret to both readers of
+    revealed_secrets — the in-session mirror (companion view) and the DB
+    dossier (GM prompt view) — deterministically, with no player event."""
+    campaign = Campaign(
+        id="campaign-rev",
+        name="Le Pacte",
+        description="",
+        session_ids=["session-rev"],
+    )
+    dossier = CampaignDossier(
+        id="dossier-rev",
+        campaign_id=campaign.id,
+        player_contract={},
+        gm_dossier={},
+        played_canon={"revealed_secrets": []},
+        import_sources=[],
+        forge_job={},
+        active_chapter_id="chapter_1",
+        generation_status="validated",
+    )
+    db_session.add_all([campaign, dossier])
+    await db_session.commit()
+
+    active = ActiveSession(
+        session_id="session-rev",
+        phase=SessionStatus.EXPLORATION,
+        state_data={
+            "campaign_context": {
+                "campaign_id": campaign.id,
+                "played_canon": {"revealed_secrets": []},
+            },
+        },
+    )
+    executor = GMResponseExecutor(source="test")
+
+    secret = "Le marchand finance les pillards."
+    await executor.execute_action(
+        "session-rev", "revelation", {"secret": secret}, active, db=db_session
+    )
+    # Idempotent on repeat.
+    await executor.execute_action(
+        "session-rev", "revelation", {"secret": secret}, active, db=db_session
+    )
+
+    await db_session.refresh(dossier)
+    # Mirror (companion view).
+    assert active.state_data["campaign_context"]["played_canon"]["revealed_secrets"] == [secret]
+    # Authoritative DB dossier (GM view).
+    assert dossier.played_canon["revealed_secrets"] == [secret]
+
+
+@pytest.mark.asyncio
+async def test_revelation_action_ignores_empty_secret(db_session):
+    active = ActiveSession(
+        session_id="session-noop",
+        phase=SessionStatus.EXPLORATION,
+        state_data={"campaign_context": {"campaign_id": "x", "played_canon": {}}},
+    )
+    executor = GMResponseExecutor(source="test")
+    await executor.execute_action("session-noop", "revelation", {"secret": "  "}, active, db=None)
+    canon = active.state_data["campaign_context"]["played_canon"]
+    assert canon.get("revealed_secrets", []) == []

@@ -943,3 +943,91 @@ async def test_synthesize_canon_updates_player_summary_and_chapter_progress(asyn
     assert data["timeline"][0]["state"] == "done"
     assert data["timeline"][1]["state"] == "active"
     assert data["quests"][0]["title"] == "Les brumes"
+
+
+# ---------------------------------------------------------------------------
+# A5 — Révélation événementielle (record_revealed_secret + survie à la synthèse)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_record_revealed_secret_persists_and_is_idempotent(async_client, db_session):
+    forged = await _forge_and_validate(async_client)
+    campaign_id = forged["campaign_id"]
+
+    await campaign_dossier_service.record_revealed_secret(
+        campaign_id, "Le marchand finance les pillards.", db_session
+    )
+    # Idempotent : un même secret n'est pas dupliqué.
+    await campaign_dossier_service.record_revealed_secret(
+        campaign_id, "Le marchand finance les pillards.", db_session
+    )
+
+    result = await db_session.execute(
+        select(CampaignDossier).where(CampaignDossier.campaign_id == campaign_id)
+    )
+    dossier = result.scalar_one()
+    assert dossier.played_canon["revealed_secrets"] == ["Le marchand finance les pillards."]
+
+
+@pytest.mark.asyncio
+async def test_canon_synthesis_preserves_recorded_revealed_secret(async_client, db_session):
+    """Le secret enregistré déterministiquement survit à une passe de synthèse
+    LLM qui renvoie revealed_secrets vide (DummyForgeAgent.synthesize_canon)."""
+    forged = await _forge_and_validate(async_client)
+    campaign_id = forged["campaign_id"]
+
+    await campaign_dossier_service.record_revealed_secret(
+        campaign_id, "La relique est une contrefaçon.", db_session
+    )
+
+    synth = await async_client.post(
+        f"/api/campaigns/{campaign_id}/synthesize-canon",
+        json={"game_state": {"canon_event": {}}, "recent_messages": []},
+    )
+    assert synth.status_code == 200
+
+    await db_session.commit()
+    result = await db_session.execute(
+        select(CampaignDossier).where(CampaignDossier.campaign_id == campaign_id)
+    )
+    dossier = result.scalar_one()
+    await db_session.refresh(dossier)
+    assert "La relique est une contrefaçon." in dossier.played_canon["revealed_secrets"]
+
+
+# ---------------------------------------------------------------------------
+# A6 — Reset canon initial aligné entre les deux compilateurs
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_gm_prompt_context_resets_canon_on_initial_session(async_client, db_session):
+    """build_gm_prompt_context vide played_canon sur la session initiale, comme
+    le compilateur public — pas de canon semé par la forge côté MJ non plus."""
+    forged = await _forge_and_validate(async_client)
+    campaign_id = forged["campaign_id"]
+    session_id = forged["session_id"]  # session initiale (session_ids[0])
+
+    # Semer un canon "déjà joué" via synthèse, comme une session antérieure.
+    await async_client.post(
+        f"/api/campaigns/{campaign_id}/synthesize-canon",
+        json={
+            "game_state": {
+                "canon_event": {
+                    "rolling_summary": "Résumé d'une session précédente.",
+                    "established_fact": "Fait contaminant.",
+                }
+            },
+            "recent_messages": [],
+        },
+    )
+
+    private_context = await campaign_dossier_service.build_gm_prompt_context(
+        session_id, db_session, None
+    )
+    # played_canon ne doit pas resurgir côté MJ sur la session initiale.
+    played = private_context.get("played_canon", {})
+    assert played.get("rolling_summary", "") == ""
+    assert played.get("established_facts", []) == []
+    assert "session précédente" not in json.dumps(private_context, ensure_ascii=False).lower()

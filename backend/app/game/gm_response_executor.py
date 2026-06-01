@@ -29,6 +29,7 @@ from app.game.session_manager import ActiveSession
 from app.game.social_resolution import SocialResolution
 from app.game.social_scene_state import enrich_scene_poi_mechanics, start_scene_clock
 from app.game.state_sync import sync_character_state
+from app.logging_utils import log_degraded
 from app.models.character import Character
 from app.schemas.campaign_content import normalize_content_id
 from app.schemas.equipment import validate_equipment_item
@@ -436,6 +437,8 @@ class GMResponseExecutor:
             await self._apply_scene_update(session_id, params, active)
         elif action_type == "scene_progress_update":
             await self._apply_scene_progress_update(session_id, params, active)
+        elif action_type == "revelation":
+            await self._apply_revelation(session_id, params, active, db)
         elif action_type == "social_outcome":
             await self._apply_social_outcome(session_id, params, active)
         elif action_type == "clock_start":
@@ -745,6 +748,60 @@ class GMResponseExecutor:
             source=self._source,
         )
 
+    async def _apply_revelation(
+        self,
+        session_id: str,
+        params: dict[str, Any],
+        active: ActiveSession,
+        db: Any | None,
+    ) -> None:
+        """Record a secret revealed in play, deterministically and immediately.
+
+        Until now ``revealed_secrets`` was only ever populated *a posteriori* by
+        the LLM canon synthesis, so the trace could lag a whole pass or hallucinate.
+        This action writes the secret the moment the GM reveals it, into both
+        readers of ``revealed_secrets``:
+
+        - the in-session mirror ``campaign_context.played_canon`` (companion view),
+        - the authoritative ``CampaignDossier.played_canon`` in DB (GM prompt view).
+
+        Like ``scene_progress_update`` it is GM-only and publishes no player event.
+        Surfacing revelations to the human player is a separate product decision.
+        """
+        del session_id
+        if not isinstance(params, dict):
+            return
+        secret = str(params.get("secret") or params.get("text") or "").strip()
+        if not secret:
+            logger.warning("revelation ignore : 'secret' vide - params=%s", params)
+            return
+        secret = secret[:600]
+
+        # 1) In-session mirror — read by the companion-visible filter.
+        context = active.state_data.get("campaign_context")
+        if isinstance(context, dict):
+            canon = context.setdefault("played_canon", {})
+            if not isinstance(canon, dict):
+                canon = {}
+                context["played_canon"] = canon
+            revealed = list(canon.get("revealed_secrets") or [])
+            if secret not in revealed:
+                revealed.append(secret)
+            canon["revealed_secrets"] = revealed
+            active.mark_dirty()
+
+        # 2) Authoritative DB dossier — read by build_gm_prompt_context.
+        if db is None:
+            return
+        try:
+            await campaign_dossier_service.record_revealed_secret(
+                self._campaign_id(active),
+                secret,
+                db,
+            )
+        except Exception as exc:
+            log_degraded(logger, "revelation (persistance dossier)", exc)
+
     async def _apply_scene_progress_update(
         self,
         session_id: str,
@@ -878,10 +935,13 @@ class GMResponseExecutor:
             logger.warning("scene_layout ignore : params invalides - %s", params)
             return
 
+        from app.game.scene_state_service import reconcile_scene_npcs
+
         enrich_scene_poi_mechanics(layout)
         self._filter_absent_npc_pois(layout, active)
         active.state_data["current_scene"] = layout
         self._register_scene_npcs(layout, active)
+        reconcile_scene_npcs(active, layout)
         active.mark_dirty()
         await self._event_bus.publish_to_session(
             session_id,
