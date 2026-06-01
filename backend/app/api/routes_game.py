@@ -162,53 +162,23 @@ def _npc_affordance_text(opening_scene: dict[str, Any]) -> str:
 
 
 def _party_briefing_text(campaign_context: dict[str, Any]) -> str:
-    """Briefing public connu du groupe à l'ouverture.
+    """Contrat public connu du groupe, en prose diégétique (sans étiquette).
 
-    Surface ``player_contract.hook`` and ``known_objectives`` so players
-    understand immediately why their characters are there.
+    Surface ``player_contract.hook`` et ``known_objectives`` pour que les
+    joueurs comprennent pourquoi leurs personnages sont là. Sert de repli
+    déterministe quand l'ouverture LLM est indisponible : le contrat affleure
+    en narration simple, jamais sous forme d'étiquette de formulaire
+    ("Accroche :" / "Mission confiée :"). Le cas nominal (narration LLM réelle)
+    n'utilise plus aucun collage : le prompt d'ouverture tisse le contrat.
     """
     hook = _hook_context_text(campaign_context)
     objective = _opening_objective(campaign_context)
     parts: list[str] = []
     if hook:
-        cleaned_hook = hook.rstrip(" .!?")
-        parts.append(f"Accroche : {cleaned_hook}.")
+        parts.append(hook.rstrip(" .!?") + ".")
     if objective:
-        cleaned_objective = objective.rstrip(" .!?")
-        parts.append(f"Mission confiée au groupe : {cleaned_objective}.")
+        parts.append(objective.rstrip(" .!?") + ".")
     return " ".join(parts)
-
-
-def _contract_words_present(narration: str, contract_text: str) -> bool:
-    normalized = _normalize_for_match(narration)
-    words = [
-        word
-        for word in _normalize_for_match(contract_text).split()
-        if len(word) > 3 and word not in _STOPWORDS
-    ]
-    if not words:
-        return True
-    present = sum(1 for word in set(words) if word in normalized)
-    return present >= min(3, max(1, len(set(words)) // 2))
-
-
-def _ensure_opening_public_prologue(narration: str, state_data: dict[str, Any]) -> str:
-    """Prefix the opening with the public quest contract if the LLM omitted it."""
-    campaign_context = state_data.get("campaign_context") if isinstance(state_data, dict) else None
-    if not isinstance(campaign_context, dict):
-        return narration
-    prologue = _party_briefing_text(campaign_context).strip()
-    if not prologue:
-        return narration
-
-    text = str(narration or "").strip()
-    hook = _hook_context_text(campaign_context)
-    objective = _opening_objective(campaign_context)
-    missing_hook = bool(hook) and not _contract_words_present(text, hook)
-    missing_objective = bool(objective) and not _contract_words_present(text, objective)
-    if not missing_hook and not missing_objective:
-        return text
-    return f"{prologue}\n\n{text}" if text else prologue
 
 
 def _campaign_opening_text(campaign_context: dict[str, Any]) -> str:
@@ -1454,10 +1424,10 @@ async def _publish_opening_scene(
 ) -> None:
     from app.services.message_service import persist_narration
 
-    response.narration = _ensure_opening_public_prologue(
-        response.narration,
-        active.state_data,
-    )
+    # La narration LLM réelle est utilisée telle quelle : le prompt d'ouverture
+    # tisse déjà le contrat public en fiction (P3). Aucun collage d'étiquette.
+    # En repli déterministe, ``response.narration`` est déjà ``_campaign_opening_text``
+    # qui porte le contrat en prose diégétique.
     response.narration = _normalize_opening_narration_closer(
         response.narration,
         active.state_data,

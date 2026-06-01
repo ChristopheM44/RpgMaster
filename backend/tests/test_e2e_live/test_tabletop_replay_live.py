@@ -2,6 +2,26 @@
 
 These tests intentionally do not mock the LLM. If the configured provider is
 unavailable, the suite fails through the normal ERROR event path.
+
+Configuration du provider (DÉCOUVERTE IMPORTANTE — ne pas chercher dans .env) :
+    La config LLM live est lue depuis ``backend/.runtime/llm_runtime.json`` (le
+    coffre runtime, perms 0600), chargé à l'import de ``app.config``. La CLÉ
+    n'est JAMAIS lue depuis ``.env`` : ``config.get_ollama_api_key()`` ne
+    consulte que ce runtime json, et ``Settings`` n'a aucun champ
+    ``ollama_api_key`` — donc ``OLLAMA_API_KEY`` dans ``.env`` est décoratif et
+    ignoré. (``ollama_base_url`` / ``gm_model`` / ``player_model`` retombent sur
+    ``.env`` à défaut d'override runtime ; la clé, non.)
+
+    On l'écrit via l'UI admin / l'endpoint ``update_llm_settings``, ou à la main
+    dans le json. Config Ollama Cloud attendue (gemma4) :
+        ollama_base_url = "https://ollama.com"
+        gm_model        = "gemma4:31b"
+        player_model    = "gemma4:31b"
+        ollama_api_key  = "<clé Ollama Cloud, ~57 car. — secret, jamais commité>"
+
+Lancer :
+    cd backend && source .venv/bin/activate
+    python -m pytest tests/test_e2e_live/ -m live_llm -v
 """
 from __future__ import annotations
 
@@ -406,3 +426,59 @@ async def test_live_llm_guide_survives_travel_transition() -> None:
     assert any(p.get("id") == "khalid_guide" for p in scene.get("pois", []) or []), (
         "le guide doit rester un POI visible dans la nouvelle scène"
     )
+
+
+@pytest.mark.live_llm
+async def test_live_llm_opening_weaves_contract_without_labels() -> None:
+    """P3 acceptance: the GM opening weaves the public contract into fiction —
+    even a *meta* objective ("survivre aux conditions extrêmes") — and never
+    pastes form labels ("Accroche :" / "Mission confiée :").
+
+    Negative assertion by design: we don't check the contract is lexically
+    *present* (that is the matching the P3 fix removed); we check the narration
+    is real (not the fallback) and label-free.
+    """
+    game_state = {
+        "characters": {
+            "thorvald": {"name": "Thorvald", "level": 1, "is_ai": False},
+        },
+        "adventure_journal": {
+            "location_region": "Désert d'Akhdar",
+            "location_place": "Piste d'ambre",
+            "time_of_day": "morning",
+            "day_number": 1,
+        },
+        "campaign_context": {
+            "player_contract": {
+                "hook": (
+                    "Une caravane a engagé le groupe pour traverser les terres "
+                    "arides et découvrir pourquoi les oasis s'assèchent."
+                ),
+                "known_objectives": ["Survivre aux conditions extrêmes du désert"],
+            },
+            "active_chapter": {
+                "opening_scene": {
+                    "place": "Piste d'ambre",
+                    "description": "Une piste de sable ocre serpente entre les dunes.",
+                },
+            },
+        },
+    }
+    # Brief de PRODUCTION : il porte l'en-tête « - Accroche publique: … » et
+    # « - Objectifs connus: … ». On vérifie que le LLM tisse ce contrat en
+    # fiction sans recopier l'étiquette (le vrai risque de régression de P3).
+    from app.api.routes_game import _build_opening_brief
+
+    opening_brief = _build_opening_brief(game_state)
+    assert "Accroche publique" in opening_brief, "garde : le brief réel doit porter le label"
+
+    response = await GMAgent().open_scene(game_state=game_state, opening_brief=opening_brief)
+    narration = str(getattr(response, "narration", "") or "")
+
+    assert narration.strip(), "le LLM doit produire une ouverture jouable"
+    assert narration != _FALLBACK_NARRATION, (
+        "Le LLM configuré ne répond pas : les replays live doivent échouer explicitement."
+    )
+    # P3 — le LLM tisse le contrat en fiction sans recopier l'étiquette du brief.
+    assert "Accroche" not in narration, f"étiquette recopiée dans l'ouverture : {narration!r}"
+    assert "Mission confiée" not in narration, f"étiquette dans l'ouverture : {narration!r}"

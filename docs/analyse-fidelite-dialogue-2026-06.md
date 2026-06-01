@@ -249,4 +249,21 @@ Les deux **échouent aujourd'hui** (ils prouvent les bugs vécus) et **passeront
 
 **Tests :** `tests/test_game/test_npc_accompanying_carry.py` (15 unitaires, verts) ; 2 scénarios d'acceptation live ajoutés à `test_tabletop_replay_live.py` (`test_live_llm_guide_survives_travel_transition`) — à exécuter avec Ollama/gemma4.
 
-**Reste (hors ce lot) :** confirmation UI 1-clic du voyage (P2-b, frontend) ; P3 (ouverture), P4 (indicateur), P5 (spotlight), P6 (persona). Dette ruff pré-existante (`asyncio`/`field` F401, E501, W292) **non corrigée** — hors périmètre.
+**Reste (hors ce lot) :** confirmation UI 1-clic du voyage (P2-b, frontend) ; P4 (indicateur), P5 (spotlight), P6 (persona). Dette ruff pré-existante (`asyncio`/`field` F401, E501, W292) **non corrigée** — hors périmètre.
+
+---
+
+## 7. État d'implémentation — P3 (ouverture réécrite par le LLM)
+
+**Décision appliquée (cf. §4 point 2)** : le LLM **possède** l'ouverture ; aucun champ collé. Correction issue de la revue avant codage : on a changé le **déclencheur**, pas le matcher. Rendre `_contract_words_present` tolérant à la paraphrase aurait ressuscité le mécanisme « détecter-le-manquant-puis-coller » que la décision rejette explicitement (« *plutôt qu'un simple prépend de la partie manquante* ») — et un objectif méta réécrit en fiction par un modèle frontier ne *matche* jamais lexicalement (le faux-négatif qui causait le bug).
+
+**Livré (2026-06-01) :**
+- **Suppression du collage labellisé** — `_ensure_opening_public_prologue` et `_contract_words_present` supprimés (`routes_game.py`). La narration LLM réelle est publiée **telle quelle** ; le seul appel (`_publish_opening_scene`) ne préfixe plus rien. Le cas dégénéré (LLM → `_FALLBACK_NARRATION`) n'atteint jamais un collage : `response = baseline` y vaut déjà le repli déterministe `_campaign_opening_text`.
+- **Repli diégétique (choix C2)** — `_party_briefing_text` dé-labellisé : plus de « Accroche : » / « Mission confiée au groupe : » ; le contrat affleure en prose simple. Alimente le repli déterministe `_campaign_opening_text` (seul cas où il est visible — échec LLM).
+- **Prompt** — `gm_open_scene.txt` : nouvelle consigne « tisse le contrat DANS la fiction, jamais en étiquette ; réécris un objectif méta (« survivre aux conditions extrêmes ») en enjeu concret et tangible (soif, chaleur, réserves d'eau) ».
+
+**Tests :** ~8 assertions de `test_routes_game.py` réécrites (intent préservé — le **contenu** du contrat reste visible dans le repli déterministe ; le **mécanisme** label supprimé) ; `test_publish_opening_scene_prefixes_missing_public_quest_contract` **inversé** en `test_publish_opening_scene_keeps_llm_narration_unlabeled` (acceptation négative unitaire). Scénario live ajouté `test_live_llm_opening_weaves_contract_without_labels` (négatif : narration ≠ `_FALLBACK_NARRATION`, sans étiquette) — **vert** contre gemma4:31b (16 s). Régression `test_api/`+`test_game/` : **499 verts**, seuls les 2 échecs pré-existants Ollama subsistent.
+
+**Preuve live (gemma4:31b)** : l'objectif méta « survivre aux conditions extrêmes » est réécrit en fiction tangible (« *la gestion de vos maigres réserves d'eau sont vos priorités absolues* », « *une chaleur sèche commence déjà à mordre vos lèvres* ») ; le hook (contrat caravane, oasis qui s'assèchent) affleure en prose ; aucune étiquette.
+
+**Différé : forge (hook/objectif).** La réécriture LLM neutralise déjà l'objectif méta *et* le hook de couverture (« ou poussés par la nécessité ») — suivi cosmétique, non bloquant.

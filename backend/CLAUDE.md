@@ -175,5 +175,22 @@ pytest tests/test_api/ -v            # API (DB SQLite in-memory)
 pytest tests/test_agents/ -v         # Agents + Persona schemas + PersonaFactory (Ollama mocke)
 pytest tests/test_game/ -v           # Game loop + WebSocket
 pytest tests/test_voice/ -v          # Voice layer (Kokoro/OpenAI mocke, WS Realtime mocke)
+pytest tests/test_e2e_live/ -m live_llm -v   # Replay live — PAS de mock, vrai LLM configuré
 pytest --cov=app --cov-report=term-missing
 ```
+
+### Tests live (`tests/test_e2e_live/`, marqueur `live_llm`)
+
+Ces tests appellent le **vrai** LLM configuré (pas de mock) ; ils échouent
+explicitement (event `ERROR`) si le provider est indisponible.
+
+**Où vit la config (piège classique) :** la config LLM est lue depuis
+`backend/.runtime/llm_runtime.json` (coffre runtime, perms 0600), chargé à
+l'import de `app.config`. La **clé** `ollama_api_key` n'est **jamais** lue depuis
+`.env` : `get_ollama_api_key()` ne consulte que ce runtime json et `Settings`
+n'a aucun champ `ollama_api_key`. Donc `OLLAMA_API_KEY=` dans `.env` est ignoré.
+`ollama_base_url`/`gm_model`/`player_model` retombent sur `.env` à défaut, mais
+pas la clé. On configure via l'UI admin / l'endpoint `update_llm_settings`
+(ou en écrivant le json). Config Ollama Cloud attendue : `ollama_base_url =
+https://ollama.com`, `gm_model = player_model = gemma4:31b`, `ollama_api_key`
+présente (~57 car., secret — jamais commité).

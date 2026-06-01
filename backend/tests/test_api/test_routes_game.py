@@ -69,9 +69,10 @@ def test_opening_response_uses_opening_scene_as_physical_scene() -> None:
     assert "azaka" in poi_ids
     assert "wakanga_o_tamu" not in poi_ids
     assert "carte_tachee" in poi_ids
-    # Le briefing public (known_objectives) doit être visible : le joueur sait
-    # pourquoi son personnage est là dès l'ouverture.
-    assert "Mission confiée" in response.narration
+    # Le contrat public (known_objectives) reste visible dans le repli
+    # déterministe, mais en prose diégétique — plus d'étiquette de fiche (P3).
+    assert "Mission confiée" not in response.narration
+    assert "Accroche" not in response.narration
     assert "Trouver la source de la malédiction" in response.narration
     assert "première scène jouable" not in response.narration
     assert "Un cap possible se dessine" not in response.narration
@@ -190,9 +191,9 @@ def test_opening_response_uses_migrated_legacy_opening_scene() -> None:
     assert "Grandfather Zitembe" not in response.narration
     assert "Syndra Silvane attend le groupe" in response.narration
     assert "Wakanga O'tamu" in response.narration
-    # Le briefing public (known_objectives) apparaît bien — c'est l'objectif
-    # officiel connu du groupe.
-    assert "Mission confiée" in response.narration
+    # Le contrat public (known_objectives) apparaît bien dans le repli
+    # déterministe, mais en prose diégétique — plus d'étiquette de fiche (P3).
+    assert "Mission confiée" not in response.narration
     assert "Trouver la source de la malédiction de mort" in response.narration
     assert "Vous pouvez" not in response.narration
     assert response.narration.endswith("Que faites-vous ?")
@@ -322,8 +323,8 @@ def test_opening_response_hides_private_or_structural_meta_text() -> None:
     assert "Un cap possible se dessine" not in narration
     assert "Si les PJ échouent" not in narration
     # known_objectives est PUBLIC (la mission officielle du groupe) et doit
-    # apparaître dans le briefing d'ouverture.
-    assert "Mission confiée" in narration
+    # apparaître dans l'ouverture — en prose diégétique, sans étiquette (P3).
+    assert "Mission confiée" not in narration
     assert "Atteindre la Tombe de l'annihilation" in narration
     assert "Vous pouvez" not in narration
     # Le hook est une accroche publique jouable : il explique pourquoi le
@@ -362,7 +363,8 @@ def test_campaign_opening_text_surfaces_public_hook() -> None:
 
     text = _campaign_opening_text(campaign_context)
 
-    assert "Accroche" in text
+    # Contenu du contrat visible, mais sans étiquette de fiche (P3).
+    assert "Accroche" not in text
     assert "Guilde des Cartographes" in text
     # La scène et l'affordance NPC restent présentes.
     assert "Port Nyanzaru" in text or "Marché" in text
@@ -403,9 +405,10 @@ def test_campaign_opening_text_surfaces_known_objective_briefing() -> None:
 
     text = _campaign_opening_text(campaign_context)
 
-    assert "Accroche" in text
+    # Contenu du contrat visible, mais sans étiquette de fiche (P3).
+    assert "Accroche" not in text
+    assert "Mission confiée" not in text
     assert "commanditaire" in text
-    assert "Mission confiée au groupe" in text
     assert "Cartographier les ruines oubliées" in text
 
 
@@ -564,7 +567,9 @@ async def test_send_campaign_opening_narration_falls_back_on_llm_fallback(monkey
     )
 
     assert captured["response"].narration != _FALLBACK_NARRATION
-    assert "Mission confiée" in captured["response"].narration
+    # Repli déterministe : le contrat affleure en prose diégétique, sans étiquette (P3).
+    assert "Mission confiée" not in captured["response"].narration
+    assert "Suivre la piste publique" in captured["response"].narration
     assert "Que faites-vous ?" in captured["response"].narration
 
 
@@ -631,7 +636,9 @@ async def test_publish_opening_scene_normalizes_path_closer_and_clears_flag(monk
 
 
 @pytest.mark.asyncio
-async def test_publish_opening_scene_prefixes_missing_public_quest_contract(monkeypatch) -> None:
+async def test_publish_opening_scene_keeps_llm_narration_unlabeled(monkeypatch) -> None:
+    """P3 : la narration LLM réelle est publiée telle quelle, sans collage du
+    contrat sous forme d'étiquette ("Accroche :" / "Mission confiée :")."""
     from app.agents.schemas import GMResponse
     from app.api import routes_game
     from app.game.event_bus import EventType
@@ -685,10 +692,11 @@ async def test_publish_opening_scene_prefixes_missing_public_quest_contract(monk
     narration_payload = next(
         payload for event, payload in published if event == EventType.NARRATION
     )
-    assert narration_payload["text"].startswith("Accroche : Khalid a engagé")
-    assert "Mission confiée au groupe : Atteindre l'oasis avant la nuit." in (
-        narration_payload["text"]
+    assert narration_payload["text"].startswith(
+        "Le sable se lève en nappes pâles"
     )
+    assert "Accroche :" not in narration_payload["text"]
+    assert "Mission confiée" not in narration_payload["text"]
 
 
 @pytest.mark.asyncio
