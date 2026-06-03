@@ -157,10 +157,18 @@ def _base_state() -> dict[str, Any]:
             },
         },
         "npc_states": {
+            # Disparition DÉLIBÉRÉE que le groupe enquête (scénario disparition_guide).
+            # On encode une absence narrative ancrée — `last_location` réel (≠ scène
+            # courante) → bucket `absent_npcs`, où gm_narrate.txt interdit explicitement
+            # de le faire parler — et NON l'artefact du bug P1 (`last_location=""`, qui
+            # le rangeait en `unknown_location_npcs`, jamais rendu au MJ). Pas de
+            # `disposition:"accompanying"` : ce serait re-encoder le bug d'évanouissement
+            # au voyage que P1 corrige (cf. _travel_state + la baseline présente/accompanying
+            # de test_live_llm_guide_survives_travel_transition).
             "khalid_guide": {
                 "name": "Khalid le Guide",
                 "status": "missing",
-                "last_location": "",
+                "last_location": "piste_ambre",
                 "known_to_party": True,
                 "notes": ["Ses traces cessent près du bassin."],
             }

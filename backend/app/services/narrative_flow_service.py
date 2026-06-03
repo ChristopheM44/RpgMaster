@@ -34,7 +34,7 @@ from app.game.social_scene_state import (
     resolve_scene_clock_crises,
 )
 from app.game.travel_detection import TravelIntent, detect_travel_intent, travel_intent_as_dict
-from app.game.visible_events import publish_visible_entry
+from app.game.visible_events import clean_dialogue_text, publish_visible_entry
 from app.services.message_service import load_recent_messages, persist_narration
 
 logger = logging.getLogger(__name__)
@@ -527,7 +527,14 @@ class NarrativeFlowService:
                 )
                 continue
 
-            visible_text = self._visible_companion_text(choice, char_name)
+            # On nettoie ICI (parole sans guillemets englobants ni préfixe de nom)
+            # une seule fois, pour que la copie PERSISTÉE soit identique à la copie
+            # publiée — sinon le rechargement de l'historique réintroduit la couture
+            # nettoyée à l'affichage live (même parité qu'avec resolve_npc_dialogue).
+            # publish_visible_entry re-nettoie en no-op (clean_dialogue_text idempotent).
+            visible_text = clean_dialogue_text(
+                self._visible_companion_text(choice, char_name), char_name
+            )
             await publish_visible_entry(
                 event_bus,
                 session_id,

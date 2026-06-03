@@ -192,6 +192,75 @@ async def test_companion_dialogue_strips_gm_owned_world_result() -> None:
 
 
 @pytest.mark.asyncio
+async def test_companion_dialogue_persisted_text_matches_cleaned_published_text() -> None:
+    """Symétrie persisté = publié pour le dialogue compagnon IA.
+
+    La copie persistée ne doit porter ni guillemets englobants ni préfixe de nom :
+    sinon, au rechargement de l'historique, la couture nettoyée à l'affichage live
+    réapparaît (même classe de régression que celle fermée pour les PNJ).
+    """
+    active = _active_with_companions()
+    active.ai_players["thorin_1"].character_name = "Oaken"
+    active.ai_players["thorin_1"].respond_to_player = AsyncMock(
+        return_value=PlayerActionChoice(
+            action_type="talk",
+            action_description="Tient la ligne.",
+            roleplay_text="Oaken : « Nous tenons la position, restez derrière moi. »",
+        )
+    )
+    resolver = MagicMock()
+    resolver.resolve = AsyncMock()
+
+    published: list[tuple[str, dict]] = []
+    persisted: list[tuple[str, str]] = []
+
+    async def capture_publish(_session_id, event_type, payload, source=None):
+        published.append((event_type, payload))
+
+    async def capture_persist(_session_id, content, speaker, _db, **_kwargs):
+        persisted.append((speaker, content))
+
+    with (
+        patch(
+            "app.services.narrative_flow_service.event_bus.publish_to_session",
+            new=capture_publish,
+        ),
+        patch(
+            "app.services.narrative_flow_service.persist_narration",
+            new=capture_persist,
+        ),
+        patch(
+            "app.services.narrative_flow_service.load_recent_messages",
+            new=AsyncMock(return_value=[]),
+        ),
+    ):
+        await NarrativeFlowService()._run_companion_responses(
+            session_id="scene-1",
+            active=active,
+            action_resolver=resolver,
+            player_text="que dis-tu ?",
+            target_ids=["thorin_1"],
+            trigger_character_id="human_1",
+            db=MagicMock(),
+            scene_id="scene-x",
+        )
+
+    published_text = next(
+        payload["text"]
+        for event_type, payload in published
+        if event_type == EventType.DIALOGUE and payload.get("speaker") == "Oaken"
+    )
+    persisted_text = next(content for speaker, content in persisted if speaker == "Oaken")
+
+    # Idempotence : persisté = clean(src), publié = clean(clean(src)) → l'égalité
+    # prouve que publish_visible_entry re-nettoie en no-op.
+    assert persisted_text == published_text
+    assert not persisted_text.startswith("«")
+    assert not persisted_text.lower().startswith("oaken")
+    assert persisted_text == "Nous tenons la position, restez derrière moi."
+
+
+@pytest.mark.asyncio
 async def test_companion_state_hides_unplayed_campaign_hook() -> None:
     active = _active_with_companions()
     active.state_data["campaign_context"] = {
