@@ -74,8 +74,23 @@ Le document Port d'Azur (§2.8) traitait Vael comme un compagnon IA muet et le m
 
 ### 2.5 Fork restant tenu honnête
 
-- **Q3** : 1ʳᵉ étape = inspecter `current_scene.pois[].interactions` d'une session réelle pour déterminer si le DEX Save vient de `mechanics` explicites du MJ ou d'un intent mal routé. **Ne pas pré-trancher** la cause ni coder le champ `exposure` avant ce diagnostic.
+- **Q3** : 1ʳᵉ étape = inspecter `current_scene.pois[].interactions` d'une session réelle pour déterminer si le DEX Save vient de `mechanics` explicites du MJ ou d'un intent mal routé. **Ne pas pré-trancher** la cause ni coder le champ `exposure` avant ce diagnostic. → **diagnostic réalisé le 2026-06-03, cf. §2.6** (les deux causes d'origine sont écartées ; cause de tête = crise d'horloge, corroborée par la session Port d'Azur).
 - *(Q5 n'est plus un fork : cause établie — Vael est un PC humain.)*
+
+### 2.6 Diagnostic Q3 (2026-06-03) — inspection d'état réel
+
+Inspection en lecture seule de `current_scene.pois[].interactions` sur les 5 `game_states` de `backend/rpgmaster.db` (18 POI, 12 interactions) :
+
+- **Distribution des intents** : `examine`×3, `search`×3, `talk`×4, `custom`×1, `use`×1.
+- **Mécaniques explicites posées par le MJ** : 3 seulement, **toutes des checks INT/WIS** — Nature DD12 (« Analyser l'eau »), Perception DD13 (« Fouiller »), Arcana DD15 (« Désactiver »). **Zéro DEX Save sur un intent d'observation** (`examine/listen/search/approach`).
+
+→ **Ce que le diagnostic clôt (prouvé par les données)** : le DEX Save sur « examiner » **ne vient ni** d'une mécanique explicite du MJ (aucune n'existe sur un intent d'observation) **ni** de l'inférence par défaut (qui route correctement `examine` sur un danger vers un INT Investigation, [social_scene_state.py:380-389](../backend/app/game/social_scene_state.py)). Les **deux** causes hypothétiques d'origine sont **écartées**.
+
+→ **Hypothèse de tête, corroborée par la session Port d'Azur elle-même** : la session `c2a070a0` (« L'Éclat du Port d'Azur ») contient l'horloge `menace_aux_docks` **résolue** via un **DEX Acrobatie DD14** (`reason: scene_clock_crisis`, jet 18 vs 14 = succès), avec la narration **fuyante** persistée : « Menace aux docks atteint son point critique. […] le personnage exposé doit réagir immédiatement. » Le **seul** DEX Save de la scène est donc **la crise d'horloge**, déclenchée sur un tick `player_action` — qui a pu coïncider avec un clic d'observation, d'où la lecture « examiner → DEX Save ». Le **lot B rend cette crise lisible** (phénomène concret, plus de label ni de placeholder « personnage exposé ») ; ce DEX Save de crise n'est **pas** un jet d'observation.
+
+→ **Vecteur non exclu (à garder pour le lot C)** : un intent `use`/`custom` sur un POI dangereux produit légitimement un DEX Save Acrobatie ([social_scene_state.py:357-367](../backend/app/game/social_scene_state.py)). Aucune occurrence dans les données inspectées, mais ce chemin reste un déclencheur possible d'un DEX Save « sur un danger » — à confirmer/infirmer en replay.
+
+**Conséquence pour le lot C** : **ne pas** coder le champ `exposure` réflexivement. Priorité = (a) lot B (lisibilité de crise — **livré**), puis (b) éventuellement gating du DEX Save de crise d'horloge **ou** annonce de risque avant toute sauvegarde sur une intention d'observation — **à trancher en replay live**, pas par anticipation.
 
 ---
 

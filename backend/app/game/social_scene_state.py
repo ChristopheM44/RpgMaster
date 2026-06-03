@@ -863,6 +863,9 @@ def normalize_clock(params: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _default_clock_on_fill(label: str) -> dict[str, Any]:
+    # On NE pré-cuit PAS la narration : elle est (re)calculée à la résolution avec
+    # l'horloge complète (label + severity) via _default_clock_crisis_text, pour
+    # rester un phénomène concret sans figer un texte partiel à la création.
     return {
         "mode": "roll",
         "roll": {
@@ -872,7 +875,6 @@ def _default_clock_on_fill(label: str) -> dict[str, Any]:
             "dc": 14,
             "reason": "scene_clock_crisis",
         },
-        "narration": _default_clock_crisis_text({"label": label}),
     }
 
 
@@ -888,11 +890,11 @@ def _normalize_clock_on_fill(value: Any, label: str) -> dict[str, Any]:
         normalized["roll"] = roll
     elif mode == "roll":
         normalized["roll"] = _default_clock_on_fill(label)["roll"]
+    # Narration custom du MJ respectée si fournie ; sinon laissée vide pour que la
+    # résolution retombe sur le fallback déterministe concret (cf. _default_clock_on_fill).
     narration = str(value.get("narration") or "").strip()
     if narration:
         normalized["narration"] = narration[:600]
-    elif mode == "roll":
-        normalized["narration"] = _default_clock_crisis_text({"label": label})
     next_clock = value.get("next_clock")
     if isinstance(next_clock, dict):
         normalized["next_clock"] = next_clock
@@ -921,26 +923,168 @@ def _execute_clock_roll(
     return payload
 
 
+# Classes de menace inférées depuis le label d'horloge (interne). Le label sert
+# UNIQUEMENT à choisir un phénomène physique concret ; il n'est jamais rendu tel
+# quel dans la narration joueur (il ne vit que dans le badge UI).
+_CLOCK_THREAT_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("dock", ("dock", "quai", "entrepot", "amarre", "pilotis", "ponton", "embarcad")),
+    ("fire", ("incendie", "flamme", "feu", "brasier", "fournaise", "fumee")),
+    ("ritual", ("rituel", "rune", "arcane", "incantation", "invocation", "sceau", "siphon")),
+    ("flood", ("inondation", "submersion", "maree", "crue", "vague", "noyade", "deluge")),
+    ("collapse", ("effondrement", "plafond", "voute", "galerie", "eboulement", "structure")),
+    ("pursuit", ("poursuite", "garde", "patrouille", "alerte", "traque", "renfort")),
+    ("explosion", ("explosion", "bombe", "baril", "poudre", "detonation", "charge")),
+)
+
+# Phénomène physique concret au moment où la menace se déchaîne (aucun acteur, on
+# décrit le monde ; jamais le label ni un placeholder "personnage exposé").
+_CLOCK_CRISIS_BY_KIND: dict[str, str] = {
+    "dock": (
+        "Les amarres cèdent l'une après l'autre dans un fracas de bois, et une portion "
+        "du pilotis s'affaisse vers l'eau noire."
+    ),
+    "fire": (
+        "Les flammes franchissent la dernière cloison d'un seul élan ; une vague de "
+        "chaleur et une fumée âcre engloutissent l'espace."
+    ),
+    "ritual": (
+        "Les runes virent à l'écarlate et l'air se met à vibrer d'une pression sourde, "
+        "prêt à se déchirer d'un instant à l'autre."
+    ),
+    "flood": (
+        "L'eau s'engouffre d'un coup, noire et glacée, et le niveau grimpe à hauteur de "
+        "cuisse en quelques secondes."
+    ),
+    "collapse": (
+        "Une fissure court au plafond dans un grondement profond ; des blocs de pierre "
+        "commencent à pleuvoir."
+    ),
+    "pursuit": (
+        "Des cris et un martèlement de bottes convergent de toutes parts : l'étau vient "
+        "de se refermer."
+    ),
+    "explosion": (
+        "Une onde de chaleur précède le grondement : la déflagration est sur le point de "
+        "tout balayer."
+    ),
+    "generic": (
+        "La tension se rompt d'un coup ; tout bascule autour dans un danger immédiat et "
+        "bien physique."
+    ),
+}
+
+# Conséquences concrètes par classe de menace. Le succès "coûte" toujours quelque
+# chose (pas de simple esquive sans effet) ; l'échec aggrave la position.
+# Clauses rédigées au présent / en « se fait + infinitif », sans pronom « il » ni
+# participe s'accordant au sujet, pour rester justes quel que soit le genre du PC
+# (« Aria », « Bram »…). Les participes présents (« noyés », « brisé », « coupé »,
+# « bouchée ») s'accordent à leur propre substantif, jamais au personnage.
+_CLOCK_OUTCOME_BY_KIND: dict[str, dict[str, str]] = {
+    "dock": {
+        "success": (
+            "se jette hors de la section qui s'effondre et retombe sur une planche encore "
+            "solide — au prix d'un genou ouvert et d'un paquetage à moitié noyé."
+        ),
+        "fail": (
+            "bascule avec la section qui cède et s'enfonce jusqu'à la taille dans l'eau "
+            "noire et le bois brisé ; sa position devient franchement périlleuse."
+        ),
+    },
+    "fire": {
+        "success": (
+            "traverse le rideau de flammes d'un bond et s'en sort — manche roussie, "
+            "poumons brûlants de fumée."
+        ),
+        "fail": (
+            "se fait rattraper par les flammes, vêtements fumants et souffle court ; le "
+            "passage derrière n'est plus qu'un mur de feu."
+        ),
+    },
+    "ritual": {
+        "success": (
+            "détourne la décharge au dernier instant, mais l'onde lui laisse les oreilles "
+            "sifflantes et la peau marquée d'un givre arcanique."
+        ),
+        "fail": (
+            "encaisse la décharge de plein fouet, bascule au sol, les sens noyés sous une "
+            "lumière mordante ; le rituel, lui, a fini sa course."
+        ),
+    },
+    "flood": {
+        "success": (
+            "s'agrippe à une saillie et garde la tête hors de l'eau — au prix d'un bain "
+            "glacé et d'une partie du matériel emportée par le courant."
+        ),
+        "fail": (
+            "se fait happer par la crue et rouler contre la paroi, reprend pied en "
+            "grelottant, l'eau désormais à hauteur de poitrine."
+        ),
+    },
+    "collapse": {
+        "success": (
+            "plonge à couvert juste avant l'éboulement et s'en tire avec une épaule "
+            "contusionnée sous la poussière et les gravats."
+        ),
+        "fail": (
+            "disparaît à demi sous la chute de pierres et doit s'arracher des décombres ; "
+            "l'issue, derrière, est maintenant bouchée."
+        ),
+    },
+    "pursuit": {
+        "success": (
+            "se faufile hors de l'étau au dernier moment — mais on a vu son visage, et "
+            "l'alerte court déjà devant."
+        ),
+        "fail": (
+            "se fait rattraper et plaquer contre le mur, se dégage de justesse, mais la "
+            "traque sait désormais exactement où chercher."
+        ),
+    },
+    "explosion": {
+        "success": (
+            "se jette derrière un abri à l'instant du souffle — tympans bourdonnants, une "
+            "coupure chaude à la tempe."
+        ),
+        "fail": (
+            "se fait cueillir par la déflagration et jeter plusieurs mètres en arrière, le "
+            "souffle coupé, au milieu d'un décor en ruine."
+        ),
+    },
+    "generic": {
+        "success": (
+            "réagit juste à temps et garde l'équilibre — non sans récolter une mauvaise "
+            "contusion dans la bousculade."
+        ),
+        "fail": (
+            "encaisse le choc de plein fouet, se relève tant bien que mal, mais la "
+            "situation alentour a nettement empiré."
+        ),
+    },
+}
+
+
+def _clock_threat_kind(label: str) -> str:
+    normalized = normalize_text(label)
+    for kind, markers in _CLOCK_THREAT_KEYWORDS:
+        if any(marker in normalized for marker in markers):
+            return kind
+    return "generic"
+
+
 def _default_clock_crisis_text(clock: dict[str, Any]) -> str:
-    label = str(clock.get("label") or "la menace").strip()
-    return (
-        f"{label} atteint son point critique. L'instabilité se libère d'un coup ; "
-        "le personnage exposé doit réagir immédiatement."
-    )
+    kind = _clock_threat_kind(str(clock.get("label") or ""))
+    text = _CLOCK_CRISIS_BY_KIND.get(kind, _CLOCK_CRISIS_BY_KIND["generic"])
+    if normalize_text(str(clock.get("severity") or "")) == "critical":
+        text = f"{text} Il n'y a plus une seconde à perdre."
+    return text
 
 
 def _clock_roll_outcome_text(clock: dict[str, Any], roll_payload: dict[str, Any]) -> str:
-    name = str(roll_payload.get("character_name") or "Le personnage")
-    label = str(clock.get("label") or "la menace")
-    if roll_payload.get("success"):
-        return (
-            f"{name} encaisse le contrecoup de {label} sans perdre pied, juste assez vite "
-            "pour éviter le pire."
-        )
-    return (
-        f"{name} est pris dans le contrecoup de {label}. La crise est passée, mais la "
-        "position est devenue nettement plus dangereuse."
-    )
+    name = str(roll_payload.get("character_name") or "Le personnage").strip() or "Le personnage"
+    kind = _clock_threat_kind(str(clock.get("label") or ""))
+    outcome = _CLOCK_OUTCOME_BY_KIND.get(kind, _CLOCK_OUTCOME_BY_KIND["generic"])
+    clause = outcome["success" if roll_payload.get("success") else "fail"]
+    return f"{name} {clause}"
 
 
 async def _publish_clock_narration(

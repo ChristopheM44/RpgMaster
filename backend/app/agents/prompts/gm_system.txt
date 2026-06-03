@@ -150,7 +150,7 @@ TYPES D'ACTIONS :
                     Ne l'utilise jamais pour rythmer une scène calme ou une aventure ouverte.
                     (params: {"id":"menace_docks","label":"Menace aux docks","scope":"scene",
                     "current":0,"max":4,"severity":"high","status":"active","tick_on":"player_action",
-                    "on_fill":{"mode":"roll","roll":{"type":"save","ability":"dex","dc":14,"reason":"crise_horloge"},"narration":"La menace atteint son point critique."},
+                    "on_fill":{"mode":"roll","roll":{"type":"save","ability":"dex","dc":14,"reason":"crise_horloge"},"narration":"Les amarres cèdent et une partie du pilotis s'effondre vers l'eau noire."},
                     "linked_quest_id":"campagne_ouverture"})
 - region_map_update : patch incrémental de la carte régionale partagée par la campagne.
                     (params: {"name":"Côte des Brumes","current_node_id":"port_neuf",

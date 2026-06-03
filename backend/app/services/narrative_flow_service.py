@@ -242,9 +242,9 @@ class NarrativeFlowService:
                     trigger_character_id=getattr(action, "character_id", None),
                     db=db,
                     action_text=(
-                        "Une horloge de menace vient d'atteindre son point critique. "
-                        "Réagis en une phrase courte, seulement comme avertissement "
-                        "ou conseil."
+                        "Le danger qui montait dans la scène vient de se déchaîner pour "
+                        "de bon. Réagis en une phrase courte, seulement comme "
+                        "avertissement ou conseil."
                     ),
                 )
 

@@ -4,6 +4,11 @@
 import { onMounted, onUnmounted } from 'vue'
 import { useSessionStore } from '../../stores/session'
 import { useExplorationPois } from '../../composables/useExplorationPois'
+import {
+  buildSceneExitPrompt,
+  buildScenePoiInteractionPrompt,
+} from '../../utils/scenePoiInteractions'
+import type { ScenePoiInteraction, ScenePoiInteractionIntent } from '../../types'
 import MapColumn from './MapColumn.vue'
 import NarrativeColumn from './NarrativeColumn.vue'
 import BottomBar from './BottomBar.vue'
@@ -33,20 +38,27 @@ function onAct(id: string) {
   if (!poi) return
   if (poi.kind === 'sortie') {
     sessionStore.moveParty(poi.dest ?? poi.id)
-    emit('action', 'free_text', `Je me dirige vers ${poi.title}.`)
-  } else {
-    const content = poi.prompt
-      ?? (poi.kind === 'npc'
-        ? `Je parle à ${poi.title}.`
-        : `J'examine : ${poi.title}${poi.dc ? ` (${poi.actionLabel ?? poi.skill ?? 'Examiner'} DD ${poi.dc})` : ''}.`)
-    emit(
-      'action',
-      'free_text',
-      content,
-      poi.kind === 'npc' ? poi.id : undefined,
-      scenePoiExtra(poi.id, poi.interactionId, poi.intent),
-    )
+    emit('action', 'free_text', buildSceneExitPrompt(poi.title))
+    return
   }
+  // Reconstruit l'interaction de scène à partir des champs adaptés (ExPoi) pour
+  // produire une phrase naturelle via le même util que le chemin mobile — plus
+  // de "J'examine : … (Compétence DD n)" qui faisait fuiter les mécaniques.
+  const intent = (poi.intent
+    ?? (poi.kind === 'npc' ? 'talk' : 'examine')) as ScenePoiInteractionIntent
+  const interaction: ScenePoiInteraction = {
+    id: poi.interactionId,
+    label: poi.actionLabel ?? '',
+    intent,
+    ...(poi.prompt ? { prompt: poi.prompt } : {}),
+  }
+  emit(
+    'action',
+    'free_text',
+    buildScenePoiInteractionPrompt(poi.title, interaction),
+    poi.kind === 'npc' ? poi.id : undefined,
+    scenePoiExtra(poi.id, poi.interactionId, poi.intent),
+  )
 }
 
 function onApproach(id: string) {

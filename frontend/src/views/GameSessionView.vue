@@ -18,7 +18,7 @@ import ConfirmDialog from '../components/common/ConfirmDialog.vue'
 import RestDialog from '../components/ui/RestDialog.vue'
 import LevelUpModal from '../components/character/LevelUpModal.vue'
 import LootNotification from '../components/combat/LootNotification.vue'
-import { buildScenePoiInteractionPrompt } from '../utils/scenePoiInteractions'
+import { buildScenePoiInteractionPrompt, buildSceneExitPrompt } from '../utils/scenePoiInteractions'
 import type { ScenePoiInteraction } from '../types'
 
 const route = useRoute()
@@ -274,7 +274,7 @@ function handleLevelUp(characterId: string) {
 }
 
 function handleSceneExit(_exitId: string, label: string) {
-  handleAction('free_text', `Je me dirige vers ${cleanExitLabel(label)}.`)
+  handleAction('free_text', buildSceneExitPrompt(label))
 }
 
 function handleScenePoi(poiId: string, name: string, interaction?: ScenePoiInteraction) {
@@ -284,13 +284,6 @@ function handleScenePoi(poiId: string, name: string, interaction?: ScenePoiInter
     scene_interaction_id: interaction?.id,
     scene_interaction_intent: interaction?.intent,
   })
-}
-
-function cleanExitLabel(label: string): string {
-  return label
-    .trim()
-    .replace(/^(?:vers|direction|aller à|aller a|se diriger vers)\s+/i, '')
-    .trim()
 }
 
 const mobileIsMyTurn = computed(() => gameStore.currentTurnId === charStore.myCharacter?.id)

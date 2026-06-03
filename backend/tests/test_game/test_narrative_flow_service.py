@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -10,6 +11,11 @@ from app.agents.schemas import GMResponse, PlayerActionChoice
 from app.game.action_resolver import ActionResolver
 from app.game.event_bus import EventType
 from app.game.session_manager import ActiveSession
+from app.game.social_scene_state import (
+    _clock_roll_outcome_text,
+    _clock_threat_kind,
+    _default_clock_crisis_text,
+)
 from app.game.visible_events import strip_visible_speaker_prefix
 from app.models.session import SessionStatus
 from app.services.narrative_flow_service import NarrativeFlowService
@@ -731,8 +737,26 @@ async def test_filled_scene_clock_triggers_crisis_roll_and_resolves() -> None:
     clock_updates = [payload for event, payload in published if event == EventType.CLOCK_UPDATED]
     assert [payload["status"] for payload in clock_updates[:2]] == ["resolving", "resolved"]
     assert any(event == EventType.ROLL_RESULT for event, _ in published)
-    assert any("point critique" in payload["text"] for event, payload in published
-               if event == EventType.NARRATION)
+
+    narrations = [
+        payload["text"] for event, payload in published if event == EventType.NARRATION
+    ]
+    # La crise se raconte par un phénomène physique concret (catégorie "dock"),
+    # jamais par le label interne ni un placeholder d'acteur.
+    assert any(
+        any(token in text.lower() for token in ("amarre", "pilotis", "eau noire"))
+        for text in narrations
+    )
+    # Le résultat du jet nomme le personnage réel et décrit une conséquence.
+    assert any("Aria" in text for text in narrations)
+    # Aucune couture mécanique (label d'horloge, placeholder, jargon) ne fuit.
+    for text in narrations:
+        assert "Menace aux docks" not in text
+        assert "point critique" not in text
+        assert "le personnage exposé" not in text
+    assert not any(
+        "Menace aux docks atteint son point critique" in text for text in narrations
+    )
 
 
 @pytest.mark.asyncio
@@ -984,3 +1008,89 @@ async def test_npc_dialogue_reaction_skipped_when_no_ai_players() -> None:
 
     resolver.resolve_npc_dialogue.assert_awaited_once()
     reaction_mock.assert_not_called()
+
+
+# ── Voix fictionnelle des horloges de menace (LOT B) ──────────────────────────
+
+_CLOCK_FORBIDDEN = ("point critique", "le personnage exposé", "horloge")
+
+
+@pytest.mark.parametrize(
+    "label,kind,token",
+    [
+        ("Menace aux docks", "dock", "amarre"),
+        ("Rituel en cours", "ritual", "rune"),
+        ("Incendie", "fire", "flamme"),
+        ("Effondrement de la galerie", "collapse", "plafond"),
+        ("Menace imminente", "generic", "tension"),
+        ("", "generic", "tension"),
+    ],
+)
+def test_clock_crisis_text_is_concrete_and_label_free(label, kind, token) -> None:
+    clock = {"label": label, "severity": "high"}
+    assert _clock_threat_kind(label) == kind
+    text = _default_clock_crisis_text(clock)
+    assert token in text.lower()
+    # Le label interne ne fuit jamais dans la narration joueur.
+    if label:
+        assert label not in text
+    for forbidden in _CLOCK_FORBIDDEN:
+        assert forbidden not in text.lower()
+
+
+def test_clock_crisis_text_critical_adds_urgency_without_leaking_label() -> None:
+    base = _default_clock_crisis_text({"label": "Menace aux docks", "severity": "high"})
+    critical = _default_clock_crisis_text({"label": "Menace aux docks", "severity": "critical"})
+    assert critical != base
+    assert critical.startswith(base)
+    assert "Menace aux docks" not in critical
+
+
+def test_clock_outcome_names_character_and_success_still_costs() -> None:
+    clock = {"label": "Menace aux docks", "severity": "high"}
+    success = _clock_roll_outcome_text(clock, {"character_name": "Bram", "success": True})
+    failure = _clock_roll_outcome_text(clock, {"character_name": "Bram", "success": False})
+
+    assert success.startswith("Bram ")
+    assert failure.startswith("Bram ")
+    assert success != failure
+    # "Même un succès coûte" : la réussite décrit une conséquence concrète.
+    assert any(token in success.lower() for token in ("prix", "genou", "noyé", "trempé"))
+    for text in (success, failure):
+        assert "Menace aux docks" not in text
+        for forbidden in _CLOCK_FORBIDDEN:
+            assert forbidden not in text.lower()
+
+
+def test_clock_outcome_falls_back_to_generic_character_name() -> None:
+    text = _clock_roll_outcome_text({"label": "Menace imminente"}, {"success": False})
+    assert text.startswith("Le personnage ")
+
+
+# Pronom « il » ou participe passé s'accordant au sujet → texte faux pour un PC
+# féminin (« Aria est emporté »). On verrouille la neutralité de genre.
+_GENDERED_PC_AGREEMENT = re.compile(
+    r"\bil\b|\b(?:emporté|pris|rattrapé|projeté|cueilli|happé|transi|enseveli|plaqué|roulé|"
+    r"désorienté|trempé)\b",
+    re.IGNORECASE,
+)
+
+
+def test_clock_outcomes_are_gender_neutral_for_any_pc() -> None:
+    labels = [
+        "Menace aux docks",
+        "Incendie",
+        "Rituel",
+        "Inondation",
+        "Effondrement",
+        "Poursuite",
+        "Explosion",
+        "Menace imminente",
+    ]
+    for label in labels:
+        for success in (True, False):
+            text = _clock_roll_outcome_text(
+                {"label": label}, {"character_name": "Aria", "success": success}
+            )
+            match = _GENDERED_PC_AGREEMENT.search(text)
+            assert match is None, (label, success, match.group(0) if match else None, text)

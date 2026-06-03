@@ -77,6 +77,57 @@ export function buildScenePoiInteractionPrompt(
   }
 }
 
+// Préfixe directionnel d'interface explicitement nommé (« Vers », « Direction »,
+// « Accès », « Passage »), retiré UNIQUEMENT s'il est suivi d'une préposition ou
+// d'un article — preuve qu'il introduit une destination et n'est pas le nom du
+// lieu lui-même (« Passage souterrain », « Accès est » restent intacts).
+const EXIT_PREFIX_RE =
+  /^(?:vers|direction|acc[èe]s|passage)(?=\s*:?\s+(?:vers|jusqu|à|a|au|aux|du|de|des|en|dans|le|la|les|l['’]))\s*:?\s+/i
+
+// Préposition de mouvement résiduelle en tête après strip (« aux Égouts »,
+// « vers les caves ») : on enchaîne « Je me dirige … » sans réinjecter « vers ».
+const EXIT_RESIDUAL_PREP_RE = /^(?:vers|jusqu['’]?\s*[àa]|aux?|à|a|dans|en)\s+/i
+
+// Le libellé porte déjà une structure de déplacement (verbe réfléchi en tête,
+// « en direction … », ou préposition de mouvement interne) → on l'émet tel quel
+// pour ne jamais fabriquer de doublon « vers … vers » (« Continuer vers X »,
+// « Retour aux X », « S'enfoncer dans X »).
+const EXIT_HAS_MOVEMENT_RE = /^(?:s['’]\w|en\s+direction\b)|\b(?:vers|jusqu|aux?|dans)\b/i
+
+/**
+ * Retire un préfixe directionnel d'interface en tête de libellé de sortie.
+ * Ne strippe que les amorces explicitement nommées et seulement quand elles
+ * introduisent une destination ; retombe sur l'original si le strip vide tout.
+ */
+export function cleanExitLabel(label: string): string {
+  const trimmed = (label ?? '').trim()
+  const stripped = trimmed.replace(EXIT_PREFIX_RE, '').trim()
+  return stripped || trimmed
+}
+
+/**
+ * Construit la phrase joueur pour un clic de sortie, partagée par le chemin
+ * mobile (GameSessionView) et le chemin desktop (ExplorationLayout). Trois cas,
+ * dont le pire reste « grammatical mais bref » — jamais un doublon de
+ * préposition ni un nom de lieu tronqué :
+ *  1. préfixe directionnel nommé → on le retire et on préfixe « Je me dirige vers » ;
+ *  2. structure de déplacement déjà présente → libellé tel quel ;
+ *  3. nom de lieu nu → on préfixe « Je me dirige vers ».
+ */
+export function buildSceneExitPrompt(label: string): string {
+  const trimmed = (label ?? '').trim()
+  if (EXIT_PREFIX_RE.test(trimmed)) {
+    const rest = cleanExitLabel(trimmed)
+    return EXIT_RESIDUAL_PREP_RE.test(rest)
+      ? `Je me dirige ${rest}.`
+      : `Je me dirige vers ${rest}.`
+  }
+  if (EXIT_HAS_MOVEMENT_RE.test(trimmed)) {
+    return `${trimmed}.`
+  }
+  return `Je me dirige vers ${trimmed}.`
+}
+
 function defaultInteractionsForPoi(poi: PointOfInterest): ResolvedScenePoiInteraction[] {
   const role = semanticRoleForPoi(poi)
 
