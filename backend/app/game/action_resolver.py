@@ -20,7 +20,7 @@ from app.game.action_orchestrator import ActionOrchestrator
 from app.game.event_bus import event_bus
 from app.game.session_manager import ActiveSession
 from app.game.social_scene_state import finalize_npc_dialogue_state, prepare_npc_dialogue_state
-from app.game.visible_events import publish_visible_entry
+from app.game.visible_events import clean_dialogue_text, publish_visible_entry
 from app.llm.voxtral_client import tts_router
 from app.logging_utils import log_degraded
 from app.services import campaign_dossier_service
@@ -255,7 +255,10 @@ class ActionResolver:
             return False
 
         has_roll_request = any(a.type == "roll_request" for a in gm_resp.actions)
-        dialogue_text = gm_resp.narration or ""
+        # On nettoie ICI (parole sans guillemets ni préfixe de nom) pour que la
+        # copie PERSISTÉE soit identique à la copie publiée — sinon le rechargement
+        # de l'historique réintroduit la couture nettoyée à l'affichage live.
+        dialogue_text = clean_dialogue_text(gm_resp.narration or "", npc_name)
 
         if not dialogue_text and not has_roll_request:
             return False
@@ -343,7 +346,7 @@ class ActionResolver:
                     roll_results=first_roll,
                 )
 
-                dialogue_text_2 = gm_resp_2.narration or ""
+                dialogue_text_2 = clean_dialogue_text(gm_resp_2.narration or "", npc_name)
                 if dialogue_text_2:
                     await publish_visible_entry(
                         event_bus,

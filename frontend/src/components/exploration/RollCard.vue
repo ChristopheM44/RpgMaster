@@ -16,16 +16,23 @@ const marker = computed(() => critical.value ? '★' : success.value ? '✓' : '
 
 <template>
   <div class="roll-card" :class="stateClass">
+    <!-- Séparateurs {{ ' ' }} explicites : les espaces de flex (gap) ne sont pas
+         des caractères, donc la copie/lecture d'écran concaténait « OakenDEX Save »
+         et « 1d2018 ». Une suite uniquement blanche entre flex items n'est pas
+         rendue (aucun impact visuel) mais reste dans le textContent. -->
     <span class="roll-card-marker">{{ marker }}</span>
-
+    {{ ' ' }}
     <span class="roll-card-who">{{ entry.who }}</span>
-
+    {{ ' ' }}
     <span class="roll-card-what">{{ entry.what }}</span>
+    {{ ' ' }}
 
     <div class="roll-card-result">
       <span class="roll-card-result-label">{{ label }}</span>
+      {{ ' ' }}
       <span class="roll-card-result-value">{{ total }}</span>
     </div>
+    {{ ' ' }}
 
     <div v-if="entry.detail" class="roll-card-detail">{{ entry.detail }}</div>
   </div>

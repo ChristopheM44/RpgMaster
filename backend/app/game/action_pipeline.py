@@ -297,28 +297,31 @@ class ActionPipeline:
         gm_response: AgentResponse | None = None
         if use_gm:
             recent_messages: list[Any] = []
-            if actual_db is not None:
-                from app.services.message_service import load_recent_messages
-
-                recent_messages = await load_recent_messages(request.session_id, actual_db)
-
-            game_state_for_gm = await self._game_state_for_gm(
-                request.session_id,
-                active,
-                actual_db,
-            )
-            context = AgentContext(
-                session_id=request.session_id,
-                game_phase=phase_value,
-                game_state=game_state_for_gm,
-                player_action=prompt_action_text,
-                roll_results=roll_results or {},
-                messages=recent_messages,
-                travel_intent=request.travel_intent,
-            )
-
             try:
+                # L'indicateur d'attente doit s'allumer AVANT toute I/O (lecture
+                # de l'historique en DB, snapshot du game state) pour un retour
+                # immédiat côté joueur. Le finally garantit son extinction même
+                # si une de ces étapes échoue (route alors vers la branche erreur).
                 await self._publish_ai_thinking(request.session_id, True)
+                if actual_db is not None:
+                    from app.services.message_service import load_recent_messages
+
+                    recent_messages = await load_recent_messages(request.session_id, actual_db)
+
+                game_state_for_gm = await self._game_state_for_gm(
+                    request.session_id,
+                    active,
+                    actual_db,
+                )
+                context = AgentContext(
+                    session_id=request.session_id,
+                    game_phase=phase_value,
+                    game_state=game_state_for_gm,
+                    player_action=prompt_action_text,
+                    roll_results=roll_results or {},
+                    messages=recent_messages,
+                    travel_intent=request.travel_intent,
+                )
                 gm_agent = self._gm_for_phase(phase_value)
                 gm_candidate = await gm_agent.think(context)
                 gm_response = self._as_agent_response(gm_candidate)

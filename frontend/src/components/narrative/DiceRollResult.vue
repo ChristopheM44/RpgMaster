@@ -6,12 +6,19 @@ defineProps<{ roll: RollResultPayload }>()
 
 <template>
   <div class="flex flex-wrap items-center gap-2 rounded border border-gold/30 bg-ink/60 px-3 py-2 text-sm">
+    <!-- Séparateurs {{ ' ' }} explicites : le gap flex n'est pas un caractère, donc
+         la copie/lecture d'écran concaténait « OakenDEX Save » / « 1d2018 ». Une
+         suite uniquement blanche entre flex items n'est pas rendue (aucun impact
+         visuel) mais reste dans le textContent. -->
     <!-- Label + character -->
     <span v-if="roll.character_name" class="font-semibold text-gold">{{ roll.character_name }}</span>
+    {{ ' ' }}
     <span v-if="roll.label" class="text-parchment/70">{{ roll.label }}</span>
+    {{ ' ' }}
 
     <!-- Dice notation -->
     <span class="font-mono text-arcane">{{ roll.dice_notation }}</span>
+    {{ ' ' }}
 
     <!-- Individual rolls -->
     <span class="text-parchment/50">[</span>

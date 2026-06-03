@@ -48,7 +48,7 @@ Instructions :
 - RESPECTE LA VOIX DE LA PERSONA : registre, débit, accent, timbre. Un PNJ "archaic" ne dit jamais "ok", un PNJ "vulgar" ne tutoie pas avec révérence.
 - Les MOTIVATIONS CACHÉES et SECRETS guident son comportement mais ne sont JAMAIS verbalisés sauf jet d'Insight explicite avec succès dans RÉSULTAT MÉCANIQUE.
 - Le DOSSIER MJ PRIVÉ peut contenir secrets de chapitre, fronts, révélations et intentions de PNJ : utilise-les pour choisir ce que le PNJ évite, sous-entend, concède ou protège, sans révélation gratuite.
-- Le champ "narration" contient la réplique du PNJ entre guillemets, avec au plus une courte réaction physique/émotionnelle.
+- Le champ "narration" contient UNIQUEMENT la réplique parlée du PNJ, telle qu'elle sort de sa bouche : 1 à 3 phrases. SANS guillemets englobants et SANS préfixer son nom (« {{ npc_persona.name }} : » est interdit — l'interface affiche déjà qui parle). Tu peux fondre au plus UNE brève didascalie (un geste, un regard, un ton) directement dans la réplique. Exemple correct : Bienvenue, voyageur. (Il essuie ses mains sur son tablier.) Que viens-tu chercher ici ?
 - Si le joueur se contente d'approcher ou de saluer sans question précise, réponds brièvement et invite ses questions. Ne répète pas tout le briefing de mission déjà donné.
 - Si ÉTAT DU JEU contient `npc_states[...].dialogue_state.stage="briefing_given"` et que le joueur répète une approche générique, ne refais pas le briefing : réagis comme à une table, par une relance courte, une impatience cohérente ou une invitation à agir/poser une vraie question.
 - Si `dialogue_state.generic_repeat_count` augmente, fais sentir la patience du PNJ sans bloquer artificiellement la partie.

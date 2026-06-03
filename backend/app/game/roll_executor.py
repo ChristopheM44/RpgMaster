@@ -44,9 +44,14 @@ def execute_roll_request(
 
     characters = active.state_data.get("characters", {})
     combatants = active.state_data.get("combatants", {})
+    resolved_id = target_id
     char_data = characters.get(target_id) or combatants.get(target_id)
     if char_data is None and characters:
-        char_data = next(iter(characters.values()))
+        # Aucune cible explicite résolue : on rattache le jet au premier
+        # personnage connu (et on retient SON id) plutôt que de garder un acteur
+        # vide — sinon la persistance retomberait sur le speaker « Système »
+        # pour un jet pourtant subi par un PJ (invariant Q7).
+        resolved_id, char_data = next(iter(characters.items()))
     if not char_data:
         logger.warning("roll_request: personnage '%s' introuvable dans state_data", target_id)
         return None
@@ -91,6 +96,10 @@ def execute_roll_request(
         logger.error("roll_request: calcul du jet echoue : %s", exc)
         return None
 
+    # Un jet subi par un PJ doit TOUJOURS porter son nom : on garantit un
+    # character_name non vide (nom → character_name → id résolu) pour ne jamais
+    # retomber sur le speaker « Système » à la persistance (invariant Q7).
+    character_name = char_data.get("name") or char_data.get("character_name") or resolved_id or ""
     payload = {
         "dice_notation": "1d20",
         "rolls": result.all_rolls,
@@ -101,8 +110,8 @@ def execute_roll_request(
         "success": result.success,
         "label": result.label,
         "breakdown": result.breakdown,
-        "character_id": target_id,
-        "character_name": char_data.get("name", target_id or ""),
+        "character_id": resolved_id,
+        "character_name": character_name,
     }
     if params.get("social_target"):
         payload["social_target_id"] = params.get("social_target")

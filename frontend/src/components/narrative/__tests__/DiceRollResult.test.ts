@@ -26,4 +26,23 @@ describe('DiceRollResult', () => {
     expect(wrapper.text()).toContain('= 25')
     expect(wrapper.text()).toContain('Succès')
   })
+
+  it('keeps tokens separated so copy/screen-reader never concatenates them (LOT G.2)', () => {
+    const wrapper = mount(DiceRollResult, {
+      props: {
+        roll: {
+          dice_notation: '1d20',
+          rolls: [18],
+          total: 18,
+          modifier: 0,
+          label: 'DEX Save',
+          success: true,
+          character_name: 'Oaken',
+        },
+      },
+    })
+
+    expect(wrapper.text()).toMatch(/Oaken\s+DEX Save/)
+    expect(wrapper.text()).not.toContain('OakenDEX')
+  })
 })
