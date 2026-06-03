@@ -100,9 +100,9 @@ Remplace P1–P6 + Q1–Q7. Ordre re-priorisé par *impact fidélité × déterm
 
 | Lot | Contenu | Origine | Priorité | Risque |
 |---|---|---|---|---|
-| **A — Clics carte naturalisés + diagnostic Q3** | Faire utiliser `buildScenePoiInteractionPrompt` + un `cleanExitLabel` partagé par `ExplorationLayout` desktop (alignement sur le chemin mobile). **Couplé au diagnostic Q3** car les deux vivent sur la même couture clic→intent→mécanique. | Q1 (+ Q3 diag) | 🔴 | faible |
-| **B — Voix fictionnelle des horloges + dents** | Remplacer `_default_clock_crisis_text` / `_clock_roll_outcome_text` par des fallbacks **déterministes et concrets** (par `kind`/`severity`/`label`) — *obligatoire*, car les horloges auto-créées n'ont **jamais** de texte MJ. Ne jamais injecter `clock.label` dans un texte joueur (badge UI seulement). Ajouter « même un succès coûte » (cf. Port d'Azur §2.4). | Q2 | 🔴 | faible/moyen |
-| **C — Contrat mécanique exposition/danger** | Après le diagnostic du lot A : (a) brider les DEX Saves explicites du MJ sur intentions d'observation **ou** (b) corriger le routage d'intent ; puis champ `exposure` (`safe/near/contact/reckless`) + annonce de risque avant toute sauvegarde sur une intention d'observation + conséquence sur succès. | Q3 | 🟠 | moyen |
+| **A ✅ — Clics carte naturalisés + diagnostic Q3** | **Livré 2026-06-03.** `cleanExitLabel` + `buildSceneExitPrompt` centralisés (`utils/scenePoiInteractions.ts`, design 3-branches à échec sûr), utilisés par `ExplorationLayout` desktop + chemin mobile ; `onAct` passe par `buildScenePoiInteractionPrompt`. Diagnostic Q3 consigné en **§2.6**. Vérif : type-check + 87 vitest + bundle Vite live. | Q1 (+ Q3 diag) | ✅ livré | faible |
+| **B ✅ — Voix fictionnelle des horloges + dents** | **Livré 2026-06-03.** `_default_clock_crisis_text` / `_clock_roll_outcome_text` réécrits : phénomène concret par `kind(label)`/`severity`, label jamais rendu, « personnage exposé » supprimé, nom réel du PC, conséquence concrète **même sur succès**, clauses **neutres en genre**. Narration `on_fill` dé-bakée (recalcul à la résolution). Garde-test anti-fuite de label. | Q2 | ✅ livré | faible/moyen |
+| **C — Contrat mécanique exposition/danger** | **⚠️ Re-cadré par le diag Q3 (§2.6)** : (a) et (b) **dissous** — aucun DEX Save explicite du MJ sur intention d'observation, et le routage par défaut est correct (`examine` danger → INT Investigation). Le vrai levier subsistant = **crise d'horloge** (désormais lisible via B) + éventuelle **annonce de risque avant sauvegarde**. **Replay-gated** : trancher en replay live ; **ne pas** coder le champ `exposure` réflexivement. | Q3 | 🟠 (replay-gated) | moyen |
 | **D — Parole PNJ vs didascalie** | `gm_npc_dialogue.txt` : `narration` **sans** guillemets, 1–3 phrases, ≤1 didascalie. Idéalement schéma `spoken_text` + `stage_direction` (UI : parole en dialogue, didascalie atténuée) + sanitizer (retire guillemets englobants et préfixe « Le Maire Valerius… »). | Q4 | 🟠 | faible/moyen |
 | **E1 — Plafond compagnons IA** | Capper `_run_companion_responses` (chemin social broadcast non cappé — source de la saturation oasis). Réutiliser `order_companion_spotlight` + cooldown. Concerne les PC `is_ai=True`. À doser en **replay live**. | P5 | 🟡 | moyen |
 | **E2 — PC sans contrôleur : hand-off (Vael)** | **Cheap d'abord** : consigne MJ → ne pas mettre en avant un PC non piloté comme acteur actif. **Puis** : contrôle multi-personnage — le joueur connecté réclame/pilote un PC sans contrôleur (le WS clé déjà sur `character_id` ; à construire : sélection/ajout de perso piloté + état UI « sans contrôleur »). **Pas de délégation IA.** | Q5 (corrigé) | 🟠 | moyen |
@@ -110,17 +110,17 @@ Remplace P1–P6 + Q1–Q7. Ordre re-priorisé par *impact fidélité × déterm
 | **G — Polish (parallèle)** | **P4** : publier `thinking:True` **avant** `load_recent_messages`/`_game_state_for_gm`. **Q7** : invariant — un `ROLL_RESULT` subi par un PJ est toujours attribué (jamais « Système ») ; espacement UI stable. | P4 ⊕ Q7 | 🟡 | faible |
 | **H — Persona PNJ clés (optionnel/continu)** | `stub_then_enrich` + persist `played_canon.npc_personas` à l'intro d'un PNJ central. Justification réduite (P1 couvre l'oubli). | P6 | ⚪ | faible |
 
-**Recommandation d'ordre** : **A + B** en lot immédiat (coutures les plus visibles et déterministes), puis **C**, puis **D** (court). **E2** a une part *cheap* (consigne MJ) faisable tôt ; sa part UI ainsi que **E1** et **F** après un replay live (sujets de rythme). **G** en parallèle (peu coûteux). **H** continu.
+**Recommandation d'ordre** : ~~**A + B** en lot immédiat~~ → **livrés 2026-06-03**. **Prochain lot recommandé : D + G** (tous deux déterministes, prêts, indépendants) — **C** étant désormais *replay-gated* par le diagnostic Q3 (ne plus le traiter en tâche de code à l'aveugle). **E2** garde sa part *cheap* (consigne MJ) faisable tôt ; sa part UI ainsi que **E1** et **F** après un replay live. **H** continu.
 
 ---
 
 ## 4. Scénarios d'acceptation (harness live `test_tabletop_replay_live.py`)
 
 Reprendre **4 des 5** scénarios proposés par Port d'Azur §6 :
-1. **Clic sortie naturalisé** — label `Direction les Docks` → action visible sans « vers Direction » ni doublon de préposition.
-2. **Horloge critique fictionnelle** — une horloge atteint son max → narration = phénomène concret ; **interdit** : `Menace aux docks atteint son point critique`.
-3. **Observer un danger** — examiner une zone dangereuse à distance → jet d'observation **ou** annonce de risque avant toute sauvegarde ; pas de DEX Save arbitraire sans exposition.
-4. **PNJ parle proprement** — pas de préfixe « Le Maire Valerius… » en tête, pas de guillemets englobants doublés.
+1. **Clic sortie naturalisé** ✅ (A, 2026-06-03) — label `Direction les Docks` → action visible sans « vers Direction » ni doublon de préposition. *Couvert par `frontend/src/utils/__tests__/scenePoiInteractions.test.ts` sur les vrais libellés DB + bundle Vite live.*
+2. **Horloge critique fictionnelle** ✅ (B, 2026-06-03) — une horloge atteint son max → narration = phénomène concret ; **interdit** : `Menace aux docks atteint son point critique`. *Couvert par `tests/test_game/test_narrative_flow_service.py` (garde anti-fuite + neutralité de genre).*
+3. **Observer un danger** ⏳ — examiner une zone dangereuse à distance → jet d'observation **ou** annonce de risque avant toute sauvegarde ; pas de DEX Save arbitraire sans exposition. *Cf. C re-cadré (§2.6) : le DEX Save observé venait de la crise d'horloge, pas d'un jet d'observation — à confirmer en replay.*
+4. **PNJ parle proprement** ⏳ (D) — pas de préfixe « Le Maire Valerius… » en tête, pas de guillemets englobants doublés.
 
 **Corriger le 5ᵉ** (« compagnon non fantôme » supposait Vael = IA) → le remplacer par **deux** invariants distincts :
 - **Plafond compagnon IA** (E1) : sur N actions monde dangereuses avec ≥1 PC `is_ai=True`, **au plus 2** réactions (anti-saturation oasis).
