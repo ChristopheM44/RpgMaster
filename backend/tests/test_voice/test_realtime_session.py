@@ -3,6 +3,7 @@
 Le WebSocket OpenAI est mocké via un fake context manager qui capture les
 messages envoyés et fournit des messages de réponse simulés.
 """
+
 from __future__ import annotations
 
 import base64
@@ -251,9 +252,7 @@ def test_render_persona_brief_includes_voice_directives_via_session() -> None:
     from app.agents.persona import NPCPersona
     from app.api.ws_dialogue import _render_persona_brief
 
-    persona = NPCPersona(
-        id="x", name="X", archetype="x", short_description="x"
-    )
+    persona = NPCPersona(id="x", name="X", archetype="x", short_description="x")
     brief = _render_persona_brief(persona)
     assert "OpenAI" not in brief
     assert "API" not in brief

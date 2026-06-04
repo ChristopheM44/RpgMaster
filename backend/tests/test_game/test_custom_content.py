@@ -78,7 +78,9 @@ async def test_start_combat_materializes_custom_monster(monkeypatch) -> None:
         "skeleton"
     )
 
-    combat_start = next(payload for event_type, payload in published if event_type == "combat_start")
+    combat_start = next(
+        payload for event_type, payload in published if event_type == "combat_start"
+    )
     custom_payload = next(
         item for item in combat_start["combatants"] if item["id"] == "custom:squelette_enflamme_1"
     )

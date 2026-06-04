@@ -45,6 +45,7 @@ async def test_trigger_ai_reactions_combat_uses_unified_turn_loop_for_monsters(
     monkeypatch.setattr(ws_game.session_manager, "get_session", lambda session_id: active)
 
     from app.api.ws_handlers import combat as ws_combat
+
     monkeypatch.setattr(ws_combat, "handle_ai_turns", handle_ai_turns)
 
     await ws_game._handle_trigger_ai_reactions("session-1", db=None)

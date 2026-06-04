@@ -1,4 +1,5 @@
 """Helpers and constants for tactical block and fallback narrations."""
+
 from __future__ import annotations
 
 import hashlib
@@ -53,11 +54,15 @@ _RISKY_ACTION_PATTERN = re.compile(
         (?:toucher|saisir|attraper|empoigner|manipuler|ouvrir)\s+
             (?:la|le|les|l'|un|une|des|mon|ma|mes)\s+
             [^.?!]{0,80}
-            """ + _DANGEROUS_OBJECT_PATTERN + r"""
+            """
+    + _DANGEROUS_OBJECT_PATTERN
+    + r"""
         |
         pose(?:r)?\s+(?:ma|la|une)\s+main\s+sur\s+
             [^.?!]{0,80}
-            """ + _DANGEROUS_OBJECT_PATTERN + r"""
+            """
+    + _DANGEROUS_OBJECT_PATTERN
+    + r"""
     )
     """,
     re.IGNORECASE | re.VERBOSE,

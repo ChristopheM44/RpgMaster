@@ -3,6 +3,7 @@
 Also contains social-detection helpers (markers, text classification,
 target resolution, DC calculation) extracted from action_pipeline.py.
 """
+
 from __future__ import annotations
 
 import re
@@ -419,9 +420,7 @@ class SocialResolution:
         if roll_type not in (None, "skill_check"):
             return None
         target_id = str(
-            roll_results.get("social_target_id")
-            or roll_results.get("target_id")
-            or ""
+            roll_results.get("social_target_id") or roll_results.get("target_id") or ""
         ).strip()
         if not target_id or not isinstance(roll_results.get("success"), bool):
             return None

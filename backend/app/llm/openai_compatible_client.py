@@ -19,12 +19,8 @@ class OpenAICompatibleError(Exception):
     """Le provider OpenAI-compatible est injoignable ou a retourné une erreur."""
 
 
-def _openai_retry_error(
-    exc: BaseException | None, max_retries: int
-) -> OpenAICompatibleError:
-    return OpenAICompatibleError(
-        f"Provider injoignable après {max_retries} tentatives : {exc}"
-    )
+def _openai_retry_error(exc: BaseException | None, max_retries: int) -> OpenAICompatibleError:
+    return OpenAICompatibleError(f"Provider injoignable après {max_retries} tentatives : {exc}")
 
 
 class OpenAICompatibleClient:
@@ -81,9 +77,7 @@ class OpenAICompatibleClient:
         try:
             return await self._chat_with_retry(messages, temperature, max_tokens)
         except APIStatusError as exc:
-            raise OpenAICompatibleError(
-                f"Erreur API {exc.status_code} : {exc.message}"
-            ) from exc
+            raise OpenAICompatibleError(f"Erreur API {exc.status_code} : {exc.message}") from exc
 
     async def generate(
         self,

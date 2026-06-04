@@ -1,4 +1,5 @@
 """Session state and AI synchronization WebSocket action helpers."""
+
 from __future__ import annotations
 
 import logging

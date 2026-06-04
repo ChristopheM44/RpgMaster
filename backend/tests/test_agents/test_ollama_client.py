@@ -126,9 +126,7 @@ async def test_chat_retries_on_connect_error(client: OllamaClient, sdk_client) -
     assert call_count == 3
 
 
-async def test_chat_raises_ollama_error_after_max_retries(
-    client: OllamaClient, sdk_client
-) -> None:
+async def test_chat_raises_ollama_error_after_max_retries(client: OllamaClient, sdk_client) -> None:
     """chat() lève OllamaError après avoir épuisé toutes les tentatives."""
     sdk_client.chat = AsyncMock(side_effect=httpx.ConnectError("Connection refused"))
 

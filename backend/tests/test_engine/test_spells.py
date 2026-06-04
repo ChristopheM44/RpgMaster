@@ -1,4 +1,5 @@
 """Tests for engine/spells.py"""
+
 from __future__ import annotations
 
 import random
@@ -357,7 +358,9 @@ class TestUpcastDamage:
     def test_upcast_crit_doubles_all_dice(self):
         # Base: 1d8 (1 die), upcast +1 level → 1 extra die → total 2 dice
         # On crit: all doubled → 4 dice
-        result = upcast_damage("1d8", "1d8", spell_level=1, slot_level=2, critical=True, rng=seeded())
+        result = upcast_damage(
+            "1d8", "1d8", spell_level=1, slot_level=2, critical=True, rng=seeded()
+        )
         assert len(result.rolls) == 4  # (1 base × 2 crit) + (1 extra × 2 crit)
 
     def test_upcast_empty_extra_dice_no_extra(self):

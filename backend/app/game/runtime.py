@@ -1,4 +1,5 @@
 """Shared runtime singletons for live game sessions."""
+
 from __future__ import annotations
 
 from app.game.session_manager import SessionManager

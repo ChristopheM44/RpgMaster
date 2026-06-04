@@ -38,11 +38,7 @@ def _valid_gm_json(**overrides) -> str:
 
 def test_outcome_prompt_requires_fail_forward() -> None:
     prompt = (
-        Path(__file__).parents[2]
-        / "app"
-        / "agents"
-        / "prompts"
-        / "gm_narrate_outcome.txt"
+        Path(__file__).parents[2] / "app" / "agents" / "prompts" / "gm_narrate_outcome.txt"
     ).read_text(encoding="utf-8")
 
     assert "ÉCHEC fait quand même avancer la scène" in prompt
@@ -51,11 +47,7 @@ def test_outcome_prompt_requires_fail_forward() -> None:
 
 def test_open_scene_prompt_rejects_path_choice_closer() -> None:
     prompt = (
-        Path(__file__).parents[2]
-        / "app"
-        / "agents"
-        / "prompts"
-        / "gm_open_scene.txt"
+        Path(__file__).parents[2] / "app" / "agents" / "prompts" / "gm_open_scene.txt"
     ).read_text(encoding="utf-8")
 
     assert "Que faites-vous ?" in prompt
@@ -85,9 +77,7 @@ async def test_narrate_success(gm_agent: GMAgent) -> None:
 async def test_narrate_with_actions(gm_agent: GMAgent) -> None:
     """narrate() parse les actions mécaniques correctement."""
     payload = _valid_gm_json(
-        actions=[
-            {"type": "roll_request", "target": "player_1", "params": {"ability": "dexterity"}}
-        ]
+        actions=[{"type": "roll_request", "target": "player_1", "params": {"ability": "dexterity"}}]
     )
     with patch.object(gm_agent._client, "chat", new=AsyncMock(return_value=payload)):
         response = await gm_agent.narrate(game_state={})
@@ -253,14 +243,16 @@ def test_extract_scene_anchor_uses_chapter_location_fallback_only() -> None:
     """Le chapitre peut fournir le lieu, mais pas l'ambiance de scène."""
     from app.agents.gm_agent import _extract_scene_anchor
 
-    anchor = _extract_scene_anchor({
-        "campaign_context": {
-            "active_chapter": {
-                "key_locations": ["Goldenthrone"],
-                "initial_state": "L'archmage Syndra Silvane se consume lentement.",
+    anchor = _extract_scene_anchor(
+        {
+            "campaign_context": {
+                "active_chapter": {
+                    "key_locations": ["Goldenthrone"],
+                    "initial_state": "L'archmage Syndra Silvane se consume lentement.",
+                }
             }
         }
-    })
+    )
     assert anchor["location_place"] == "Goldenthrone"
     assert anchor["scene_brief"] == ""
     assert anchor["time_of_day"] == "morning"
@@ -271,17 +263,19 @@ def test_extract_scene_anchor_uses_current_scene_description() -> None:
     """L'ambiance établie vient de current_scene.description."""
     from app.agents.gm_agent import _extract_scene_anchor
 
-    anchor = _extract_scene_anchor({
-        "adventure_journal": {"location_place": "Port Nyanzaru"},
-        "campaign_context": {
-            "active_chapter": {
-                "initial_state": "Wakanga engage le groupe ailleurs.",
-            }
-        },
-        "current_scene": {
-            "description": "Azaka observe la salle commune depuis le comptoir.",
-        },
-    })
+    anchor = _extract_scene_anchor(
+        {
+            "adventure_journal": {"location_place": "Port Nyanzaru"},
+            "campaign_context": {
+                "active_chapter": {
+                    "initial_state": "Wakanga engage le groupe ailleurs.",
+                }
+            },
+            "current_scene": {
+                "description": "Azaka observe la salle commune depuis le comptoir.",
+            },
+        }
+    )
 
     assert anchor["scene_brief"] == "Azaka observe la salle commune depuis le comptoir."
 
@@ -290,20 +284,22 @@ def test_extract_scene_anchor_uses_opening_scene_location_fallback() -> None:
     """opening_scene peut fournir le lieu physique avant le premier journal_update."""
     from app.agents.gm_agent import _extract_scene_anchor
 
-    anchor = _extract_scene_anchor({
-        "campaign_context": {
-            "active_chapter": {
-                "key_locations": ["Goldenthrone"],
-                "opening_scene": {
-                    "region": "Chult",
-                    "place": "Port Nyanzaru",
-                    "venue": "Auberge du Poisson Grillé",
-                    "time_of_day": "dusk",
-                    "weather": "Chaleur humide",
-                },
+    anchor = _extract_scene_anchor(
+        {
+            "campaign_context": {
+                "active_chapter": {
+                    "key_locations": ["Goldenthrone"],
+                    "opening_scene": {
+                        "region": "Chult",
+                        "place": "Port Nyanzaru",
+                        "venue": "Auberge du Poisson Grillé",
+                        "time_of_day": "dusk",
+                        "weather": "Chaleur humide",
+                    },
+                }
             }
         }
-    })
+    )
 
     assert anchor["location_region"] == "Chult"
     assert anchor["location_place"] == "Port Nyanzaru"
@@ -316,14 +312,16 @@ def test_extract_scene_anchor_uses_location_venue() -> None:
     """location_venue est extrait du journal et ajouté à l'ancre."""
     from app.agents.gm_agent import _extract_scene_anchor
 
-    anchor = _extract_scene_anchor({
-        "adventure_journal": {
-            "location_place": "Port Nyanzaru",
-            "location_venue": "Auberge du Poisson Grillé",
-            "time_of_day": "morning",
-            "day_number": 1,
-        },
-    })
+    anchor = _extract_scene_anchor(
+        {
+            "adventure_journal": {
+                "location_place": "Port Nyanzaru",
+                "location_venue": "Auberge du Poisson Grillé",
+                "time_of_day": "morning",
+                "day_number": 1,
+            },
+        }
+    )
 
     assert anchor["location_venue"] == "Auberge du Poisson Grillé"
     assert anchor["location_place"] == "Port Nyanzaru"
@@ -333,29 +331,27 @@ def test_extract_active_quest_brief_returns_public_objective_only() -> None:
     """_extract_active_quest_brief expose known_objectives, jamais le hook."""
     from app.agents.gm_agent import _extract_active_quest_brief
 
-    brief = _extract_active_quest_brief({
-        "campaign_context": {
-            "player_contract": {
-                "hook": "La tombe est réelle et quelqu'un veut libérer le fléau.",
-                "known_objectives": [
-                    "Cartographier les ruines oubliées de la jungle de Chult"
-                ],
-            }
-        },
-        "quests": [
-            {
-                "id": "campaign_opening",
-                "category": "principale",
-                "title": "Mission Guilde",
-                "status": "active",
-                "urgency": "élevée",
-            }
-        ],
-    })
-
-    assert brief["primary_objective"] == (
-        "Cartographier les ruines oubliées de la jungle de Chult"
+    brief = _extract_active_quest_brief(
+        {
+            "campaign_context": {
+                "player_contract": {
+                    "hook": "La tombe est réelle et quelqu'un veut libérer le fléau.",
+                    "known_objectives": ["Cartographier les ruines oubliées de la jungle de Chult"],
+                }
+            },
+            "quests": [
+                {
+                    "id": "campaign_opening",
+                    "category": "principale",
+                    "title": "Mission Guilde",
+                    "status": "active",
+                    "urgency": "élevée",
+                }
+            ],
+        }
     )
+
+    assert brief["primary_objective"] == ("Cartographier les ruines oubliées de la jungle de Chult")
     assert brief["main_quest_title"] == "Mission Guilde"
     assert brief["urgency"] == "élevée"
     # Le hook ne doit jamais fuir dans le brief.
@@ -477,38 +473,40 @@ def test_extract_scene_anchor_computes_npc_presence() -> None:
     """L'ancre catégorise les PNJs en présents/absents selon leur last_location."""
     from app.agents.gm_agent import _extract_scene_anchor
 
-    anchor = _extract_scene_anchor({
-        "adventure_journal": {
-            "location_place": "Port Nyanzaru",
-            "location_venue": "Auberge du Poisson Grillé",
-        },
-        "current_scene": {
-            "scene_id": "scene_auberge",
-            "terrain": "tavern",
-            "pois": [
-                {
-                    "id": "azaka",
+    anchor = _extract_scene_anchor(
+        {
+            "adventure_journal": {
+                "location_place": "Port Nyanzaru",
+                "location_venue": "Auberge du Poisson Grillé",
+            },
+            "current_scene": {
+                "scene_id": "scene_auberge",
+                "terrain": "tavern",
+                "pois": [
+                    {
+                        "id": "azaka",
+                        "name": "Azaka",
+                        "kind": "npc",
+                        "icon": "npc",
+                        "position": {"col": 3, "row": 3},
+                        "description": "La tenancière.",
+                    }
+                ],
+            },
+            "npc_states": {
+                "azaka": {
                     "name": "Azaka",
-                    "kind": "npc",
-                    "icon": "npc",
-                    "position": {"col": 3, "row": 3},
-                    "description": "La tenancière.",
-                }
-            ],
-        },
-        "npc_states": {
-            "azaka": {
-                "name": "Azaka",
-                "attitude": "indifferent",
-                "last_location": "scene_auberge",
+                    "attitude": "indifferent",
+                    "last_location": "scene_auberge",
+                },
+                "wakanga": {
+                    "name": "Wakanga O'tamu",
+                    "attitude": "friendly",
+                    "last_location": "scene_palais",
+                },
             },
-            "wakanga": {
-                "name": "Wakanga O'tamu",
-                "attitude": "friendly",
-                "last_location": "scene_palais",
-            },
-        },
-    })
+        }
+    )
 
     present_names = [n["name"] for n in anchor["present_npcs"]]
     absent_names = [n["name"] for n in anchor["absent_npcs"]]
@@ -822,14 +820,16 @@ async def test_narrate_missing_narration_field(gm_agent: GMAgent) -> None:
 
 async def test_narrate_actions_with_missing_fields(gm_agent: GMAgent) -> None:
     """narrate() ignore les actions malformées sans planter."""
-    payload = json.dumps({
-        "narration": "test",
-        "actions": [
-            {"type": "roll_request"},  # pas de target ni params -> valeurs par défaut
-            "not_a_dict",  # filtré
-        ],
-        "mood": "neutral",
-    })
+    payload = json.dumps(
+        {
+            "narration": "test",
+            "actions": [
+                {"type": "roll_request"},  # pas de target ni params -> valeurs par défaut
+                "not_a_dict",  # filtré
+            ],
+            "mood": "neutral",
+        }
+    )
     with patch.object(gm_agent._client, "chat", new=AsyncMock(return_value=payload)):
         response = await gm_agent.narrate(game_state={})
 

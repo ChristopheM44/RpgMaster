@@ -3,6 +3,7 @@
 Future: wire into tactical_combat.py for AoE spells (circle, cone, line, cube).
 Currently only exercised by tests.
 """
+
 from __future__ import annotations
 
 from app.engine.tactical_grid import CELL_SIZE_M, GridPosition, chebyshev_distance

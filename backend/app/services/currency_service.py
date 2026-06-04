@@ -1,4 +1,5 @@
 """Currency persistence service."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -64,8 +65,7 @@ class CurrencyService:
             old_wealth=old,
             new_wealth=new,
             delta_cp=(
-                total_value_cp(new.gp, new.sp, new.cp)
-                - total_value_cp(old.gp, old.sp, old.cp)
+                total_value_cp(new.gp, new.sp, new.cp) - total_value_cp(old.gp, old.sp, old.cp)
             ),
         )
 
@@ -91,8 +91,7 @@ class CurrencyService:
             old_wealth=old,
             new_wealth=new,
             delta_cp=(
-                total_value_cp(new.gp, new.sp, new.cp)
-                - total_value_cp(old.gp, old.sp, old.cp)
+                total_value_cp(new.gp, new.sp, new.cp) - total_value_cp(old.gp, old.sp, old.cp)
             ),
         )
 

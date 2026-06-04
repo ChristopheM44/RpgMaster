@@ -1,4 +1,5 @@
 """Inventory helpers for typed equipment, slots, weight, and attunement."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -56,10 +57,14 @@ def resolve_default_slot(
 
 def slots_for_item(item: dict[str, Any], requested_slot: str | None = None) -> set[str]:
     properties = [str(prop).lower() for prop in item.get("properties", []) or []]
-    default_slot = requested_slot or item.get("slot") or resolve_default_slot(
-        item.get("category"),
-        properties,
-        item.get("item_type"),
+    default_slot = (
+        requested_slot
+        or item.get("slot")
+        or resolve_default_slot(
+            item.get("category"),
+            properties,
+            item.get("item_type"),
+        )
     )
     if default_slot is None:
         return set()

@@ -1,4 +1,5 @@
 """Campaign API routes — CRUD + session progression."""
+
 from __future__ import annotations
 
 import asyncio
@@ -197,9 +198,7 @@ async def get_campaign_gm_dossier(campaign_id: str, db: AsyncSession = Depends(g
 
 
 @router.get("/{campaign_id}/personas")
-async def get_campaign_personas(
-    campaign_id: str, db: AsyncSession = Depends(get_db)
-):
+async def get_campaign_personas(campaign_id: str, db: AsyncSession = Depends(get_db)):
     """Liste les personas connues d'une campagne (PNJ, monstres, compagnons).
 
     Retourne un dict ``{npcs, monsters, companions}`` où chaque entrée est une
@@ -279,9 +278,7 @@ async def award_xp(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        campaign = await campaign_service.award_xp(
-            campaign_id, body.character_id, body.xp, db
-        )
+        campaign = await campaign_service.award_xp(campaign_id, body.character_id, body.xp, db)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     return await _campaign_response(campaign, db)

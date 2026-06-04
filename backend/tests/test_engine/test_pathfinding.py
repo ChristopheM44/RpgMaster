@@ -17,10 +17,13 @@ def test_astar_path_avoids_blocked_cells() -> None:
 
 
 def test_astar_path_returns_empty_when_goal_blocked() -> None:
-    assert astar_path(
-        GridPosition(0, 0),
-        GridPosition(1, 1),
-        3,
-        3,
-        blocked=[GridPosition(1, 1)],
-    ) == []
+    assert (
+        astar_path(
+            GridPosition(0, 0),
+            GridPosition(1, 1),
+            3,
+            3,
+            blocked=[GridPosition(1, 1)],
+        )
+        == []
+    )

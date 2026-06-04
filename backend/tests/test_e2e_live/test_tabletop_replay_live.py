@@ -23,6 +23,7 @@ Lancer :
     cd backend && source .venv/bin/activate
     python -m pytest tests/test_e2e_live/ -m live_llm -v
 """
+
 from __future__ import annotations
 
 import re
@@ -263,9 +264,7 @@ async def test_live_llm_tabletop_replay_scenario(scenario: dict[str, Any]) -> No
 
     if scenario.get("expect_roll"):
         rolls = [
-            payload
-            for event_type, payload in bus.events
-            if event_type == EventType.ROLL_RESULT
+            payload for event_type, payload in bus.events if event_type == EventType.ROLL_RESULT
         ]
         assert rolls, f"{scenario['id']} devait résoudre un jet mécanique."
         roll = rolls[-1]
@@ -422,7 +421,8 @@ async def test_live_llm_guide_survives_travel_transition() -> None:
 
     # Acceptance #2 — the imperative travel produced a real scene change.
     scene_changes = [
-        payload for event_type, payload in bus.events
+        payload
+        for event_type, payload in bus.events
         if event_type == EventType.SCENE_LAYOUT_CHANGED
     ]
     assert scene_changes, "le voyage (« rendons-nous à… ») doit publier une nouvelle scène"

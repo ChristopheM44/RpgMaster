@@ -9,6 +9,7 @@ Covers:
 
 No I/O, no async, no database access.
 """
+
 from __future__ import annotations
 
 import random
@@ -25,16 +26,44 @@ POINT_BUY_BUDGET: int = 27
 
 # SRD 5.2 point buy cost table (base scores 8–15, before species bonuses)
 POINT_BUY_COST: dict[int, int] = {
-    8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9,
+    8: 0,
+    9: 1,
+    10: 2,
+    11: 3,
+    12: 4,
+    13: 5,
+    14: 7,
+    15: 9,
 }
 
-VALID_SPECIES = frozenset({
-    "human", "elf", "dwarf", "halfling", "gnome", "half_elf", "half_orc", "tiefling",
-})
-VALID_CLASSES = frozenset({
-    "fighter", "wizard", "rogue", "cleric",
-    "barbarian", "bard", "druid", "monk", "paladin", "ranger", "sorcerer", "warlock",
-})
+VALID_SPECIES = frozenset(
+    {
+        "human",
+        "elf",
+        "dwarf",
+        "halfling",
+        "gnome",
+        "half_elf",
+        "half_orc",
+        "tiefling",
+    }
+)
+VALID_CLASSES = frozenset(
+    {
+        "fighter",
+        "wizard",
+        "rogue",
+        "cleric",
+        "barbarian",
+        "bard",
+        "druid",
+        "monk",
+        "paladin",
+        "ranger",
+        "sorcerer",
+        "warlock",
+    }
+)
 
 
 def point_buy_cost(score: int) -> int:
@@ -44,9 +73,7 @@ def point_buy_cost(score: int) -> int:
         ValueError: if score is outside the valid 8–15 range.
     """
     if score not in POINT_BUY_COST:
-        raise ValueError(
-            f"Point buy score must be between 8 and 15, got {score}"
-        )
+        raise ValueError(f"Point buy score must be between 8 and 15, got {score}")
     return POINT_BUY_COST[score]
 
 
@@ -96,9 +123,7 @@ def validate_point_buy(scores: dict[str, int]) -> int:
 
     total = sum(point_buy_cost(v) for v in scores.values())  # raises on out-of-range
     if total > POINT_BUY_BUDGET:
-        raise ValueError(
-            f"Point buy cost {total} exceeds budget of {POINT_BUY_BUDGET}"
-        )
+        raise ValueError(f"Point buy cost {total} exceeds budget of {POINT_BUY_BUDGET}")
     return total
 
 
@@ -165,12 +190,12 @@ class SpeciesTraits:
     """Mechanical traits granted by a character's species."""
 
     name: str
-    ability_bonuses: dict[str, int]     # e.g. {"dexterity": 2, "intelligence": 1}
-    speed: float                        # vitesse de déplacement de base en mètres
-    size: str                           # "Medium" or "Small"
-    darkvision_m: float                 # 0 = pas de vision dans le noir
-    traits: list[str]                   # feature names
-    skill_proficiencies: list[str]      # bonus skill proficiencies granted by species
+    ability_bonuses: dict[str, int]  # e.g. {"dexterity": 2, "intelligence": 1}
+    speed: float  # vitesse de déplacement de base en mètres
+    size: str  # "Medium" or "Small"
+    darkvision_m: float  # 0 = pas de vision dans le noir
+    traits: list[str]  # feature names
+    skill_proficiencies: list[str]  # bonus skill proficiencies granted by species
     languages: list[str]
 
 
@@ -290,9 +315,7 @@ def get_species_traits(species_name: str) -> SpeciesTraits:
     """
     key = species_name.lower()
     if key not in _SPECIES_DATA:
-        raise ValueError(
-            f"Unknown species '{species_name}'. Valid: {sorted(VALID_SPECIES)}"
-        )
+        raise ValueError(f"Unknown species '{species_name}'. Valid: {sorted(VALID_SPECIES)}")
     return _SPECIES_DATA[key]
 
 
@@ -306,15 +329,15 @@ class ClassFeatures:
     """Features and proficiencies granted by a class at level 1."""
 
     name: str
-    hit_die: int                            # e.g. 10 for Fighter (d10)
-    saving_throw_proficiencies: list[str]   # ability names
+    hit_die: int  # e.g. 10 for Fighter (d10)
+    saving_throw_proficiencies: list[str]  # ability names
     armor_proficiencies: list[str]
     weapon_proficiencies: list[str]
-    skill_choices: list[str]                # pool from which to choose
-    num_skill_choices: int                  # how many to pick
-    level_1_features: list[str]             # feature names at level 1
-    spellcasting_ability: str | None     # None for non-casters
-    caster_type: str | None              # "full", "half", "third", "warlock", or None
+    skill_choices: list[str]  # pool from which to choose
+    num_skill_choices: int  # how many to pick
+    level_1_features: list[str]  # feature names at level 1
+    spellcasting_ability: str | None  # None for non-casters
+    caster_type: str | None  # "full", "half", "third", "warlock", or None
 
 
 _CLASS_DATA: dict[str, ClassFeatures] = {
@@ -325,8 +348,14 @@ _CLASS_DATA: dict[str, ClassFeatures] = {
         armor_proficiencies=["light", "medium", "heavy", "shields"],
         weapon_proficiencies=["simple", "martial"],
         skill_choices=[
-            "acrobatics", "animal_handling", "athletics", "history",
-            "insight", "intimidation", "perception", "survival",
+            "acrobatics",
+            "animal_handling",
+            "athletics",
+            "history",
+            "insight",
+            "intimidation",
+            "perception",
+            "survival",
         ],
         num_skill_choices=2,
         level_1_features=["Fighting Style", "Second Wind"],
@@ -339,10 +368,19 @@ _CLASS_DATA: dict[str, ClassFeatures] = {
         saving_throw_proficiencies=["intelligence", "wisdom"],
         armor_proficiencies=[],
         weapon_proficiencies=[
-            "daggers", "darts", "slings", "quarterstaffs", "light crossbows",
+            "daggers",
+            "darts",
+            "slings",
+            "quarterstaffs",
+            "light crossbows",
         ],
         skill_choices=[
-            "arcana", "history", "insight", "investigation", "medicine", "religion",
+            "arcana",
+            "history",
+            "insight",
+            "investigation",
+            "medicine",
+            "religion",
         ],
         num_skill_choices=2,
         level_1_features=["Spellcasting", "Arcane Recovery"],
@@ -355,12 +393,24 @@ _CLASS_DATA: dict[str, ClassFeatures] = {
         saving_throw_proficiencies=["dexterity", "intelligence"],
         armor_proficiencies=["light"],
         weapon_proficiencies=[
-            "simple", "hand crossbows", "longswords", "rapiers", "shortswords",
+            "simple",
+            "hand crossbows",
+            "longswords",
+            "rapiers",
+            "shortswords",
         ],
         skill_choices=[
-            "acrobatics", "athletics", "deception", "insight", "intimidation",
-            "investigation", "perception", "performance", "persuasion",
-            "sleight_of_hand", "stealth",
+            "acrobatics",
+            "athletics",
+            "deception",
+            "insight",
+            "intimidation",
+            "investigation",
+            "perception",
+            "performance",
+            "persuasion",
+            "sleight_of_hand",
+            "stealth",
         ],
         num_skill_choices=4,
         level_1_features=["Expertise", "Sneak Attack (1d6)", "Thieves' Cant"],
@@ -386,7 +436,12 @@ _CLASS_DATA: dict[str, ClassFeatures] = {
         armor_proficiencies=["light", "medium", "shields"],
         weapon_proficiencies=["simple", "martial"],
         skill_choices=[
-            "animal_handling", "athletics", "intimidation", "nature", "perception", "survival",
+            "animal_handling",
+            "athletics",
+            "intimidation",
+            "nature",
+            "perception",
+            "survival",
         ],
         num_skill_choices=2,
         level_1_features=["Rage", "Unarmored Defense"],
@@ -400,9 +455,24 @@ _CLASS_DATA: dict[str, ClassFeatures] = {
         armor_proficiencies=["light"],
         weapon_proficiencies=["simple", "hand_crossbows", "longswords", "rapiers", "shortswords"],
         skill_choices=[
-            "acrobatics", "animal_handling", "arcana", "athletics", "deception", "history",
-            "insight", "intimidation", "investigation", "medicine", "nature", "perception",
-            "performance", "persuasion", "religion", "sleight_of_hand", "stealth", "survival",
+            "acrobatics",
+            "animal_handling",
+            "arcana",
+            "athletics",
+            "deception",
+            "history",
+            "insight",
+            "intimidation",
+            "investigation",
+            "medicine",
+            "nature",
+            "perception",
+            "performance",
+            "persuasion",
+            "religion",
+            "sleight_of_hand",
+            "stealth",
+            "survival",
         ],
         num_skill_choices=3,
         level_1_features=["Spellcasting", "Bardic Inspiration (d6)"],
@@ -414,11 +484,27 @@ _CLASS_DATA: dict[str, ClassFeatures] = {
         hit_die=8,
         saving_throw_proficiencies=["intelligence", "wisdom"],
         armor_proficiencies=["light", "medium", "shields"],
-        weapon_proficiencies=["clubs", "daggers", "darts", "javelins", "maces", "quarterstaffs",
-                              "scimitars", "sickles", "slings", "spears"],
+        weapon_proficiencies=[
+            "clubs",
+            "daggers",
+            "darts",
+            "javelins",
+            "maces",
+            "quarterstaffs",
+            "scimitars",
+            "sickles",
+            "slings",
+            "spears",
+        ],
         skill_choices=[
-            "arcana", "animal_handling", "insight", "medicine", "nature",
-            "perception", "religion", "survival",
+            "arcana",
+            "animal_handling",
+            "insight",
+            "medicine",
+            "nature",
+            "perception",
+            "religion",
+            "survival",
         ],
         num_skill_choices=2,
         level_1_features=["Druidic", "Spellcasting"],
@@ -444,7 +530,12 @@ _CLASS_DATA: dict[str, ClassFeatures] = {
         armor_proficiencies=["light", "medium", "heavy", "shields"],
         weapon_proficiencies=["simple", "martial"],
         skill_choices=[
-            "athletics", "insight", "intimidation", "medicine", "persuasion", "religion"
+            "athletics",
+            "insight",
+            "intimidation",
+            "medicine",
+            "persuasion",
+            "religion",
         ],
         num_skill_choices=2,
         level_1_features=["Divine Sense", "Lay on Hands"],
@@ -458,8 +549,14 @@ _CLASS_DATA: dict[str, ClassFeatures] = {
         armor_proficiencies=["light", "medium", "shields"],
         weapon_proficiencies=["simple", "martial"],
         skill_choices=[
-            "animal_handling", "athletics", "insight", "investigation",
-            "nature", "perception", "stealth", "survival",
+            "animal_handling",
+            "athletics",
+            "insight",
+            "investigation",
+            "nature",
+            "perception",
+            "stealth",
+            "survival",
         ],
         num_skill_choices=3,
         level_1_features=["Favored Enemy", "Natural Explorer"],
@@ -485,8 +582,13 @@ _CLASS_DATA: dict[str, ClassFeatures] = {
         armor_proficiencies=["light"],
         weapon_proficiencies=["simple"],
         skill_choices=[
-            "arcana", "deception", "history", "intimidation",
-            "investigation", "nature", "religion",
+            "arcana",
+            "deception",
+            "history",
+            "intimidation",
+            "investigation",
+            "nature",
+            "religion",
         ],
         num_skill_choices=2,
         level_1_features=["Otherworldly Patron", "Pact Magic"],
@@ -508,9 +610,7 @@ def get_class_features(class_name: str) -> ClassFeatures:
     """
     key = class_name.lower()
     if key not in _CLASS_DATA:
-        raise ValueError(
-            f"Unknown class '{class_name}'. Valid: {sorted(VALID_CLASSES)}"
-        )
+        raise ValueError(f"Unknown class '{class_name}'. Valid: {sorted(VALID_CLASSES)}")
     return _CLASS_DATA[key]
 
 
@@ -569,8 +669,8 @@ class CharacterBlueprint:
     species: str
     character_class: str
     level: int
-    base_scores: AbilityScores       # as entered via point buy (before bonuses)
-    final_scores: AbilityScores      # after species ability bonuses
+    base_scores: AbilityScores  # as entered via point buy (before bonuses)
+    final_scores: AbilityScores  # after species ability bonuses
     species_traits: SpeciesTraits
     class_features: ClassFeatures
     max_hp: int

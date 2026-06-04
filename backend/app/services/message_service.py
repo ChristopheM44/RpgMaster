@@ -1,4 +1,5 @@
 """Service de persistance et lecture des messages narratifs en base de données."""
+
 from __future__ import annotations
 
 import logging
@@ -49,7 +50,8 @@ async def persist_narration(
     except Exception as exc:
         logger.warning(
             "persist_narration : échec persistance message session=%s : %s",
-            session_id, exc,
+            session_id,
+            exc,
         )
 
 

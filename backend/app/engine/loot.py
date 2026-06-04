@@ -1,4 +1,5 @@
 """Small deterministic loot suggestion tables for encounter aftermath."""
+
 from __future__ import annotations
 
 import random

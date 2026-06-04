@@ -10,6 +10,7 @@ Endpoints :
     GET  /api/admin/llm/model-info    → caractéristiques Ollama du modèle sélectionné
     POST /api/admin/llm/ping          → test rapide d'un appel LLM (provider courant)
 """
+
 from __future__ import annotations
 
 import base64
@@ -25,6 +26,7 @@ from pydantic import BaseModel, Field, field_validator
 from app.api.rate_limit import FixedWindowRateLimiter, client_ip
 from app.config import (
     get_gm_model,
+    get_image_api_key,
     get_image_base_url,
     get_image_generation_enabled,
     get_image_model,
@@ -36,7 +38,6 @@ from app.config import (
     get_openai_base_url,
     get_player_model,
     get_source_max_chars,
-    get_image_api_key,
     is_image_api_key_set,
     is_ollama_api_key_set,
     is_openai_api_key_set,

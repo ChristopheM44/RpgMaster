@@ -4,6 +4,7 @@ Validates that every entry in monsters.json and spells.json conforms to its
 Pydantic schema. This is the safety net that catches malformed data added by
 parsers or hand-edits.
 """
+
 from __future__ import annotations
 
 import json

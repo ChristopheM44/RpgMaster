@@ -7,6 +7,7 @@ Backends disponibles :
 Le TtsRouter ne bloque jamais le game loop : synthesize_and_broadcast() est
 conçu pour être lancé en fire-and-forget via asyncio.create_task().
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -143,9 +144,7 @@ class KokoroClient:
             VoxtralError: Si le subprocess échoue ou retourne des bytes vides.
         """
         if not _SYNTHESIZE_SCRIPT.exists():
-            raise VoxtralError(
-                f"Script synthesize.py introuvable : {_SYNTHESIZE_SCRIPT}"
-            )
+            raise VoxtralError(f"Script synthesize.py introuvable : {_SYNTHESIZE_SCRIPT}")
         if not _KOKORO_VENV_PYTHON.exists():
             raise VoxtralError(
                 f"Python Kokoro introuvable : {_KOKORO_VENV_PYTHON}. "
@@ -155,7 +154,8 @@ class KokoroClient:
         cmd = [
             str(_KOKORO_VENV_PYTHON),
             str(_SYNTHESIZE_SCRIPT),
-            "--text", text,
+            "--text",
+            text,
         ]
         if voice:
             cmd.extend(["--voice", voice])
@@ -177,15 +177,11 @@ class KokoroClient:
                     )
                 except TimeoutError:
                     proc.kill()
-                    raise VoxtralError(
-                        f"Kokoro subprocess timeout ({self._timeout}s)"
-                    )
+                    raise VoxtralError(f"Kokoro subprocess timeout ({self._timeout}s)")
 
                 if proc.returncode != 0:
                     err = stderr_bytes.decode(errors="replace")
-                    raise VoxtralError(
-                        f"Kokoro subprocess code={proc.returncode} : {err[:200]}"
-                    )
+                    raise VoxtralError(f"Kokoro subprocess code={proc.returncode} : {err[:200]}")
 
                 if not wav_bytes:
                     raise VoxtralError("Kokoro a retourné 0 bytes audio.")
@@ -267,7 +263,10 @@ class VLLMVoxtralClient:
                     break
                 logger.warning(
                     "vLLM-Omni tentative %d/%d échouée : %s — retry dans %.1fs",
-                    attempt, _MAX_RETRIES, exc, delay,
+                    attempt,
+                    _MAX_RETRIES,
+                    exc,
+                    delay,
                 )
                 await asyncio.sleep(delay)
                 delay *= 2
@@ -473,13 +472,18 @@ class TtsRouter:
             )
             logger.debug(
                 "TTS audio broadcast : session=%s narration=%s backend=%s bytes=%d",
-                session_id, narration_id, self.tts_backend, len(wav_bytes),
+                session_id,
+                narration_id,
+                self.tts_backend,
+                len(wav_bytes),
             )
 
         except VoxtralError as exc:
             logger.warning(
                 "TTS échec (session=%s backend=%s) : %s — jeu continue sans audio.",
-                session_id, self.tts_backend, exc,
+                session_id,
+                self.tts_backend,
+                exc,
             )
             await self._publish_audio(
                 session_id,
@@ -490,9 +494,7 @@ class TtsRouter:
                 },
             )
         except Exception as exc:
-            logger.error(
-                "TTS erreur inattendue (session=%s) : %s", session_id, exc
-            )
+            logger.error("TTS erreur inattendue (session=%s) : %s", session_id, exc)
             await self._publish_audio(
                 session_id,
                 {

@@ -1,4 +1,5 @@
 """Tests for engine/equipment.py"""
+
 from __future__ import annotations
 
 import pytest
@@ -101,8 +102,14 @@ class TestGetWeapon:
     def test_all_properties_are_valid_srd_tags(self):
         """Every weapon property in the catalogue must be a known SRD tag."""
         for weapon in [
-            "dagger", "handaxe", "light_crossbow", "longsword",
-            "rapier", "shortsword", "greatsword", "longbow",
+            "dagger",
+            "handaxe",
+            "light_crossbow",
+            "longsword",
+            "rapier",
+            "shortsword",
+            "greatsword",
+            "longbow",
         ]:
             w = get_weapon(weapon)
             for prop in w.properties:
@@ -349,8 +356,7 @@ class TestWeaponAttackStats:
 
     def test_longsword_str_proficient(self):
         w = get_weapon("longsword")
-        stats = weapon_attack_stats(w, str_score=16, dex_score=12,
-                                     proficient=True, level=1)
+        stats = weapon_attack_stats(w, str_score=16, dex_score=12, proficient=True, level=1)
         assert isinstance(stats, AttackStats)
         # STR mod +3, prof +2 = +5
         assert stats.attack_bonus == 5
@@ -360,25 +366,24 @@ class TestWeaponAttackStats:
 
     def test_mace_not_proficient_no_prof_bonus(self):
         w = get_weapon("mace")
-        stats = weapon_attack_stats(w, str_score=14, dex_score=10,
-                                     proficient=False, level=1)
+        stats = weapon_attack_stats(w, str_score=14, dex_score=10, proficient=False, level=1)
         # STR mod +2, no prof = +2
         assert stats.attack_bonus == 2
         assert stats.damage_notation == "1d6+2"
 
     def test_longsword_two_handed_uses_versatile_die(self):
         w = get_weapon("longsword")
-        stats = weapon_attack_stats(w, str_score=14, dex_score=10,
-                                     proficient=True, level=1,
-                                     two_handed=True)
+        stats = weapon_attack_stats(
+            w, str_score=14, dex_score=10, proficient=True, level=1, two_handed=True
+        )
         assert stats.damage_notation == "1d10+2"
         assert stats.two_handed is True
 
     def test_quarterstaff_two_handed_1d8(self):
         w = get_weapon("quarterstaff")
-        stats = weapon_attack_stats(w, str_score=12, dex_score=10,
-                                     proficient=True, level=3,
-                                     two_handed=True)
+        stats = weapon_attack_stats(
+            w, str_score=12, dex_score=10, proficient=True, level=3, two_handed=True
+        )
         assert stats.damage_notation == "1d8+1"
 
     def test_two_handed_on_non_versatile_raises(self):
@@ -390,8 +395,7 @@ class TestWeaponAttackStats:
 
     def test_longbow_uses_dex(self):
         w = get_weapon("longbow")
-        stats = weapon_attack_stats(w, str_score=10, dex_score=18,
-                                     proficient=True, level=5)
+        stats = weapon_attack_stats(w, str_score=10, dex_score=18, proficient=True, level=5)
         assert stats.uses_dex is True
         # DEX +4, prof +3 = +7
         assert stats.attack_bonus == 7
@@ -399,8 +403,7 @@ class TestWeaponAttackStats:
 
     def test_shortbow_dex_proficient_level1(self):
         w = get_weapon("shortbow")
-        stats = weapon_attack_stats(w, str_score=8, dex_score=16,
-                                     proficient=True, level=1)
+        stats = weapon_attack_stats(w, str_score=8, dex_score=16, proficient=True, level=1)
         assert stats.uses_dex is True
         assert stats.attack_bonus == 5  # +3 DEX + 2 prof
 
@@ -409,30 +412,30 @@ class TestWeaponAttackStats:
     def test_rapier_chooses_higher_ability(self):
         w = get_weapon("rapier")
         # STR 16 (+3), DEX 14 (+2) → chooses STR
-        stats = weapon_attack_stats(w, str_score=16, dex_score=14,
-                                     proficient=False, level=1)
+        stats = weapon_attack_stats(w, str_score=16, dex_score=14, proficient=False, level=1)
         assert stats.uses_dex is False
         assert stats.attack_bonus == 3
 
     def test_rapier_chooses_dex_when_higher(self):
         w = get_weapon("rapier")
         # DEX 18 (+4) > STR 12 (+1) → chooses DEX
-        stats = weapon_attack_stats(w, str_score=12, dex_score=18,
-                                     proficient=False, level=1)
+        stats = weapon_attack_stats(w, str_score=12, dex_score=18, proficient=False, level=1)
         assert stats.uses_dex is True
         assert stats.attack_bonus == 4
 
     def test_finesse_prefer_dex_on_tie(self):
         w = get_weapon("dagger")
         # STR 14 (+2), DEX 14 (+2) — tie, prefer_dex=True → uses DEX
-        stats = weapon_attack_stats(w, str_score=14, dex_score=14,
-                                     proficient=False, level=1, prefer_dex=True)
+        stats = weapon_attack_stats(
+            w, str_score=14, dex_score=14, proficient=False, level=1, prefer_dex=True
+        )
         assert stats.uses_dex is True
 
     def test_finesse_str_wins_over_equal_dex_no_prefer(self):
         w = get_weapon("dagger")
-        stats = weapon_attack_stats(w, str_score=14, dex_score=14,
-                                     proficient=False, level=1, prefer_dex=False)
+        stats = weapon_attack_stats(
+            w, str_score=14, dex_score=14, proficient=False, level=1, prefer_dex=False
+        )
         assert stats.uses_dex is False
 
     def test_dagger_thrown_uses_melee_ability(self):
@@ -444,24 +447,21 @@ class TestWeaponAttackStats:
 
     def test_negative_modifier_in_notation(self):
         w = get_weapon("mace")
-        stats = weapon_attack_stats(w, str_score=8, dex_score=10,
-                                     proficient=False, level=1)
+        stats = weapon_attack_stats(w, str_score=8, dex_score=10, proficient=False, level=1)
         # STR -1 → damage: "1d6-1"
         assert stats.damage_notation == "1d6-1"
         assert stats.attack_bonus == -1
 
     def test_zero_modifier_notation_has_no_plus(self):
         w = get_weapon("mace")
-        stats = weapon_attack_stats(w, str_score=10, dex_score=10,
-                                     proficient=False, level=1)
+        stats = weapon_attack_stats(w, str_score=10, dex_score=10, proficient=False, level=1)
         assert stats.damage_notation == "1d6"
 
     # ---- Proficiency bonus at different levels ----
 
     def test_proficiency_bonus_level_5(self):
         w = get_weapon("longsword")
-        stats = weapon_attack_stats(w, str_score=16, dex_score=10,
-                                     proficient=True, level=5)
+        stats = weapon_attack_stats(w, str_score=16, dex_score=10, proficient=True, level=5)
         # STR +3, prof +3 = +6
         assert stats.attack_bonus == 6
 

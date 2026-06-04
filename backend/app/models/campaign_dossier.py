@@ -14,9 +14,7 @@ class CampaignDossier(Base):
 
     __tablename__ = "campaign_dossiers"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     campaign_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("campaigns.id", ondelete="CASCADE"),

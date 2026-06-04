@@ -4,6 +4,7 @@ The LLM is instructed to emit structured ``encounter_setup`` and
 ``state_transition`` actions, but live narration can still omit them.  These
 helpers provide a conservative backend safety net for clear hostile scenes.
 """
+
 from __future__ import annotations
 
 import re

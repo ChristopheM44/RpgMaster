@@ -14,6 +14,7 @@ L'instructions système Realtime est dérivée de PersonaVoice via
 ``_format_voice_directive`` — accent + register + timbre + age sont sérialisés en
 consignes textuelles pour guider l'IA Realtime.
 """
+
 from __future__ import annotations
 
 import logging

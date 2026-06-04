@@ -1,4 +1,5 @@
 """Stealth and passive Perception helpers for hidden-world events."""
+
 from __future__ import annotations
 
 import random
@@ -29,9 +30,7 @@ def resolve_stealth_event(
     roll_payload = _roll_stealth(actor_data, params, rng)
     observers = party_passive_perceptions(active)
     noticed_by = [
-        observer
-        for observer in observers
-        if observer["passive_perception"] > roll_payload["total"]
+        observer for observer in observers if observer["passive_perception"] > roll_payload["total"]
     ]
     stealth_succeeded = len(noticed_by) == 0
 
@@ -87,9 +86,7 @@ def resolve_hide_action(
     roll_payload = _roll_stealth(actor_data, params, rng)
     observers = hostile_passive_perceptions(active, actor_id)
     noticed_by = [
-        observer
-        for observer in observers
-        if observer["passive_perception"] > roll_payload["total"]
+        observer for observer in observers if observer["passive_perception"] > roll_payload["total"]
     ]
     stealth_succeeded = len(noticed_by) == 0
     max_pp = max((observer["passive_perception"] for observer in observers), default=None)

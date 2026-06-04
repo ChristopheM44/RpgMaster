@@ -1,4 +1,5 @@
 """Campaign service — business logic for multi-session campaigns."""
+
 from __future__ import annotations
 
 import uuid
@@ -181,9 +182,7 @@ async def advance_to_next_session(
     # (in case attach_session was never explicitly called)
     if campaign.session_ids:
         current_sid = campaign.session_ids[campaign.current_session_index]
-        sync_result = await db.execute(
-            select(Character).where(Character.session_id == current_sid)
-        )
+        sync_result = await db.execute(select(Character).where(Character.session_id == current_sid))
         existing_ids = set(campaign.character_ids or [])
         char_ids = list(campaign.character_ids or [])
         for c in sync_result.scalars().all():
@@ -195,9 +194,7 @@ async def advance_to_next_session(
     # Transfer surviving characters
     transferred = 0
     if campaign.character_ids:
-        result = await db.execute(
-            select(Character).where(Character.id.in_(campaign.character_ids))
-        )
+        result = await db.execute(select(Character).where(Character.id.in_(campaign.character_ids)))
         chars = result.scalars().all()
         xp_pool = dict(campaign.xp_pool)
 
@@ -373,10 +370,7 @@ def _reconcile_campaign_sessions(campaign: Campaign, valid_session_ids: set[str]
         normalized_index = current_index - removed_before_current
         normalized_index = max(0, min(normalized_index, len(filtered_ids) - 1))
 
-    changed = (
-        filtered_ids != session_ids
-        or normalized_index != current_index
-    )
+    changed = filtered_ids != session_ids or normalized_index != current_index
     if changed:
         campaign.session_ids = filtered_ids
         campaign.current_session_index = normalized_index
@@ -475,8 +469,7 @@ def _initial_spell_slots(char_class: str, level: int) -> dict[str, dict[str, int
     except ValueError:
         return {}
     return {
-        str(slot_level): {"total": int(total), "used": 0}
-        for slot_level, total in slots.items()
+        str(slot_level): {"total": int(total), "used": 0} for slot_level, total in slots.items()
     }
 
 

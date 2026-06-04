@@ -1,4 +1,5 @@
 """Encounter-intro helpers for the game WebSocket facade."""
+
 from __future__ import annotations
 
 import inspect
@@ -50,15 +51,17 @@ def encounter_intro_combatants(combatants_info: dict[str, Any]) -> list[dict[str
     for combatant_id, info in combatants_info.items():
         if info.get("is_player", False):
             continue
-        enemies.append({
-            "id": combatant_id,
-            "name": info.get("name", combatant_id),
-            "hp": info.get("hp"),
-            "hp_max": info.get("hp_max"),
-            "monster_id": info.get("monster_id"),
-            "species": info.get("species"),
-            "cr": info.get("cr"),
-        })
+        enemies.append(
+            {
+                "id": combatant_id,
+                "name": info.get("name", combatant_id),
+                "hp": info.get("hp"),
+                "hp_max": info.get("hp_max"),
+                "monster_id": info.get("monster_id"),
+                "species": info.get("species"),
+                "cr": info.get("cr"),
+            }
+        )
     return enemies
 
 
@@ -73,10 +76,7 @@ def is_async_callable(candidate: Any) -> bool:
     if inspect.iscoroutinefunction(candidate):
         return True
     candidate_type = type(candidate)
-    return (
-        candidate_type.__module__ == "unittest.mock"
-        and candidate_type.__name__ == "AsyncMock"
-    )
+    return candidate_type.__module__ == "unittest.mock" and candidate_type.__name__ == "AsyncMock"
 
 
 async def generate_encounter_intro(

@@ -7,6 +7,7 @@ Glossary (SRD 5.2 terms):
   DC             : Difficulty Class (target number to meet or beat)
   advantage/disadvantage: roll 2d20, keep best/worst
 """
+
 from __future__ import annotations
 
 import random
@@ -27,9 +28,9 @@ class Ability(str, Enum):
 
 class Proficiency(str, Enum):
     NONE = "none"
-    HALF = "half"          # Jack of All Trades (bard feature)
+    HALF = "half"  # Jack of All Trades (bard feature)
     PROFICIENT = "proficient"
-    EXPERT = "expert"      # double proficiency bonus
+    EXPERT = "expert"  # double proficiency bonus
 
 
 # Canonical skill → governing ability mapping (SRD 5.2)
@@ -95,14 +96,14 @@ class CheckResult:
     """Full breakdown of an ability/skill/saving-throw check."""
 
     d20_roll: int
-    all_rolls: list[int]           # both dice when advantage/disadvantage applies
-    modifier: int                  # total modifier applied
-    total: int                     # d20_roll + modifier
+    all_rolls: list[int]  # both dice when advantage/disadvantage applies
+    modifier: int  # total modifier applied
+    total: int  # d20_roll + modifier
     dc: int | None
-    success: bool | None        # None when no DC was provided
-    advantage: bool | None      # True/False/None
-    label: str                     # human-readable label, e.g. "DEX (Stealth)"
-    breakdown: str                 # e.g. "14 + 5 = 19 vs DC 15 ✓"
+    success: bool | None  # None when no DC was provided
+    advantage: bool | None  # True/False/None
+    label: str  # human-readable label, e.g. "DEX (Stealth)"
+    breakdown: str  # e.g. "14 + 5 = 19 vs DC 15 ✓"
 
     @property
     def critical_hit(self) -> bool:

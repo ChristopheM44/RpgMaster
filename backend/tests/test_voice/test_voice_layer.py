@@ -2,6 +2,7 @@
 
 Aucun appel réseau, aucun subprocess Kokoro : tout est mocké.
 """
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock
@@ -122,9 +123,7 @@ def test_openai_voice_mapping_by_gender_age() -> None:
 
 
 def test_openai_voice_explicit_override_wins() -> None:
-    v = PersonaVoice(
-        gender="male", age_range="adult", voice_id_realtime="custom_voice"
-    )
+    v = PersonaVoice(gender="male", age_range="adult", voice_id_realtime="custom_voice")
     assert openai_voice_for(v) == "custom_voice"
 
 

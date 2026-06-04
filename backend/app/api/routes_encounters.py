@@ -1,4 +1,5 @@
 """REST endpoints for encounter management (preset listing + dynamic generation)."""
+
 from __future__ import annotations
 
 from typing import Any

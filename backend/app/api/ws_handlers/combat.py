@@ -1,4 +1,5 @@
 """Combat orchestration handlers and helpers used by the game WebSocket facade."""
+
 from __future__ import annotations
 
 import logging
@@ -170,12 +171,7 @@ async def reject_out_of_turn_action(
     await event_bus.publish_to_session(
         session_id,
         EventType.ERROR,
-        {
-            "message": (
-                f"Ce n'est pas le tour de ce personnage. "
-                f"Tour actuel : {current.name}."
-            )
-        },
+        {"message": (f"Ce n'est pas le tour de ce personnage. Tour actuel : {current.name}.")},
         source=source,
     )
     return True
@@ -677,6 +673,7 @@ async def _generate_encounter_end(
 ) -> tuple[str | None, bool]:
     """Ask the GM for one post-combat narration and safe scene updates."""
     from app.api import ws_game
+
     gm_agent = getattr(ws_game.action_resolver, "_gm", None)
     run_end = getattr(gm_agent, "run_encounter_end", None)
     if not callable(run_end) or not is_async_callable(run_end):
@@ -1009,6 +1006,7 @@ async def handle_start_combat(
         return
 
     from app.api import ws_game
+
     await ws_game._sync_ai_control_from_db(session_id, active, db)
 
     characters_data: dict[str, Any] = active.state_data.get("characters", {})
@@ -1141,9 +1139,7 @@ async def handle_start_combat(
             "xp": monster_data.get("xp", npc.get("xp", 0)),
             "ability_scores": monster_data.get("ability_scores", {}),
             "senses": monster_data.get("senses", {}),
-            "passive_perception": (monster_data.get("senses") or {}).get(
-                "passive_perception"
-            ),
+            "passive_perception": (monster_data.get("senses") or {}).get("passive_perception"),
             "skills": monster_data.get("skills", {}),
             "actions": format_monster_actions(monster_data.get("actions", [])),
             "traits": monster_data.get("traits", []),
@@ -1237,6 +1233,7 @@ async def handle_start_combat(
 
     if should_generate_intro:
         from app.api import ws_game
+
         generated_intro = await ws_game._generate_encounter_intro(
             session_id,
             active,
@@ -1276,6 +1273,7 @@ async def handle_start_combat(
     )
 
     from app.api import ws_game
+
     await event_bus.publish_to_session(
         session_id,
         "combat_start",
@@ -1365,6 +1363,7 @@ async def handle_end_turn(session_id: str, active: Any, db: AsyncSession) -> Non
 async def handle_ai_turns(session_id: str, active: Any, db: AsyncSession) -> None:
     """Trigger all consecutive AI-controlled turns, then emit TURN_START for the next human."""
     from app.api import ws_game
+
     await handle_ai_combat_turns(
         session_id,
         active,
@@ -1519,8 +1518,7 @@ async def handle_flee(
     await persist_narration(session_id, flee_text, "Maître du Jeu", db)
 
     active_pcs = [
-        cid for cid, c in combatants.items()
-        if c.get("is_player") and c.get("status") == "active"
+        cid for cid, c in combatants.items() if c.get("is_player") and c.get("status") == "active"
     ]
 
     if not active_pcs:

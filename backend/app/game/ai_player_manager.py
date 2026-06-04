@@ -468,7 +468,17 @@ class AIPlayerManager:
                 else:
                     action = _WAIT_ACTION
 
-            visible_text = self._visible_action_text(action, current.name)
+            if action.action_type in {"talk", "wait"}:
+                visible_text = self._visible_action_text(action, current.name)
+            else:
+                # Action mécanique en combat : le compagnon déclare une INTENTION ;
+                # le moteur et le MJ possèdent l'issue. On diffuse l'intention
+                # (action_description) plutôt qu'un roleplay revendiquant le résultat
+                # (« frappe le gobelin » : contact non encore résolu par le moteur).
+                visible_text = sanitize_companion_visible_text(
+                    self._companion_action_prompt(action, current.name),
+                    character_name=current.name,
+                )
             scene_id = str(uuid.uuid4())
             entry_kind = "dialogue" if action.action_type == "talk" else "action"
 
@@ -1188,6 +1198,10 @@ class AIPlayerManager:
         spell_id, spell_name, slot_level = spell_choice
         action.params["spell_id"] = spell_id
         action.params["spell_name"] = spell_name
+        # Exposer le niveau d'emplacement choisi (0 pour un cantrip) pour que la
+        # validation préliminaire ne rejette pas à tort un cantrip lancé sans
+        # emplacement disponible.
+        action.params["slot_level"] = slot_level
         if action.target is None:
             action.target = cls._select_default_enemy_target(character_id, state_data)
         return action, spell_id, slot_level
@@ -1451,9 +1465,7 @@ class AIPlayerManager:
     @staticmethod
     def _choice_spell_id(action: PlayerActionChoice) -> str | None:
         spell_id = str(
-            action.params.get("spell_id")
-            or action.params.get("spell_name")
-            or ""
+            action.params.get("spell_id") or action.params.get("spell_name") or ""
         ).strip()
         return spell_id or None
 

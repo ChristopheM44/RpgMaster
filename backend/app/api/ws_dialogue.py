@@ -22,6 +22,7 @@ Messages serveur → client (JSON) :
 - `{"type": "error", "message": "..."}` — erreur applicative
 - `{"type": "session_ready"}` — session OpenAI ouverte et configurée
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -76,13 +77,9 @@ async def _load_persona_brief(
             )
             await websocket.close(code=4404)
             return None
-        persona = await campaign_dossier_service.get_npc_persona(
-            campaign.id, persona_id, db
-        )
+        persona = await campaign_dossier_service.get_npc_persona(campaign.id, persona_id, db)
     if persona is None:
-        await websocket.send_json(
-            {"type": "error", "message": f"Persona inconnue : {persona_id}"}
-        )
+        await websocket.send_json({"type": "error", "message": f"Persona inconnue : {persona_id}"})
         await websocket.close(code=4404)
         return None
 
@@ -216,9 +213,7 @@ async def _forward_client_to_openai(
             try:
                 pcm16 = base64.b64decode(audio_b64)
             except Exception:
-                await websocket.send_json(
-                    {"type": "error", "message": "audio_b64 invalide"}
-                )
+                await websocket.send_json({"type": "error", "message": "audio_b64 invalide"})
                 continue
             await session.send_user_audio(pcm16)
         elif etype == "commit":

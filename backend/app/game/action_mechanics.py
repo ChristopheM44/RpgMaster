@@ -1,4 +1,5 @@
 """Mechanical action resolution helpers used by ActionResolver and ActionPipeline."""
+
 from __future__ import annotations
 
 import json
@@ -93,9 +94,7 @@ class ActionMechanics:
                 "critical": dmg.critical,
             }
             hit_label = "CRITIQUE" if attack.critical else "touché"
-            payload["summary"] = (
-                f"Attaque : {attack.total} ({hit_label}) → {dmg.total} dégâts"
-            )
+            payload["summary"] = f"Attaque : {attack.total} ({hit_label}) → {dmg.total} dégâts"
         else:
             miss_label = "fumble" if attack.fumble else "raté"
             payload["summary"] = f"Attaque : {attack.total} vs CA {target_ac} ({miss_label})"
@@ -299,7 +298,10 @@ class ActionMechanics:
             if atk.hit and damage_dice:
                 if extra_dice and effective_slot > spell_level:
                     dmg = upcast_damage(
-                        damage_dice, extra_dice, spell_level, effective_slot,
+                        damage_dice,
+                        extra_dice,
+                        spell_level,
+                        effective_slot,
                         critical=atk.critical,
                     )
                 else:
@@ -313,8 +315,7 @@ class ActionMechanics:
                 hit_label = "CRITIQUE" if atk.critical else "touche"
                 dmg_type = spell.get("damage_type", "")
                 payload["summary"] = (
-                    f"{spell_name} : {atk.total} ({hit_label}) → "
-                    f"{dmg.total} dégâts {dmg_type}"
+                    f"{spell_name} : {atk.total} ({hit_label}) → {dmg.total} dégâts {dmg_type}"
                 )
             elif atk.hit:
                 payload["summary"] = f"{spell_name} : touche !"
@@ -325,9 +326,7 @@ class ActionMechanics:
             # Projectile magique et assimilés
             darts: int = int(spell.get("darts", 1))
             if effective_slot > spell_level:
-                darts += int(spell.get("upcast_extra_darts", 0)) * (
-                    effective_slot - spell_level
-                )
+                darts += int(spell.get("upcast_extra_darts", 0)) * (effective_slot - spell_level)
             total_dmg = 0
             all_rolls: list[int] = []
             for _ in range(darts):
@@ -341,9 +340,7 @@ class ActionMechanics:
                 "type": spell.get("damage_type", ""),
             }
             payload["darts"] = darts
-            payload["summary"] = (
-                f"{spell_name} : {darts} fléchette(s) → {total_dmg} dégâts"
-            )
+            payload["summary"] = f"{spell_name} : {darts} fléchette(s) → {total_dmg} dégâts"
 
         elif spell.get("save") and damage_dice:
             # Sort avec jet de sauvegarde et dégâts
@@ -439,6 +436,7 @@ class ActionMechanics:
         3 succès = stable ; 3 échecs = mort.
         """
         from app.engine.combat import roll_death_save  # noqa: PLC0415
+
         result = roll_death_save()
 
         cdata = state_data.get("combatants", {}).get(character_id or "", {})
@@ -552,6 +550,7 @@ class ActionMechanics:
     ) -> dict[str, Any]:
         """Jet de Médecine DD 10 pour stabiliser un personnage inconscient (SRD 5.2)."""
         from app.engine.ability_checks import ability_modifier  # noqa: PLC0415
+
         combatants: dict[str, Any] = state_data.get("combatants", {})
         healer = combatants.get(healer_id or "", {})
         wis_score = int(healer.get("ability_scores", {}).get("wisdom", 10))

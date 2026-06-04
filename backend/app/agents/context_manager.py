@@ -63,9 +63,7 @@ class ContextManager:
         result: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
         for msg in self.get_messages(last_n):
             ollama_role = "user" if msg.role == "player" else "assistant"
-            result.append(
-                {"role": ollama_role, "content": f"[{msg.speaker}] {msg.content}"}
-            )
+            result.append({"role": ollama_role, "content": f"[{msg.speaker}] {msg.content}"})
         return result
 
     # -------------------------------------------------------------------------

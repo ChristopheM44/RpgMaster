@@ -8,6 +8,7 @@ Handles:
 
 Pure logic: no I/O, no async, no database access.
 """
+
 from __future__ import annotations
 
 import random
@@ -136,8 +137,7 @@ class TurnManager:
             raise ValueError("Cannot set up combat with an empty combatant list.")
 
         initiative_results = [
-            roll_initiative(c.dex_score, combatant_id=c.combatant_id, rng=rng)
-            for c in combatants
+            roll_initiative(c.dex_score, combatant_id=c.combatant_id, rng=rng) for c in combatants
         ]
         sorted_results = sort_initiative(initiative_results)
 

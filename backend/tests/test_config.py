@@ -22,9 +22,7 @@ def test_update_llm_settings_normalizes_ollama_runtime_values(
 
     assert config.get_ollama_url() == "https://ollama.com"
     assert config.get_ollama_api_key() == "secret-key"
-    assert config.get_ollama_auth_headers() == {
-        "Authorization": "Bearer secret-key"
-    }
+    assert config.get_ollama_auth_headers() == {"Authorization": "Bearer secret-key"}
 
     saved = json.loads(runtime_file.read_text(encoding="utf-8"))
     assert saved["ollama_base_url"] == "https://ollama.com"

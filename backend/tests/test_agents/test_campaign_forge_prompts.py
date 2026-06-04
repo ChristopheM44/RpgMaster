@@ -17,8 +17,7 @@ def test_compact_srd_monster_index_exposes_all_monsters() -> None:
 
 def test_forge_prompts_do_not_use_old_ten_monster_whitelist() -> None:
     forbidden = (
-        "goblin, hobgoblin, orc, skeleton, zombie, wolf, "
-        "giant_spider, bandit, cultist, bugbear"
+        "goblin, hobgoblin, orc, skeleton, zombie, wolf, giant_spider, bandit, cultist, bugbear"
     )
 
     for path in Path(_PROMPTS_DIR).glob("campaign_forge*.txt"):

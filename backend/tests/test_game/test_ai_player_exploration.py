@@ -6,6 +6,7 @@ Couvre :
 3. Reprise mid-combat — après open_session, ai_players est peuplé avant le 1er tour IA
 4. toggle_ai_control WS message — via TestClient
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -28,29 +29,37 @@ from app.models.session import Session, SessionStatus
 
 def _roleplay_json(character_name: str) -> str:
     import json
-    return json.dumps({
-        "action_type": "talk",
-        "action_description": f"{character_name} propose de questionner le contact visible.",
-        "target": None,
-        "params": {},
-        "roleplay_text": (
-            f"{character_name} désigne le contact visible. "
-            "« Commençons par lui poser des questions précises. »"
-        ),
-        "inner_reasoning": "Faire avancer la scène par une prise d'information.",
-    }, ensure_ascii=False)
+
+    return json.dumps(
+        {
+            "action_type": "talk",
+            "action_description": f"{character_name} propose de questionner le contact visible.",
+            "target": None,
+            "params": {},
+            "roleplay_text": (
+                f"{character_name} désigne le contact visible. "
+                "« Commençons par lui poser des questions précises. »"
+            ),
+            "inner_reasoning": "Faire avancer la scène par une prise d'information.",
+        },
+        ensure_ascii=False,
+    )
 
 
 def _attack_roleplay_json(character_name: str) -> str:
     import json
-    return json.dumps({
-        "action_type": "attack",
-        "action_description": f"{character_name} attaque la menace la plus proche.",
-        "target": None,
-        "params": {},
-        "roleplay_text": f"{character_name} dégaine et se jette dans la mêlée.",
-        "inner_reasoning": "La situation bascule en combat.",
-    }, ensure_ascii=False)
+
+    return json.dumps(
+        {
+            "action_type": "attack",
+            "action_description": f"{character_name} attaque la menace la plus proche.",
+            "target": None,
+            "params": {},
+            "roleplay_text": f"{character_name} dégaine et se jette dans la mêlée.",
+            "inner_reasoning": "La situation bascule en combat.",
+        },
+        ensure_ascii=False,
+    )
 
 
 def _make_exploration_session() -> ActiveSession:
@@ -129,25 +138,19 @@ async def test_exploration_reactions_calls_roleplay_for_ai() -> None:
         if call.args[1] == "ai_thinking"
     ]
     assert thinking_flags == [True, False]
-    dialogue_calls = [
-        call for call in publish.await_args_list if call.args[1] == "dialogue"
-    ]
+    dialogue_calls = [call for call in publish.await_args_list if call.args[1] == "dialogue"]
     expected_text = (
-        "Thorin désigne le contact visible. "
-        "« Commençons par lui poser des questions précises. »"
+        "Thorin désigne le contact visible. « Commençons par lui poser des questions précises. »"
     )
     expected_visible_text = (
-        "désigne le contact visible. "
-        "« Commençons par lui poser des questions précises. »"
+        "désigne le contact visible. « Commençons par lui poser des questions précises. »"
     )
     assert dialogue_calls[-1].args[2]["text"] == expected_visible_text
     assert dialogue_calls[-1].args[2]["speaker_id"] == "ai_1"
     assert dialogue_calls[-1].args[2]["speaker_kind"] == "companion"
     assert dialogue_calls[-1].args[2]["entry_kind"] == "dialogue"
     assert dialogue_calls[-1].args[2]["scene_id"]
-    assert responses == [
-        {"speaker": "Thorin", "text": expected_text}
-    ]
+    assert responses == [{"speaker": "Thorin", "text": expected_text}]
 
 
 @pytest.mark.asyncio
@@ -174,22 +177,26 @@ async def test_companion_talk_addressing_present_npc_calls_npc_dialogue_once() -
 
     shade = MagicMock()
     shade.character_name = "Shade"
-    shade.roleplay = AsyncMock(return_value=PlayerActionChoice(
-        action_type="talk",
-        action_description="Interroge Syndra.",
-        target="Syndra Silvane",
-        roleplay_text=(
-            "Shade incline la tête vers l'archimage. "
-            "« Archimage, avez-vous une piste plus précise ? »"
-        ),
-    ))
+    shade.roleplay = AsyncMock(
+        return_value=PlayerActionChoice(
+            action_type="talk",
+            action_description="Interroge Syndra.",
+            target="Syndra Silvane",
+            roleplay_text=(
+                "Shade incline la tête vers l'archimage. "
+                "« Archimage, avez-vous une piste plus précise ? »"
+            ),
+        )
+    )
     elara = MagicMock()
     elara.character_name = "Elara"
-    elara.roleplay = AsyncMock(return_value=PlayerActionChoice(
-        action_type="talk",
-        action_description="Ajoute un doute.",
-        roleplay_text="Elara observe en silence.",
-    ))
+    elara.roleplay = AsyncMock(
+        return_value=PlayerActionChoice(
+            action_type="talk",
+            action_description="Ajoute un doute.",
+            roleplay_text="Elara observe en silence.",
+        )
+    )
     active.ai_players = {"ai_1": shade, "ai_2": elara}
 
     resolver = MagicMock()
@@ -230,12 +237,14 @@ async def test_companion_talk_merely_mentioning_npc_does_not_call_npc_dialogue()
     }
     ai_agent = MagicMock()
     ai_agent.character_name = "Shade"
-    ai_agent.roleplay = AsyncMock(return_value=PlayerActionChoice(
-        action_type="talk",
-        action_description="Commente la scène.",
-        target=None,
-        roleplay_text="Syndra cache-t-elle quelque chose ? Restons attentifs.",
-    ))
+    ai_agent.roleplay = AsyncMock(
+        return_value=PlayerActionChoice(
+            action_type="talk",
+            action_description="Commente la scène.",
+            target=None,
+            roleplay_text="Syndra cache-t-elle quelque chose ? Restons attentifs.",
+        )
+    )
     active.ai_players["ai_1"] = ai_agent
 
     resolver = MagicMock()
@@ -271,13 +280,15 @@ async def test_companion_environmental_spell_is_arbitrated_with_first_person_vis
     }
     ai_agent = MagicMock()
     ai_agent.character_name = "Thorin"
-    ai_agent.roleplay = AsyncMock(return_value=PlayerActionChoice(
-        action_type="cast_spell",
-        action_description="lance un trait de feu vers l'eau noire",
-        target="eau_noire",
-        params={"spell_id": "fire_bolt", "slot_level": 0},
-        roleplay_text="Je tends la main vers l'eau noire et je canalise une flamme précise.",
-    ))
+    ai_agent.roleplay = AsyncMock(
+        return_value=PlayerActionChoice(
+            action_type="cast_spell",
+            action_description="lance un trait de feu vers l'eau noire",
+            target="eau_noire",
+            params={"spell_id": "fire_bolt", "slot_level": 0},
+            roleplay_text="Je tends la main vers l'eau noire et je canalise une flamme précise.",
+        )
+    )
     active.ai_players["ai_1"] = ai_agent
 
     resolver = MagicMock()
@@ -294,9 +305,7 @@ async def test_companion_environmental_spell_is_arbitrated_with_first_person_vis
 
     assert reacted == 1
     action_calls = [
-        call
-        for call in publish.await_args_list
-        if call.args[2].get("entry_kind") == "action"
+        call for call in publish.await_args_list if call.args[2].get("entry_kind") == "action"
     ]
     assert action_calls[-1].args[2]["text"].startswith("Je tends la main")
     assert responses == [
@@ -436,9 +445,7 @@ async def test_exploration_reactions_attack_without_encounter_converts_to_wait()
     assert "pending_phase_transition" not in active.state_data
     resolver.resolve.assert_not_called()
     # Le texte publié doit être celui de l'hésitation, pas l'attaque originale
-    narration_calls = [
-        call for call in publish.await_args_list if call.args[1] == "narration"
-    ]
+    narration_calls = [call for call in publish.await_args_list if call.args[1] == "narration"]
     assert narration_calls, "Au moins une narration doit être publiée"
     published_text = narration_calls[-1].args[2]["text"]
     assert "dégainer" in published_text or "méfiant" in published_text
@@ -474,9 +481,7 @@ async def test_exploration_reactions_attack_with_pending_encounter_triggers_comb
     assert reacted == 1
     assert active.state_data["pending_phase_transition"] == "COMBAT"
     resolver.resolve.assert_not_called()
-    narration_calls = [
-        call for call in publish.await_args_list if call.args[1] == "narration"
-    ]
+    narration_calls = [call for call in publish.await_args_list if call.args[1] == "narration"]
     assert narration_calls[-1].args[2]["text"] == "Thorin dégaine et se jette dans la mêlée."
     assert responses == []
 
@@ -495,14 +500,17 @@ async def test_exploration_reactions_examine_triggers_gm_arbitrage() -> None:
     )
     active.ai_players["ai_1"] = ai_agent
 
-    examine_json = json.dumps({
-        "action_type": "examine",
-        "action_description": "Thorin examine la porte suspecte.",
-        "target": None,
-        "params": {},
-        "roleplay_text": "Thorin s'approche lentement et inspecte la porte.",
-        "inner_reasoning": "Cherche des pièges.",
-    }, ensure_ascii=False)
+    examine_json = json.dumps(
+        {
+            "action_type": "examine",
+            "action_description": "Thorin examine la porte suspecte.",
+            "target": None,
+            "params": {},
+            "roleplay_text": "Thorin s'approche lentement et inspecte la porte.",
+            "inner_reasoning": "Cherche des pièges.",
+        },
+        ensure_ascii=False,
+    )
 
     with patch.object(ai_agent._client, "chat", new=AsyncMock(return_value=examine_json)):
         resolver = MagicMock()
@@ -522,12 +530,9 @@ async def test_exploration_reactions_examine_triggers_gm_arbitrage() -> None:
     assert call_kwargs["action_type"] == "examine"
     assert call_kwargs["content"] == "Thorin examine la porte suspecte."
 
-    narration_calls = [
-        call for call in publish.await_args_list if call.args[1] == "narration"
-    ]
+    narration_calls = [call for call in publish.await_args_list if call.args[1] == "narration"]
     assert (
-        narration_calls[-1].args[2]["text"]
-        == "Thorin s'approche lentement et inspecte la porte."
+        narration_calls[-1].args[2]["text"] == "Thorin s'approche lentement et inspecte la porte."
     )
     assert call_kwargs["display_text"] == "Thorin s'approche lentement et inspecte la porte."
     assert responses == [
@@ -548,18 +553,20 @@ async def test_manual_exploration_reactions_use_individual_flow_even_in_sober_mo
         client=MagicMock(),
     )
 
-    with patch.object(ws_game.session_manager, "get_session", return_value=active), \
-         patch("app.llm.budget.get_llm_budget_mode", return_value="sober"), \
-         patch.object(
-             AIPlayerManager,
-             "run_exploration_reactions",
-             new=AsyncMock(return_value=(1, [])),
-         ) as reactions, \
-         patch.object(
-             ws_game,
-             "_consume_pending_combat_transition",
-             new=AsyncMock(),
-         ) as consume:
+    with (
+        patch.object(ws_game.session_manager, "get_session", return_value=active),
+        patch("app.llm.budget.get_llm_budget_mode", return_value="sober"),
+        patch.object(
+            AIPlayerManager,
+            "run_exploration_reactions",
+            new=AsyncMock(return_value=(1, [])),
+        ) as reactions,
+        patch.object(
+            ws_game,
+            "_consume_pending_combat_transition",
+            new=AsyncMock(),
+        ) as consume,
+    ):
         await ws_game._handle_trigger_ai_reactions(
             "expl_session",
             db=None,
@@ -678,13 +685,16 @@ async def test_resume_mid_combat_ai_players_populated_before_first_ai_turn() -> 
 
     agent = active.ai_players["ai_1"]
     import json
-    attack_json = json.dumps({
-        "action_type": "attack",
-        "action_description": "Thorin attaque",
-        "target": "human_1",
-        "params": {"weapon": "hache"},
-        "roleplay_text": "Thorin frappe !",
-    })
+
+    attack_json = json.dumps(
+        {
+            "action_type": "attack",
+            "action_description": "Thorin attaque",
+            "target": "human_1",
+            "params": {"weapon": "hache"},
+            "roleplay_text": "Thorin frappe !",
+        }
+    )
 
     with patch.object(agent._client, "chat", new=AsyncMock(return_value=attack_json)):
         resolver = MagicMock()
@@ -709,16 +719,19 @@ def _create_session_with_character(ws_client) -> tuple[str, str]:
     assert resp.status_code == 201
     session_id = resp.json()["id"]
 
-    resp = ws_client.post("/api/characters/", json={
-        "session_id": session_id,
-        "name": "Thorvald",
-        "char_class": "fighter",
-        "species": "human",
-        "level": 1,
-        "ability_scores": {"str": 16, "dex": 12, "con": 14, "int": 10, "wis": 11, "cha": 8},
-        "background": "soldier",
-        "is_ai": False,
-    })
+    resp = ws_client.post(
+        "/api/characters/",
+        json={
+            "session_id": session_id,
+            "name": "Thorvald",
+            "char_class": "fighter",
+            "species": "human",
+            "level": 1,
+            "ability_scores": {"str": 16, "dex": 12, "con": 14, "int": 10, "wis": 11, "cha": 8},
+            "background": "soldier",
+            "is_ai": False,
+        },
+    )
     assert resp.status_code == 201, resp.text
     character_id = resp.json()["id"]
     return session_id, character_id
@@ -739,11 +752,13 @@ def test_toggle_ai_control_ws_updates_state(ws_client) -> None:
         assert data["event_type"] == "session_state"
 
         # Send toggle: make character AI-controlled
-        ws.send_json({
-            "type": "toggle_ai_control",
-            "character_id": character_id,
-            "is_ai": True,
-        })
+        ws.send_json(
+            {
+                "type": "toggle_ai_control",
+                "character_id": character_id,
+                "is_ai": True,
+            }
+        )
 
         # Consume events until we get a session_state update
         events = []
@@ -963,19 +978,21 @@ def test_companion_visible_state_anonymizes_unknown_npc_in_root_scene_pois() -> 
     """La forme canonique current_scene.pois est anonymisée."""
     from app.game.companion_visibility import companion_visible_game_state
 
-    visible = companion_visible_game_state({
-        "current_scene": {
-            "pois": [
-                {
-                    "id": "volothamp",
-                    "name": "Volothamp Geddarm",
-                    "kind": "npc",
-                    "known_to_party": False,
-                    "description": "un homme au chapeau à plumes",
-                }
-            ]
+    visible = companion_visible_game_state(
+        {
+            "current_scene": {
+                "pois": [
+                    {
+                        "id": "volothamp",
+                        "name": "Volothamp Geddarm",
+                        "kind": "npc",
+                        "known_to_party": False,
+                        "description": "un homme au chapeau à plumes",
+                    }
+                ]
+            }
         }
-    })
+    )
 
     npc_poi = visible["current_scene"]["pois"][0]
     assert npc_poi["name"] == "un homme au chapeau à plumes"
@@ -1052,7 +1069,9 @@ async def test_max_reactors_explicit_override() -> None:
 
     with patch("app.game.ai_player_manager.event_bus.publish_to_session", new=AsyncMock()):
         reacted, _ = await AIPlayerManager().run_exploration_reactions(
-            "two_ai_session", active, MagicMock(),
+            "two_ai_session",
+            active,
+            MagicMock(),
             trigger_character_id="human_1",
             max_reactors=2,
         )
@@ -1181,7 +1200,9 @@ async def test_context_reloaded_between_companions() -> None:
         ),
     ):
         reacted, _ = await AIPlayerManager().run_exploration_reactions(
-            "two_ai_session", active, resolver,
+            "two_ai_session",
+            active,
+            resolver,
             trigger_character_id="human_1",
             max_reactors=2,
             db=mock_db,

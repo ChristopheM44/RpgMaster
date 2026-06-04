@@ -126,9 +126,7 @@ async def test_update_session_name(async_client):
     create_resp = await async_client.post("/api/sessions/", json={"name": "Ancien Nom"})
     session_id = create_resp.json()["id"]
 
-    response = await async_client.put(
-        f"/api/sessions/{session_id}", json={"name": "Nouveau Nom"}
-    )
+    response = await async_client.put(f"/api/sessions/{session_id}", json={"name": "Nouveau Nom"})
     assert response.status_code == 200
     data = response.json()
     assert data["name"] == "Nouveau Nom"

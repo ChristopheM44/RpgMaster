@@ -3,6 +3,7 @@
 Le GMAgent est mocké (Ollama non disponible en CI).
 On vérifie que le pipeline complet produit les bons événements WebSocket.
 """
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -20,7 +21,9 @@ def _create_session(ws_client, name: str = "Integration Session") -> str:
     return resp.json()["id"]
 
 
-def _mock_gm_response(narration: str = "Le MJ narre l'action.", actions: list = None) -> AgentResponse:
+def _mock_gm_response(
+    narration: str = "Le MJ narre l'action.", actions: list = None
+) -> AgentResponse:
     return AgentResponse(content=narration, actions=actions or [])
 
 
@@ -72,23 +75,26 @@ class TestFreeTextAction:
             # Re-instancier le resolver avec le GM mocké pour ce test
             with patch(
                 "app.game.action_resolver.GMAgent",
-            ) as MockGMAgent:
+            ) as mock_gm_agent:
                 mock_instance = MagicMock()
                 mock_instance.think = AsyncMock(return_value=mock_response)
-                MockGMAgent.return_value = mock_instance
+                mock_gm_agent.return_value = mock_instance
 
                 from app.api import ws_game
                 from app.game.action_resolver import ActionResolver
+
                 ws_game.action_resolver = ActionResolver(gm_agent=mock_instance)
 
                 with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
                     ws.receive_json()  # session_state
 
-                    ws.send_json({
-                        "type": "action",
-                        "action_type": "free_text",
-                        "content": "Je cherche des pièges dans la salle",
-                    })
+                    ws.send_json(
+                        {
+                            "type": "action",
+                            "action_type": "free_text",
+                            "content": "Je cherche des pièges dans la salle",
+                        }
+                    )
 
                     raw_events = _collect_all(ws, 3)
                     events = _without_ai_thinking(raw_events)
@@ -115,11 +121,13 @@ class TestFreeTextAction:
         with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
             ws.receive_json()  # session_state
 
-            ws.send_json({
-                "type": "action",
-                "action_type": "free_text",
-                "content": "Je regarde autour de moi",
-            })
+            ws.send_json(
+                {
+                    "type": "action",
+                    "action_type": "free_text",
+                    "content": "Je regarde autour de moi",
+                }
+            )
 
             raw_events = _collect_all(ws, 3)
             events = _without_ai_thinking(raw_events)
@@ -152,13 +160,15 @@ class TestAttackAction:
         with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
             ws.receive_json()  # session_state
 
-            ws.send_json({
-                "type": "action",
-                "action_type": "attack",
-                "content": "J'attaque le gobelin",
-                "character_id": "hero-1",
-                "target_id": "goblin-1",
-            })
+            ws.send_json(
+                {
+                    "type": "action",
+                    "action_type": "attack",
+                    "content": "J'attaque le gobelin",
+                    "character_id": "hero-1",
+                    "target_id": "goblin-1",
+                }
+            )
 
             raw_events = _collect_all(ws, 4)
             msgs = _without_ai_thinking(raw_events)
@@ -184,11 +194,13 @@ class TestAttackAction:
         with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
             ws.receive_json()  # session_state
 
-            ws.send_json({
-                "type": "action",
-                "action_type": "attack",
-                "content": "Attaque à la hache",
-            })
+            ws.send_json(
+                {
+                    "type": "action",
+                    "action_type": "attack",
+                    "content": "Attaque à la hache",
+                }
+            )
 
             raw_events = _collect_all(ws, 4)
             msgs = _without_ai_thinking(raw_events)
@@ -220,11 +232,13 @@ class TestAttackAction:
         with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
             ws.receive_json()  # session_state
 
-            ws.send_json({
-                "type": "action",
-                "action_type": "attack",
-                "content": "Frappe fatale",
-            })
+            ws.send_json(
+                {
+                    "type": "action",
+                    "action_type": "attack",
+                    "content": "Frappe fatale",
+                }
+            )
 
             raw_events = _collect_all(ws, 4)
             msgs = _without_ai_thinking(raw_events)
@@ -256,11 +270,13 @@ class TestCastSpellAction:
         with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
             ws.receive_json()  # session_state
 
-            ws.send_json({
-                "type": "action",
-                "action_type": "cast_spell",
-                "content": "Projectile magique",
-            })
+            ws.send_json(
+                {
+                    "type": "action",
+                    "action_type": "cast_spell",
+                    "content": "Projectile magique",
+                }
+            )
 
             raw_events = _collect_all(ws, 3)
             msgs = _without_ai_thinking(raw_events)
@@ -306,13 +322,15 @@ class TestGMActions:
             if active is not None:
                 active.state_data["combatants"] = {"goblin-1": {"hp": 10, "ac": 12}}
 
-            ws.send_json({
-                "type": "action",
-                "action_type": "cast_spell",
-                "content": "Projectile magique sur le gobelin",
-                "character_id": "hero-1",
-                "target_id": "goblin-1",
-            })
+            ws.send_json(
+                {
+                    "type": "action",
+                    "action_type": "cast_spell",
+                    "content": "Projectile magique sur le gobelin",
+                    "character_id": "hero-1",
+                    "target_id": "goblin-1",
+                }
+            )
 
             raw_events = _collect_all(ws, 5)
             msgs = _without_ai_thinking(raw_events)
@@ -349,12 +367,14 @@ class TestTurnProgression:
             ws.receive_json()  # session_state
 
             for i in range(1, 4):
-                ws.send_json({
-                    "type": "action",
-                    "action_type": "free_text",
-                    "content": f"Action {i}",
-                })
-                events = _without_ai_thinking(_collect_all(ws, 3))
+                ws.send_json(
+                    {
+                        "type": "action",
+                        "action_type": "free_text",
+                        "content": f"Action {i}",
+                    }
+                )
+                _collect_all(ws, 3)  # draine les événements de ce tour
                 active = ws_game.session_manager.get_session(session_id)
                 assert active is not None
                 assert active.turn_number == i
@@ -387,8 +407,14 @@ class TestTurnProgression:
 
 
 class TestResilienceGMFailure:
-    def test_gm_failure_still_sends_narration(self, ws_client) -> None:
-        """Si le GMAgent lève une exception, une narration de fallback est envoyée."""
+    def test_gm_failure_emits_system_error_not_fabricated_narration(self, ws_client) -> None:
+        """Si le GMAgent lève une exception, un event ERROR explicite est émis.
+
+        Choix de conception (Tabletop Fidelity) : quand le MJ IA ne peut pas
+        produire de narration réelle, on signale honnêtement l'indisponibilité au
+        joueur au lieu de fabriquer un texte de remplissage (``_FALLBACK_NARRATION``
+        est volontairement vide). Aucune narration factice, aucun tour ne se termine.
+        """
         session_id = _create_session(ws_client)
 
         from app.api import ws_game
@@ -407,10 +433,12 @@ class TestResilienceGMFailure:
             events = _without_ai_thinking(raw_events)
 
         _assert_gm_thinking_pair(raw_events)
-        narration = _event(events, "narration")
-        assert narration["event_type"] == "narration"
-        # Le fallback ne doit pas être vide
-        assert len(narration["payload"]["text"]) > 0
+        error = _event(events, "error")
+        assert error["event_type"] == "error"
+        # Le message d'indisponibilité ne doit pas être vide
+        assert len(error["payload"]["message"]) > 0
+        # Pas de narration fabriquée, pas de fin de tour
+        assert not any(e["event_type"] == "narration" for e in events)
         assert not any(e["event_type"] == "turn_end" for e in events)
 
 
@@ -457,11 +485,13 @@ class TestAutoCombatTrigger:
                 }
             }
 
-            ws.send_json({
-                "type": "action",
-                "action_type": "free_text",
-                "content": "Nous avançons prudemment.",
-            })
+            ws.send_json(
+                {
+                    "type": "action",
+                    "action_type": "free_text",
+                    "content": "Nous avançons prudemment.",
+                }
+            )
 
             raw_events = _collect_all(ws, 8)
             events = _without_ai_thinking(raw_events)
@@ -472,9 +502,7 @@ class TestAutoCombatTrigger:
         assert "combat_start" in event_types
 
         combat_start = next(e for e in events if e["event_type"] == "combat_start")
-        monsters = [
-            c for c in combat_start["payload"]["combatants"] if c["kind"] == "monster"
-        ]
+        monsters = [c for c in combat_start["payload"]["combatants"] if c["kind"] == "monster"]
         assert len(monsters) == 2
         assert all(m["name"].startswith("Bandit") for m in monsters)
 
@@ -482,9 +510,7 @@ class TestAutoCombatTrigger:
         assert active is not None
         assert active.phase == SessionStatus.COMBAT
 
-    def test_explicit_attack_text_in_exploration_starts_combat(
-        self, ws_client
-    ) -> None:
+    def test_explicit_attack_text_in_exploration_starts_combat(self, ws_client) -> None:
         """Si le joueur écrit « j'attaque le bandit », on entre en combat."""
         session_id = _create_session(ws_client)
 
@@ -518,12 +544,14 @@ class TestAutoCombatTrigger:
                 }
             }
 
-            ws.send_json({
-                "type": "action",
-                "action_type": "free_text",
-                "content": "J'attaque le bandit le plus proche.",
-                "character_id": "hero-1",
-            })
+            ws.send_json(
+                {
+                    "type": "action",
+                    "action_type": "free_text",
+                    "content": "J'attaque le bandit le plus proche.",
+                    "character_id": "hero-1",
+                }
+            )
 
             events = _collect_all(ws, 5)
 
@@ -586,11 +614,13 @@ class TestAutoCombatTrigger:
                 }
             }
 
-            ws.send_json({
-                "type": "action",
-                "action_type": "free_text",
-                "content": "J'avance prudemment.",
-            })
+            ws.send_json(
+                {
+                    "type": "action",
+                    "action_type": "free_text",
+                    "content": "J'avance prudemment.",
+                }
+            )
 
             # Starlette's WebSocketTestSession.receive_json n'accepte PAS `timeout`.
             # On reçoit un nombre connu d'événements. Si le flag d'auto-combat
@@ -608,9 +638,7 @@ class TestAutoCombatTrigger:
         _assert_gm_thinking_pair(raw_events)
         event_types = _event_types(events)
         assert event_types[0] == "narration", event_types
-        assert "combat_start" in event_types, (
-            f"combat_start attendu, reçu : {event_types}"
-        )
+        assert "combat_start" in event_types, f"combat_start attendu, reçu : {event_types}"
         assert "phase_change" in event_types
         # turn_start est émis soit directement (joueur first), soit par
         # _handle_ai_turns (monstre first) — dans les deux cas il doit apparaître.
@@ -625,9 +653,7 @@ class TestAutoCombatTrigger:
         # Le pending_encounter a aussi été consommé par _handle_start_combat.
         assert "pending_encounter" not in active.state_data
 
-    def test_state_transition_without_encounter_does_not_start_combat(
-        self, ws_client
-    ) -> None:
+    def test_state_transition_without_encounter_does_not_start_combat(self, ws_client) -> None:
         """Sans encounter_setup, state_transition COMBAT est ignoré : phase inchangée."""
         session_id = _create_session(ws_client)
 
@@ -647,11 +673,13 @@ class TestAutoCombatTrigger:
         with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
             ws.receive_json()  # session_state
 
-            ws.send_json({
-                "type": "action",
-                "action_type": "free_text",
-                "content": "Je scrute.",
-            })
+            ws.send_json(
+                {
+                    "type": "action",
+                    "action_type": "free_text",
+                    "content": "Je scrute.",
+                }
+            )
 
             raw_events = _collect_all(ws, 3)
             events = _without_ai_thinking(raw_events)

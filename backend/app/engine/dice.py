@@ -10,6 +10,7 @@ Supported notations:
   advantage      → roll 2d20, keep highest
   disadvantage   → roll 2d20, keep lowest
 """
+
 from __future__ import annotations
 
 import random
@@ -30,8 +31,8 @@ class RollResult:
     """Result of a dice roll."""
 
     notation: str
-    rolls: list[int]          # all individual dice results
-    kept: list[int]           # dice that count toward the total
+    rolls: list[int]  # all individual dice results
+    kept: list[int]  # dice that count toward the total
     modifier: int
     total: int
     advantage: bool | None = None  # True=adv, False=disadv, None=normal
@@ -63,7 +64,7 @@ def roll(notation: str, rng: random.Random | None = None) -> RollResult:
 
     count = int(m.group("count") or 1)
     sides = int(m.group("sides"))
-    keep_dir = m.group("keep_dir")   # 'h' or 'l'
+    keep_dir = m.group("keep_dir")  # 'h' or 'l'
     keep_n = int(m.group("keep_n")) if m.group("keep_n") else None
     modifier = int(m.group("mod") or 0)
 
@@ -110,11 +111,7 @@ def roll_with_advantage(
     kept_value = max(rolls) if advantage else min(rolls)
     total = kept_value + modifier
     adv_str = "advantage" if advantage else "disadvantage"
-    notation = (
-        f"2d{sides} ({adv_str}){modifier:+d}"
-        if modifier
-        else f"2d{sides} ({adv_str})"
-    )
+    notation = f"2d{sides} ({adv_str}){modifier:+d}" if modifier else f"2d{sides} ({adv_str})"
     return RollResult(
         notation=notation,
         rolls=rolls,

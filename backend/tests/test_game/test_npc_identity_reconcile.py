@@ -6,6 +6,7 @@ POI's ``name`` / ``known_to_party`` consistent with the authoritative
 ``npc_states[id]``. These tests pin the conflict-resolution contract so the
 class of "real name / stale reveal leaks to the POI" bugs cannot regress.
 """
+
 from __future__ import annotations
 
 from app.game.scene_state_service import apply_scene_update, reconcile_scene_npcs

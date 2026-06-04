@@ -3,6 +3,7 @@
 Companions behave like player characters: they can state intent, words, and
 voluntary gestures, but the GM owns world consequences and NPC reactions.
 """
+
 from __future__ import annotations
 
 import logging

@@ -1,4 +1,5 @@
 """AI combat turn handling for the game WebSocket facade."""
+
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable

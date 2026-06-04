@@ -1,4 +1,5 @@
 """Pure helpers for shared exploration/combat local maps."""
+
 from __future__ import annotations
 
 import hashlib
@@ -231,8 +232,7 @@ def normalize_visual_asset(raw: Any) -> dict[str, Any] | None:
         "model": model,
         "status": status,
         "prompt": prompt,
-        "prompt_hash": _clean_text(raw.get("prompt_hash"), max_len=64)
-        or _prompt_hash(prompt),
+        "prompt_hash": _clean_text(raw.get("prompt_hash"), max_len=64) or _prompt_hash(prompt),
     }
     for key, max_len in (("url", 1000), ("generated_at", 80), ("error", 280)):
         value = _clean_text(raw.get(key), max_len=max_len)
@@ -1003,21 +1003,22 @@ def _has_explicit_local_road(scene: dict[str, Any]) -> bool:
             "path",
         }:
             return True
-    return (
-        any(word in _layout_corpus(scene) for word in _LOCAL_ROAD_CONTEXT_WORDS)
-        and not _is_plaza_scene(scene)
-    )
+    return any(
+        word in _layout_corpus(scene) for word in _LOCAL_ROAD_CONTEXT_WORDS
+    ) and not _is_plaza_scene(scene)
 
 
 def _layout_corpus(layout: dict[str, Any]) -> str:
     parts = _layout_public_corpus_parts(layout)
     for element in layout.get("elements", []) or []:
         if isinstance(element, dict):
-            parts.extend([
-                element.get("name"),
-                element.get("description"),
-                element.get("terrain_type"),
-            ])
+            parts.extend(
+                [
+                    element.get("name"),
+                    element.get("description"),
+                    element.get("terrain_type"),
+                ]
+            )
     return " ".join(str(part or "") for part in parts).casefold()
 
 

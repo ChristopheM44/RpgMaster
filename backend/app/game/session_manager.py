@@ -12,6 +12,7 @@ Responsibilities:
 - Validate and apply phase transitions, keeping ``Session.status`` and
   ``GameState.state_data["phase"]`` in sync.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -165,6 +166,7 @@ class SessionManager:
         # characters would fall through to the "enemy monster" branch of
         # _handle_ai_turns and stop acting.
         from app.game.ai_player_manager import rebuild_ai_players
+
         rebuild_ai_players(active)
 
         # Reconcile append-only guard lists from the authoritative DB dossier.
@@ -373,9 +375,7 @@ class SessionManager:
 
     @staticmethod
     async def _load_or_create_game_state(session_id: str, db: AsyncSession) -> GameState:
-        result = await db.execute(
-            select(GameState).where(GameState.session_id == session_id)
-        )
+        result = await db.execute(select(GameState).where(GameState.session_id == session_id))
         game_state = result.scalar_one_or_none()
         if game_state is None:
             game_state = GameState(session_id=session_id, state_data={})

@@ -5,6 +5,7 @@ the scene POI while only ``npc_states[id]`` was flagged ``known_to_party=False``
 The companion-visible filter trusted the POI's own (absent) flag and exposed the
 real name. Fix: ``npc_states[id].known_to_party`` is the single source of truth.
 """
+
 from __future__ import annotations
 
 from app.game.companion_visibility import companion_visible_game_state

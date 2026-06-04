@@ -1,4 +1,5 @@
 """Partial schema and migration helpers for the JSON game state blob."""
+
 from __future__ import annotations
 
 from typing import Any

@@ -1,4 +1,5 @@
 """Currency helpers using copper pieces as the canonical value."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

@@ -8,6 +8,7 @@ Covers:
 
 No I/O, no async, no database access.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -24,29 +25,31 @@ class WeaponStats:
     """Mechanical stat block for a weapon."""
 
     name: str
-    category: str               # "simple" or "martial"
-    damage_dice: str            # e.g. "1d6"  – passed directly to roll_damage()
-    damage_type: str            # "piercing" | "slashing" | "bludgeoning"
-    properties: list[str]       # SRD property tags (see WEAPON_PROPERTIES)
+    category: str  # "simple" or "martial"
+    damage_dice: str  # e.g. "1d6"  – passed directly to roll_damage()
+    damage_type: str  # "piercing" | "slashing" | "bludgeoning"
+    properties: list[str]  # SRD property tags (see WEAPON_PROPERTIES)
     range_normal: float | None  # None pour les armes de mêlée uniquement ; mètres
-    range_long: float | None    # longue portée impose le désavantage
+    range_long: float | None  # longue portée impose le désavantage
     versatile_dice: str | None  # two-handed damage, e.g. "1d8" for longsword
-    weight: float               # pounds
-    cost_gp: float              # gold pieces
+    weight: float  # pounds
+    cost_gp: float  # gold pieces
 
 
 # SRD 5.2 weapon property names (informational – used by consumers)
-WEAPON_PROPERTIES = frozenset({
-    "ammunition",   # requires ammo; use DEX for ranged attack
-    "finesse",      # choose STR or DEX for attack & damage
-    "heavy",        # small/tiny creatures have disadvantage
-    "light",        # can be used with two-weapon fighting
-    "loading",      # one attack per action regardless of number of attacks
-    "reach",        # +1,5 m de portée
-    "thrown",       # can be thrown (uses same ability as melee)
-    "two-handed",   # requires two hands
-    "versatile",    # can be used one- or two-handed (versatile_dice)
-})
+WEAPON_PROPERTIES = frozenset(
+    {
+        "ammunition",  # requires ammo; use DEX for ranged attack
+        "finesse",  # choose STR or DEX for attack & damage
+        "heavy",  # small/tiny creatures have disadvantage
+        "light",  # can be used with two-weapon fighting
+        "loading",  # one attack per action regardless of number of attacks
+        "reach",  # +1,5 m de portée
+        "thrown",  # can be thrown (uses same ability as melee)
+        "two-handed",  # requires two hands
+        "versatile",  # can be used one- or two-handed (versatile_dice)
+    }
+)
 
 # ---------------------------------------------------------------------------
 # Weapon catalogue (SRD 5.2 subset — simple + martial relevant to 4 classes)
@@ -55,150 +58,259 @@ WEAPON_PROPERTIES = frozenset({
 _WEAPONS: dict[str, WeaponStats] = {
     # ---- Simple melee ----
     "club": WeaponStats(
-        name="Club", category="simple",
-        damage_dice="1d4", damage_type="bludgeoning",
-        properties=["light"], range_normal=None, range_long=None,
-        versatile_dice=None, weight=2.0, cost_gp=0.1,
+        name="Club",
+        category="simple",
+        damage_dice="1d4",
+        damage_type="bludgeoning",
+        properties=["light"],
+        range_normal=None,
+        range_long=None,
+        versatile_dice=None,
+        weight=2.0,
+        cost_gp=0.1,
     ),
     "dagger": WeaponStats(
-        name="Dagger", category="simple",
-        damage_dice="1d4", damage_type="piercing",
+        name="Dagger",
+        category="simple",
+        damage_dice="1d4",
+        damage_type="piercing",
         properties=["finesse", "light", "thrown"],
-        range_normal=6, range_long=18,
-        versatile_dice=None, weight=1.0, cost_gp=2.0,
+        range_normal=6,
+        range_long=18,
+        versatile_dice=None,
+        weight=1.0,
+        cost_gp=2.0,
     ),
     "handaxe": WeaponStats(
-        name="Handaxe", category="simple",
-        damage_dice="1d6", damage_type="slashing",
+        name="Handaxe",
+        category="simple",
+        damage_dice="1d6",
+        damage_type="slashing",
         properties=["light", "thrown"],
-        range_normal=6, range_long=18,
-        versatile_dice=None, weight=2.0, cost_gp=5.0,
+        range_normal=6,
+        range_long=18,
+        versatile_dice=None,
+        weight=2.0,
+        cost_gp=5.0,
     ),
     "javelin": WeaponStats(
-        name="Javelin", category="simple",
-        damage_dice="1d6", damage_type="piercing",
+        name="Javelin",
+        category="simple",
+        damage_dice="1d6",
+        damage_type="piercing",
         properties=["thrown"],
-        range_normal=9, range_long=36,
-        versatile_dice=None, weight=2.0, cost_gp=0.5,
+        range_normal=9,
+        range_long=36,
+        versatile_dice=None,
+        weight=2.0,
+        cost_gp=0.5,
     ),
     "light_hammer": WeaponStats(
-        name="Light Hammer", category="simple",
-        damage_dice="1d4", damage_type="bludgeoning",
+        name="Light Hammer",
+        category="simple",
+        damage_dice="1d4",
+        damage_type="bludgeoning",
         properties=["light", "thrown"],
-        range_normal=6, range_long=18,
-        versatile_dice=None, weight=2.0, cost_gp=2.0,
+        range_normal=6,
+        range_long=18,
+        versatile_dice=None,
+        weight=2.0,
+        cost_gp=2.0,
     ),
     "mace": WeaponStats(
-        name="Mace", category="simple",
-        damage_dice="1d6", damage_type="bludgeoning",
-        properties=[], range_normal=None, range_long=None,
-        versatile_dice=None, weight=4.0, cost_gp=5.0,
+        name="Mace",
+        category="simple",
+        damage_dice="1d6",
+        damage_type="bludgeoning",
+        properties=[],
+        range_normal=None,
+        range_long=None,
+        versatile_dice=None,
+        weight=4.0,
+        cost_gp=5.0,
     ),
     "quarterstaff": WeaponStats(
-        name="Quarterstaff", category="simple",
-        damage_dice="1d6", damage_type="bludgeoning",
+        name="Quarterstaff",
+        category="simple",
+        damage_dice="1d6",
+        damage_type="bludgeoning",
         properties=["versatile"],
-        range_normal=None, range_long=None,
-        versatile_dice="1d8", weight=4.0, cost_gp=0.2,
+        range_normal=None,
+        range_long=None,
+        versatile_dice="1d8",
+        weight=4.0,
+        cost_gp=0.2,
     ),
     "sickle": WeaponStats(
-        name="Sickle", category="simple",
-        damage_dice="1d4", damage_type="slashing",
-        properties=["light"], range_normal=None, range_long=None,
-        versatile_dice=None, weight=2.0, cost_gp=1.0,
+        name="Sickle",
+        category="simple",
+        damage_dice="1d4",
+        damage_type="slashing",
+        properties=["light"],
+        range_normal=None,
+        range_long=None,
+        versatile_dice=None,
+        weight=2.0,
+        cost_gp=1.0,
     ),
     "spear": WeaponStats(
-        name="Spear", category="simple",
-        damage_dice="1d6", damage_type="piercing",
+        name="Spear",
+        category="simple",
+        damage_dice="1d6",
+        damage_type="piercing",
         properties=["thrown", "versatile"],
-        range_normal=6, range_long=18,
-        versatile_dice="1d8", weight=3.0, cost_gp=1.0,
+        range_normal=6,
+        range_long=18,
+        versatile_dice="1d8",
+        weight=3.0,
+        cost_gp=1.0,
     ),
     # ---- Simple ranged ----
     "light_crossbow": WeaponStats(
-        name="Light Crossbow", category="simple",
-        damage_dice="1d8", damage_type="piercing",
+        name="Light Crossbow",
+        category="simple",
+        damage_dice="1d8",
+        damage_type="piercing",
         properties=["ammunition", "loading", "two-handed"],
-        range_normal=24, range_long=96,
-        versatile_dice=None, weight=5.0, cost_gp=25.0,
+        range_normal=24,
+        range_long=96,
+        versatile_dice=None,
+        weight=5.0,
+        cost_gp=25.0,
     ),
     "shortbow": WeaponStats(
-        name="Shortbow", category="simple",
-        damage_dice="1d6", damage_type="piercing",
+        name="Shortbow",
+        category="simple",
+        damage_dice="1d6",
+        damage_type="piercing",
         properties=["ammunition", "two-handed"],
-        range_normal=24, range_long=96,
-        versatile_dice=None, weight=2.0, cost_gp=25.0,
+        range_normal=24,
+        range_long=96,
+        versatile_dice=None,
+        weight=2.0,
+        cost_gp=25.0,
     ),
     # ---- Martial melee ----
     "battleaxe": WeaponStats(
-        name="Battleaxe", category="martial",
-        damage_dice="1d8", damage_type="slashing",
+        name="Battleaxe",
+        category="martial",
+        damage_dice="1d8",
+        damage_type="slashing",
         properties=["versatile"],
-        range_normal=None, range_long=None,
-        versatile_dice="1d10", weight=4.0, cost_gp=10.0,
+        range_normal=None,
+        range_long=None,
+        versatile_dice="1d10",
+        weight=4.0,
+        cost_gp=10.0,
     ),
     "greataxe": WeaponStats(
-        name="Greataxe", category="martial",
-        damage_dice="1d12", damage_type="slashing",
+        name="Greataxe",
+        category="martial",
+        damage_dice="1d12",
+        damage_type="slashing",
         properties=["heavy", "two-handed"],
-        range_normal=None, range_long=None,
-        versatile_dice=None, weight=7.0, cost_gp=30.0,
+        range_normal=None,
+        range_long=None,
+        versatile_dice=None,
+        weight=7.0,
+        cost_gp=30.0,
     ),
     "greatsword": WeaponStats(
-        name="Greatsword", category="martial",
-        damage_dice="2d6", damage_type="slashing",
+        name="Greatsword",
+        category="martial",
+        damage_dice="2d6",
+        damage_type="slashing",
         properties=["heavy", "two-handed"],
-        range_normal=None, range_long=None,
-        versatile_dice=None, weight=6.0, cost_gp=50.0,
+        range_normal=None,
+        range_long=None,
+        versatile_dice=None,
+        weight=6.0,
+        cost_gp=50.0,
     ),
     "longsword": WeaponStats(
-        name="Longsword", category="martial",
-        damage_dice="1d8", damage_type="slashing",
+        name="Longsword",
+        category="martial",
+        damage_dice="1d8",
+        damage_type="slashing",
         properties=["versatile"],
-        range_normal=None, range_long=None,
-        versatile_dice="1d10", weight=3.0, cost_gp=15.0,
+        range_normal=None,
+        range_long=None,
+        versatile_dice="1d10",
+        weight=3.0,
+        cost_gp=15.0,
     ),
     "rapier": WeaponStats(
-        name="Rapier", category="martial",
-        damage_dice="1d8", damage_type="piercing",
+        name="Rapier",
+        category="martial",
+        damage_dice="1d8",
+        damage_type="piercing",
         properties=["finesse"],
-        range_normal=None, range_long=None,
-        versatile_dice=None, weight=2.0, cost_gp=25.0,
+        range_normal=None,
+        range_long=None,
+        versatile_dice=None,
+        weight=2.0,
+        cost_gp=25.0,
     ),
     "shortsword": WeaponStats(
-        name="Shortsword", category="martial",
-        damage_dice="1d6", damage_type="piercing",
+        name="Shortsword",
+        category="martial",
+        damage_dice="1d6",
+        damage_type="piercing",
         properties=["finesse", "light"],
-        range_normal=None, range_long=None,
-        versatile_dice=None, weight=2.0, cost_gp=10.0,
+        range_normal=None,
+        range_long=None,
+        versatile_dice=None,
+        weight=2.0,
+        cost_gp=10.0,
     ),
     "war_pick": WeaponStats(
-        name="War Pick", category="martial",
-        damage_dice="1d8", damage_type="piercing",
-        properties=[], range_normal=None, range_long=None,
-        versatile_dice=None, weight=2.0, cost_gp=5.0,
+        name="War Pick",
+        category="martial",
+        damage_dice="1d8",
+        damage_type="piercing",
+        properties=[],
+        range_normal=None,
+        range_long=None,
+        versatile_dice=None,
+        weight=2.0,
+        cost_gp=5.0,
     ),
     "warhammer": WeaponStats(
-        name="Warhammer", category="martial",
-        damage_dice="1d8", damage_type="bludgeoning",
+        name="Warhammer",
+        category="martial",
+        damage_dice="1d8",
+        damage_type="bludgeoning",
         properties=["versatile"],
-        range_normal=None, range_long=None,
-        versatile_dice="1d10", weight=2.0, cost_gp=15.0,
+        range_normal=None,
+        range_long=None,
+        versatile_dice="1d10",
+        weight=2.0,
+        cost_gp=15.0,
     ),
     # ---- Martial ranged ----
     "hand_crossbow": WeaponStats(
-        name="Hand Crossbow", category="martial",
-        damage_dice="1d6", damage_type="piercing",
+        name="Hand Crossbow",
+        category="martial",
+        damage_dice="1d6",
+        damage_type="piercing",
         properties=["ammunition", "light", "loading"],
-        range_normal=9, range_long=36,
-        versatile_dice=None, weight=3.0, cost_gp=75.0,
+        range_normal=9,
+        range_long=36,
+        versatile_dice=None,
+        weight=3.0,
+        cost_gp=75.0,
     ),
     "longbow": WeaponStats(
-        name="Longbow", category="martial",
-        damage_dice="1d8", damage_type="piercing",
+        name="Longbow",
+        category="martial",
+        damage_dice="1d8",
+        damage_type="piercing",
         properties=["ammunition", "heavy", "two-handed"],
-        range_normal=45, range_long=180,
-        versatile_dice=None, weight=2.0, cost_gp=50.0,
+        range_normal=45,
+        range_long=180,
+        versatile_dice=None,
+        weight=2.0,
+        cost_gp=50.0,
     ),
 }
 
@@ -212,8 +324,7 @@ def get_weapon(weapon_name: str) -> WeaponStats:
     key = weapon_name.lower().replace(" ", "_")
     if key not in _WEAPONS:
         raise ValueError(
-            f"Unknown weapon '{weapon_name}'. "
-            f"Valid weapons: {sorted(_WEAPONS.keys())}"
+            f"Unknown weapon '{weapon_name}'. Valid weapons: {sorted(_WEAPONS.keys())}"
         )
     return _WEAPONS[key]
 
@@ -228,10 +339,10 @@ class ArmorStats:
     """Mechanical stat block for a piece of armor or a shield."""
 
     name: str
-    category: str           # "light" | "medium" | "heavy" | "shield"
-    base_ac: int            # base AC (or bonus for shields)
+    category: str  # "light" | "medium" | "heavy" | "shield"
+    base_ac: int  # base AC (or bonus for shields)
     dex_cap: int | None  # max DEX bonus allowed (None = uncapped)
-    strength_requirement: int   # minimum STR score (0 = none)
+    strength_requirement: int  # minimum STR score (0 = none)
     stealth_disadvantage: bool
     weight: float
     cost_gp: float
@@ -244,85 +355,137 @@ class ArmorStats:
 _ARMORS: dict[str, ArmorStats] = {
     # ---- Light armor (DEX mod, uncapped) ----
     "padded": ArmorStats(
-        name="Padded", category="light",
-        base_ac=11, dex_cap=None,
-        strength_requirement=0, stealth_disadvantage=True,
-        weight=8.0, cost_gp=5.0,
+        name="Padded",
+        category="light",
+        base_ac=11,
+        dex_cap=None,
+        strength_requirement=0,
+        stealth_disadvantage=True,
+        weight=8.0,
+        cost_gp=5.0,
     ),
     "leather": ArmorStats(
-        name="Leather", category="light",
-        base_ac=11, dex_cap=None,
-        strength_requirement=0, stealth_disadvantage=False,
-        weight=10.0, cost_gp=10.0,
+        name="Leather",
+        category="light",
+        base_ac=11,
+        dex_cap=None,
+        strength_requirement=0,
+        stealth_disadvantage=False,
+        weight=10.0,
+        cost_gp=10.0,
     ),
     "studded_leather": ArmorStats(
-        name="Studded Leather", category="light",
-        base_ac=12, dex_cap=None,
-        strength_requirement=0, stealth_disadvantage=False,
-        weight=13.0, cost_gp=45.0,
+        name="Studded Leather",
+        category="light",
+        base_ac=12,
+        dex_cap=None,
+        strength_requirement=0,
+        stealth_disadvantage=False,
+        weight=13.0,
+        cost_gp=45.0,
     ),
     # ---- Medium armor (DEX mod capped at +2) ----
     "hide": ArmorStats(
-        name="Hide", category="medium",
-        base_ac=12, dex_cap=2,
-        strength_requirement=0, stealth_disadvantage=False,
-        weight=12.0, cost_gp=10.0,
+        name="Hide",
+        category="medium",
+        base_ac=12,
+        dex_cap=2,
+        strength_requirement=0,
+        stealth_disadvantage=False,
+        weight=12.0,
+        cost_gp=10.0,
     ),
     "chain_shirt": ArmorStats(
-        name="Chain Shirt", category="medium",
-        base_ac=13, dex_cap=2,
-        strength_requirement=0, stealth_disadvantage=False,
-        weight=20.0, cost_gp=50.0,
+        name="Chain Shirt",
+        category="medium",
+        base_ac=13,
+        dex_cap=2,
+        strength_requirement=0,
+        stealth_disadvantage=False,
+        weight=20.0,
+        cost_gp=50.0,
     ),
     "scale_mail": ArmorStats(
-        name="Scale Mail", category="medium",
-        base_ac=14, dex_cap=2,
-        strength_requirement=0, stealth_disadvantage=True,
-        weight=45.0, cost_gp=50.0,
+        name="Scale Mail",
+        category="medium",
+        base_ac=14,
+        dex_cap=2,
+        strength_requirement=0,
+        stealth_disadvantage=True,
+        weight=45.0,
+        cost_gp=50.0,
     ),
     "breastplate": ArmorStats(
-        name="Breastplate", category="medium",
-        base_ac=14, dex_cap=2,
-        strength_requirement=0, stealth_disadvantage=False,
-        weight=20.0, cost_gp=400.0,
+        name="Breastplate",
+        category="medium",
+        base_ac=14,
+        dex_cap=2,
+        strength_requirement=0,
+        stealth_disadvantage=False,
+        weight=20.0,
+        cost_gp=400.0,
     ),
     "half_plate": ArmorStats(
-        name="Half Plate", category="medium",
-        base_ac=15, dex_cap=2,
-        strength_requirement=0, stealth_disadvantage=True,
-        weight=40.0, cost_gp=750.0,
+        name="Half Plate",
+        category="medium",
+        base_ac=15,
+        dex_cap=2,
+        strength_requirement=0,
+        stealth_disadvantage=True,
+        weight=40.0,
+        cost_gp=750.0,
     ),
     # ---- Heavy armor (no DEX bonus) ----
     "ring_mail": ArmorStats(
-        name="Ring Mail", category="heavy",
-        base_ac=14, dex_cap=0,
-        strength_requirement=0, stealth_disadvantage=True,
-        weight=40.0, cost_gp=30.0,
+        name="Ring Mail",
+        category="heavy",
+        base_ac=14,
+        dex_cap=0,
+        strength_requirement=0,
+        stealth_disadvantage=True,
+        weight=40.0,
+        cost_gp=30.0,
     ),
     "chain_mail": ArmorStats(
-        name="Chain Mail", category="heavy",
-        base_ac=16, dex_cap=0,
-        strength_requirement=13, stealth_disadvantage=True,
-        weight=55.0, cost_gp=75.0,
+        name="Chain Mail",
+        category="heavy",
+        base_ac=16,
+        dex_cap=0,
+        strength_requirement=13,
+        stealth_disadvantage=True,
+        weight=55.0,
+        cost_gp=75.0,
     ),
     "splint": ArmorStats(
-        name="Splint", category="heavy",
-        base_ac=17, dex_cap=0,
-        strength_requirement=15, stealth_disadvantage=True,
-        weight=60.0, cost_gp=200.0,
+        name="Splint",
+        category="heavy",
+        base_ac=17,
+        dex_cap=0,
+        strength_requirement=15,
+        stealth_disadvantage=True,
+        weight=60.0,
+        cost_gp=200.0,
     ),
     "plate": ArmorStats(
-        name="Plate", category="heavy",
-        base_ac=18, dex_cap=0,
-        strength_requirement=15, stealth_disadvantage=True,
-        weight=65.0, cost_gp=1500.0,
+        name="Plate",
+        category="heavy",
+        base_ac=18,
+        dex_cap=0,
+        strength_requirement=15,
+        stealth_disadvantage=True,
+        weight=65.0,
+        cost_gp=1500.0,
     ),
     # ---- Shield (+2 AC bonus, stacks with armor) ----
     "shield": ArmorStats(
-        name="Shield", category="shield",
-        base_ac=2, dex_cap=None,
-        strength_requirement=0, stealth_disadvantage=False,
-        weight=6.0, cost_gp=10.0,
+        name="Shield",
+        category="shield",
+        base_ac=2,
+        dex_cap=None,
+        strength_requirement=0,
+        stealth_disadvantage=False,
+        weight=6.0,
+        cost_gp=10.0,
     ),
 }
 
@@ -335,10 +498,7 @@ def get_armor(armor_name: str) -> ArmorStats:
     """
     key = armor_name.lower().replace(" ", "_")
     if key not in _ARMORS:
-        raise ValueError(
-            f"Unknown armor '{armor_name}'. "
-            f"Valid armors: {sorted(_ARMORS.keys())}"
-        )
+        raise ValueError(f"Unknown armor '{armor_name}'. Valid armors: {sorted(_ARMORS.keys())}")
     return _ARMORS[key]
 
 
@@ -352,9 +512,9 @@ class ACResult:
     """Breakdown of a character's Armor Class."""
 
     total: int
-    base: int           # base AC before shield
-    shield_bonus: int   # 0 or 2
-    dex_applied: int    # DEX modifier actually applied (may be capped or zero)
+    base: int  # base AC before shield
+    shield_bonus: int  # 0 or 2
+    dex_applied: int  # DEX modifier actually applied (may be capped or zero)
     armor_name: str | None
     has_shield: bool
     stealth_disadvantage: bool
@@ -446,13 +606,13 @@ class AttackStats:
     """Computed attack parameters for one weapon, ready for roll_attack / roll_damage."""
 
     weapon_name: str
-    attack_bonus: int       # total modifier to the attack roll
-    damage_notation: str    # e.g. "1d8+3" — pass directly to roll_damage()
+    attack_bonus: int  # total modifier to the attack roll
+    damage_notation: str  # e.g. "1d8+3" — pass directly to roll_damage()
     damage_type: str
     is_finesse: bool
-    uses_dex: bool          # True if DEX was chosen (finesse or ranged)
-    two_handed: bool        # True if using versatile weapon two-handed
-    breakdown: str          # human-readable summary
+    uses_dex: bool  # True if DEX was chosen (finesse or ranged)
+    two_handed: bool  # True if using versatile weapon two-handed
+    breakdown: str  # human-readable summary
 
 
 def weapon_attack_stats(
@@ -492,8 +652,7 @@ def weapon_attack_stats(
         and "two-handed" not in weapon.properties
     ):
         raise ValueError(
-            f"'{weapon.name}' cannot be used two-handed "
-            "(no 'versatile' or 'two-handed' property)."
+            f"'{weapon.name}' cannot be used two-handed (no 'versatile' or 'two-handed' property)."
         )
 
     str_mod = ability_modifier(str_score)
@@ -543,9 +702,9 @@ def weapon_attack_stats(
         damage_type=weapon.damage_type,
         is_finesse=is_finesse,
         uses_dex=uses_dex,
-        two_handed=two_handed and "two-handed" in weapon.properties or (
-            two_handed and "versatile" in weapon.properties
-        ),
+        two_handed=two_handed
+        and "two-handed" in weapon.properties
+        or (two_handed and "versatile" in weapon.properties),
         breakdown=breakdown,
     )
 

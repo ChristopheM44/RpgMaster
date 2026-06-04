@@ -1,4 +1,5 @@
 """Level-up calculations built on existing character creation rules."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

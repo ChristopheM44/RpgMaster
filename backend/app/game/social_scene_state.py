@@ -1,4 +1,5 @@
 """Deterministic social scene memory and optional scene clocks."""
+
 from __future__ import annotations
 
 import re
@@ -213,8 +214,7 @@ def apply_contextual_npc_interactions(active: ActiveSession, npc_id: str) -> Non
                 "label": "Jauger le PNJ",
                 "intent": "talk",
                 "prompt": (
-                    f"J'observe {npc_name} avec perspicacité pour jauger "
-                    "son état et sa sincérité."
+                    f"J'observe {npc_name} avec perspicacité pour jauger son état et sa sincérité."
                 ),
                 "icon": "clue",
             },
@@ -268,14 +268,12 @@ def _state_text_sources(active: ActiveSession) -> list[str]:
         for exit_data in scene.get("exits", []) or []:
             if isinstance(exit_data, dict):
                 sources.extend(
-                    str(exit_data.get(key) or "")
-                    for key in ("label", "leads_to", "description")
+                    str(exit_data.get(key) or "") for key in ("label", "leads_to", "description")
                 )
         for poi in scene.get("pois", []) or []:
             if isinstance(poi, dict):
                 sources.extend(
-                    str(poi.get(key) or "")
-                    for key in ("name", "description", "action_hint")
+                    str(poi.get(key) or "") for key in ("name", "description", "action_hint")
                 )
     return sources
 
@@ -317,11 +315,9 @@ def resolve_scene_interaction_context(
     if not poi:
         return None
     interaction = _find_poi_interaction(poi, interaction_id, interaction_intent)
-    intent = str(
-        (interaction or {}).get("intent")
-        or interaction_intent
-        or "custom"
-    ).strip().lower()
+    intent = (
+        str((interaction or {}).get("intent") or interaction_intent or "custom").strip().lower()
+    )
     if intent not in _SCENE_INTERACTION_INTENTS:
         intent = "custom"
     mechanics = infer_poi_interaction_mechanics(poi, intent, interaction)
@@ -419,9 +415,8 @@ def _find_poi_interaction(
         return None
     if interaction_id:
         for interaction in interactions:
-            if (
-                isinstance(interaction, dict)
-                and str(interaction.get("id") or "") == str(interaction_id)
+            if isinstance(interaction, dict) and str(interaction.get("id") or "") == str(
+                interaction_id
             ):
                 return interaction
     if interaction_intent:

@@ -37,10 +37,10 @@ _NON_JSON_LLM_ERROR = "Réponse LLM non parsable (JSON manquant)."
 _ELLIPSIS_ONLY_RESPONSES = {"...", "…"}
 
 # Limites de longueur et de tokens pour les chemins de décision et de récupération
-_FALLBACK_ROLEPLAY_MAX_LEN = 600   # roleplay fallback texte (était 300)
-_INFERRED_ACTION_MAX_LEN   = 300   # description action déduite (était 160)
-_MAX_TOKENS_PLAYER_DECIDE  = 1500  # tokens output décision joueur (était 1024)
-_MAX_TOKENS_PLAYER_REPAIR  = 1000  # tokens output réparation JSON (était 600)
+_FALLBACK_ROLEPLAY_MAX_LEN = 600  # roleplay fallback texte (était 300)
+_INFERRED_ACTION_MAX_LEN = 300  # description action déduite (était 160)
+_MAX_TOKENS_PLAYER_DECIDE = 1500  # tokens output décision joueur (était 1024)
+_MAX_TOKENS_PLAYER_REPAIR = 1000  # tokens output réparation JSON (était 600)
 
 _ACTION_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
@@ -358,12 +358,22 @@ class PlayerAgent(BaseAgent):
             spell_ref = action.params.get("spell_name") or action.params.get("spell_id")
             if not spell_ref:
                 return False, "cast_spell sans spell_id/spell_name dans params"
-            requested_level = action.params.get("slot_level") or action.params.get("level")
-            if requested_level is not None:
+            # Sentinelle : distinguer « niveau absent » de « 0 explicite » (cantrip).
+            # `or` casserait le niveau 0 (falsy) et ferait passer un cantrip pour
+            # un sort sans niveau précisé.
+            requested_level = action.params.get("slot_level")
+            if requested_level is None:
+                requested_level = action.params.get("level")
+            has_slot = self._has_available_spell_slot(character_data.get("spell_slots", {}))
+            if requested_level is None:
+                # Niveau non précisé → on suppose un sort à emplacement : au moins un
+                # emplacement doit rester. Un cantrip explicite (slot_level=0) est
+                # géré par la branche `else` (int(0) > 0 est faux) et reste permis.
+                if not has_slot:
+                    return False, f"{self._character_name} n'a plus d'emplacements de sorts"
+            else:
                 try:
-                    if int(requested_level) > 0 and not self._has_available_spell_slot(
-                        character_data.get("spell_slots", {})
-                    ):
+                    if int(requested_level) > 0 and not has_slot:
                         return False, f"{self._character_name} n'a plus d'emplacements de sorts"
                 except (TypeError, ValueError):
                     return False, "slot_level invalide pour cast_spell"

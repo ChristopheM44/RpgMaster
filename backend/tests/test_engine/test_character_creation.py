@@ -1,4 +1,5 @@
 """Tests for engine/character_creation.py"""
+
 from __future__ import annotations
 
 import pytest
@@ -25,6 +26,7 @@ from app.engine.character_creation import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _standard_base() -> AbilityScores:
     """Standard array equivalent: 15, 14, 13, 12, 10, 8 — costs exactly 27 pts."""
     return AbilityScores(
@@ -40,8 +42,12 @@ def _standard_base() -> AbilityScores:
 def _all_tens() -> AbilityScores:
     """All 10s — costs 2 × 6 = 12 points (under budget)."""
     return AbilityScores(
-        strength=10, dexterity=10, constitution=10,
-        intelligence=10, wisdom=10, charisma=10,
+        strength=10,
+        dexterity=10,
+        constitution=10,
+        intelligence=10,
+        wisdom=10,
+        charisma=10,
     )
 
 
@@ -146,8 +152,9 @@ class TestValidatePointBuy:
 
 class TestAbilityScores:
     def test_get_returns_correct_score(self):
-        s = AbilityScores(strength=16, dexterity=14, constitution=12,
-                          intelligence=10, wisdom=8, charisma=13)
+        s = AbilityScores(
+            strength=16, dexterity=14, constitution=12, intelligence=10, wisdom=8, charisma=13
+        )
         assert s.get(Ability.STR) == 16
         assert s.get(Ability.DEX) == 14
         assert s.get(Ability.CON) == 12
@@ -156,9 +163,10 @@ class TestAbilityScores:
         assert s.get(Ability.CHA) == 13
 
     def test_modifier_returns_correct_modifier(self):
-        s = AbilityScores(strength=16, dexterity=14, constitution=12,
-                          intelligence=10, wisdom=8, charisma=13)
-        assert s.modifier(Ability.STR) == 3    # (16-10)//2
+        s = AbilityScores(
+            strength=16, dexterity=14, constitution=12, intelligence=10, wisdom=8, charisma=13
+        )
+        assert s.modifier(Ability.STR) == 3  # (16-10)//2
         assert s.modifier(Ability.DEX) == 2
         assert s.modifier(Ability.CON) == 1
         assert s.modifier(Ability.INT) == 0
@@ -166,16 +174,18 @@ class TestAbilityScores:
         assert s.modifier(Ability.CHA) == 1
 
     def test_apply_bonuses_adds_values(self):
-        s = AbilityScores(strength=10, dexterity=10, constitution=10,
-                          intelligence=10, wisdom=10, charisma=10)
+        s = AbilityScores(
+            strength=10, dexterity=10, constitution=10, intelligence=10, wisdom=10, charisma=10
+        )
         s2 = s.apply_bonuses({"dexterity": 2, "intelligence": 1})
         assert s2.dexterity == 12
         assert s2.intelligence == 11
         assert s2.strength == 10  # unchanged
 
     def test_apply_bonuses_caps_at_20(self):
-        s = AbilityScores(strength=19, dexterity=10, constitution=10,
-                          intelligence=10, wisdom=10, charisma=10)
+        s = AbilityScores(
+            strength=19, dexterity=10, constitution=10, intelligence=10, wisdom=10, charisma=10
+        )
         s2 = s.apply_bonuses({"strength": 5})
         assert s2.strength == 20  # capped, not 24
 
@@ -459,10 +469,10 @@ class TestBuildCharacter:
 
     def test_species_bonuses_applied_to_final_scores(self):
         # Elf: +2 DEX, +1 INT
-        base = AbilityScores(strength=10, dexterity=14, constitution=10,
-                             intelligence=12, wisdom=10, charisma=8)
-        char = build_character("Sylvan", "elf", "wizard", base,
-                               validate_scores=False)
+        base = AbilityScores(
+            strength=10, dexterity=14, constitution=10, intelligence=12, wisdom=10, charisma=8
+        )
+        char = build_character("Sylvan", "elf", "wizard", base, validate_scores=False)
         assert char.final_scores.dexterity == 16  # 14 + 2
         assert char.final_scores.intelligence == 13  # 12 + 1
         assert char.final_scores.strength == 10  # unchanged
@@ -485,28 +495,35 @@ class TestBuildCharacter:
     def test_max_hp_uses_final_con(self):
         # Dwarf: +2 CON. Base CON=13 (mod+1), final CON=15 (mod+2)
         # Cleric d8: 8 + 2 = 10
-        base = AbilityScores(strength=15, dexterity=10, constitution=13,
-                             intelligence=10, wisdom=14, charisma=8)
+        base = AbilityScores(
+            strength=15, dexterity=10, constitution=13, intelligence=10, wisdom=14, charisma=8
+        )
         char = build_character("Thordak", "dwarf", "cleric", base)
         assert char.max_hp == 10  # d8 + CON mod +2
 
     def test_validate_scores_catches_over_budget(self):
         over_budget = AbilityScores(
-            strength=15, dexterity=15, constitution=15,
-            intelligence=15, wisdom=15, charisma=15,
+            strength=15,
+            dexterity=15,
+            constitution=15,
+            intelligence=15,
+            wisdom=15,
+            charisma=15,
         )
         with pytest.raises(ValueError, match="budget"):
-            build_character("Cheater", "human", "fighter", over_budget,
-                            validate_scores=True)
+            build_character("Cheater", "human", "fighter", over_budget, validate_scores=True)
 
     def test_validate_scores_false_skips_budget_check(self):
         over_budget = AbilityScores(
-            strength=15, dexterity=15, constitution=15,
-            intelligence=15, wisdom=15, charisma=15,
+            strength=15,
+            dexterity=15,
+            constitution=15,
+            intelligence=15,
+            wisdom=15,
+            charisma=15,
         )
         # Should not raise
-        char = build_character("Powerful", "human", "fighter", over_budget,
-                               validate_scores=False)
+        char = build_character("Powerful", "human", "fighter", over_budget, validate_scores=False)
         assert char is not None
 
     def test_species_traits_attached(self):
@@ -526,6 +543,5 @@ class TestBuildCharacter:
     def test_all_species_and_classes_combinable(self):
         for species in VALID_SPECIES:
             for cls in VALID_CLASSES:
-                char = build_character("Test", species, cls, _all_tens(),
-                                       validate_scores=False)
+                char = build_character("Test", species, cls, _all_tens(), validate_scores=False)
                 assert char.max_hp >= 1

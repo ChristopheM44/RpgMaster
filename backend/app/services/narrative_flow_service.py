@@ -5,6 +5,7 @@ le joueur peut s'adresser au monde, au MJ, au groupe ou à un compagnon précis 
 les compagnons concernés répondent, puis le MJ arbitre seulement si la scène le
 nécessite.
 """
+
 from __future__ import annotations
 
 import logging
@@ -845,9 +846,8 @@ class NarrativeFlowService:
                 return char_id
             if normalized.startswith(f"{name_norm} ") or normalized.startswith(f"{name_norm},"):
                 return char_id
-            if (
-                normalized.startswith(f"{name_norm} que")
-                or normalized.startswith(f"{name_norm} qu")
+            if normalized.startswith(f"{name_norm} que") or normalized.startswith(
+                f"{name_norm} qu"
             ):
                 return char_id
         return None
@@ -867,9 +867,7 @@ class NarrativeFlowService:
     @staticmethod
     def _choice_spell_id(choice: PlayerActionChoice) -> str | None:
         spell_id = str(
-            choice.params.get("spell_id")
-            or choice.params.get("spell_name")
-            or ""
+            choice.params.get("spell_id") or choice.params.get("spell_name") or ""
         ).strip()
         return spell_id or None
 

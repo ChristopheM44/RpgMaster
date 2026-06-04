@@ -74,9 +74,12 @@ async def test_action_resolver_routes_combat_to_combat_gm() -> None:
         published.append((event_type, payload))
 
     resolver = ActionResolver(gm_agent=narrative_gm, combat_gm_agent=combat_gm)
-    with patch("app.game.action_resolver.event_bus.publish_to_session", new=capture), patch(
-        "app.game.action_resolver.tts_router.synthesize_and_broadcast",
-        new=AsyncMock(),
+    with (
+        patch("app.game.action_resolver.event_bus.publish_to_session", new=capture),
+        patch(
+            "app.game.action_resolver.tts_router.synthesize_and_broadcast",
+            new=AsyncMock(),
+        ),
     ):
         await resolver.resolve(
             session_id="combat-route",

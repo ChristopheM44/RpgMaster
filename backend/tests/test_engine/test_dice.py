@@ -1,4 +1,5 @@
 """Tests for engine/dice.py"""
+
 from __future__ import annotations
 
 import random
@@ -11,6 +12,7 @@ from app.engine.dice import roll, roll_ability_scores, roll_with_advantage
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def seeded(seed: int = 42) -> random.Random:
     return random.Random(seed)
 
@@ -18,6 +20,7 @@ def seeded(seed: int = 42) -> random.Random:
 # ---------------------------------------------------------------------------
 # Basic notation parsing
 # ---------------------------------------------------------------------------
+
 
 class TestRollParsing:
     def test_simple_d20(self):
@@ -75,6 +78,7 @@ class TestRollParsing:
 # Keep-highest / keep-lowest
 # ---------------------------------------------------------------------------
 
+
 class TestKeepModifiers:
     def test_kh_keeps_highest(self):
         rng = seeded(0)
@@ -104,6 +108,7 @@ class TestKeepModifiers:
 # Advantage / Disadvantage
 # ---------------------------------------------------------------------------
 
+
 class TestAdvantage:
     def test_advantage_keeps_max(self):
         rng = random.Random(99)
@@ -131,6 +136,7 @@ class TestAdvantage:
 # ---------------------------------------------------------------------------
 # Ability score generation
 # ---------------------------------------------------------------------------
+
 
 class TestAbilityScores:
     def test_returns_six_results(self):

@@ -1,4 +1,5 @@
 """Tests for engine/conditions.py"""
+
 from __future__ import annotations
 
 import pytest
@@ -34,9 +35,20 @@ class TestConditionEnum:
     def test_all_14_conditions_present(self):
         names = {c.value for c in Condition}
         expected = {
-            "blinded", "charmed", "deafened", "frightened", "grappled",
-            "incapacitated", "invisible", "paralyzed", "petrified",
-            "poisoned", "prone", "restrained", "stunned", "unconscious",
+            "blinded",
+            "charmed",
+            "deafened",
+            "frightened",
+            "grappled",
+            "incapacitated",
+            "invisible",
+            "paralyzed",
+            "petrified",
+            "poisoned",
+            "prone",
+            "restrained",
+            "stunned",
+            "unconscious",
         }
         assert names == expected
 

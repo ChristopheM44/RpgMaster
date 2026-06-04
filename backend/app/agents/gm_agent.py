@@ -254,12 +254,14 @@ def _extract_scene_anchor(game_state: dict[str, Any]) -> dict[str, Any]:
     for exit_data in scene.get("exits") or []:
         if not isinstance(exit_data, dict):
             continue
-        available_exits.append({
-            "id": str(exit_data.get("id") or ""),
-            "label": str(exit_data.get("label") or ""),
-            "leads_to": str(exit_data.get("leads_to") or ""),
-            "description": str(exit_data.get("description") or ""),
-        })
+        available_exits.append(
+            {
+                "id": str(exit_data.get("id") or ""),
+                "label": str(exit_data.get("label") or ""),
+                "leads_to": str(exit_data.get("leads_to") or ""),
+                "description": str(exit_data.get("description") or ""),
+            }
+        )
 
     # --- Noeuds proches sur la carte régionale ---
     nearby_map_nodes: list[dict[str, str]] = []
@@ -282,12 +284,14 @@ def _extract_scene_anchor(game_state: dict[str, Any]) -> dict[str, Any]:
                 dest_id = to_id if from_id == current_node_id else from_id
                 for node in region_nodes:
                     if isinstance(node, dict) and str(node.get("id") or "") == dest_id:
-                        nearby_map_nodes.append({
-                            "id": dest_id,
-                            "name": str(node.get("name") or dest_id),
-                            "kind": str(node.get("kind") or ""),
-                            "travel_hint": str(edge.get("travel_hint") or ""),
-                        })
+                        nearby_map_nodes.append(
+                            {
+                                "id": dest_id,
+                                "name": str(node.get("name") or dest_id),
+                                "kind": str(node.get("kind") or ""),
+                                "travel_hint": str(edge.get("travel_hint") or ""),
+                            }
+                        )
                         break
         nearby_map_nodes = nearby_map_nodes[:8]
 
@@ -603,11 +607,14 @@ class GMAgent(BaseAgent):
     @staticmethod
     def _format_outcome_roll(result: dict[str, Any]) -> str:
         if result.get("type") == "stealth_event":
-            noticed_by = ", ".join(
-                str(item.get("name") or item.get("id"))
-                for item in result.get("noticed_by", [])
-                if isinstance(item, dict)
-            ) or "personne"
+            noticed_by = (
+                ", ".join(
+                    str(item.get("name") or item.get("id"))
+                    for item in result.get("noticed_by", [])
+                    if isinstance(item, dict)
+                )
+                or "personne"
+            )
             return (
                 "- stealth_event "
                 f"actor={result.get('actor_name') or result.get('actor_id')} "
@@ -623,11 +630,7 @@ class GMAgent(BaseAgent):
             if result.get("social_target_id")
             else ""
         )
-        margin = (
-            f" [marge: {result.get('margin')}]"
-            if result.get("margin") is not None
-            else ""
-        )
+        margin = f" [marge: {result.get('margin')}]" if result.get("margin") is not None else ""
         outcome = (
             "SUCCÈS"
             if result.get("success") is True

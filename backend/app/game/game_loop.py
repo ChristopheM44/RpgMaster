@@ -5,6 +5,7 @@ provides helpers to validate and query them.
 
 Pure logic: no I/O, no async, no database access.
 """
+
 from __future__ import annotations
 
 from app.models.session import SessionStatus
@@ -15,21 +16,13 @@ from app.models.session import SessionStatus
 
 #: Maps each phase to the set of phases it is allowed to transition to.
 VALID_TRANSITIONS: dict[SessionStatus, frozenset[SessionStatus]] = {
-    SessionStatus.LOBBY: frozenset(
-        [SessionStatus.CHARACTER_CREATION]
-    ),
-    SessionStatus.CHARACTER_CREATION: frozenset(
-        [SessionStatus.EXPLORATION, SessionStatus.LOBBY]
-    ),
+    SessionStatus.LOBBY: frozenset([SessionStatus.CHARACTER_CREATION]),
+    SessionStatus.CHARACTER_CREATION: frozenset([SessionStatus.EXPLORATION, SessionStatus.LOBBY]),
     SessionStatus.EXPLORATION: frozenset(
         [SessionStatus.ENCOUNTER_START, SessionStatus.REST, SessionStatus.SESSION_END]
     ),
-    SessionStatus.ENCOUNTER_START: frozenset(
-        [SessionStatus.COMBAT, SessionStatus.EXPLORATION]
-    ),
-    SessionStatus.COMBAT: frozenset(
-        [SessionStatus.ENCOUNTER_END]
-    ),
+    SessionStatus.ENCOUNTER_START: frozenset([SessionStatus.COMBAT, SessionStatus.EXPLORATION]),
+    SessionStatus.COMBAT: frozenset([SessionStatus.ENCOUNTER_END]),
     SessionStatus.ENCOUNTER_END: frozenset(
         [
             SessionStatus.EXPLORATION,
@@ -41,9 +34,7 @@ VALID_TRANSITIONS: dict[SessionStatus, frozenset[SessionStatus]] = {
     SessionStatus.REST: frozenset(
         [SessionStatus.EXPLORATION, SessionStatus.LEVEL_UP, SessionStatus.SESSION_END]
     ),
-    SessionStatus.LEVEL_UP: frozenset(
-        [SessionStatus.EXPLORATION, SessionStatus.SESSION_END]
-    ),
+    SessionStatus.LEVEL_UP: frozenset([SessionStatus.EXPLORATION, SessionStatus.SESSION_END]),
     SessionStatus.SESSION_END: frozenset(),  # terminal state
 }
 

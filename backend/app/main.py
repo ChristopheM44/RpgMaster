@@ -200,10 +200,7 @@ def create_app() -> FastAPI:
             access_token_required()
             and request.url.path.startswith("/api/")
             and request.method != "OPTIONS"
-            and not (
-                request.url.path.startswith("/api/admin/")
-                and admin_access_token_required()
-            )
+            and not (request.url.path.startswith("/api/admin/") and admin_access_token_required())
             and not request_has_valid_access_token(request)
         ):
             return JSONResponse(

@@ -35,10 +35,10 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 # Limites de contenu pour la scène d'ouverture
-_OPENING_CLUES_MAX = 5   # indices visibles initiaux (était 2)
-_OPENING_NPCS_MAX  = 5   # PNJ présents en ouverture (était 2)
-_OPENING_POIS_MAX  = 8   # points d'intérêt (était 5)
-_OPENING_EXITS_MAX = 5   # sorties disponibles (était 3)
+_OPENING_CLUES_MAX = 5  # indices visibles initiaux (était 2)
+_OPENING_NPCS_MAX = 5  # PNJ présents en ouverture (était 2)
+_OPENING_POIS_MAX = 8  # points d'intérêt (était 5)
+_OPENING_EXITS_MAX = 5  # sorties disponibles (était 3)
 
 
 class StartGameBody(BaseModel):
@@ -124,11 +124,7 @@ def _hook_context_text(campaign_context: dict[str, Any]) -> str:
     if not isinstance(contract, dict):
         contract = {}
 
-    hook = str(
-        contract.get("hook")
-        or contract.get("pitch_public")
-        or ""
-    ).strip()
+    hook = str(contract.get("hook") or contract.get("pitch_public") or "").strip()
     return hook
 
 
@@ -325,13 +321,15 @@ def _opening_scene_exits(value: Any) -> list[dict[str, Any]]:
             description = ""
         if not label and not leads_to:
             continue
-        out.append({
-            "id": exit_id or _safe_id(label or leads_to, f"sortie_{index + 1}"),
-            "label": label or leads_to,
-            "position": {"col": 7, "row": 3 + min(index, 4)},
-            "leads_to": leads_to or _safe_id(label, f"sortie_{index + 1}"),
-            "description": description or f"Quitter la scène vers : {label or leads_to}.",
-        })
+        out.append(
+            {
+                "id": exit_id or _safe_id(label or leads_to, f"sortie_{index + 1}"),
+                "label": label or leads_to,
+                "position": {"col": 7, "row": 3 + min(index, 4)},
+                "leads_to": leads_to or _safe_id(label, f"sortie_{index + 1}"),
+                "description": description or f"Quitter la scène vers : {label or leads_to}.",
+            }
+        )
         if len(out) >= 3:
             break
     return out
@@ -368,22 +366,26 @@ def _infer_opening_present_npcs(
         name = str(raw_name or "").strip()
         if not name or name.casefold() not in hook:
             continue
-        present.append({
-            "id": _safe_id(name, f"npc_{index + 1}"),
-            "name": name,
-            "description": f"{name} attend le groupe.",
-        })
+        present.append(
+            {
+                "id": _safe_id(name, f"npc_{index + 1}"),
+                "name": name,
+                "description": f"{name} attend le groupe.",
+            }
+        )
         if len(present) >= 2:
             break
     host = _infer_opening_host(campaign_context, present)
     if host is not None:
         present_ids = {npc["id"] for npc in present}
         if host["id"] not in present_ids:
-            present.append({
-                "id": host["id"],
-                "name": host["name"],
-                "description": f"{host['name']} occupe les lieux.",
-            })
+            present.append(
+                {
+                    "id": host["id"],
+                    "name": host["name"],
+                    "description": f"{host['name']} occupe les lieux.",
+                }
+            )
     return present
 
 
@@ -433,8 +435,7 @@ def _infer_opening_description(
             primary_names = [npc["name"] for npc in present_npcs if npc["id"] != host["id"]]
             primary = ", ".join(primary_names) or "La personne qui a convoqué le groupe"
             return (
-                f"Chez {host['name']}, {primary} attend le groupe. "
-                f"{host['name']} occupe les lieux."
+                f"Chez {host['name']}, {primary} attend le groupe. {host['name']} occupe les lieux."
             )
         names = ", ".join(npc["name"] for npc in present_npcs)
         return f"{names} attend le groupe. Aucun détail de décor plus précis n'est encore établi."
@@ -523,11 +524,7 @@ async def _migrate_missing_opening_scene(
     inferred = _infer_opening_scene_from_context(campaign_context, fallback_place)
     merged = {
         **inferred,
-        **{
-            key: value
-            for key, value in scene.items()
-            if value not in (None, "", [], {})
-        },
+        **{key: value for key, value in scene.items() if value not in (None, "", [], {})},
     }
     chapter["opening_scene"] = merged
 
@@ -746,10 +743,7 @@ def _opening_scene_allows_path_choice(state_data: dict[str, Any]) -> bool:
     if not isinstance(campaign_context, dict):
         return False
     opening_scene = _opening_scene(campaign_context)
-    text = " ".join(
-        str(opening_scene.get(key) or "")
-        for key in ("place", "venue", "description")
-    )
+    text = " ".join(str(opening_scene.get(key) or "") for key in ("place", "venue", "description"))
     return bool(_PATH_CHOICE_ALLOWED_RE.search(text))
 
 
@@ -776,9 +770,7 @@ def _brief_list(value: Any, *, limit: int = 6) -> list[str]:
     for item in value:
         if isinstance(item, dict):
             text = ", ".join(
-                f"{key}: {val}"
-                for key, val in item.items()
-                if val not in (None, "", [], {})
+                f"{key}: {val}" for key, val in item.items() if val not in (None, "", [], {})
             )
         else:
             text = str(item or "").strip()
@@ -855,8 +847,7 @@ def _build_opening_brief(state_data: dict[str, Any]) -> str:
             if not isinstance(npc, dict):
                 continue
             npc_line = (
-                f"  - {npc.get('name') or npc.get('id')}: "
-                f"{npc.get('description') or ''}"
+                f"  - {npc.get('name') or npc.get('id')}: {npc.get('description') or ''}"
             ).rstrip()
             details = []
             if npc.get("action_hint"):
@@ -873,8 +864,7 @@ def _build_opening_brief(state_data: dict[str, Any]) -> str:
             if isinstance(clue, dict):
                 lines.append(
                     (
-                        f"  - {clue.get('name') or clue.get('id')}: "
-                        f"{clue.get('description') or ''}"
+                        f"  - {clue.get('name') or clue.get('id')}: {clue.get('description') or ''}"
                     ).rstrip()
                 )
     exits = opening_scene.get("exits") or []
@@ -1003,22 +993,24 @@ def _opening_response(
                 clue_name,
                 f"indice_{index + 1}",
             )
-            pois.append({
-                "id": clue_id,
-                "name": (clue_name[:48].rstrip() + "…") if len(clue_name) > 48 else clue_name,
-                "kind": "clue",
-                "position": {"col": 4 + index, "row": 4},
-                "icon": "clue",
-                "description": clue_text[:200],
-                "action_hint": clue_action_hint[:160],
-                "interactions": [
-                    {
-                        "label": "Se renseigner",
-                        "intent": "search",
-                        "prompt": f"Je cherche à en savoir plus sur : {clue_text[:120]}",
-                    }
-                ],
-            })
+            pois.append(
+                {
+                    "id": clue_id,
+                    "name": (clue_name[:48].rstrip() + "…") if len(clue_name) > 48 else clue_name,
+                    "kind": "clue",
+                    "position": {"col": 4 + index, "row": 4},
+                    "icon": "clue",
+                    "description": clue_text[:200],
+                    "action_hint": clue_action_hint[:160],
+                    "interactions": [
+                        {
+                            "label": "Se renseigner",
+                            "intent": "search",
+                            "prompt": f"Je cherche à en savoir plus sur : {clue_text[:120]}",
+                        }
+                    ],
+                }
+            )
     for index, npc in enumerate(present_npcs):
         npc_name = str(npc.get("name") or npc.get("id") or f"PNJ {index + 1}").strip()
         npc_id = str(npc.get("id") or "").strip() or _safe_id(npc_name, f"npc_{index + 1}")
@@ -1030,28 +1022,30 @@ def _opening_response(
         else:
             prompt_target = npc_description
             if len(prompt_target) > 60:
-                prompt_target = prompt_target[:60].rsplit(' ', 1)[0] + "..."
+                prompt_target = prompt_target[:60].rsplit(" ", 1)[0] + "..."
         npc_action_hint = str(npc.get("action_hint") or "Lui parler ou négocier avant d'agir.")
 
-        pois.append({
-            "id": npc_id,
-            "name": npc_name,
-            "kind": "npc",
-            "position": {"col": 5 + index, "row": 5},
-            "icon": "npc",
-            "description": npc_description,
-            "action_hint": npc_action_hint[:160],
-            # PNJ non encore présenté : masqué dans la vue compagnons jusqu'à
-            # ce que le MJ le nomme ou qu'un joueur l'interpelle par son nom.
-            "known_to_party": False,
-            "interactions": [
-                {
-                    "label": "Parler",
-                    "intent": "talk",
-                    "prompt": f"Je m'approche de {prompt_target} et lui adresse la parole.",
-                }
-            ],
-        })
+        pois.append(
+            {
+                "id": npc_id,
+                "name": npc_name,
+                "kind": "npc",
+                "position": {"col": 5 + index, "row": 5},
+                "icon": "npc",
+                "description": npc_description,
+                "action_hint": npc_action_hint[:160],
+                # PNJ non encore présenté : masqué dans la vue compagnons jusqu'à
+                # ce que le MJ le nomme ou qu'un joueur l'interpelle par son nom.
+                "known_to_party": False,
+                "interactions": [
+                    {
+                        "label": "Parler",
+                        "intent": "talk",
+                        "prompt": f"Je m'approche de {prompt_target} et lui adresse la parole.",
+                    }
+                ],
+            }
+        )
 
     exits = list(opening_scene.get("exits") or [])
     if not exits:
@@ -1071,13 +1065,15 @@ def _opening_response(
         guessed_theme,
     )
     if objective and not objective_exit_suppressed:
-        exits.append({
-            "id": "prendre_route_objectif",
-            "label": "Prendre la route",
-            "position": {"col": 10, "row": 7},
-            "leads_to": objective_id or "objectif",
-            "description": f"Se diriger vers : {objective}",
-        })
+        exits.append(
+            {
+                "id": "prendre_route_objectif",
+                "label": "Prendre la route",
+                "position": {"col": 10, "row": 7},
+                "leads_to": objective_id or "objectif",
+                "description": f"Se diriger vers : {objective}",
+            }
+        )
 
     journal_params: dict[str, Any] = {
         "location_region": physical_region,
@@ -1121,27 +1117,31 @@ def _opening_response(
                         "description": "Point de départ joué en scène.",
                     },
                     *(
-                        [{
-                            "id": objective_id,
-                            "name": objective,
-                            "kind": "landmark",
-                            "position": {"x": 62, "y": 42},
-                            "status": "rumored",
-                            "description": "Destination ou piste connue, non encore vérifiée.",
-                        }]
+                        [
+                            {
+                                "id": objective_id,
+                                "name": objective,
+                                "kind": "landmark",
+                                "position": {"x": 62, "y": 42},
+                                "status": "rumored",
+                                "description": "Destination ou piste connue, non encore vérifiée.",
+                            }
+                        ]
                         if objective_id
                         else []
                     ),
                 ],
                 "nodes_remove": [],
                 "edges_upsert": (
-                    [{
-                        "id": f"route_{location_id}_{objective_id}",
-                        "from": location_id,
-                        "to": objective_id,
-                        "kind": "path",
-                        "travel_hint": "Trajet à confirmer par les choix du groupe.",
-                    }]
+                    [
+                        {
+                            "id": f"route_{location_id}_{objective_id}",
+                            "from": location_id,
+                            "to": objective_id,
+                            "kind": "path",
+                            "travel_hint": "Trajet à confirmer par les choix du groupe.",
+                        }
+                    ]
                     if objective_id
                     else []
                 ),
@@ -1305,6 +1305,7 @@ async def _send_free_opening_narration(
     seed = None
     if not script:
         from app.engine.adventure_seeds import generate_adventure_context
+
         seed = generate_adventure_context(
             preset_id=preset,
             biome_id=biome,
@@ -1509,9 +1510,7 @@ async def start_game(
             }
 
         # Load characters for this session
-        result = await db.execute(
-            select(Character).where(Character.session_id == session_id)
-        )
+        result = await db.execute(select(Character).where(Character.session_id == session_id))
         characters = result.scalars().all()
 
         if not characters:
@@ -1541,21 +1540,21 @@ async def start_game(
         active.turn_manager.setup_exploration(participants)
 
         # Store character snapshots in state_data for later combat use
-        active.state_data["characters"] = {
-            c.id: character_snapshot(c)
-            for c in characters
-        }
+        active.state_data["characters"] = {c.id: character_snapshot(c) for c in characters}
 
         # Seed world-state slices (idempotent — setdefault preserves existing saves)
-        active.state_data.setdefault("adventure_journal", {
-            "location_region": None,
-            "location_place": None,
-            "location_venue": None,
-            "time_of_day": "morning",
-            "day_number": 1,
-            "calendar_date": None,
-            "weather": None,
-        })
+        active.state_data.setdefault(
+            "adventure_journal",
+            {
+                "location_region": None,
+                "location_place": None,
+                "location_venue": None,
+                "time_of_day": "morning",
+                "day_number": 1,
+                "calendar_date": None,
+                "weather": None,
+            },
+        )
         active.state_data.setdefault("quests", [])
         active.state_data.setdefault("chronicle", [])
         active.state_data.setdefault(
@@ -1671,9 +1670,7 @@ async def create_save(
         state_data["turn_manager"] = active.turn_manager.to_dict()
         state_data["phase"] = phase_val
     else:
-        gs_result = await db.execute(
-            select(GameState).where(GameState.session_id == session_id)
-        )
+        gs_result = await db.execute(select(GameState).where(GameState.session_id == session_id))
         gs = gs_result.scalar_one_or_none()
         phase_val = session.status.value
         turn_number = gs.turn_number if gs else 0
@@ -1681,9 +1678,7 @@ async def create_save(
         state_data = dict(gs.state_data) if gs else {}
 
     # Snapshot de tous les personnages
-    chars_result = await db.execute(
-        select(Character).where(Character.session_id == session_id)
-    )
+    chars_result = await db.execute(select(Character).where(Character.session_id == session_id))
     characters = chars_result.scalars().all()
     characters_snapshot = [
         {
@@ -1776,9 +1771,7 @@ async def list_saves(session_id: str, db: AsyncSession = Depends(get_db)):
 async def delete_save(session_id: str, save_id: str, db: AsyncSession = Depends(get_db)):
     """Supprimer une sauvegarde."""
     result = await db.execute(
-        select(SaveSlot).where(
-            SaveSlot.id == save_id, SaveSlot.session_id == session_id
-        )
+        select(SaveSlot).where(SaveSlot.id == save_id, SaveSlot.session_id == session_id)
     )
     save = result.scalar_one_or_none()
     if save is None:
@@ -1792,9 +1785,7 @@ async def delete_save(session_id: str, save_id: str, db: AsyncSession = Depends(
 async def load_save(session_id: str, save_id: str, db: AsyncSession = Depends(get_db)):
     """Restaurer la session a partir d'une sauvegarde."""
     result = await db.execute(
-        select(SaveSlot).where(
-            SaveSlot.id == save_id, SaveSlot.session_id == session_id
-        )
+        select(SaveSlot).where(SaveSlot.id == save_id, SaveSlot.session_id == session_id)
     )
     save = result.scalar_one_or_none()
     if save is None:
@@ -1815,9 +1806,7 @@ async def load_save(session_id: str, save_id: str, db: AsyncSession = Depends(ge
     session.status = target_status
 
     # Restaurer GameState
-    gs_result = await db.execute(
-        select(GameState).where(GameState.session_id == session_id)
-    )
+    gs_result = await db.execute(select(GameState).where(GameState.session_id == session_id))
     gs = gs_result.scalar_one_or_none()
     if gs is None:
         gs = GameState(session_id=session_id)
@@ -1828,9 +1817,7 @@ async def load_save(session_id: str, save_id: str, db: AsyncSession = Depends(ge
     gs.round_number = save.round_number
 
     # Restaurer les personnages depuis le snapshot
-    chars_result = await db.execute(
-        select(Character).where(Character.session_id == session_id)
-    )
+    chars_result = await db.execute(select(Character).where(Character.session_id == session_id))
     existing_chars = {c.id: c for c in chars_result.scalars().all()}
 
     for snap in save.characters_snapshot:

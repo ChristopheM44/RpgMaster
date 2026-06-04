@@ -855,6 +855,7 @@ class ActionPipeline:
             logger.error("ActionPipeline : narrate_outcome echoue : %s", exc)
             from app.llm.ollama_client import OllamaError
             from app.llm.openai_compatible_client import OpenAICompatibleError
+
             if isinstance(exc, (OllamaError, OpenAICompatibleError)):
                 err_msg = (
                     "Le serveur LLM local (Ollama) ou l'API distante est injoignable. "
@@ -1078,8 +1079,7 @@ class ActionPipeline:
                 "safe_observation": mechanics.get("safe_observation"),
                 "reveal_tier": mechanics.get("reveal_tier"),
                 "summary": (
-                    f"{label} : {payload.get('total')} vs DD {payload.get('dc')} "
-                    f"({success_label})"
+                    f"{label} : {payload.get('total')} vs DD {payload.get('dc')} ({success_label})"
                 ),
             }
         )
@@ -1172,9 +1172,7 @@ class ActionPipeline:
                     "rows": 12,
                     "cell_size_m": 1.5,
                     "terrain": "unknown",
-                    "description": (
-                        f"Le groupe arrive {place}. Les lieux se précisent peu à peu."
-                    ),
+                    "description": (f"Le groupe arrive {place}. Les lieux se précisent peu à peu."),
                     "pois": [],
                     "exits": [],
                     "party_positions": positions,
@@ -1335,9 +1333,7 @@ class ActionPipeline:
         actor_name = str(roll_results.get("actor_name") or "").strip()
         if not actor_name:
             return response
-        text = (
-            response.content if isinstance(response, AgentResponse) else response.narration
-        )
+        text = response.content if isinstance(response, AgentResponse) else response.narration
         wrong_name = ActionPipeline._misattributed_actor_name(text, actor_name, roll_results)
         if wrong_name is None:
             return response
@@ -2004,13 +2000,9 @@ class ActionPipeline:
                 roll_results["tactical"] = {
                     "target_id": target_id,
                     "moved": bool(tactical.moved),
-                    "movement_used_m": (
-                        tactical.moved.movement_used_m if tactical.moved else 0
-                    ),
+                    "movement_used_m": (tactical.moved.movement_used_m if tactical.moved else 0),
                     "path": (
-                        [step.to_dict() for step in tactical.moved.path]
-                        if tactical.moved
-                        else []
+                        [step.to_dict() for step in tactical.moved.path] if tactical.moved else []
                     ),
                     "opportunity_attacks": [
                         attack.__dict__ for attack in tactical.moved.opportunity_attacks

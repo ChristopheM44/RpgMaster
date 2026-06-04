@@ -1,4 +1,5 @@
 """Tests for level-up and ASI REST endpoints."""
+
 from __future__ import annotations
 
 import pytest
@@ -131,9 +132,12 @@ async def test_asi_duplicate_abilities_rejected(async_client):
 @pytest.mark.asyncio
 async def test_asi_cap_at_20(async_client):
     """Score plafonné à 20 même si la valeur de base est déjà haute."""
-    char = await _create(async_client, xp=2700, level=3,
-                         ability_scores={"str": 20, "dex": 12, "con": 14,
-                                         "int": 10, "wis": 13, "cha": 8})
+    char = await _create(
+        async_client,
+        xp=2700,
+        level=3,
+        ability_scores={"str": 20, "dex": 12, "con": 14, "int": 10, "wis": 13, "cha": 8},
+    )
     await async_client.post(f"/api/characters/{char['id']}/level-up")
     r = await async_client.post(
         f"/api/characters/{char['id']}/asi-choice",

@@ -1,4 +1,5 @@
 """Repos court/long et suivi des dés de vie."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -364,10 +365,7 @@ class RestService:
 
     @staticmethod
     def _short_rest_narration(updates: list[RestCharacterUpdate]) -> str:
-        fragments = [
-            f"{update.character_name} récupère {update.hp_delta} PV"
-            for update in updates
-        ]
+        fragments = [f"{update.character_name} récupère {update.hp_delta} PV" for update in updates]
         return "Le groupe prend un repos court. " + "; ".join(fragments) + "."
 
 

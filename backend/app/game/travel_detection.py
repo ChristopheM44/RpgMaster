@@ -4,11 +4,12 @@ Ce module identifie quand un joueur exprime une volonté de se déplacer vers
 un lieu et extrait la destination mentionnée, en la croisant avec les sorties
 de la scène courante et les noeuds de carte régionaux disponibles.
 """
+
 from __future__ import annotations
 
 import re
 import unicodedata
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 
@@ -280,7 +281,10 @@ def detect_travel_intent(
                 continue
             exit_label = str(exit_data.get("label") or "")
             exit_leads = str(exit_data.get("leads_to") or "")
-            if _normalize_text(exit_label) in normalized or _normalize_text(exit_leads) in normalized:
+            if (
+                _normalize_text(exit_label) in normalized
+                or _normalize_text(exit_leads) in normalized
+            ):
                 return TravelIntent(
                     is_travel=True,
                     destination=exit_label or exit_leads,

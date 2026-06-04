@@ -9,6 +9,7 @@ The schemas reflect the conventions of D&D 2024 (SRD 5.2.1), with bilingual
 naming: each entry carries an English `name` (canonical) plus a `name_fr`
 (used by the French-speaking GM agent and UI).
 """
+
 from __future__ import annotations
 
 from typing import Any, Literal
@@ -168,7 +169,9 @@ class MonsterSchema(BaseModel):
     legendary_actions: list[Action] = Field(default_factory=list)
     description: str | None = None
     # Set by the importer when a stat-block could not be fully parsed.
-    parse_status: Literal["needs_review", "needs_actions", "needs_mechanics", "needs_en_name"] | None = None
+    parse_status: (
+        Literal["needs_review", "needs_actions", "needs_mechanics", "needs_en_name"] | None
+    ) = None
 
 
 # --- Spell schema ---------------------------------------------------------

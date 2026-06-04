@@ -1,4 +1,5 @@
 """Tests for conservative combat-start heuristics."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -63,9 +64,7 @@ def test_aggressive_text_without_pending_encounter_or_target_stays_conservative(
 
 
 def test_zhentarim_alias_maps_to_bandit() -> None:
-    assert infer_monster_ids_from_text("L'emissaire Zhentarim tire son couteau.") == [
-        "bandit"
-    ]
+    assert infer_monster_ids_from_text("L'emissaire Zhentarim tire son couteau.") == ["bandit"]
 
 
 @pytest.mark.asyncio
@@ -106,10 +105,12 @@ async def test_dispatch_tactical_attack_from_encounter_start_opens_combat() -> N
     resolver.resolve = AsyncMock()
     start_combat = AsyncMock()
 
-    with patch.object(ws_game.session_manager, "get_session", return_value=active), \
-        patch.object(ws_game.session_manager, "save_state", new=AsyncMock()), \
-        patch.object(ws_game, "_handle_start_combat", new=start_combat), \
-        patch.object(ws_game, "action_resolver", resolver):
+    with (
+        patch.object(ws_game.session_manager, "get_session", return_value=active),
+        patch.object(ws_game.session_manager, "save_state", new=AsyncMock()),
+        patch.object(ws_game, "_handle_start_combat", new=start_combat),
+        patch.object(ws_game, "action_resolver", resolver),
+    ):
         await ws_game._dispatch_action("session-1", action, db)
 
     start_combat.assert_awaited_once_with(

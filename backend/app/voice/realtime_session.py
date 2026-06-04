@@ -12,6 +12,7 @@ Protocole OpenAI Realtime résumé :
 
 Réf: https://platform.openai.com/docs/guides/realtime
 """
+
 from __future__ import annotations
 
 import base64
@@ -107,8 +108,7 @@ class RealtimeSession:
             raise VoiceProviderError(f"Realtime WS connect failed: {exc}") from exc
 
         full_instructions = (
-            f"{instructions.strip()}\n\n"
-            f"DIRECTIVES VOCALES :\n{format_voice_directive(self._voice)}"
+            f"{instructions.strip()}\n\nDIRECTIVES VOCALES :\n{format_voice_directive(self._voice)}"
         )
         await self._send(
             {

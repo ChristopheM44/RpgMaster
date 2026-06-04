@@ -1093,9 +1093,7 @@ class TestPipelineExecutorUnits:
         assert poi["facts"]
         assert [payload for event, payload in bus.published if event == EventType.ROLL_RESULT]
         assert [
-            payload
-            for event, payload in bus.published
-            if event == EventType.SCENE_LAYOUT_CHANGED
+            payload for event, payload in bus.published if event == EventType.SCENE_LAYOUT_CHANGED
         ]
 
     async def test_clock_start_is_opt_in_and_publishes_clock_update(self) -> None:

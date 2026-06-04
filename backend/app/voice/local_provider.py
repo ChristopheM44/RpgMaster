@@ -3,6 +3,7 @@
 Mappe ``PersonaVoice(gender, age_range)`` → ``kokoro_voice_id`` quand la persona
 ne spécifie pas ``voice_id_local`` explicitement.
 """
+
 from __future__ import annotations
 
 import logging

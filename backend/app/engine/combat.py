@@ -9,6 +9,7 @@ Covers:
 
 No I/O, no async, no database access.
 """
+
 from __future__ import annotations
 
 import random
@@ -38,13 +39,13 @@ class AttackResult:
     """Full breakdown of an attack roll."""
 
     d20_roll: int
-    all_rolls: list[int]       # both dice under advantage/disadvantage
+    all_rolls: list[int]  # both dice under advantage/disadvantage
     attack_bonus: int
     total: int
     target_ac: int
     hit: bool
-    critical: bool             # natural 20
-    fumble: bool               # natural 1
+    critical: bool  # natural 20
+    fumble: bool  # natural 1
     advantage: bool | None  # True=adv, False=disadv, None=normal
     breakdown: str
 
@@ -54,9 +55,9 @@ class DamageResult:
     """Result of a damage roll (with optional critical doubling)."""
 
     notation: str
-    rolls: list[int]   # all dice rolled (2× count on crit)
+    rolls: list[int]  # all dice rolled (2× count on crit)
     modifier: int
-    total: int         # always ≥ 0
+    total: int  # always ≥ 0
     critical: bool
 
 
@@ -242,8 +243,7 @@ def roll_damage(
     m = _DMG_NOTATION.match(cleaned)
     if not m:
         raise ValueError(
-            f"Invalid damage notation: '{notation}'. "
-            "Expected format: [N]dS[+/-M] (e.g. '2d6+3')."
+            f"Invalid damage notation: '{notation}'. Expected format: [N]dS[+/-M] (e.g. '2d6+3')."
         )
 
     count = int(m.group("count") or 1)

@@ -5,6 +5,7 @@ the AI companion view (``companion_visible_game_state``) or the human player
 payload (``build_session_state_payload``). One test, planted markers, so any
 future key that leaks a secret is caught here regardless of which boundary.
 """
+
 from __future__ import annotations
 
 import json

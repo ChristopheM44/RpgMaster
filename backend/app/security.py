@@ -18,7 +18,7 @@ def _bearer_value(value: str | None) -> str:
         return ""
     prefix = "Bearer "
     if value.startswith(prefix):
-        return value[len(prefix):].strip()
+        return value[len(prefix) :].strip()
     return value.strip()
 
 
@@ -33,9 +33,7 @@ def admin_access_token_required() -> bool:
 def validate_access_token_configuration() -> None:
     """Fail closed when running outside debug mode without a local token."""
     if not settings.app_debug and not access_token_required():
-        raise RuntimeError(
-            "APP_ACCESS_TOKEN must be configured when APP_DEBUG=false."
-        )
+        raise RuntimeError("APP_ACCESS_TOKEN must be configured when APP_DEBUG=false.")
 
 
 def is_valid_access_token(token: str | None) -> bool:

@@ -1,4 +1,5 @@
 """Tests for game/turn_manager.py — combat and exploration turn order."""
+
 from __future__ import annotations
 
 import random
@@ -121,9 +122,7 @@ class TestNextTurn:
         assert manager.current_turn.combatant_id != first_id
         assert manager.current_turn is order[1]
 
-    def test_wraps_to_first_and_increments_round(
-        self, manager, all_combatants, seeded_rng
-    ) -> None:
+    def test_wraps_to_first_and_increments_round(self, manager, all_combatants, seeded_rng) -> None:
         manager.setup_combat(all_combatants, rng=seeded_rng)
         first_id = manager.current_turn.combatant_id
         # Advance through all 4 combatants
@@ -132,9 +131,7 @@ class TestNextTurn:
         assert manager.current_turn.combatant_id == first_id
         assert manager.round_number == 2
 
-    def test_action_economy_reset_on_next_turn(
-        self, manager, all_combatants, seeded_rng
-    ) -> None:
+    def test_action_economy_reset_on_next_turn(self, manager, all_combatants, seeded_rng) -> None:
         manager.setup_combat(all_combatants, rng=seeded_rng)
         # Spend the action of the first combatant
         manager.current_turn.action_economy.use_action()
@@ -264,6 +261,4 @@ class TestSerialization:
         restored.load_dict(snapshot)
 
         assert restored.mode == "exploration"
-        assert [e.combatant_id for e in restored._order] == [
-            e.combatant_id for e in manager._order
-        ]
+        assert [e.combatant_id for e in restored._order] == [e.combatant_id for e in manager._order]

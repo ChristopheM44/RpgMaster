@@ -310,9 +310,7 @@ async def _forge_and_validate(async_client) -> dict:
 
 async def _poll_forge_job(async_client, campaign_id: str, job_id: str) -> dict:
     for _ in range(50):
-        response = await async_client.get(
-            f"/api/campaigns/{campaign_id}/forge-draft/jobs/{job_id}"
-        )
+        response = await async_client.get(f"/api/campaigns/{campaign_id}/forge-draft/jobs/{job_id}")
         assert response.status_code == 200
         payload = response.json()
         if payload["status"] in {"completed", "failed"}:
@@ -591,8 +589,7 @@ def test_resolve_duration_scratch_scope_is_authoritative():
     )
     assert svc._resolve_duration({}, {}, {**base, "scope": "mini-chronique"}, 3) == "3-5 sessions"
     assert (
-        svc._resolve_duration({}, {}, {**base, "scope": "chronique longue"}, 5)
-        == "6-10 sessions"
+        svc._resolve_duration({}, {}, {**base, "scope": "chronique longue"}, 5) == "6-10 sessions"
     )
 
 
@@ -748,9 +745,7 @@ async def test_gm_prompt_context_contains_private_chapter_and_npcs(
 async def test_personas_endpoint_returns_dossier_personas(async_client):
     """L'endpoint /personas liste les personas de la campagne par type."""
     forged = await _forge_and_validate(async_client)
-    response = await async_client.get(
-        f"/api/campaigns/{forged['campaign_id']}/personas"
-    )
+    response = await async_client.get(f"/api/campaigns/{forged['campaign_id']}/personas")
 
     assert response.status_code == 200
     data = response.json()
@@ -820,9 +815,7 @@ async def test_start_game_injects_minimal_campaign_context(async_client, db_sess
     assert game_state.state_data["world_maps"]["region_map"] is None
 
     messages = await db_session.execute(
-        select(Message)
-        .where(Message.session_id == session_id)
-        .order_by(Message.created_at.desc())
+        select(Message).where(Message.session_id == session_id).order_by(Message.created_at.desc())
     )
     opening = messages.scalars().first()
     assert opening is not None

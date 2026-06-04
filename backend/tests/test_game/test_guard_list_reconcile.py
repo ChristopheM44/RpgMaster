@@ -9,6 +9,7 @@ which reads the mirror) would re-grant a unique item.
 `SessionManager._reconcile_guard_lists_from_dossier` union-merges the append-only
 guard lists DB→mirror at open, closing that window.
 """
+
 from __future__ import annotations
 
 import pytest

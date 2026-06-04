@@ -4,6 +4,7 @@ Chaque test utilise `ws_client` (fixture sync de test_game/conftest.py).
 Les sessions sont créées via l'API HTTP avant chaque connexion WS,
 assurant que tout s'exécute dans le même event loop interne du TestClient.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -142,7 +143,9 @@ class TestWebSocketConnection:
             calls.append("disconnect")
 
         monkeypatch.setattr(ws_game, "websocket_has_valid_access_token", lambda websocket: True)
-        monkeypatch.setattr(ws_game, "_db_session_factory", lambda websocket: _fake_db_session_factory)
+        monkeypatch.setattr(
+            ws_game, "_db_session_factory", lambda websocket: _fake_db_session_factory
+        )
         monkeypatch.setattr(ws_game.session_manager, "open_session", AsyncMock())
         monkeypatch.setattr(
             ws_game,
@@ -182,9 +185,7 @@ class TestWebSocketConnection:
         session_id = _create_session(ws_client)
         monkeypatch.setattr(settings, "app_access_token", "test-token")
 
-        with ws_client.websocket_connect(
-            f"/ws/game/{session_id}?access_token=test-token"
-        ) as ws:
+        with ws_client.websocket_connect(f"/ws/game/{session_id}?access_token=test-token") as ws:
             data = ws.receive_json()
             assert data["event_type"] == "session_state"
 
@@ -258,11 +259,13 @@ class TestPlayerAction:
         session_id = _create_session(ws_client)
         with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
             ws.receive_json()  # session_state
-            ws.send_json({
-                "type": "action",
-                "action_type": "free_text",
-                "content": "x" * 4001,
-            })
+            ws.send_json(
+                {
+                    "type": "action",
+                    "action_type": "free_text",
+                    "content": "x" * 4001,
+                }
+            )
             data = ws.receive_json()
             assert data["event_type"] == "error"
             assert data["payload"]["message"] == "Message WebSocket invalide."
@@ -271,11 +274,13 @@ class TestPlayerAction:
         session_id = _create_session(ws_client)
         with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
             ws.receive_json()  # session_state
-            ws.send_json({
-                "type": "toggle_ai_control",
-                "character_id": "../../../etc/passwd",
-                "is_ai": True,
-            })
+            ws.send_json(
+                {
+                    "type": "toggle_ai_control",
+                    "character_id": "../../../etc/passwd",
+                    "is_ai": True,
+                }
+            )
             data = ws.receive_json()
             assert data["event_type"] == "error"
 
@@ -283,11 +288,13 @@ class TestPlayerAction:
         session_id = _create_session(ws_client)
         with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
             ws.receive_json()  # session_state
-            ws.send_json({
-                "type": "action",
-                "action_type": "free_text",
-                "content": "Je cherche des pièges",
-            })
+            ws.send_json(
+                {
+                    "type": "action",
+                    "action_type": "free_text",
+                    "content": "Je cherche des pièges",
+                }
+            )
             narration = _receive_until(ws, "narration")
             assert narration["event_type"] == "narration"
             # Le GMAgent génère la narration (ou fallback si Ollama indisponible)
@@ -297,11 +304,13 @@ class TestPlayerAction:
         session_id = _create_session(ws_client)
         with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
             ws.receive_json()  # session_state
-            ws.send_json({
-                "type": "action",
-                "action_type": "free_text",
-                "content": "Je passe prudemment au tour suivant.",
-            })
+            ws.send_json(
+                {
+                    "type": "action",
+                    "action_type": "free_text",
+                    "content": "Je passe prudemment au tour suivant.",
+                }
+            )
             events = _collect_all(ws, 3)
             types = [e["event_type"] for e in events]
             assert "narration" in types
@@ -310,14 +319,17 @@ class TestPlayerAction:
     def test_action_increments_turn_number(self, ws_client) -> None:
         session_id = _create_session(ws_client)
         from app.api import ws_game
+
         with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
             ws.receive_json()  # session_state
             for i in range(1, 4):
-                ws.send_json({
-                    "type": "action",
-                    "action_type": "free_text",
-                    "content": "Je continue d'explorer.",
-                })
+                ws.send_json(
+                    {
+                        "type": "action",
+                        "action_type": "free_text",
+                        "content": "Je continue d'explorer.",
+                    }
+                )
                 _receive_until(ws, "narration")
             active = ws_game.session_manager.get_session(session_id)
             assert active is not None
@@ -372,11 +384,13 @@ class TestPlayerAction:
             ]
             active.turn_manager._index = 0
 
-            ws.send_json({
-                "type": "action",
-                "action_type": "reset_combat",
-                "character_id": "hero-1",
-            })
+            ws.send_json(
+                {
+                    "type": "action",
+                    "action_type": "reset_combat",
+                    "character_id": "hero-1",
+                }
+            )
 
             event_types: list[str] = []
             exploration_seen = False
@@ -407,12 +421,14 @@ class TestPlayerAction:
 
         with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
             ws.receive_json()  # session_state
-            ws.send_json({
-                "type": "action",
-                "action_type": "equip",
-                "character_id": character["id"],
-                "item_id": "dagger",
-            })
+            ws.send_json(
+                {
+                    "type": "action",
+                    "action_type": "equip",
+                    "character_id": character["id"],
+                    "item_id": "dagger",
+                }
+            )
 
             update = _receive_until(ws, "equipment_updated")
             assert update["payload"]["character_id"] == character["id"]
@@ -428,12 +444,14 @@ class TestPlayerAction:
 
         with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
             ws.receive_json()  # session_state
-            ws.send_json({
-                "type": "action",
-                "action_type": "short_rest",
-                "character_id": character["id"],
-                "hit_dice_spend": {character["id"]: 1},
-            })
+            ws.send_json(
+                {
+                    "type": "action",
+                    "action_type": "short_rest",
+                    "character_id": character["id"],
+                    "hit_dice_spend": {character["id"]: 1},
+                }
+            )
 
             roll = _receive_until(ws, "roll_result")
             assert roll["payload"]["character_id"] == character["id"]
@@ -459,11 +477,13 @@ class TestPlayerAction:
 
         with ws_client.websocket_connect(f"/ws/game/{session_id}") as ws:
             ws.receive_json()  # session_state
-            ws.send_json({
-                "type": "action",
-                "action_type": "take_rest",
-                "character_id": character["id"],
-            })
+            ws.send_json(
+                {
+                    "type": "action",
+                    "action_type": "take_rest",
+                    "character_id": character["id"],
+                }
+            )
 
             phase = _receive_until(ws, "phase_change")
             assert phase["payload"]["phase"] == "exploration"
@@ -484,26 +504,30 @@ class TestPlayerAction:
 
         session_id = _create_session(ws_client)
         mock_gm = MagicMock()
-        mock_gm.think = AsyncMock(return_value=AgentResponse(
-            content="Le bandit hésite, son arme tremblante à la main.",
-            actions=[
-                GMAction(
-                    type="roll_request",
-                    target="hero-1",
-                    params={"ability": "cha", "type": "check", "dc": 1},
-                )
-            ],
-        ))
-        mock_gm.narrate_outcome_response = AsyncMock(return_value=GMResponse(
-            narration="Le bandit laisse tomber son cimeterre et lève les mains.",
-            actions=[
-                GMAction(
-                    type="combatant_status",
-                    target="bandit_1",
-                    params={"status": "surrendered", "reason": "reddition"},
-                )
-            ],
-        ))
+        mock_gm.think = AsyncMock(
+            return_value=AgentResponse(
+                content="Le bandit hésite, son arme tremblante à la main.",
+                actions=[
+                    GMAction(
+                        type="roll_request",
+                        target="hero-1",
+                        params={"ability": "cha", "type": "check", "dc": 1},
+                    )
+                ],
+            )
+        )
+        mock_gm.narrate_outcome_response = AsyncMock(
+            return_value=GMResponse(
+                narration="Le bandit laisse tomber son cimeterre et lève les mains.",
+                actions=[
+                    GMAction(
+                        type="combatant_status",
+                        target="bandit_1",
+                        params={"status": "surrendered", "reason": "reddition"},
+                    )
+                ],
+            )
+        )
         previous_resolver = ws_game.action_resolver
         ws_game.action_resolver = ActionResolver(gm_agent=mock_gm)
 
@@ -553,12 +577,14 @@ class TestPlayerAction:
                 active.turn_manager._mode = "combat"
                 active.turn_manager._round = 1
 
-                ws.send_json({
-                    "type": "action",
-                    "action_type": "free_text",
-                    "content": "Rends-toi bandit.",
-                    "character_id": "hero-1",
-                })
+                ws.send_json(
+                    {
+                        "type": "action",
+                        "action_type": "free_text",
+                        "content": "Rends-toi bandit.",
+                        "character_id": "hero-1",
+                    }
+                )
 
                 events = []
                 for _ in range(18):

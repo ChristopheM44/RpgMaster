@@ -78,10 +78,7 @@ def test_opening_response_uses_opening_scene_as_physical_scene() -> None:
     assert "Un cap possible se dessine" not in response.narration
     assert "Vous pouvez" not in response.narration
     assert response.narration.endswith("Que faites-vous ?")
-    assert any(
-        exit_["leads_to"] == "trouver_source_malediction"
-        for exit_ in scene.params["exits"]
-    )
+    assert any(exit_["leads_to"] == "trouver_source_malediction" for exit_ in scene.params["exits"])
 
 
 def test_opening_response_does_not_add_route_exit_inside_square() -> None:
@@ -260,9 +257,7 @@ def test_opening_response_separates_hook_from_scene() -> None:
     campaign_context = {
         "active_chapter": {
             "key_locations": ["Goldenthrone"],
-            "initial_state": (
-                "L'archmage Syndra Silvane se consume lentement à Goldenthrone."
-            ),
+            "initial_state": ("L'archmage Syndra Silvane se consume lentement à Goldenthrone."),
             "involved_npcs": ["Syndra Silvane"],
             "stakes": "La malédiction s'aggrave chaque jour.",
             "opening_scene": {
@@ -355,9 +350,7 @@ def test_campaign_opening_text_surfaces_public_hook() -> None:
         },
         "player_contract": {
             "hook": "La Guilde des Cartographes vous engage pour atteindre Chult.",
-            "known_objectives": [
-                "Cartographier les ruines oubliées de la jungle de Chult"
-            ],
+            "known_objectives": ["Cartographier les ruines oubliées de la jungle de Chult"],
         },
     }
 
@@ -397,9 +390,7 @@ def test_campaign_opening_text_surfaces_known_objective_briefing() -> None:
         },
         "player_contract": {
             "hook": "Une commanditaire vous paie pour partir vers Chult.",
-            "known_objectives": [
-                "Cartographier les ruines oubliées de la jungle de Chult"
-            ],
+            "known_objectives": ["Cartographier les ruines oubliées de la jungle de Chult"],
         },
     }
 
@@ -692,9 +683,7 @@ async def test_publish_opening_scene_keeps_llm_narration_unlabeled(monkeypatch) 
     narration_payload = next(
         payload for event, payload in published if event == EventType.NARRATION
     )
-    assert narration_payload["text"].startswith(
-        "Le sable se lève en nappes pâles"
-    )
+    assert narration_payload["text"].startswith("Le sable se lève en nappes pâles")
     assert "Accroche :" not in narration_payload["text"]
     assert "Mission confiée" not in narration_payload["text"]
 

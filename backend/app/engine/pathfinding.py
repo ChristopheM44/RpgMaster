@@ -1,4 +1,5 @@
 """Pure grid pathfinding helpers."""
+
 from __future__ import annotations
 
 import heapq

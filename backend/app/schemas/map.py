@@ -130,6 +130,7 @@ class MapEdge(BaseModel):
 
 class ForestSpot(BaseModel):
     """Cercle de végétation sur la carte."""
+
     model_config = ConfigDict(extra="ignore")
 
     x: float = Field(ge=0, le=100)
@@ -140,6 +141,7 @@ class ForestSpot(BaseModel):
 
 class MountainSpot(BaseModel):
     """Triangle de montagne (rendu par le frontend en SVG)."""
+
     model_config = ConfigDict(extra="ignore")
 
     x: float = Field(ge=0, le=100)
@@ -149,6 +151,7 @@ class MountainSpot(BaseModel):
 
 class Coastline(BaseModel):
     """Polygone côtier (mer ou grand lac) ancré sur un bord de la carte."""
+
     model_config = ConfigDict(extra="ignore")
 
     side: CoastlineSide = "west"
@@ -159,6 +162,7 @@ class Coastline(BaseModel):
 
 class RiverPath(BaseModel):
     """Cours d'eau (rivière ou ruisseau) traversant la carte."""
+
     model_config = ConfigDict(extra="ignore")
 
     # Path SVG en coords 0..100 — ex: "M 0 76 Q 30 80 60 78 T 100 80"
@@ -174,6 +178,7 @@ class MapDecor(BaseModel):
     littoral et rivière. Sémantique du patch : ``None`` ⇒ ne touche pas au
     décor existant ; ``MapDecor()`` (vide) ⇒ efface le décor.
     """
+
     model_config = ConfigDict(extra="ignore")
 
     forests: list[ForestSpot] = Field(default_factory=list, max_length=64)
@@ -191,6 +196,7 @@ class MapVisualAsset(BaseModel):
     Structured nodes, POIs, exits and scene elements remain the gameplay source
     of truth. This asset is only an inspectable visual layer.
     """
+
     model_config = ConfigDict(extra="ignore")
 
     provider: str = Field(min_length=1, max_length=48)

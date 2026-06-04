@@ -3,6 +3,7 @@
 XP Thresholds per character per level (SRD 5.2 §Building Combat Encounters):
 Easy / Medium / Hard / Deadly
 """
+
 from __future__ import annotations
 
 import random
@@ -11,26 +12,26 @@ from typing import Any
 
 # XP thresholds per character per level: (Easy, Medium, Hard, Deadly)
 _XP_THRESHOLDS: dict[int, tuple[int, int, int, int]] = {
-    1:  (25,   50,   75,   100),
-    2:  (50,   100,  150,  200),
-    3:  (75,   150,  225,  400),
-    4:  (125,  250,  375,  500),
-    5:  (250,  500,  750,  1100),
-    6:  (300,  600,  900,  1400),
-    7:  (350,  750,  1100, 1700),
-    8:  (450,  900,  1400, 2100),
-    9:  (550,  1100, 1600, 2400),
-    10: (600,  1200, 1900, 2800),
+    1: (25, 50, 75, 100),
+    2: (50, 100, 150, 200),
+    3: (75, 150, 225, 400),
+    4: (125, 250, 375, 500),
+    5: (250, 500, 750, 1100),
+    6: (300, 600, 900, 1400),
+    7: (350, 750, 1100, 1700),
+    8: (450, 900, 1400, 2100),
+    9: (550, 1100, 1600, 2400),
+    10: (600, 1200, 1900, 2800),
 }
 
 # XP multipliers by number of monsters: (min_count, max_count, multiplier)
 _GROUP_MULTIPLIERS: list[tuple[int, int, float]] = [
-    (1,   1,   1.0),
-    (2,   2,   1.5),
-    (3,   6,   2.0),
-    (7,   10,  2.5),
-    (11,  14,  3.0),
-    (15,  999, 4.0),
+    (1, 1, 1.0),
+    (2, 2, 1.5),
+    (3, 6, 2.0),
+    (7, 10, 2.5),
+    (11, 14, 3.0),
+    (15, 999, 4.0),
 ]
 
 _DIFFICULTY_INDEX: dict[str, int] = {
@@ -183,17 +184,19 @@ def generate_encounter(
                 continue  # still too much, skip this monster
 
         first_action = _first_attack_action(monster)
-        entries.append(EncounterEntry(
-            monster_id=monster["id"],
-            count=count,
-            name_fr=monster.get("name_fr", monster["name"]),
-            cr=monster["cr"],
-            xp_each=monster_xp,
-            ac=monster["ac"],
-            hp=monster["hp"],
-            attack_bonus=first_action.get("attack_bonus", 2),
-            damage_notation=first_action.get("damage_dice", "1d4"),
-        ))
+        entries.append(
+            EncounterEntry(
+                monster_id=monster["id"],
+                count=count,
+                name_fr=monster.get("name_fr", monster["name"]),
+                cr=monster["cr"],
+                xp_each=monster_xp,
+                ac=monster["ac"],
+                hp=monster["hp"],
+                attack_bonus=first_action.get("attack_bonus", 2),
+                damage_notation=first_action.get("damage_dice", "1d4"),
+            )
+        )
         xp_accumulated += monster_xp * count
 
         # Cap variety at 3 different types
@@ -204,17 +207,19 @@ def generate_encounter(
     if not entries:
         m = candidates[0]
         first_action = _first_attack_action(m)
-        entries.append(EncounterEntry(
-            monster_id=m["id"],
-            count=1,
-            name_fr=m.get("name_fr", m["name"]),
-            cr=m["cr"],
-            xp_each=m["xp"],
-            ac=m["ac"],
-            hp=m["hp"],
-            attack_bonus=first_action.get("attack_bonus", 2),
-            damage_notation=first_action.get("damage_dice", "1d4"),
-        ))
+        entries.append(
+            EncounterEntry(
+                monster_id=m["id"],
+                count=1,
+                name_fr=m.get("name_fr", m["name"]),
+                cr=m["cr"],
+                xp_each=m["xp"],
+                ac=m["ac"],
+                hp=m["hp"],
+                attack_bonus=first_action.get("attack_bonus", 2),
+                damage_notation=first_action.get("damage_dice", "1d4"),
+            )
+        )
 
     all_xp_flat = [e.xp_each for e in entries for _ in range(e.count)]
     return BuiltEncounter(
@@ -245,20 +250,22 @@ def expand_to_combatants(
             display_name = entry.name_fr
             if entry.count > 1:
                 display_name = f"{entry.name_fr} {i + 1}"
-            result.append({
-                "combatant_id": combatant_id,
-                "name": display_name,
-                "hp": entry.hp,
-                "hp_max": entry.hp,
-                "is_player": False,
-                "is_ai": True,
-                "ac": entry.ac,
-                "attack_bonus": entry.attack_bonus,
-                "damage_notation": entry.damage_notation,
-                "cr": entry.cr,
-                "xp": entry.xp_each,
-                "ability_scores": monster_data.get("ability_scores", {}),
-                "senses": dict(senses),
-                "passive_perception": senses.get("passive_perception"),
-            })
+            result.append(
+                {
+                    "combatant_id": combatant_id,
+                    "name": display_name,
+                    "hp": entry.hp,
+                    "hp_max": entry.hp,
+                    "is_player": False,
+                    "is_ai": True,
+                    "ac": entry.ac,
+                    "attack_bonus": entry.attack_bonus,
+                    "damage_notation": entry.damage_notation,
+                    "cr": entry.cr,
+                    "xp": entry.xp_each,
+                    "ability_scores": monster_data.get("ability_scores", {}),
+                    "senses": dict(senses),
+                    "passive_perception": senses.get("passive_perception"),
+                }
+            )
     return result

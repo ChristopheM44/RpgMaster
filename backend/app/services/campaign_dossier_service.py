@@ -40,10 +40,10 @@ FORGE_PHASE_RETRY_BASE_DELAY = 1.0
 FORGE_JOB_EVENT_LIMIT = 80
 
 # Sliding window pour la mémoire canon long terme
-MAX_CANON_LIST_SIZE      = 200   # hard-cap finale pour toutes les listes canon (était 50)
-SLIDING_WINDOW_THRESHOLD = 150   # déclenche la compression LLM au-delà de cette taille
-SLIDING_WINDOW_KEEP      = 100   # entrées récentes conservées après compression
-ROLLING_SUMMARY_MAX_LEN  = 4000  # taille max du résumé glissant (était 2000)
+MAX_CANON_LIST_SIZE = 200  # hard-cap finale pour toutes les listes canon (était 50)
+SLIDING_WINDOW_THRESHOLD = 150  # déclenche la compression LLM au-delà de cette taille
+SLIDING_WINDOW_KEEP = 100  # entrées récentes conservées après compression
+ROLLING_SUMMARY_MAX_LEN = 4000  # taille max du résumé glissant (était 2000)
 
 # Champs narratifs à traiter par la fenêtre glissante (contenu temporel/chronologique)
 _SLIDING_WINDOW_FIELDS: tuple[str, ...] = (
@@ -1215,8 +1215,7 @@ def _source_note_inputs(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 {
                     **source,
                     "title": (
-                        f"{source.get('title') or 'Source'} — "
-                        f"partie {index + 1}/{len(chunks)}"
+                        f"{source.get('title') or 'Source'} — partie {index + 1}/{len(chunks)}"
                     ),
                     "content": chunk,
                     "chunk_index": index + 1,

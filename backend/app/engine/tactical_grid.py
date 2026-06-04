@@ -6,6 +6,7 @@ No I/O, no async, no database. Provides:
 - Movement validation
 - Default position assignment at combat start
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass

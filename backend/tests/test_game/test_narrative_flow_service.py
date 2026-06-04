@@ -183,7 +183,8 @@ async def test_companion_dialogue_strips_gm_owned_world_result() -> None:
         )
 
     dialogue_payload = next(
-        payload for event_type, payload in published
+        payload
+        for event_type, payload in published
         if event_type == "dialogue" and payload.get("speaker") == "Oaken"
     )
     assert "bois craque" not in dialogue_payload["text"]
@@ -401,12 +402,9 @@ async def test_direct_companion_action_keeps_dialogue_then_calls_gm() -> None:
         "Thorin examine le passage secret pour détecter les pièges."
     )
     assert exchange.audience == "companion"
-    dialogue_payloads = [
-        payload for event_type, payload in published if event_type == "dialogue"
-    ]
+    dialogue_payloads = [payload for event_type, payload in published if event_type == "dialogue"]
     assert dialogue_payloads[-1]["text"] == (
-        "s'accroupit à l'entrée du passage. "
-        "« Je passe devant, attendez mon signal. »"
+        "s'accroupit à l'entrée du passage. « Je passe devant, attendez mon signal. »"
     )
 
 
@@ -807,9 +805,7 @@ async def test_filled_scene_clock_triggers_crisis_roll_and_resolves() -> None:
     assert [payload["status"] for payload in clock_updates[:2]] == ["resolving", "resolved"]
     assert any(event == EventType.ROLL_RESULT for event, _ in published)
 
-    narrations = [
-        payload["text"] for event, payload in published if event == EventType.NARRATION
-    ]
+    narrations = [payload["text"] for event, payload in published if event == EventType.NARRATION]
     # La crise se raconte par un phénomène physique concret (catégorie "dock"),
     # jamais par le label interne ni un placeholder d'acteur.
     assert any(
@@ -823,9 +819,7 @@ async def test_filled_scene_clock_triggers_crisis_roll_and_resolves() -> None:
         assert "Menace aux docks" not in text
         assert "point critique" not in text
         assert "le personnage exposé" not in text
-    assert not any(
-        "Menace aux docks atteint son point critique" in text for text in narrations
-    )
+    assert not any("Menace aux docks atteint son point critique" in text for text in narrations)
 
 
 @pytest.mark.asyncio
@@ -962,11 +956,12 @@ async def test_npc_social_action_does_not_trigger_party_dialogue_path() -> None:
     resolver.social_conclude = AsyncMock()
     resolver.resolve_npc_dialogue = AsyncMock()
 
-    with patch(
-        "app.services.narrative_flow_service.event_bus.publish_to_session", new=AsyncMock()
-    ), patch(
-        "app.game.ai_player_manager.AIPlayerManager.run_exploration_reactions",
-        new=AsyncMock(return_value=(0, [])),
+    with (
+        patch("app.services.narrative_flow_service.event_bus.publish_to_session", new=AsyncMock()),
+        patch(
+            "app.game.ai_player_manager.AIPlayerManager.run_exploration_reactions",
+            new=AsyncMock(return_value=(0, [])),
+        ),
     ):
         exchange = await NarrativeFlowService().handle_exploration_action(
             session_id="scene-1",
@@ -1010,11 +1005,12 @@ async def test_npc_dialogue_triggers_one_companion_reaction() -> None:
 
     reaction_mock = AsyncMock(return_value=(1, [{"speaker": "Thorin", "text": "Méfions-nous."}]))
 
-    with patch(
-        "app.services.narrative_flow_service.event_bus.publish_to_session", new=AsyncMock()
-    ), patch(
-        "app.game.ai_player_manager.AIPlayerManager.run_exploration_reactions",
-        new=reaction_mock,
+    with (
+        patch("app.services.narrative_flow_service.event_bus.publish_to_session", new=AsyncMock()),
+        patch(
+            "app.game.ai_player_manager.AIPlayerManager.run_exploration_reactions",
+            new=reaction_mock,
+        ),
     ):
         await NarrativeFlowService().handle_exploration_action(
             session_id="scene-1",
@@ -1061,11 +1057,12 @@ async def test_npc_dialogue_reaction_skipped_when_no_ai_players() -> None:
 
     reaction_mock = AsyncMock(return_value=(0, []))
 
-    with patch(
-        "app.services.narrative_flow_service.event_bus.publish_to_session", new=AsyncMock()
-    ), patch(
-        "app.game.ai_player_manager.AIPlayerManager.run_exploration_reactions",
-        new=reaction_mock,
+    with (
+        patch("app.services.narrative_flow_service.event_bus.publish_to_session", new=AsyncMock()),
+        patch(
+            "app.game.ai_player_manager.AIPlayerManager.run_exploration_reactions",
+            new=reaction_mock,
+        ),
     ):
         await NarrativeFlowService().handle_exploration_action(
             session_id="scene-solo",

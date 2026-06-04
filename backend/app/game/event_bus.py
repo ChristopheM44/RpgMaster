@@ -11,6 +11,7 @@ Design decisions:
 - Phase 1 (solo): in-process only.  Phase 2+: swap out for Redis pub/sub
   without touching the rest of the codebase.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -135,17 +136,13 @@ class GameEvent(BaseModel):
 
 
 class EventBusProtocol(Protocol):
-    def subscribe(self, session_id: str, maxsize: int | None = None) -> asyncio.Queue:
-        ...
+    def subscribe(self, session_id: str, maxsize: int | None = None) -> asyncio.Queue: ...
 
-    def unsubscribe(self, session_id: str, queue: asyncio.Queue) -> None:
-        ...
+    def unsubscribe(self, session_id: str, queue: asyncio.Queue) -> None: ...
 
-    def subscriber_count(self, session_id: str) -> int:
-        ...
+    def subscriber_count(self, session_id: str) -> int: ...
 
-    async def publish(self, event: GameEvent) -> None:
-        ...
+    async def publish(self, event: GameEvent) -> None: ...
 
     async def publish_to_session(
         self,
@@ -153,8 +150,7 @@ class EventBusProtocol(Protocol):
         event_type: str,
         payload: dict[str, Any],
         source: str | None = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
 
 class InProcessEventBus:

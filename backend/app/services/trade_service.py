@@ -1,4 +1,5 @@
 """Player-to-player inventory and currency transfer service."""
+
 from __future__ import annotations
 
 from typing import Any

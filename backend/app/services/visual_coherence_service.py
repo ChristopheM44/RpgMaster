@@ -1,4 +1,5 @@
 """Idempotent repairs for visual map/scene coherence."""
+
 from __future__ import annotations
 
 from copy import deepcopy

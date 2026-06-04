@@ -46,6 +46,19 @@ ignore = []
 
 [tool.ruff.lint.per-file-ignores]
 "app/engine/adventure_seeds.py" = ["E501"]
+# UP042 (str + Enum → StrEnum) volontairement ignoré sur ces enums *persistés*.
+# Ils sont sérialisés en base (colonnes SQLAlchemy `Enum` → `.name`) et en
+# JSON/API (toujours via `.value`). Passer à `StrEnum` changerait `str(membre)`
+# de "Cls.A" à "a" : neutre ici (aucune dépendance à cette forme hors `__repr__`)
+# mais sans bénéfice fonctionnel et risqué pour des données déjà persistées.
+# On conserve donc `class X(str, Enum)`. Les nouveaux enums ailleurs gardent le
+# rappel StrEnum.
+"app/engine/ability_checks.py" = ["UP042"]
+"app/engine/conditions.py" = ["UP042"]
+"app/game/constants.py" = ["UP042"]
+"app/models/message.py" = ["UP042"]
+"app/models/session.py" = ["UP042"]
+"app/schemas/equipment.py" = ["UP042"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -9,13 +9,18 @@ BIOMES = {
             "l'Auberge de la Chope Fêlée",
             "la Taverne du Gobelin Borgne",
             "le Relais des Voyageurs",
-            "un cabaret souterrain mal famé"
+            "un cabaret souterrain mal famé",
         ],
-        "weather_options": ["Calme", "Pluie battante dehors", "Orage violent dehors", "Nuit noire dehors"],
+        "weather_options": [
+            "Calme",
+            "Pluie battante dehors",
+            "Orage violent dehors",
+            "Nuit noire dehors",
+        ],
         "prologues": [
             "Après des semaines de voyage éprouvant à travers des contrées sauvages, vous avez enfin trouvé refuge dans ce relais. Alors que vous partagiez un repas chaud et quelques pichets de bière en discutant de vos projets, l'agitation habituelle de la salle s'est soudainement tue pour laisser place à une tension palpable...",
-            "Vous vous êtes tous retrouvés à la même table, réunis par un intermédiaire qui vous avait promis un travail gracieusement payé. Mais l'intermédiaire ne s'est jamais présenté, et vous venez de découvrir qu'une étrange marque noire a été discrètement gravée sur le bois de votre table sous vos chopines..."
-        ]
+            "Vous vous êtes tous retrouvés à la même table, réunis par un intermédiaire qui vous avait promis un travail gracieusement payé. Mais l'intermédiaire ne s'est jamais présenté, et vous venez de découvrir qu'une étrange marque noire a été discrètement gravée sur le bois de votre table sous vos chopines...",
+        ],
     },
     "dungeon": {
         "name_fr": "Donjon / Crypte",
@@ -24,13 +29,18 @@ BIOMES = {
             "les catacombes oubliées d'un culte éteint",
             "les geôles humides d'une forteresse en ruine",
             "la crypte ancestrale d'une lignée maudite",
-            "les couloirs de pierre d'un ancien sanctuaire"
+            "les couloirs de pierre d'un ancien sanctuaire",
         ],
-        "weather_options": ["Air stagnant", "Froid glacial souterrain", "Humidité suintante", "Obscurité totale"],
+        "weather_options": [
+            "Air stagnant",
+            "Froid glacial souterrain",
+            "Humidité suintante",
+            "Obscurité totale",
+        ],
         "prologues": [
             "Le sol s'est dérobé sous vos pieds alors que vous exploriez les ruines de surface, vous précipitant dans ce dédale de pierre oublié de tous. Blessés mais vivants, vos torches faiblissantes révèlent des gravures ancestrales sur les murs, et le seul chemin de retour semble être de vous enfoncer plus profondément...",
-            "Capturés dans votre sommeil par des pilleurs de tombes ou des fanatiques, vous avez été jetés dans ces profondeurs pour servir de sacrifices ou de main d'œuvre. Vous avez réussi à briser vos chaînes et à éliminer vos gardes dans l'ombre, mais vous êtes désormais perdus dans l'obscurité moite de ces galeries..."
-        ]
+            "Capturés dans votre sommeil par des pilleurs de tombes ou des fanatiques, vous avez été jetés dans ces profondeurs pour servir de sacrifices ou de main d'œuvre. Vous avez réussi à briser vos chaînes et à éliminer vos gardes dans l'ombre, mais vous êtes désormais perdus dans l'obscurité moite de ces galeries...",
+        ],
     },
     "forest": {
         "name_fr": "Forêt mystérieuse",
@@ -39,13 +49,20 @@ BIOMES = {
             "une clairière d'arbres millénaires",
             "un bosquet entouré de ronces géantes",
             "les sentiers d'une forêt de pins étouffante",
-            "une croisée de chemins forestiers balayée par le vent"
+            "une croisée de chemins forestiers balayée par le vent",
         ],
-        "weather_options": ["Calme", "Brouillard épais", "Pluie battante", "Tempétueux", "Nuit noire", "Éclipse lunaire"],
+        "weather_options": [
+            "Calme",
+            "Brouillard épais",
+            "Pluie battante",
+            "Tempétueux",
+            "Nuit noire",
+            "Éclipse lunaire",
+        ],
         "prologues": [
             "Vous suiviez une ancienne piste de marchands à travers les bois lorsqu'un brouillard surnaturel et soudain a effacé tout repère. Les arbres semblent avoir bougé autour de vous, refermant leurs branches comme des griffes. Vous réalisez que vous tournez en rond depuis des heures et que les bruits de la faune ont totalement cessé...",
-            "Engagés pour traquer une bête enragée ou retrouver un enfant égaré, vous vous êtes enfoncés loin sous la canopée sombre. Vos provisions s'amenuisent et une étrange mélodie portée par le vent semble vous attirer vers le cœur de ce bois dense..."
-        ]
+            "Engagés pour traquer une bête enragée ou retrouver un enfant égaré, vous vous êtes enfoncés loin sous la canopée sombre. Vos provisions s'amenuisent et une étrange mélodie portée par le vent semble vous attirer vers le cœur de ce bois dense...",
+        ],
     },
     "swamp": {
         "name_fr": "Marécage fétide",
@@ -54,13 +71,18 @@ BIOMES = {
             "les rives de sédiments d'un marais putride",
             "une cabane sur pilotis abandonnée au milieu des roseaux",
             "un chemin de planches pourries traversant une tourbière",
-            "une mangrove aux eaux stagnantes et sombres"
+            "une mangrove aux eaux stagnantes et sombres",
         ],
-        "weather_options": ["Brouillard toxique vert", "Brume dense", "Pluie lourde et acide", "Chaleur moite étouffante"],
+        "weather_options": [
+            "Brouillard toxique vert",
+            "Brume dense",
+            "Pluie lourde et acide",
+            "Chaleur moite étouffante",
+        ],
         "prologues": [
             "Votre guide local a été happé en silence au milieu de la nuit par une créature tapie sous les eaux noires. Sans sa lanterne et sa carte, vous avez erré à l'aveugle, enfonçant vos bottes dans la vase fétide, poursuivis par des feux follets dansants à la lisière de votre vision...",
-            "Fuyant la colère d'un seigneur local ou d'une horde de mercenaires, vous n'avez eu d'autre choix que de vous jeter dans ces marais réputés maudits. Vos poursuivants ont rebroussé chemin, terrifiés par les légendes locales, vous laissant seuls face à la brume verte et étouffante..."
-        ]
+            "Fuyant la colère d'un seigneur local ou d'une horde de mercenaires, vous n'avez eu d'autre choix que de vous jeter dans ces marais réputés maudits. Vos poursuivants ont rebroussé chemin, terrifiés par les légendes locales, vous laissant seuls face à la brume verte et étouffante...",
+        ],
     },
     "desert": {
         "name_fr": "Désert aride",
@@ -69,13 +91,18 @@ BIOMES = {
             "le sommet d'une dune de sable brûlant",
             "les ruines à demi ensablées d'une oasis asséchée",
             "un canyon de roche rouge aride",
-            "les abords d'un squelette de titan pétrifié"
+            "les abords d'un squelette de titan pétrifié",
         ],
-        "weather_options": ["Chaleur écrasante", "Vent de sable violent", "Soleil de plomb", "Nuit polaire désertique"],
+        "weather_options": [
+            "Chaleur écrasante",
+            "Vent de sable violent",
+            "Soleil de plomb",
+            "Nuit polaire désertique",
+        ],
         "prologues": [
             "La dernière tempête de sable a complètement balayé votre campement et enseveli votre chameau de bât contenant vos réserves d'eau. La gorge sèche et les yeux irrités par la poussière de verre, vous marchez depuis l'aube en cherchant désespérément une silhouette à l'horizon, jusqu'à ce que vos pas butent contre...",
-            "Poursuivant la légende d'une cité d'or engloutie sous les sables, vous avez bravé la chaleur mortelle des dunes. Vos gourdes sont presque vides, mais les reflets métalliques d'anciennes structures émergeant du sable raniment votre espoir..."
-        ]
+            "Poursuivant la légende d'une cité d'or engloutie sous les sables, vous avez bravé la chaleur mortelle des dunes. Vos gourdes sont presque vides, mais les reflets métalliques d'anciennes structures émergeant du sable raniment votre espoir...",
+        ],
     },
     "mountain": {
         "name_fr": "Montagne escarpée",
@@ -84,13 +111,18 @@ BIOMES = {
             "un col rocheux exposé aux vents",
             "le flanc d'une falaise abrupte",
             "le surplomb de gorges profondes",
-            "les ruines d'un guetteur de pierre d'altitude"
+            "les ruines d'un guetteur de pierre d'altitude",
         ],
-        "weather_options": ["Vent violent", "Froid glacial", "Blizzard mordant", "Brouillard d'altitude opaque"],
+        "weather_options": [
+            "Vent violent",
+            "Froid glacial",
+            "Blizzard mordant",
+            "Brouillard d'altitude opaque",
+        ],
         "prologues": [
             "Le sentier escarpé s'est effondré dans un fracas de tonnerre juste derrière vous, manquant de vous emporter dans l'abîme. Le vent hurle et la température chute rapidement alors que le soleil décline. Vous êtes bloqués sur cette corniche rocheuse avec pour seule option de continuer vers les cimes...",
-            "Vous escaladiez ce massif à la recherche d'un monastère reclus abritant des secrets anciens. La météo a brutalement tourné en un orage violent de grêle et d'éclairs, vous obligeant à vous abriter à la hâte dans ces ruines de pierre suspendues au-dessus du vide..."
-        ]
+            "Vous escaladiez ce massif à la recherche d'un monastère reclus abritant des secrets anciens. La météo a brutalement tourné en un orage violent de grêle et d'éclairs, vous obligeant à vous abriter à la hâte dans ces ruines de pierre suspendues au-dessus du vide...",
+        ],
     },
     "coastal": {
         "name_fr": "Rivage sauvage",
@@ -99,13 +131,18 @@ BIOMES = {
             "une crique de galets noirs entourée de falaises",
             "la carcasse échouée d'un drakkar",
             "un promontoire rocheux surplombant une mer démontée",
-            "une plage de sable gris battue par l'écume"
+            "une plage de sable gris battue par l'écume",
         ],
-        "weather_options": ["Tempétueux", "Brume marine dense", "Pluie battante et vent marin", "Calme et ensoleillé"],
+        "weather_options": [
+            "Tempétueux",
+            "Brume marine dense",
+            "Pluie battante et vent marin",
+            "Calme et ensoleillé",
+        ],
         "prologues": [
             "Votre navire a sombré corps et biens après avoir heurté un récif acéré dissimulé par la brume marine. Ballottés par les vagues glaciales, vous avez lutté toute la nuit pour ne pas couler. Vous reprenez conscience ce matin, trempés et épuisés, échoués sur ce rivage hostile jonché de débris...",
-            "Vous avez navigué jusqu'à cette île isolée à bord d'une petite barque de pêche afin d'élucider le mystère d'un phare éteint. Mais à peine aviez-vous posé le pied sur le rivage qu'une vague scélérate a emporté votre embarcation, vous coupant tout moyen de retour..."
-        ]
+            "Vous avez navigué jusqu'à cette île isolée à bord d'une petite barque de pêche afin d'élucider le mystère d'un phare éteint. Mais à peine aviez-vous posé le pied sur le rivage qu'une vague scélérate a emporté votre embarcation, vous coupant tout moyen de retour...",
+        ],
     },
     "cave": {
         "name_fr": "Grotte naturelle",
@@ -114,13 +151,18 @@ BIOMES = {
             "une caverne de stalactites étincelantes",
             "une faille souterraine où gronde une cascade",
             "une grotte côtière inondée à marée haute",
-            "un réseau de galeries étroites et humides"
+            "un réseau de galeries étroites et humides",
         ],
-        "weather_options": ["Air stagnant", "Courant d'air siffleur", "Humidité glaciale", "Obscurité totale"],
+        "weather_options": [
+            "Air stagnant",
+            "Courant d'air siffleur",
+            "Humidité glaciale",
+            "Obscurité totale",
+        ],
         "prologues": [
             "Réfugiés dans cette caverne pour échapper à un prédateur aérien ou à un éboulement de falaise, vous vous êtes enfoncés plus profondément pour trouver une sortie alternative. Vos pas résonnent étrangement dans ces galeries calcaires humides et vous commencez à percevoir un souffle régulier et lourd venant des profondeurs...",
-            "À la recherche d'une veine de cristaux magiques ou fuyant des brigands, vous avez rampé à travers des boyaux étroits. Vous débouchez enfin dans cette grande salle souterraine, mais vos torches éclairent des ossements disposés en cercle par une main intelligente..."
-        ]
+            "À la recherche d'une veine de cristaux magiques ou fuyant des brigands, vous avez rampé à travers des boyaux étroits. Vous débouchez enfin dans cette grande salle souterraine, mais vos torches éclairent des ossements disposés en cercle par une main intelligente...",
+        ],
     },
     "plains": {
         "name_fr": "Plaines herbeuses",
@@ -129,14 +171,20 @@ BIOMES = {
             "une colline herbeuse surplombant la vallée",
             "le milieu d'une prairie de hautes herbes",
             "les abords d'un tumulus de pierres anciennes",
-            "une route de terre battue traversant des champs abandonnés"
+            "une route de terre battue traversant des champs abandonnés",
         ],
-        "weather_options": ["Calme", "Vent vif", "Orage menaçant à l'horizon", "Brume matinale", "Soleil radieux"],
+        "weather_options": [
+            "Calme",
+            "Vent vif",
+            "Orage menaçant à l'horizon",
+            "Brume matinale",
+            "Soleil radieux",
+        ],
         "prologues": [
             "Votre caravane marchande a été pillée et incendiée sous vos yeux par des cavaliers nomades. Laissés pour morts au milieu de ces plaines herbeuses immenses, vous vous relevez péniblement. Le vent fait onduler les herbes hautes comme une mer verte, et vous devez rapidement trouver de l'aide avant la nuit...",
-            "Vous escortiez un messager important à travers les plaines lorsque celui-ci a été abattu d'une flèche noire tirée depuis les herbes hautes. Avant de mourir, il vous a confié une sacoche scellée de cire rouge en vous suppliant de la mener à destination. Vous vous retrouvez seuls au milieu du chemin..."
-        ]
-    }
+            "Vous escortiez un messager important à travers les plaines lorsque celui-ci a été abattu d'une flèche noire tirée depuis les herbes hautes. Avant de mourir, il vous a confié une sacoche scellée de cire rouge en vous suppliant de la mener à destination. Vous vous retrouvez seuls au milieu du chemin...",
+        ],
+    },
 }
 
 GENERIC_HOOKS = [
@@ -145,7 +193,7 @@ GENERIC_HOOKS = [
     "Un message cryptique sur un morceau de parchemin ensanglanté vous a menés jusqu'à ce point précis.",
     "Le guide qui vous accompagnait a disparu durant la nuit, vous laissant seuls face à l'inconnu.",
     "Des bruits étranges et des vibrations sous le sol font craindre un danger imminent dans la zone.",
-    "Une étrange anomalie magique semble perturber vos sens et déformer la boussole."
+    "Une étrange anomalie magique semble perturber vos sens et déformer la boussole.",
 ]
 
 PRESETS = {
@@ -159,7 +207,7 @@ PRESETS = {
         "description": "Un avant-poste minéral marqué par la rigueur impériale romaine.",
         "prologues": [
             "Enrôlés comme mercenaires et éclaireurs par le centurion Marcus de la Troisième Légion, vous escortiez un convoi de ravitaillement militaire à travers les Marches Frontalières de Pangée. Mais au milieu de la nuit, une attaque éclair d'insurgés locaux a décimé l'arrière-garde et dispersé les chevaux. Séparés de la colonne impériale, vous vous retrouvez seuls, à court de provisions, au pied de ces pierres centenaires...",
-            "À la recherche des secrets perdus de la magie de l'Ancien Empire, vous avez arpenté les anciennes voies pavées romaines en ruine. Une carte cryptique achetée à un mendiant de la capitale vous a guidés jusqu'ici. Après des jours de marche sous une pluie de cendres étouffante, le tracé s'arrête net devant ces structures impériales déchues..."
+            "À la recherche des secrets perdus de la magie de l'Ancien Empire, vous avez arpenté les anciennes voies pavées romaines en ruine. Une carte cryptique achetée à un mendiant de la capitale vous a guidés jusqu'ici. Après des jours de marche sous une pluie de cendres étouffante, le tracé s'arrête net devant ces structures impériales déchues...",
         ],
         "opening_brief_template": (
             "HISTORIQUE ET PROLOGUE DE DÉPART (D'où on vient, pourquoi on est là) :\n"
@@ -172,7 +220,7 @@ PRESETS = {
             "- Mets en avant les dilemmes éthiques sérieux, la décadence politique et l'usure du monde.\n"
             "- Ne commence JAMAIS dans une taverne classique ou autour d'un feu de camp en forêt.\n"
             "- Sois assertif et affirmatif : improvise le cadre sans poser de questions hors-jeu de conception."
-        )
+        ),
     },
     "jungle_dinos": {
         "name_fr": "Jungle & Ruines Oubliées (Exploration & Dinos)",
@@ -184,7 +232,7 @@ PRESETS = {
         "description": "Une jungle tropicale étouffante peuplée de bêtes préhistoriques.",
         "prologues": [
             "Votre navire d'exploration, le 'Dauphin de Nacre', a été pris dans une tempête tropicale d'une violence surnaturelle et s'est fracassé contre les récifs coralliens de la péninsule. Seuls survivants du naufrage, vos corps meurtris et trempés ont été rejetés par les vagues sur une plage de sable noir. N'ayant plus aucun équipement de navigation, vous n'avez d'autre choix que de vous enfoncer dans cette jungle étouffante d'où s'élèvent des cris bestiaux préhistoriques...",
-            "Engagés par un érudit de l'université pour retrouver la trace d'une expédition archéologique disparue, vous avez pénétré les territoires sauvages des dieux serpents. Après des jours de marche épuisante à vous frayer un chemin à la machette sous une chaleur de plomb et une humidité suffocante, vous découvrez enfin des traces d'activité humaine..."
+            "Engagés par un érudit de l'université pour retrouver la trace d'une expédition archéologique disparue, vous avez pénétré les territoires sauvages des dieux serpents. Après des jours de marche épuisante à vous frayer un chemin à la machette sous une chaleur de plomb et une humidité suffocante, vous découvrez enfin des traces d'activité humaine...",
         ],
         "opening_brief_template": (
             "HISTORIQUE ET PROLOGUE DE DÉPART (D'où on vient, pourquoi on est là) :\n"
@@ -198,7 +246,7 @@ PRESETS = {
             "- Décris les bruits primitifs, les lianes étouffantes, l'odeur d'humus et de chair en décomposition.\n"
             "- Propose immédiatement des affordances d'exploration (un nid géant, des pistes fraîches de dinosaures, "
             "des ruines gravées de glyphes serpentins)."
-        )
+        ),
     },
     "toundra_gelee": {
         "name_fr": "Toundra des Glaces Éternelles (Survie Polaire)",
@@ -210,7 +258,7 @@ PRESETS = {
         "description": "Une étendue gelée désolée où le vent hurle sans fin.",
         "prologues": [
             "Voyageant à bord d'un grand traîneau à chiens à travers le désert blanc, vous avez été surpris par un blizzard d'une violence inouïe. Les bêtes de trait, paniquées par le hurlement des loups arctiques, ont brisé leurs liens et se sont enfuies dans la tempête, emportant la majeure partie de vos rations. La nuit polaire s'est installée, et le froid commence à geler vos doigts alors que vous apercevez un abri précaire...",
-            "Les légendes parlent d'une veine d'argent magique cachée sous les glaciers du grand nord. Poussés par l'espoir de faire fortune, vous avez gravi le col. Mais une avalanche soudaine a bloqué la gorge derrière vous, vous coupant de toute retraite et vous laissant isolés dans la toundra blanche avec pour seul espoir de continuer vers l'inconnu..."
+            "Les légendes parlent d'une veine d'argent magique cachée sous les glaciers du grand nord. Poussés par l'espoir de faire fortune, vous avez gravi le col. Mais une avalanche soudaine a bloqué la gorge derrière vous, vous coupant de toute retraite et vous laissant isolés dans la toundra blanche avec pour seul espoir de continuer vers l'inconnu...",
         ],
         "opening_brief_template": (
             "HISTORIQUE ET PROLOGUE DE DÉPART (D'où on vient, pourquoi on est là) :\n"
@@ -223,7 +271,7 @@ PRESETS = {
             "- Insiste sur la morsure implacable du gel, l'isolement extrême et le silence étouffant de la neige.\n"
             "- Les personnages doivent ressentir l'engourdissement de leurs membres et la buée gelant sur leurs cils.\n"
             "- Ne tolère aucune taverne chaleureuse : le départ se fait dans le froid vif avec une urgence de feu ou d'abri."
-        )
+        ),
     },
     "brume_gothique": {
         "name_fr": "Domaine de la Brume Éternelle (Horreur Gothique)",
@@ -235,7 +283,7 @@ PRESETS = {
         "description": "Une contrée maudite plongée dans une nuit brumeuse perpétuelle.",
         "prologues": [
             "Alors que vous traversiez en diligence le col de montagne menant à une province isolée, un brouillard anormalement dense et glacial s'est levé. Les chevaux, terrifiés par des ombres mouvantes dans la brume, ont fait une embardée, projetant la voiture dans le ravin. Sortant miraculeusement vivants des débris de bois, vous réalisez que le cocher a disparu et que des hurlements de loups se rapprochent à travers le brouillard...",
-            "Chassés de votre précédente contrée par une foule en colère ou fuyant une épidémie mortelle, vous avez marché pendant des jours sans vous arrêter. Le chemin est progressivement devenu sombre, les arbres squelettiques, et une brume glaciale rampante vous a enveloppés, vous faisant perdre tout repère géographique et temporel. Les grilles rouillées de ce vieux cimetière se dessinent devant vous..."
+            "Chassés de votre précédente contrée par une foule en colère ou fuyant une épidémie mortelle, vous avez marché pendant des jours sans vous arrêter. Le chemin est progressivement devenu sombre, les arbres squelettiques, et une brume glaciale rampante vous a enveloppés, vous faisant perdre tout repère géographique et temporel. Les grilles rouillées de ce vieux cimetière se dessinent devant vous...",
         ],
         "opening_brief_template": (
             "HISTORIQUE ET PROLOGUE DE DÉPART (D'où on vient, pourquoi on est là) :\n"
@@ -250,8 +298,8 @@ PRESETS = {
             "l'impression constante d'être observé par des yeux invisibles.\n"
             "- Offre des affordances d'angoisse immédiate : des tombes fraîches anonymes, un corbeau au regard humain, "
             "un sentier s'enfonçant dans les brumes impénétrables."
-        )
-    }
+        ),
+    },
 }
 
 
@@ -259,7 +307,7 @@ def generate_adventure_context(
     preset_id: str | None = None,
     biome_id: str | None = None,
     weather: str | None = None,
-    tone: str | None = None
+    tone: str | None = None,
 ) -> dict[str, Any]:
     """Compile un contexte d'aventure cohérent et varié à partir de presets ou de tirages aléatoires.
 
@@ -273,7 +321,11 @@ def generate_adventure_context(
         prologue = random.choice(preset["prologues"])
 
         # Surcharge éventuelle par des choix directs
-        final_theme = biome_id if (biome_id and biome_id in [b["scene_theme"] for b in BIOMES.values()]) else preset["scene_theme"]
+        final_theme = (
+            biome_id
+            if (biome_id and biome_id in [b["scene_theme"] for b in BIOMES.values()])
+            else preset["scene_theme"]
+        )
         final_weather = weather if (weather and weather != "random") else preset["weather"]
         final_tone = tone if (tone and tone != "random") else preset["tone"]
 
@@ -287,7 +339,7 @@ def generate_adventure_context(
             "weather": final_weather,
             "scene_theme": final_theme,
             "tone": final_tone,
-            "opening_brief": opening_brief
+            "opening_brief": opening_brief,
         }
 
     # 2. Traitement Aléatoire / Classique
@@ -310,7 +362,9 @@ def generate_adventure_context(
 
     # Choix du ton
     if not tone or tone == "random":
-        chosen_tone = random.choice(["exploration calme", "mystérieuse et tendue", "héroïque et active", "survie immédiate"])
+        chosen_tone = random.choice(
+            ["exploration calme", "mystérieuse et tendue", "héroïque et active", "survie immédiate"]
+        )
     else:
         chosen_tone = tone
 
@@ -341,5 +395,5 @@ def generate_adventure_context(
         "weather": chosen_weather,
         "scene_theme": biome["scene_theme"],
         "tone": chosen_tone,
-        "opening_brief": brief_text
+        "opening_brief": brief_text,
     }

@@ -4,9 +4,9 @@ Ce module ne parle pas au LLM. Il applique les actions structurees deja
 produites par le GM agent, publie les evenements mecaniques correspondants et
 retourne les jets en attente pour une narration d'outcome.
 """
+
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import logging
 import re
@@ -54,8 +54,8 @@ _TIME_OF_DAY_NEXT: dict[str, str] = {
 
 # Limites de longueur de texte pour la normalisation des scènes MJ
 _SCENE_DESCRIPTION_MAX_LEN = 1500  # description principale d'une scène (était 320)
-_POI_ACTION_HINT_MAX_LEN   = 300   # hint d'action d'un POI (était 140)
-_POI_PROMPT_MAX_LEN        = 400   # prompt d'une interaction POI (était 180)
+_POI_ACTION_HINT_MAX_LEN = 300  # hint d'action d'un POI (était 140)
+_POI_PROMPT_MAX_LEN = 400  # prompt d'une interaction POI (était 180)
 
 CANON_DIRTY_ACTIONS = {
     "journal_update",
@@ -266,9 +266,7 @@ class GMResponseExecutor:
         if phase == "ENCOUNTER_END":
             return True
 
-        if action_type in {"currency_grant", "loot_grant"} and self._scene_has_loot_source(
-            active
-        ):
+        if action_type in {"currency_grant", "loot_grant"} and self._scene_has_loot_source(active):
             return True
 
         if self._recent_gm_text_establishes_reward(provenance_context):
@@ -369,9 +367,7 @@ class GMResponseExecutor:
             target_ids = [raw_targets]
         elif isinstance(raw_targets, list):
             target_ids = [
-                str(item).strip()
-                for item in raw_targets
-                if item is not None and str(item).strip()
+                str(item).strip() for item in raw_targets if item is not None and str(item).strip()
             ]
         else:
             target_ids = []
@@ -825,12 +821,15 @@ class GMResponseExecutor:
         current_scene = active.state_data.get("current_scene")
         if not isinstance(current_scene, dict):
             current_scene = {}
-        scene_id = str(
-            params.get("scene_id")
-            or current_scene.get("scene_id")
-            or current_scene.get("id")
+        scene_id = (
+            str(
+                params.get("scene_id")
+                or current_scene.get("scene_id")
+                or current_scene.get("id")
+                or "current"
+            ).strip()
             or "current"
-        ).strip() or "current"
+        )
 
         scene_entry = scene_state.get(scene_id)
         if not isinstance(scene_entry, dict):
@@ -878,13 +877,16 @@ class GMResponseExecutor:
             obstacle_inputs.append(params)
 
         for obstacle_data in obstacle_inputs:
-            obstacle_id = str(
-                obstacle_data.get("obstacle_id")
-                or obstacle_data.get("id")
-                or obstacle_data.get("linked_poi_id")
-                or obstacle_data.get("name")
+            obstacle_id = (
+                str(
+                    obstacle_data.get("obstacle_id")
+                    or obstacle_data.get("id")
+                    or obstacle_data.get("linked_poi_id")
+                    or obstacle_data.get("name")
+                    or "main"
+                ).strip()
                 or "main"
-            ).strip() or "main"
+            )
             obstacle_entry = obstacles.get(obstacle_id)
             if not isinstance(obstacle_entry, dict):
                 obstacle_entry = {"id": obstacle_id}
@@ -1240,9 +1242,7 @@ class GMResponseExecutor:
             },
             source=self._source,
         )
-        self._trigger_visual_asset_generation(
-            session_id, city_maps.get(city_id, {}), scope="city"
-        )
+        self._trigger_visual_asset_generation(session_id, city_maps.get(city_id, {}), scope="city")
 
     async def _apply_node_status_update(
         self,
@@ -1738,9 +1738,7 @@ class GMResponseExecutor:
             is_npc = kind == "npc" or icon == "npc"
             npc = npc_states.get(npc_id) if npc_id else None
             last_location = (
-                str(npc.get("last_location") or "").strip()
-                if isinstance(npc, dict)
-                else ""
+                str(npc.get("last_location") or "").strip() if isinstance(npc, dict) else ""
             )
             if is_npc and last_location and last_location != scene_id:
                 logger.warning(
@@ -1807,10 +1805,7 @@ class GMResponseExecutor:
             if value:
                 layout[optional_text] = value
         if isinstance(raw.get("facts"), list):
-            facts = [
-                cls._clean_optional_text(item, max_len=180)
-                for item in raw.get("facts", [])
-            ]
+            facts = [cls._clean_optional_text(item, max_len=180) for item in raw.get("facts", [])]
             facts = [item for item in facts if item]
             if facts:
                 layout["facts"] = facts[:24]
@@ -1846,8 +1841,7 @@ class GMResponseExecutor:
                 normalized_poi["discovered"] = poi["discovered"]
             if isinstance(poi.get("facts"), list):
                 facts = [
-                    cls._clean_optional_text(item, max_len=180)
-                    for item in poi.get("facts", [])
+                    cls._clean_optional_text(item, max_len=180) for item in poi.get("facts", [])
                 ]
                 facts = [item for item in facts if item]
                 if facts:
@@ -1894,9 +1888,7 @@ class GMResponseExecutor:
                     layout["party_positions"][str(char_id)] = position
 
         layout["pois"] = [
-            poi
-            for poi in layout["pois"]
-            if not cls._is_duplicate_exit_poi(poi, layout["exits"])
+            poi for poi in layout["pois"] if not cls._is_duplicate_exit_poi(poi, layout["exits"])
         ]
 
         normalized_elements = []
@@ -1936,17 +1928,19 @@ class GMResponseExecutor:
                 )
 
         if "scene_id" not in layout:
-            stable_basis = repr((
-                layout["cols"],
-                layout["rows"],
-                layout["terrain"],
-                [(element["id"], element["kind"]) for element in layout.get("elements", [])],
-                [(poi["id"], poi["position"]) for poi in layout["pois"]],
-                [(exit_data["id"], exit_data["position"]) for exit_data in layout["exits"]],
-            ))
-            layout["scene_id"] = "scene_" + hashlib.sha1(
-                stable_basis.encode("utf-8")
-            ).hexdigest()[:12]
+            stable_basis = repr(
+                (
+                    layout["cols"],
+                    layout["rows"],
+                    layout["terrain"],
+                    [(element["id"], element["kind"]) for element in layout.get("elements", [])],
+                    [(poi["id"], poi["position"]) for poi in layout["pois"]],
+                    [(exit_data["id"], exit_data["position"]) for exit_data in layout["exits"]],
+                )
+            )
+            layout["scene_id"] = (
+                "scene_" + hashlib.sha1(stable_basis.encode("utf-8")).hexdigest()[:12]
+            )
 
         return layout
 
@@ -2043,26 +2037,28 @@ class GMResponseExecutor:
     @staticmethod
     def _is_exit_like_scene_poi(poi: dict[str, Any]) -> bool:
         searchable = " ".join(
-            str(poi.get(key, ""))
-            for key in ("id", "name", "kind", "icon")
+            str(poi.get(key, "")) for key in ("id", "name", "kind", "icon")
         ).casefold()
         normalized = re.sub(r"[^a-z0-9_ -]+", " ", searchable)
         tokens = set(normalized.replace("_", " ").replace("-", " ").split())
-        return bool(tokens & {
-            "exit",
-            "sortie",
-            "issue",
-            "door",
-            "porte",
-            "gate",
-            "portail",
-            "grille",
-            "sas",
-            "passage",
-            "secret",
-            "hidden",
-            "cache",
-        })
+        return bool(
+            tokens
+            & {
+                "exit",
+                "sortie",
+                "issue",
+                "door",
+                "porte",
+                "gate",
+                "portail",
+                "grille",
+                "sas",
+                "passage",
+                "secret",
+                "hidden",
+                "cache",
+            }
+        )
 
     @staticmethod
     def _positions_equal(first: Any, second: Any) -> bool:

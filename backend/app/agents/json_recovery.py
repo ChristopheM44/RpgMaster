@@ -19,9 +19,7 @@ def recover_partial_json_response(
     *,
     character_name: str,
     game_state: dict[str, Any] | None,
-    safe_recovered_roleplay: Callable[
-        [str | None, str | None, str | None, dict[str, Any]], str
-    ],
+    safe_recovered_roleplay: Callable[[str | None, str | None, str | None, dict[str, Any]], str],
 ) -> dict[str, Any] | None:
     if "action_type" not in raw and "roleplay_text" not in raw:
         return None
@@ -80,7 +78,7 @@ def recover_structured_text_response(raw: str) -> dict[str, Any] | None:
         match = re.search(pattern, raw, re.IGNORECASE | re.DOTALL)
         if not match:
             return None
-        value = match.group(1).strip().strip(' "\'')
+        value = match.group(1).strip().strip(" \"'")
         return value or None
 
     action_type = _match(r"(?:action_type|type_action|action)\s*[:=]\s*([a-z_]+)")

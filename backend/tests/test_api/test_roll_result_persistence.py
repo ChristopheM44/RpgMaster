@@ -8,6 +8,7 @@ tests verrouillent les deux moitiés du contrat :
 - les jets restent exclus de la fenêtre de contexte LLM (load_recent_messages),
   pour ne pas changer le budget de contexte du MJ.
 """
+
 from __future__ import annotations
 
 import pytest

@@ -1,4 +1,5 @@
 """Shared helpers for narrative and dialogue WebSocket entries."""
+
 from __future__ import annotations
 
 import re

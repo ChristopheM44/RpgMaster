@@ -7,6 +7,7 @@ Couvre les deux corrections :
 
 Le GMAgent est mocké (on n'appelle jamais le vrai LLM).
 """
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -118,12 +119,16 @@ class TestConversationHistory:
         from app.models.message import Message, MessageRole, MessageType
 
         rows = (
-            await db_session.execute(
-                select(Message)
-                .where(Message.session_id == active_session.session_id)
-                .order_by(Message.created_at.asc())
+            (
+                await db_session.execute(
+                    select(Message)
+                    .where(Message.session_id == active_session.session_id)
+                    .order_by(Message.created_at.asc())
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         player_msgs = [m for m in rows if m.role == MessageRole.PLAYER]
         assert len(player_msgs) == 1
@@ -175,9 +180,7 @@ class TestConversationHistory:
         assert "salle circulaire" in contents
         assert "J'écoute" in contents
 
-    async def test_messages_are_in_chronological_order(
-        self, db_session, active_session
-    ) -> None:
+    async def test_messages_are_in_chronological_order(self, db_session, active_session) -> None:
         """L'ordre des messages dans AgentContext doit être chronologique."""
         resolver1 = _mock_resolver("Narration 1.")
         await resolver1.resolve(
@@ -239,29 +242,36 @@ class TestFluidNarrativeFlow:
         from app.models.message import Message, MessageRole
 
         mock_gm = MagicMock()
-        mock_gm.think = AsyncMock(return_value=AgentResponse(
-            content="Thorvald se penche sur les traces.",
-            actions=[
-                GMAction(
-                    type="roll_request",
-                    target="hero-1",
-                    params={"ability": "wis", "type": "check", "dc": 10},
-                )
-            ],
-        ))
-        mock_gm.narrate_outcome_response = AsyncMock(return_value=GMResponse(
-            narration="La boue révèle seulement des passages confus, impossibles à dater.",
-            actions=[],
-        ))
+        mock_gm.think = AsyncMock(
+            return_value=AgentResponse(
+                content="Thorvald se penche sur les traces.",
+                actions=[
+                    GMAction(
+                        type="roll_request",
+                        target="hero-1",
+                        params={"ability": "wis", "type": "check", "dc": 10},
+                    )
+                ],
+            )
+        )
+        mock_gm.narrate_outcome_response = AsyncMock(
+            return_value=GMResponse(
+                narration="La boue révèle seulement des passages confus, impossibles à dater.",
+                actions=[],
+            )
+        )
         resolver = ActionResolver(gm_agent=mock_gm)
         published: list[tuple[str, dict]] = []
 
         async def publish(session_id, event_type, payload, source=None):
             published.append((event_type, payload))
 
-        with patch("app.game.action_resolver.event_bus.publish_to_session", new=publish), patch(
-            "app.game.action_resolver.tts_router.synthesize_and_broadcast",
-            new=AsyncMock(),
+        with (
+            patch("app.game.action_resolver.event_bus.publish_to_session", new=publish),
+            patch(
+                "app.game.action_resolver.tts_router.synthesize_and_broadcast",
+                new=AsyncMock(),
+            ),
         ):
             await resolver.resolve(
                 session_id=active_session.session_id,
@@ -285,22 +295,22 @@ class TestFluidNarrativeFlow:
             for event_type, payload in published
             if event_type == EventType.NARRATION
         ]
-        assert narrations == [
-            "La boue révèle seulement des passages confus, impossibles à dater."
-        ]
+        assert narrations == ["La boue révèle seulement des passages confus, impossibles à dater."]
         assert all("se penche" not in text for text in narrations)
 
         rows = (
-            await db_session.execute(
-                select(Message)
-                .where(Message.session_id == active_session.session_id)
-                .order_by(Message.created_at.asc())
+            (
+                await db_session.execute(
+                    select(Message)
+                    .where(Message.session_id == active_session.session_id)
+                    .order_by(Message.created_at.asc())
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         gm_messages = [row.content for row in rows if row.role == MessageRole.GM]
-        assert gm_messages == [
-            "La boue révèle seulement des passages confus, impossibles à dater."
-        ]
+        assert gm_messages == ["La boue révèle seulement des passages confus, impossibles à dater."]
 
     async def test_action_without_roll_request_keeps_initial_narration(
         self, db_session, active_session
@@ -309,10 +319,12 @@ class TestFluidNarrativeFlow:
         from app.game.event_bus import EventType
 
         mock_gm = MagicMock()
-        mock_gm.think = AsyncMock(return_value=AgentResponse(
-            content="Le sentier descend vers les ruines.",
-            actions=[],
-        ))
+        mock_gm.think = AsyncMock(
+            return_value=AgentResponse(
+                content="Le sentier descend vers les ruines.",
+                actions=[],
+            )
+        )
         mock_gm.narrate_outcome_response = AsyncMock()
         resolver = ActionResolver(gm_agent=mock_gm)
         published: list[tuple[str, dict]] = []
@@ -320,9 +332,12 @@ class TestFluidNarrativeFlow:
         async def publish(session_id, event_type, payload, source=None):
             published.append((event_type, payload))
 
-        with patch("app.game.action_resolver.event_bus.publish_to_session", new=publish), patch(
-            "app.game.action_resolver.tts_router.synthesize_and_broadcast",
-            new=AsyncMock(),
+        with (
+            patch("app.game.action_resolver.event_bus.publish_to_session", new=publish),
+            patch(
+                "app.game.action_resolver.tts_router.synthesize_and_broadcast",
+                new=AsyncMock(),
+            ),
         ):
             await resolver.resolve(
                 session_id=active_session.session_id,
@@ -377,20 +392,24 @@ class TestStateTransition:
     ) -> None:
         """Une embuscade révélée par l'issue d'un jet déclenche aussi le combat."""
         mock_gm = MagicMock()
-        mock_gm.think = AsyncMock(return_value=AgentResponse(
-            content="Le passage semble dangereusement silencieux.",
-            actions=[
-                GMAction(
-                    type="roll_request",
-                    target="hero-1",
-                    params={"ability": "wis", "type": "check", "dc": 13},
-                )
-            ],
-        ))
-        mock_gm.narrate_outcome = AsyncMock(return_value=(
-            "Des flèches pleuvent depuis les rochers ; trois bandits surgissent, "
-            "lames au clair."
-        ))
+        mock_gm.think = AsyncMock(
+            return_value=AgentResponse(
+                content="Le passage semble dangereusement silencieux.",
+                actions=[
+                    GMAction(
+                        type="roll_request",
+                        target="hero-1",
+                        params={"ability": "wis", "type": "check", "dc": 13},
+                    )
+                ],
+            )
+        )
+        mock_gm.narrate_outcome = AsyncMock(
+            return_value=(
+                "Des flèches pleuvent depuis les rochers ; trois bandits surgissent, "
+                "lames au clair."
+            )
+        )
         resolver = ActionResolver(gm_agent=mock_gm)
 
         await resolver.resolve(
@@ -458,9 +477,7 @@ class TestStateTransition:
 
 
 class TestCombatStateActions:
-    async def test_roll_outcome_can_mark_npc_surrendered(
-        self, db_session, session_row
-    ) -> None:
+    async def test_roll_outcome_can_mark_npc_surrendered(self, db_session, session_row) -> None:
         """Une issue de jet social peut retirer un PNJ hostile via combatant_status."""
         active = ActiveSession(
             session_id=session_row,
@@ -487,26 +504,30 @@ class TestCombatStateActions:
             },
         )
         mock_gm = MagicMock()
-        mock_gm.think = AsyncMock(return_value=AgentResponse(
-            content="Le bandit hésite.",
-            actions=[
-                GMAction(
-                    type="roll_request",
-                    target="hero-1",
-                    params={"ability": "cha", "type": "check", "dc": 1},
-                )
-            ],
-        ))
-        mock_gm.narrate_outcome_response = AsyncMock(return_value=GMResponse(
-            narration="Le bandit laisse tomber son arme et se rend.",
-            actions=[
-                GMAction(
-                    type="combatant_status",
-                    target="bandit_1",
-                    params={"status": "surrendered", "reason": "reddition"},
-                )
-            ],
-        ))
+        mock_gm.think = AsyncMock(
+            return_value=AgentResponse(
+                content="Le bandit hésite.",
+                actions=[
+                    GMAction(
+                        type="roll_request",
+                        target="hero-1",
+                        params={"ability": "cha", "type": "check", "dc": 1},
+                    )
+                ],
+            )
+        )
+        mock_gm.narrate_outcome_response = AsyncMock(
+            return_value=GMResponse(
+                narration="Le bandit laisse tomber son arme et se rend.",
+                actions=[
+                    GMAction(
+                        type="combatant_status",
+                        target="bandit_1",
+                        params={"status": "surrendered", "reason": "reddition"},
+                    )
+                ],
+            )
+        )
 
         resolver = ActionResolver(gm_agent=mock_gm)
         await resolver.resolve(
@@ -521,9 +542,7 @@ class TestCombatStateActions:
 
         assert active.state_data["combatants"]["bandit_1"]["status"] == "surrendered"
 
-    async def test_condition_actions_mutate_state_data(
-        self, db_session, active_session
-    ) -> None:
+    async def test_condition_actions_mutate_state_data(self, db_session, active_session) -> None:
         """condition_add/remove doit modifier state_data, pas seulement publier un event."""
         active_session.phase = SessionStatus.COMBAT
         active_session.state_data["combatants"] = {
@@ -671,32 +690,37 @@ class TestNpcDialogueRouting:
             },
         )
         mock_gm = MagicMock()
-        mock_gm.run_npc_dialogue = AsyncMock(return_value=GMResponse(
-            narration="Azaka hoche la tête. « D'accord, je vous guiderai. »",
-            actions=[
-                GMAction(
-                    type="social_outcome",
-                    params={
-                        "npc_id": "azaka",
-                        "attitude_shift": "friendly",
-                        "note": "Azaka accepte de guider le groupe.",
-                        "new_quest": {
-                            "id": "guide_azaka",
-                            "category": "secondaire",
-                            "title": "Engager Azaka",
-                            "summary": "Azaka accepte de servir de guide.",
-                            "status": "active",
+        mock_gm.run_npc_dialogue = AsyncMock(
+            return_value=GMResponse(
+                narration="Azaka hoche la tête. « D'accord, je vous guiderai. »",
+                actions=[
+                    GMAction(
+                        type="social_outcome",
+                        params={
+                            "npc_id": "azaka",
+                            "attitude_shift": "friendly",
+                            "note": "Azaka accepte de guider le groupe.",
+                            "new_quest": {
+                                "id": "guide_azaka",
+                                "category": "secondaire",
+                                "title": "Engager Azaka",
+                                "summary": "Azaka accepte de servir de guide.",
+                                "status": "active",
+                            },
                         },
-                    },
-                )
-            ],
-        ))
+                    )
+                ],
+            )
+        )
         resolver = ActionResolver(gm_agent=mock_gm)
 
-        with patch.object(event_bus, "publish_to_session", new=AsyncMock()), patch(
-            "app.services.campaign_dossier_service.synthesize_canon_for_session",
-            new=AsyncMock(),
-        ) as synth:
+        with (
+            patch.object(event_bus, "publish_to_session", new=AsyncMock()),
+            patch(
+                "app.services.campaign_dossier_service.synthesize_canon_for_session",
+                new=AsyncMock(),
+            ) as synth,
+        ):
             await resolver.resolve_npc_dialogue(
                 session_id=session_row,
                 content="Je demande à Azaka d'être notre guide.",
@@ -782,9 +806,12 @@ class TestNpcDialogueRouting:
         resolver = ActionResolver(gm_agent=mock_gm)
 
         publish_mock = AsyncMock()
-        with patch.object(event_bus, "publish_to_session", new=publish_mock), patch(
-            "app.services.campaign_dossier_service.synthesize_canon_for_session",
-            new=AsyncMock(),
+        with (
+            patch.object(event_bus, "publish_to_session", new=publish_mock),
+            patch(
+                "app.services.campaign_dossier_service.synthesize_canon_for_session",
+                new=AsyncMock(),
+            ),
         ):
             await resolver.resolve_npc_dialogue(
                 session_id=session_row,
@@ -812,9 +839,7 @@ class TestNpcDialogueRouting:
 
         # Vérifie l'application de la conséquence finale (attitude amicale)
         assert active.state_data["npc_states"]["azaka"]["attitude"] == "friendly"
-        assert active.state_data["npc_states"]["azaka"]["notes"] == [
-            "Azaka est convaincue."
-        ]
+        assert active.state_data["npc_states"]["azaka"]["notes"] == ["Azaka est convaincue."]
 
     async def test_resolve_npc_dialogue_uses_rich_persona_from_dossier(
         self,
@@ -871,18 +896,23 @@ class TestNpcDialogueRouting:
                 return rich_persona
             return None
 
-        with patch(
-            "app.game.action_resolver.campaign_dossier_service.campaign_for_session",
-            new=fake_campaign_for_session,
-        ), patch(
-            "app.game.action_resolver.campaign_dossier_service.get_npc_persona",
-            new=fake_get_npc_persona,
-        ), patch(
-            "app.services.campaign_dossier_service.synthesize_canon_for_session",
-            new=AsyncMock(),
-        ), patch(
-            "app.game.action_resolver.event_bus.publish_to_session",
-            new=AsyncMock(),
+        with (
+            patch(
+                "app.game.action_resolver.campaign_dossier_service.campaign_for_session",
+                new=fake_campaign_for_session,
+            ),
+            patch(
+                "app.game.action_resolver.campaign_dossier_service.get_npc_persona",
+                new=fake_get_npc_persona,
+            ),
+            patch(
+                "app.services.campaign_dossier_service.synthesize_canon_for_session",
+                new=AsyncMock(),
+            ),
+            patch(
+                "app.game.action_resolver.event_bus.publish_to_session",
+                new=AsyncMock(),
+            ),
         ):
             await resolver.resolve_npc_dialogue(
                 session_id=session_row,
@@ -929,15 +959,19 @@ class TestNpcDialogueRouting:
         async def fake_campaign_for_session(session_id, db):
             return None  # pas de campagne associée
 
-        with patch(
-            "app.game.action_resolver.campaign_dossier_service.campaign_for_session",
-            new=fake_campaign_for_session,
-        ), patch(
-            "app.services.campaign_dossier_service.synthesize_canon_for_session",
-            new=AsyncMock(),
-        ), patch(
-            "app.game.action_resolver.event_bus.publish_to_session",
-            new=AsyncMock(),
+        with (
+            patch(
+                "app.game.action_resolver.campaign_dossier_service.campaign_for_session",
+                new=fake_campaign_for_session,
+            ),
+            patch(
+                "app.services.campaign_dossier_service.synthesize_canon_for_session",
+                new=AsyncMock(),
+            ),
+            patch(
+                "app.game.action_resolver.event_bus.publish_to_session",
+                new=AsyncMock(),
+            ),
         ):
             await resolver.resolve_npc_dialogue(
                 session_id=session_row,

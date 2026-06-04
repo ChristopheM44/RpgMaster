@@ -1,4 +1,5 @@
 """Tests for engine/ability_checks.py"""
+
 from __future__ import annotations
 
 import random
@@ -25,12 +26,25 @@ def seeded(seed: int = 42) -> random.Random:
 # ability_modifier
 # ---------------------------------------------------------------------------
 
+
 class TestAbilityModifier:
-    @pytest.mark.parametrize("score,expected", [
-        (1, -5), (3, -4), (8, -1), (9, -1),
-        (10, 0), (11, 0), (12, 1), (13, 1),
-        (16, 3), (18, 4), (20, 5), (30, 10),
-    ])
+    @pytest.mark.parametrize(
+        "score,expected",
+        [
+            (1, -5),
+            (3, -4),
+            (8, -1),
+            (9, -1),
+            (10, 0),
+            (11, 0),
+            (12, 1),
+            (13, 1),
+            (16, 3),
+            (18, 4),
+            (20, 5),
+            (30, 10),
+        ],
+    )
     def test_values(self, score, expected):
         assert ability_modifier(score) == expected
 
@@ -39,12 +53,23 @@ class TestAbilityModifier:
 # proficiency_bonus
 # ---------------------------------------------------------------------------
 
+
 class TestProficiencyBonus:
-    @pytest.mark.parametrize("level,expected", [
-        (1, 2), (4, 2), (5, 3), (8, 3),
-        (9, 4), (12, 4), (13, 5), (16, 5),
-        (17, 6), (20, 6),
-    ])
+    @pytest.mark.parametrize(
+        "level,expected",
+        [
+            (1, 2),
+            (4, 2),
+            (5, 3),
+            (8, 3),
+            (9, 4),
+            (12, 4),
+            (13, 5),
+            (16, 5),
+            (17, 6),
+            (20, 6),
+        ],
+    )
     def test_values(self, level, expected):
         assert proficiency_bonus(level) == expected
 
@@ -61,6 +86,7 @@ class TestProficiencyBonus:
 # passive perception
 # ---------------------------------------------------------------------------
 
+
 class TestPassivePerception:
     def test_no_proficiency(self):
         assert compute_passive_perception(10) == 10
@@ -76,6 +102,7 @@ class TestPassivePerception:
 # ---------------------------------------------------------------------------
 # ability_check
 # ---------------------------------------------------------------------------
+
 
 class TestAbilityCheck:
     def test_total_equals_roll_plus_modifier(self):
@@ -130,33 +157,34 @@ class TestAbilityCheck:
 # skill_check
 # ---------------------------------------------------------------------------
 
+
 class TestSkillCheck:
     def test_no_proficiency_uses_ability_mod_only(self):
         rng = seeded(1)
-        r = skill_check(score=14, skill="stealth", level=1,
-                        proficiency=Proficiency.NONE, rng=rng)
+        r = skill_check(score=14, skill="stealth", level=1, proficiency=Proficiency.NONE, rng=rng)
         expected_mod = ability_modifier(14)  # +2
         assert r.modifier == expected_mod
         assert r.total == r.d20_roll + expected_mod
 
     def test_proficient_adds_prof_bonus(self):
         rng = seeded(1)
-        r = skill_check(score=14, skill="stealth", level=5,
-                        proficiency=Proficiency.PROFICIENT, rng=rng)
+        r = skill_check(
+            score=14, skill="stealth", level=5, proficiency=Proficiency.PROFICIENT, rng=rng
+        )
         # mod=+2, prof=+3 at level 5
         assert r.modifier == 2 + 3
 
     def test_expert_doubles_prof(self):
         rng = seeded(1)
-        r = skill_check(score=10, skill="perception", level=5,
-                        proficiency=Proficiency.EXPERT, rng=rng)
+        r = skill_check(
+            score=10, skill="perception", level=5, proficiency=Proficiency.EXPERT, rng=rng
+        )
         # mod=0, prof=3, expert=6
         assert r.modifier == 6
 
     def test_half_proficiency(self):
         rng = seeded(1)
-        r = skill_check(score=10, skill="arcana", level=5,
-                        proficiency=Proficiency.HALF, rng=rng)
+        r = skill_check(score=10, skill="arcana", level=5, proficiency=Proficiency.HALF, rng=rng)
         # prof=3, half=1 (floor)
         assert r.modifier == 0 + (3 // 2)
 
@@ -170,14 +198,21 @@ class TestSkillCheck:
 
     def test_success_flag(self):
         # Use a very low DC to ensure success with any roll
-        r = skill_check(score=20, skill="athletics", level=5,
-                        proficiency=Proficiency.PROFICIENT, dc=1, rng=seeded())
+        r = skill_check(
+            score=20,
+            skill="athletics",
+            level=5,
+            proficiency=Proficiency.PROFICIENT,
+            dc=1,
+            rng=seeded(),
+        )
         assert r.success is True
 
     def test_failure_flag(self):
         # Use impossible DC
-        r = skill_check(score=8, skill="athletics", level=1,
-                        proficiency=Proficiency.NONE, dc=30, rng=seeded())
+        r = skill_check(
+            score=8, skill="athletics", level=1, proficiency=Proficiency.NONE, dc=30, rng=seeded()
+        )
         assert r.success is False
 
     def test_skill_name_with_space(self):
@@ -190,15 +225,14 @@ class TestSkillCheck:
 # saving_throw
 # ---------------------------------------------------------------------------
 
+
 class TestSavingThrow:
     def test_not_proficient_uses_mod_only(self):
-        r = saving_throw(score=14, ability=Ability.DEX, level=1,
-                         proficient=False, rng=seeded())
+        r = saving_throw(score=14, ability=Ability.DEX, level=1, proficient=False, rng=seeded())
         assert r.modifier == ability_modifier(14)
 
     def test_proficient_adds_bonus(self):
-        r = saving_throw(score=14, ability=Ability.CON, level=5,
-                         proficient=True, rng=seeded())
+        r = saving_throw(score=14, ability=Ability.CON, level=5, proficient=True, rng=seeded())
         assert r.modifier == ability_modifier(14) + proficiency_bonus(5)
 
     def test_label(self):
@@ -207,13 +241,13 @@ class TestSavingThrow:
         assert "Save" in r.label
 
     def test_success_against_dc(self):
-        r = saving_throw(score=20, ability=Ability.STR, level=5,
-                         proficient=True, dc=1, rng=seeded())
+        r = saving_throw(
+            score=20, ability=Ability.STR, level=5, proficient=True, dc=1, rng=seeded()
+        )
         assert r.success is True
 
     def test_advantage(self):
-        r = saving_throw(score=10, ability=Ability.DEX, level=1,
-                         advantage=True, rng=seeded())
+        r = saving_throw(score=10, ability=Ability.DEX, level=1, advantage=True, rng=seeded())
         assert len(r.all_rolls) == 2
         assert r.d20_roll == max(r.all_rolls)
 

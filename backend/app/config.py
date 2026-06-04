@@ -94,6 +94,7 @@ def get_runtime_dir() -> Path:
         path = Path(__file__).parent.parent / path
     return path
 
+
 # ---------------------------------------------------------------------------
 # Runtime LLM overrides (survivent aux redémarrages via llm_runtime.json)
 # Surchargent les valeurs .env sans nécessiter de redémarrage du serveur.

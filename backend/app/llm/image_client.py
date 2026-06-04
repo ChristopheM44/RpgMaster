@@ -1,4 +1,5 @@
 """Async client for image generation via OpenAI-compatible API (DALL-E, etc.)."""
+
 from __future__ import annotations
 
 import logging
@@ -24,12 +25,8 @@ class ImageClientError(Exception):
     """The image generation provider is unreachable or returned an error."""
 
 
-def _image_retry_error(
-    exc: BaseException | None, max_retries: int
-) -> ImageClientError:
-    return ImageClientError(
-        f"Image provider injoignable après {max_retries} tentatives : {exc}"
-    )
+def _image_retry_error(exc: BaseException | None, max_retries: int) -> ImageClientError:
+    return ImageClientError(f"Image provider injoignable après {max_retries} tentatives : {exc}")
 
 
 class ImageClient:
@@ -110,9 +107,7 @@ class ImageClient:
     async def generate(self, prompt: str) -> str:
         """Generate an image from a prompt and return the image URL."""
         try:
-            return await self._generate_with_retry(
-                prompt, self._size, self._model
-            )
+            return await self._generate_with_retry(prompt, self._size, self._model)
         except APIStatusError as exc:
             # Detect non-API responses (e.g. Ollama HTML homepage on 404)
             body = getattr(exc, "response", None)
@@ -126,9 +121,7 @@ class ImageClient:
                     "Vérifiez que l'URL pointe vers un service compatible OpenAI "
                     "(DALL-E, Stable Diffusion WebUI, etc.), pas un serveur LLM texte."
                 ) from exc
-            raise ImageClientError(
-                f"Erreur API image {exc.status_code} : {exc.message}"
-            ) from exc
+            raise ImageClientError(f"Erreur API image {exc.status_code} : {exc.message}") from exc
 
     async def is_available(self) -> bool:
         try:

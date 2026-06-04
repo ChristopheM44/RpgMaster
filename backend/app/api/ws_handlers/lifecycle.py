@@ -1,4 +1,5 @@
 """WebSocket lifecycle helpers for connection-level messages."""
+
 from __future__ import annotations
 
 from sqlalchemy import select
@@ -26,8 +27,10 @@ async def character_belongs_to_session(
 
 
 async def send_ws_error(websocket, session_id: str, message: str) -> None:
-    await websocket.send_json({
-        "event_type": EventType.ERROR,
-        "session_id": session_id,
-        "payload": {"message": message},
-    })
+    await websocket.send_json(
+        {
+            "event_type": EventType.ERROR,
+            "session_id": session_id,
+            "payload": {"message": message},
+        }
+    )

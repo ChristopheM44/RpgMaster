@@ -1,4 +1,5 @@
 """Pure campaign map merge/projection helpers."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -219,17 +220,19 @@ def _validate_city_patch(patch_data: dict[str, Any]) -> CityMapPatch:
 
 def _coerce_region_map(existing: dict[str, Any] | None) -> RegionMap:
     raw = existing if isinstance(existing, dict) else {}
-    return RegionMap.model_validate({
-        "id": raw.get("id") or "region",
-        "name": raw.get("name") or "Région",
-        "current_node_id": raw.get("current_node_id"),
-        "nodes": raw.get("nodes") or [],
-        "edges": raw.get("edges") or [],
-        "background_seed": raw.get("background_seed"),
-        "decor": raw.get("decor"),
-        "visual_asset": raw.get("visual_asset"),
-        "updated_at": raw.get("updated_at") or _now_iso(),
-    })
+    return RegionMap.model_validate(
+        {
+            "id": raw.get("id") or "region",
+            "name": raw.get("name") or "Région",
+            "current_node_id": raw.get("current_node_id"),
+            "nodes": raw.get("nodes") or [],
+            "edges": raw.get("edges") or [],
+            "background_seed": raw.get("background_seed"),
+            "decor": raw.get("decor"),
+            "visual_asset": raw.get("visual_asset"),
+            "updated_at": raw.get("updated_at") or _now_iso(),
+        }
+    )
 
 
 def _coerce_city_map(
@@ -239,18 +242,20 @@ def _coerce_city_map(
     name: str | None,
 ) -> CityMap:
     raw = existing if isinstance(existing, dict) else {}
-    return CityMap.model_validate({
-        "id": raw.get("id") or city_id,
-        "region_node_id": raw.get("region_node_id") or region_node_id,
-        "name": raw.get("name") or name or "Ville",
-        "current_node_id": raw.get("current_node_id"),
-        "nodes": raw.get("nodes") or [],
-        "edges": raw.get("edges") or [],
-        "background_seed": raw.get("background_seed"),
-        "decor": raw.get("decor"),
-        "visual_asset": raw.get("visual_asset"),
-        "updated_at": raw.get("updated_at") or _now_iso(),
-    })
+    return CityMap.model_validate(
+        {
+            "id": raw.get("id") or city_id,
+            "region_node_id": raw.get("region_node_id") or region_node_id,
+            "name": raw.get("name") or name or "Ville",
+            "current_node_id": raw.get("current_node_id"),
+            "nodes": raw.get("nodes") or [],
+            "edges": raw.get("edges") or [],
+            "background_seed": raw.get("background_seed"),
+            "decor": raw.get("decor"),
+            "visual_asset": raw.get("visual_asset"),
+            "updated_at": raw.get("updated_at") or _now_iso(),
+        }
+    )
 
 
 def _merge_nodes(
@@ -278,9 +283,7 @@ def _merge_edges(
     edges = {
         edge.id: edge
         for edge in existing_edges
-        if edge.id not in explicit_removed
-        and edge.from_ in node_ids
-        and edge.to in node_ids
+        if edge.id not in explicit_removed and edge.from_ in node_ids and edge.to in node_ids
     }
     for edge in upserts:
         if edge.from_ not in node_ids or edge.to not in node_ids:

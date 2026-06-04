@@ -1,4 +1,5 @@
 """Unit tests for engine/encounter_builder.py (pure logic, no I/O)."""
+
 from __future__ import annotations
 
 import random
@@ -72,6 +73,7 @@ ALL_MONSTERS = [GOBLIN, HOBGOBLIN, OGRE]
 # get_xp_threshold
 # ---------------------------------------------------------------------------
 
+
 class TestGetXpThreshold:
     def test_level_1_easy(self):
         assert get_xp_threshold(1, "easy") == 25
@@ -95,6 +97,7 @@ class TestGetXpThreshold:
 # ---------------------------------------------------------------------------
 # get_group_multiplier
 # ---------------------------------------------------------------------------
+
 
 class TestGetGroupMultiplier:
     def test_single_monster(self):
@@ -121,6 +124,7 @@ class TestGetGroupMultiplier:
 # calculate_xp_budget
 # ---------------------------------------------------------------------------
 
+
 class TestCalculateXpBudget:
     def test_party_of_four_level_1_medium(self):
         # 4 × 50 = 200
@@ -138,6 +142,7 @@ class TestCalculateXpBudget:
 # calculate_adjusted_xp
 # ---------------------------------------------------------------------------
 
+
 class TestCalculateAdjustedXp:
     def test_single_monster_no_multiplier(self):
         assert calculate_adjusted_xp([100]) == 100
@@ -152,6 +157,7 @@ class TestCalculateAdjustedXp:
 # ---------------------------------------------------------------------------
 # assess_difficulty
 # ---------------------------------------------------------------------------
+
 
 class TestAssessDifficulty:
     def test_trivial(self):
@@ -173,6 +179,7 @@ class TestAssessDifficulty:
 # ---------------------------------------------------------------------------
 # generate_encounter
 # ---------------------------------------------------------------------------
+
 
 class TestGenerateEncounter:
     def test_returns_built_encounter(self):
@@ -228,14 +235,22 @@ class TestGenerateEncounter:
 # expand_to_combatants
 # ---------------------------------------------------------------------------
 
+
 class TestExpandToCombatants:
     def _make_encounter(self, entries: list[EncounterEntry]) -> BuiltEncounter:
         return BuiltEncounter(entries=entries)
 
     def test_single_entry_single_count(self):
         entry = EncounterEntry(
-            monster_id="goblin", count=1, name_fr="Gobelin",
-            cr=0.25, xp_each=50, ac=15, hp=7, attack_bonus=4, damage_notation="1d6+2",
+            monster_id="goblin",
+            count=1,
+            name_fr="Gobelin",
+            cr=0.25,
+            xp_each=50,
+            ac=15,
+            hp=7,
+            attack_bonus=4,
+            damage_notation="1d6+2",
         )
         enc = self._make_encounter([entry])
         monsters_by_id = {"goblin": GOBLIN}
@@ -247,8 +262,15 @@ class TestExpandToCombatants:
 
     def test_multiple_count_generates_unique_ids(self):
         entry = EncounterEntry(
-            monster_id="goblin", count=3, name_fr="Gobelin",
-            cr=0.25, xp_each=50, ac=15, hp=7, attack_bonus=4, damage_notation="1d6+2",
+            monster_id="goblin",
+            count=3,
+            name_fr="Gobelin",
+            cr=0.25,
+            xp_each=50,
+            ac=15,
+            hp=7,
+            attack_bonus=4,
+            damage_notation="1d6+2",
         )
         enc = self._make_encounter([entry])
         result = expand_to_combatants(enc, {"goblin": GOBLIN})
@@ -257,8 +279,15 @@ class TestExpandToCombatants:
 
     def test_numbered_names_for_multiple(self):
         entry = EncounterEntry(
-            monster_id="goblin", count=2, name_fr="Gobelin",
-            cr=0.25, xp_each=50, ac=15, hp=7, attack_bonus=4, damage_notation="1d6+2",
+            monster_id="goblin",
+            count=2,
+            name_fr="Gobelin",
+            cr=0.25,
+            xp_each=50,
+            ac=15,
+            hp=7,
+            attack_bonus=4,
+            damage_notation="1d6+2",
         )
         result = expand_to_combatants(self._make_encounter([entry]), {"goblin": GOBLIN})
         assert result[0]["name"] == "Gobelin 1"
@@ -267,8 +296,15 @@ class TestExpandToCombatants:
     def test_unknown_monster_still_expands(self):
         # EncounterEntry carries all combat stats; monsters_by_id is not required
         entry = EncounterEntry(
-            monster_id="dragon", count=1, name_fr="Dragon",
-            cr=10, xp_each=5900, ac=19, hp=200, attack_bonus=10, damage_notation="2d10+7",
+            monster_id="dragon",
+            count=1,
+            name_fr="Dragon",
+            cr=10,
+            xp_each=5900,
+            ac=19,
+            hp=200,
+            attack_bonus=10,
+            damage_notation="2d10+7",
         )
         result = expand_to_combatants(self._make_encounter([entry]), {})
         assert len(result) == 1
@@ -277,8 +313,15 @@ class TestExpandToCombatants:
 
     def test_is_player_false_for_npcs(self):
         entry = EncounterEntry(
-            monster_id="goblin", count=1, name_fr="Gobelin",
-            cr=0.25, xp_each=50, ac=15, hp=7, attack_bonus=4, damage_notation="1d6+2",
+            monster_id="goblin",
+            count=1,
+            name_fr="Gobelin",
+            cr=0.25,
+            xp_each=50,
+            ac=15,
+            hp=7,
+            attack_bonus=4,
+            damage_notation="1d6+2",
         )
         result = expand_to_combatants(self._make_encounter([entry]), {"goblin": GOBLIN})
         assert result[0]["is_player"] is False
@@ -286,8 +329,15 @@ class TestExpandToCombatants:
 
     def test_expanded_combatant_carries_srd_senses_and_abilities(self):
         entry = EncounterEntry(
-            monster_id="goblin", count=1, name_fr="Gobelin",
-            cr=0.25, xp_each=50, ac=15, hp=7, attack_bonus=4, damage_notation="1d6+2",
+            monster_id="goblin",
+            count=1,
+            name_fr="Gobelin",
+            cr=0.25,
+            xp_each=50,
+            ac=15,
+            hp=7,
+            attack_bonus=4,
+            damage_notation="1d6+2",
         )
         result = expand_to_combatants(self._make_encounter([entry]), {"goblin": GOBLIN})
         assert result[0]["ability_scores"] == {"dexterity": 14}

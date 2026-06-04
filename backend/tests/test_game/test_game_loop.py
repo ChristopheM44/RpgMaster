@@ -1,4 +1,5 @@
 """Tests for game/game_loop.py — state machine transitions."""
+
 from __future__ import annotations
 
 import pytest
@@ -25,34 +26,26 @@ class TestCanTransition:
         assert loop.can_transition(SessionStatus.LOBBY, SessionStatus.EXPLORATION) is False
 
     def test_character_creation_to_exploration(self, loop: GameLoop) -> None:
-        assert loop.can_transition(
-            SessionStatus.CHARACTER_CREATION, SessionStatus.EXPLORATION
-        ) is True
+        assert (
+            loop.can_transition(SessionStatus.CHARACTER_CREATION, SessionStatus.EXPLORATION) is True
+        )
 
     def test_character_creation_back_to_lobby(self, loop: GameLoop) -> None:
-        assert loop.can_transition(
-            SessionStatus.CHARACTER_CREATION, SessionStatus.LOBBY
-        ) is True
+        assert loop.can_transition(SessionStatus.CHARACTER_CREATION, SessionStatus.LOBBY) is True
 
     def test_exploration_to_encounter_start(self, loop: GameLoop) -> None:
-        assert loop.can_transition(
-            SessionStatus.EXPLORATION, SessionStatus.ENCOUNTER_START
-        ) is True
+        assert loop.can_transition(SessionStatus.EXPLORATION, SessionStatus.ENCOUNTER_START) is True
 
     def test_encounter_start_to_combat(self, loop: GameLoop) -> None:
-        assert loop.can_transition(
-            SessionStatus.ENCOUNTER_START, SessionStatus.COMBAT
-        ) is True
+        assert loop.can_transition(SessionStatus.ENCOUNTER_START, SessionStatus.COMBAT) is True
 
     def test_encounter_start_can_deescalate_to_exploration(self, loop: GameLoop) -> None:
-        assert loop.can_transition(
-            SessionStatus.ENCOUNTER_START, SessionStatus.EXPLORATION
-        ) is True
+        assert loop.can_transition(SessionStatus.ENCOUNTER_START, SessionStatus.EXPLORATION) is True
 
     def test_encounter_start_cannot_skip_to_encounter_end(self, loop: GameLoop) -> None:
-        assert loop.can_transition(
-            SessionStatus.ENCOUNTER_START, SessionStatus.ENCOUNTER_END
-        ) is False
+        assert (
+            loop.can_transition(SessionStatus.ENCOUNTER_START, SessionStatus.ENCOUNTER_END) is False
+        )
 
     def test_combat_to_encounter_end(self, loop: GameLoop) -> None:
         assert loop.can_transition(SessionStatus.COMBAT, SessionStatus.ENCOUNTER_END) is True

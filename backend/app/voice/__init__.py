@@ -3,6 +3,7 @@
 Voir le plan persona §5 :
 /Users/christophe/.claude/plans/je-voudrais-reflechir-moonlit-hammock.md
 """
+
 from app.voice.base import AudioBlob, VoiceProvider, VoiceProviderError
 from app.voice.local_provider import LocalVoiceProvider, kokoro_voice_for
 from app.voice.realtime_provider import (

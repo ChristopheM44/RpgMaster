@@ -7,6 +7,7 @@ Pipeline complet pour une action joueur :
 
 Pure orchestration : ce module ne contient pas de logique de règles.
 """
+
 from __future__ import annotations
 
 import logging
@@ -233,6 +234,7 @@ class ActionResolver:
         recent_messages: list[Any] = []
         if db is not None:
             from app.services.message_service import load_recent_messages
+
             recent_messages = await load_recent_messages(session_id, db)
         game_state = await self._game_state_for_gm_prompt(
             session_id,
@@ -292,6 +294,7 @@ class ActionResolver:
             if db is not None:
                 from app.models.message import MessageRole, MessageType
                 from app.services.message_service import persist_narration
+
                 await persist_narration(
                     session_id,
                     dialogue_text,
@@ -307,6 +310,7 @@ class ActionResolver:
                 )
 
         from app.game.gm_response_executor import execute_gm_response
+
         exec_result = await execute_gm_response(
             gm_resp,
             active,
@@ -366,6 +370,7 @@ class ActionResolver:
                     if db is not None:
                         from app.models.message import MessageRole, MessageType
                         from app.services.message_service import persist_narration
+
                         await persist_narration(
                             session_id,
                             dialogue_text_2,
@@ -478,17 +483,14 @@ class ActionResolver:
         """
         if db is not None:
             try:
-                campaign = await campaign_dossier_service.campaign_for_session(
-                    session_id, db
-                )
+                campaign = await campaign_dossier_service.campaign_for_session(session_id, db)
                 if campaign is not None:
                     persona = await campaign_dossier_service.get_npc_persona(
                         campaign.id, npc_id, db
                     )
                     if persona is not None:
                         logger.debug(
-                            "resolve_npc_dialogue: persona riche trouvée pour %s "
-                            "(importance=%s)",
+                            "resolve_npc_dialogue: persona riche trouvée pour %s (importance=%s)",
                             npc_id,
                             persona.importance,
                         )

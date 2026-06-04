@@ -5,6 +5,7 @@ This module applies incremental patches to that JSON blob without replacing the
 whole layout, so discoveries and party positions can persist like they would at
 a real table.
 """
+
 from __future__ import annotations
 
 import logging
@@ -464,12 +465,14 @@ def _upsert_npc_poi(
     pois = scene.setdefault("pois", [])
     for poi in pois:
         if isinstance(poi, dict) and str(poi.get("id") or "") == npc_id:
-            poi.update({
-                "name": str(name),
-                "kind": "npc",
-                "icon": "npc",
-                "position": position,
-            })
+            poi.update(
+                {
+                    "name": str(name),
+                    "kind": "npc",
+                    "icon": "npc",
+                    "position": position,
+                }
+            )
             if known_to_party is not None:
                 poi["known_to_party"] = known_to_party
             return

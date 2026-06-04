@@ -9,10 +9,13 @@ Stratégie :
   du TestClient (car `on_event("startup")` est ignoré quand un `lifespan` est déjà défini).
 - Chaque test WS crée ses données via l'API HTTP du même TestClient.
 """
+
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -23,6 +26,50 @@ from starlette.testclient import TestClient
 import app.models  # noqa: F401
 from app.db.database import Base, get_db
 from app.main import create_app
+
+# Réponse JSON canned, valide à la fois pour ``GMResponse`` (clé ``narration``)
+# et ``PlayerActionChoice`` (clés ``action_type`` / ``action_description`` /
+# ``roleplay_text``) — cf. app/agents/schemas.py. Les champs surnuméraires sont
+# ignorés par Pydantic, donc un même payload sert au MJ comme aux joueurs IA.
+_CANNED_LLM_JSON = json.dumps(
+    {
+        "narration": "La scène se poursuit, calme et attentive.",
+        "actions": [],
+        "mood": "neutral",
+        "action_type": "wait",
+        "action_description": "observe la scène",
+        "roleplay_text": "(observe la scène, attentif)",
+        "inner_reasoning": "Réponse de test déterministe.",
+    },
+    ensure_ascii=False,
+)
+
+
+@pytest.fixture(autouse=True)
+def _stub_real_llm_calls():
+    """Neutralise tout appel LLM réseau réel dans la suite ``game/``.
+
+    Conforme à la philosophie de test (CLAUDE.md) : seuls les tests
+    ``tests/test_e2e_live`` (marqueur ``live_llm``) appellent un vrai LLM. Les
+    tests ``game/`` qui n'injectent pas leur propre mock d'agent retombaient
+    sinon sur de vrais appels Ollama Cloud — lents (réseau) et surtout source de
+    tâches de fond orphelines liées à des event loops fermés (« Event loop is
+    closed » puis ``CancelledError`` au teardown du ``TestClient``, flake
+    d'isolation à victime variable).
+
+    On patche ``OllamaClient.chat`` / ``generate`` au niveau classe : MJ,
+    joueurs IA et services passent tous par là. Les tests qui patchent un client
+    ou un agent au niveau instance gardent la priorité (l'attribut d'instance
+    masque celui de classe).
+    """
+    from app.llm.ollama_client import OllamaClient
+
+    with (
+        patch.object(OllamaClient, "chat", new=AsyncMock(return_value=_CANNED_LLM_JSON)),
+        patch.object(OllamaClient, "generate", new=AsyncMock(return_value=_CANNED_LLM_JSON)),
+        patch.object(OllamaClient, "is_available", new=AsyncMock(return_value=True)),
+    ):
+        yield
 
 
 @pytest.fixture

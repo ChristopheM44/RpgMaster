@@ -1,4 +1,5 @@
 """Tests for game/event_bus.py."""
+
 from __future__ import annotations
 
 import asyncio
@@ -76,9 +77,7 @@ class TestPublish:
         assert q.empty()
 
     async def test_publish_no_subscribers_does_not_raise(self, bus: EventBus) -> None:
-        event = GameEvent(
-            event_type=EventType.NARRATION, session_id="ghost-session", payload={}
-        )
+        event = GameEvent(event_type=EventType.NARRATION, session_id="ghost-session", payload={})
         await bus.publish(event)  # should not raise
 
     async def test_full_queue_replaces_backlog_with_backpressure_error(

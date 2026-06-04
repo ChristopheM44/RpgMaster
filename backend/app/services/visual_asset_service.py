@@ -4,9 +4,9 @@ Orchestrates the async lifecycle: prompt_ready → generating → ready/failed.
 Runs as a fire-and-forget asyncio task after a scene or map layout is created
 with a visual_asset in prompt_ready state.
 """
+
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import UTC, datetime
 from typing import Any
@@ -15,7 +15,6 @@ from app.db.database import async_session
 from app.game.event_bus import EventType, event_bus
 from app.game.runtime import session_manager
 from app.llm.image_client import ImageClient, ImageClientError
-from app.services import local_map_service
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +29,7 @@ async def _update_visual_asset_and_publish(
     async with session_manager.session_lock(session_id):
         active = session_manager.get_session(session_id)
         if active is None:
-            logger.warning(
-                "visual_asset: session %s fermée avant mise à jour.", session_id
-            )
+            logger.warning("visual_asset: session %s fermée avant mise à jour.", session_id)
             return
 
         if scope == "scene":
@@ -106,9 +103,7 @@ async def generate_visual_asset(
 
     # Transition to "generating"
     generating_asset = {**visual_asset, "status": "generating"}
-    await _update_visual_asset_and_publish(
-        session_id, scope, "visual_asset", generating_asset
-    )
+    await _update_visual_asset_and_publish(session_id, scope, "visual_asset", generating_asset)
 
     # Call the image API
     client = ImageClient()
@@ -121,9 +116,7 @@ async def generate_visual_asset(
             "status": "failed",
             "error": str(exc)[:280],
         }
-        await _update_visual_asset_and_publish(
-            session_id, scope, "visual_asset", failed_asset
-        )
+        await _update_visual_asset_and_publish(session_id, scope, "visual_asset", failed_asset)
         return
 
     # Transition to "ready"
@@ -133,9 +126,5 @@ async def generate_visual_asset(
         "url": url,
         "generated_at": datetime.now(UTC).isoformat(),
     }
-    await _update_visual_asset_and_publish(
-        session_id, scope, "visual_asset", ready_asset
-    )
-    logger.info(
-        "visual_asset: image générée pour session %s (scope=%s)", session_id, scope
-    )
+    await _update_visual_asset_and_publish(session_id, scope, "visual_asset", ready_asset)
+    logger.info("visual_asset: image générée pour session %s (scope=%s)", session_id, scope)

@@ -1,4 +1,5 @@
 """Encounter service: loads SRD data and orchestrates preset vs dynamic encounters."""
+
 from __future__ import annotations
 
 import json
@@ -97,20 +98,20 @@ class EncounterService:
             if not monster:
                 continue
             count = slot.get("count", 1)
-            first_action = next(
-                (a for a in monster.get("actions", []) if "attack_bonus" in a), {}
+            first_action = next((a for a in monster.get("actions", []) if "attack_bonus" in a), {})
+            entries.append(
+                EncounterEntry(
+                    monster_id=monster["id"],
+                    count=count,
+                    name_fr=monster.get("name_fr", monster["name"]),
+                    cr=monster["cr"],
+                    xp_each=monster["xp"],
+                    ac=monster["ac"],
+                    hp=monster["hp"],
+                    attack_bonus=first_action.get("attack_bonus", 2),
+                    damage_notation=first_action.get("damage_dice", "1d4"),
+                )
             )
-            entries.append(EncounterEntry(
-                monster_id=monster["id"],
-                count=count,
-                name_fr=monster.get("name_fr", monster["name"]),
-                cr=monster["cr"],
-                xp_each=monster["xp"],
-                ac=monster["ac"],
-                hp=monster["hp"],
-                attack_bonus=first_action.get("attack_bonus", 2),
-                damage_notation=first_action.get("damage_dice", "1d4"),
-            ))
 
         all_xp_flat = [e.xp_each for e in entries for _ in range(e.count)]
         return BuiltEncounter(
@@ -149,20 +150,20 @@ class EncounterService:
             if not monster:
                 logger.warning("EncounterService: monster_id invalide ignore '%s'.", mid)
                 continue
-            first_action = next(
-                (a for a in monster.get("actions", []) if "attack_bonus" in a), {}
+            first_action = next((a for a in monster.get("actions", []) if "attack_bonus" in a), {})
+            entries.append(
+                EncounterEntry(
+                    monster_id=monster["id"],
+                    count=count,
+                    name_fr=monster.get("name_fr", monster["name"]),
+                    cr=monster["cr"],
+                    xp_each=monster["xp"],
+                    ac=monster["ac"],
+                    hp=monster["hp"],
+                    attack_bonus=first_action.get("attack_bonus", 2),
+                    damage_notation=first_action.get("damage_dice", "1d4"),
+                )
             )
-            entries.append(EncounterEntry(
-                monster_id=monster["id"],
-                count=count,
-                name_fr=monster.get("name_fr", monster["name"]),
-                cr=monster["cr"],
-                xp_each=monster["xp"],
-                ac=monster["ac"],
-                hp=monster["hp"],
-                attack_bonus=first_action.get("attack_bonus", 2),
-                damage_notation=first_action.get("damage_dice", "1d4"),
-            ))
 
         all_xp_flat = [e.xp_each for e in entries for _ in range(e.count)]
         return BuiltEncounter(
@@ -253,8 +254,7 @@ class EncounterService:
             rng = random.Random()
         avg = sum(party_levels) / len(party_levels) if party_levels else 1
         candidates = [
-            p for p in self._presets
-            if p.get("min_level", 0) <= avg <= p.get("max_level", 99)
+            p for p in self._presets if p.get("min_level", 0) <= avg <= p.get("max_level", 99)
         ]
         return rng.choice(candidates) if candidates else None
 

@@ -85,9 +85,7 @@ class AgentResponse(BaseModel):
 
     content: str = Field(..., description="Texte principal de la réponse")
     actions: list[GMAction] = Field(default_factory=list)
-    raw_llm_output: str | None = Field(
-        None, description="Sortie brute du LLM avant parsing"
-    )
+    raw_llm_output: str | None = Field(None, description="Sortie brute du LLM avant parsing")
     action_intent: str | None = Field(
         None, description="Relayé depuis GMResponse : 'social' | 'environmental' | 'mixed'"
     )

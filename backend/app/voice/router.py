@@ -9,6 +9,7 @@ En cas d'échec du provider primaire en mode Realtime/hybrid, fallback automatiq
 sur le LocalVoiceProvider — le jeu continue avec une voix dégradée plutôt qu'un
 silence ou une erreur visible côté joueur.
 """
+
 from __future__ import annotations
 
 import logging

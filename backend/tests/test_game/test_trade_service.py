@@ -14,7 +14,14 @@ async def test_give_item_moves_instance_between_characters(db_session):
         ability_scores={"str": 10, "dex": 10, "con": 12, "int": 10, "wis": 15, "cha": 10},
         hp_current=9,
         hp_max=9,
-        equipment=[{"id": "healing_potion_1", "template_id": "healing_potion", "name_fr": "Potion", "equipped": True}],
+        equipment=[
+            {
+                "id": "healing_potion_1",
+                "template_id": "healing_potion",
+                "name_fr": "Potion",
+                "equipped": True,
+            }
+        ],
         session_id="session-1",
     )
     receiver = Character(

@@ -1,4 +1,5 @@
 """Interface abstraite des fournisseurs vocaux (TTS local et Realtime API)."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

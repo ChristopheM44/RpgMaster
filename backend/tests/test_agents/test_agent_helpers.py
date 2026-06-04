@@ -4,6 +4,7 @@ _extract_json, _format_messages, _build_messages sont les primitives
 communes à GMAgent et PlayerAgent.  Les tester directement protège le
 Lot 1.4 contre toute régression lors de la création du pipeline unifié.
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -121,9 +122,7 @@ class TestFormatMessages:
 
 
 class TestBuildMessages:
-    def test_without_context_manager_returns_system_and_user(
-        self, agent: _StubAgent
-    ) -> None:
+    def test_without_context_manager_returns_system_and_user(self, agent: _StubAgent) -> None:
         msgs = agent._build_messages("Bonjour", None)
         assert len(msgs) == 2
         assert msgs[0]["role"] == "system"
@@ -143,12 +142,8 @@ class TestBuildMessages:
         assert msgs[-1]["role"] == "user"
         assert msgs[-1]["content"] == "Action 2"
 
-    def test_with_context_manager_calls_to_ollama_messages(
-        self, agent: _StubAgent
-    ) -> None:
+    def test_with_context_manager_calls_to_ollama_messages(self, agent: _StubAgent) -> None:
         cm = MagicMock()
-        cm.to_ollama_messages.return_value = [
-            {"role": "system", "content": "Système de test."}
-        ]
+        cm.to_ollama_messages.return_value = [{"role": "system", "content": "Système de test."}]
         agent._build_messages("prompt", cm)
         cm.to_ollama_messages.assert_called_once_with("Système de test.")

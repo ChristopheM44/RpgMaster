@@ -1,4 +1,5 @@
 """XP thresholds and level lookup helpers for SRD-style progression."""
+
 from __future__ import annotations
 
 XP_THRESHOLDS: dict[int, int] = {

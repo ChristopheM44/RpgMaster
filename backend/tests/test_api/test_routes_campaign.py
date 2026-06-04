@@ -163,87 +163,89 @@ async def test_reset_campaign_keeps_current_session_and_clears_played_state(
         "pending_asi_levels": [4],
     }
 
-    db_session.add_all([
-        GameState(
-            session_id=current_session_id,
-            turn_number=9,
-            round_number=3,
-            state_data={
-                "phase": "combat",
-                "quests": [{"id": "played", "title": "Jouée"}],
-                "world_maps": {"region_map": {"id": "played-map"}, "city_maps": {}},
-            },
-        ),
-        Message(
-            session_id=current_session_id,
-            role=MessageRole.GM,
-            speaker="MJ",
-            message_type=MessageType.NARRATION,
-            content="Un événement joué.",
-        ),
-        SaveSlot(
-            id="save-reset-test",
-            session_id=current_session_id,
-            name="Avant reset",
-            phase="combat",
-            turn_number=9,
-            round_number=3,
-            state_data={"phase": "combat"},
-            characters_snapshot=[],
-        ),
-        CampaignDossier(
-            id="dossier-reset-test",
-            campaign_id=campaign_id,
-            player_contract={
-                "title": "Brumes rejouables",
-                "pitch_public": "Une route noyée de brume.",
-                "tones": ["Mystère"],
-                "duration": "3 sessions",
-                "hook": "La brume appelle.",
-                "visible_chapters": [
-                    {
-                        "id": "chapter_1",
-                        "num": "I",
-                        "title": "Route",
-                        "state": "done",
-                        "sessions": 2,
-                        "summary": "La route a été jouée.",
-                    },
-                    {
-                        "id": "chapter_2",
-                        "num": "II",
-                        "title": "Mine",
-                        "state": "active",
-                        "sessions": 1,
-                        "summary": "La mine attend.",
-                    },
-                ],
-                "known_objectives": ["Comprendre la brume."],
-                "played_summary": "Le groupe a déjà tout changé.",
-            },
-            gm_dossier={
-                "narrative_arc": "Secret conservé.",
-                "chapters": [],
-                "important_npcs": [{"name": "Bram"}],
-                "region_map": {"id": "private-map"},
-                "city_maps": {"ville": {"id": "ville"}},
-                "active_city_id": "ville",
-            },
-            played_canon={
-                "established_facts": ["Fait joué"],
-                "player_decisions": ["Décision jouée"],
-                "quests": [{"id": "played"}],
-                "npc_relationships": [{"id": "bram"}],
-                "revealed_secrets": ["Secret révélé"],
-                "plan_changes": ["Plan changé"],
-                "rolling_summary": "Résumé joué",
-                "chapter_progression": [{"id": "chapter_2", "state": "active"}],
-            },
-            import_sources=[{"id": "source-1", "kind": "text", "title": "Source privée"}],
-            active_chapter_id="chapter_2",
-            generation_status="validated",
-        ),
-    ])
+    db_session.add_all(
+        [
+            GameState(
+                session_id=current_session_id,
+                turn_number=9,
+                round_number=3,
+                state_data={
+                    "phase": "combat",
+                    "quests": [{"id": "played", "title": "Jouée"}],
+                    "world_maps": {"region_map": {"id": "played-map"}, "city_maps": {}},
+                },
+            ),
+            Message(
+                session_id=current_session_id,
+                role=MessageRole.GM,
+                speaker="MJ",
+                message_type=MessageType.NARRATION,
+                content="Un événement joué.",
+            ),
+            SaveSlot(
+                id="save-reset-test",
+                session_id=current_session_id,
+                name="Avant reset",
+                phase="combat",
+                turn_number=9,
+                round_number=3,
+                state_data={"phase": "combat"},
+                characters_snapshot=[],
+            ),
+            CampaignDossier(
+                id="dossier-reset-test",
+                campaign_id=campaign_id,
+                player_contract={
+                    "title": "Brumes rejouables",
+                    "pitch_public": "Une route noyée de brume.",
+                    "tones": ["Mystère"],
+                    "duration": "3 sessions",
+                    "hook": "La brume appelle.",
+                    "visible_chapters": [
+                        {
+                            "id": "chapter_1",
+                            "num": "I",
+                            "title": "Route",
+                            "state": "done",
+                            "sessions": 2,
+                            "summary": "La route a été jouée.",
+                        },
+                        {
+                            "id": "chapter_2",
+                            "num": "II",
+                            "title": "Mine",
+                            "state": "active",
+                            "sessions": 1,
+                            "summary": "La mine attend.",
+                        },
+                    ],
+                    "known_objectives": ["Comprendre la brume."],
+                    "played_summary": "Le groupe a déjà tout changé.",
+                },
+                gm_dossier={
+                    "narrative_arc": "Secret conservé.",
+                    "chapters": [],
+                    "important_npcs": [{"name": "Bram"}],
+                    "region_map": {"id": "private-map"},
+                    "city_maps": {"ville": {"id": "ville"}},
+                    "active_city_id": "ville",
+                },
+                played_canon={
+                    "established_facts": ["Fait joué"],
+                    "player_decisions": ["Décision jouée"],
+                    "quests": [{"id": "played"}],
+                    "npc_relationships": [{"id": "bram"}],
+                    "revealed_secrets": ["Secret révélé"],
+                    "plan_changes": ["Plan changé"],
+                    "rolling_summary": "Résumé joué",
+                    "chapter_progression": [{"id": "chapter_2", "state": "active"}],
+                },
+                import_sources=[{"id": "source-1", "kind": "text", "title": "Source privée"}],
+                active_chapter_id="chapter_2",
+                generation_status="validated",
+            ),
+        ]
+    )
     await db_session.commit()
 
     response = await async_client.post(f"/api/campaigns/{campaign_id}/reset")
@@ -357,8 +359,6 @@ async def test_reset_campaign_without_session_creates_current_lobby_session(
 
 @pytest.mark.asyncio
 async def test_reset_campaign_not_found(async_client):
-    response = await async_client.post(
-        "/api/campaigns/00000000-0000-0000-0000-000000000000/reset"
-    )
+    response = await async_client.post("/api/campaigns/00000000-0000-0000-0000-000000000000/reset")
 
     assert response.status_code == 404

@@ -20,7 +20,8 @@ logger = logging.getLogger(__name__)
 
 _MAX_RETRIES = 3
 _BASE_DELAY = 1.0  # seconds, doubles on each retry
-_LLM_TIMEOUT = httpx.Timeout(240.0, connect=3.0)  # fast connect, very generous read timeout for large cloud models like Gemma 4 31B
+# Fast connect, very generous read timeout for large cloud models like Gemma 4 31B.
+_LLM_TIMEOUT = httpx.Timeout(240.0, connect=3.0)
 _SEMAPHORES: dict[tuple[int, int], asyncio.Semaphore] = {}
 
 
@@ -49,6 +50,7 @@ class OllamaClient:
         self._explicit_headers = headers  # None = lire depuis config au moment de la création
         self._cached_url: str | None = None
         self._cached_headers: dict | None = None
+        self._cached_loop: asyncio.AbstractEventLoop | None = None
         self._client: ollama.AsyncClient | None = None
 
     @property
@@ -67,13 +69,26 @@ class OllamaClient:
         return {"Authorization": f"Bearer {api_key}"} if api_key else None
 
     def _get_client(self) -> ollama.AsyncClient:
-        """Retourne le client Ollama, en le recréant si l'URL ou les headers ont changé."""
+        """Retourne le client Ollama, recréé si l'URL, les headers ou la boucle changent.
+
+        Le client ollama enveloppe un ``httpx.AsyncClient`` lié à la boucle
+        asyncio active lors de sa première requête. En test, chaque ``TestClient``
+        Starlette ouvre sa propre boucle : réutiliser un client lié à une boucle
+        déjà fermée lève « Event loop is closed ». On recrée donc le client dès
+        que la boucle courante diffère de celle mémorisée. En production la boucle
+        ne change pas — aucun surcoût.
+        """
         current_url = self.base_url
         current_headers = self._auth_headers
+        try:
+            current_loop: asyncio.AbstractEventLoop | None = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
         if (
             self._client is None
             or self._cached_url != current_url
             or self._cached_headers != current_headers
+            or self._cached_loop is not current_loop
         ):
             self._client = ollama.AsyncClient(
                 host=current_url,
@@ -82,6 +97,7 @@ class OllamaClient:
             )
             self._cached_url = current_url
             self._cached_headers = current_headers
+            self._cached_loop = current_loop
         return self._client
 
     @staticmethod

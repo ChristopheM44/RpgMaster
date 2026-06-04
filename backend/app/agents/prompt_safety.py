@@ -1,4 +1,5 @@
 """Prompt helpers for clearly delimiting untrusted player input."""
+
 from __future__ import annotations
 
 USER_INPUT_START = "<<<USER_INPUT_START>>>"

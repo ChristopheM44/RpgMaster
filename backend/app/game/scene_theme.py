@@ -1,4 +1,5 @@
 """Scene theme inference shared by opening, layout normalization and migrations."""
+
 from __future__ import annotations
 
 import re

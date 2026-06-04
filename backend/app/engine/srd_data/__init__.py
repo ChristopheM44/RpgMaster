@@ -8,6 +8,7 @@ schemas defined in ``schemas.py``. The cached return value is kept as a
 ``list[dict]`` for backwards compatibility with existing consumers, but a
 ``ValueError`` is raised on the first call if any entry is malformed.
 """
+
 from __future__ import annotations
 
 import json
@@ -33,8 +34,10 @@ def _validate_all(items: list[dict[str, Any]], model, kind: str) -> list[dict[st
         try:
             model.model_validate(item)
         except ValidationError as e:
-            errors.append(f"{kind} '{item.get('id', '?')}': {e.errors()[0]['msg']} "
-                          f"at {'.'.join(str(p) for p in e.errors()[0]['loc'])}")
+            errors.append(
+                f"{kind} '{item.get('id', '?')}': {e.errors()[0]['msg']} "
+                f"at {'.'.join(str(p) for p in e.errors()[0]['loc'])}"
+            )
     if errors:
         head = "\n  - ".join(errors[:10])
         more = f"\n  ... and {len(errors) - 10} more" if len(errors) > 10 else ""

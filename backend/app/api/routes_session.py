@@ -41,8 +41,11 @@ async def list_sessions(
 
     responses = [
         SessionResponse(
-            id=s.id, name=s.name, status=s.status,
-            created_at=s.created_at, updated_at=s.updated_at,
+            id=s.id,
+            name=s.name,
+            status=s.status,
+            created_at=s.created_at,
+            updated_at=s.updated_at,
             character_count=counts.get(s.id, 0),
         )
         for s in sessions
@@ -77,8 +80,11 @@ async def get_session(
         select(func.count(Character.id)).where(Character.session_id == session_id)
     )
     return SessionResponse(
-        id=session.id, name=session.name, status=session.status,
-        created_at=session.created_at, updated_at=session.updated_at,
+        id=session.id,
+        name=session.name,
+        status=session.status,
+        created_at=session.created_at,
+        updated_at=session.updated_at,
         character_count=count_result.scalar_one(),
     )
 

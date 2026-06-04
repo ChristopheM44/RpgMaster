@@ -121,7 +121,12 @@ def _decor_payload() -> dict:
         "mountains": [{"x": 80, "y": 28, "height": 5.0}],
         "coastline": {
             "side": "west",
-            "points": [{"x": 0, "y": 0}, {"x": 18, "y": 0}, {"x": 12, "y": 100}, {"x": 0, "y": 100}],
+            "points": [
+                {"x": 0, "y": 0},
+                {"x": 18, "y": 0},
+                {"x": 12, "y": 100},
+                {"x": 0, "y": 100},
+            ],
         },
         "river": {"path": "M 0 76 Q 30 80 60 78 T 100 80", "width": 1.5},
         "decorative_roads": ["M 12 60 L 88 60"],
@@ -143,7 +148,9 @@ def test_region_map_decor_is_set_on_first_patch() -> None:
     merged = merge_region_map_patch(
         None,
         {
-            "nodes_upsert": [{"id": "a", "name": "A", "kind": "settlement", "position": {"x": 50, "y": 50}}],
+            "nodes_upsert": [
+                {"id": "a", "name": "A", "kind": "settlement", "position": {"x": 50, "y": 50}}
+            ],
             "decor": _decor_payload(),
         },
     )
@@ -159,7 +166,9 @@ def test_region_map_decor_preserved_when_patch_has_no_decor() -> None:
     initial = merge_region_map_patch(
         None,
         {
-            "nodes_upsert": [{"id": "a", "name": "A", "kind": "settlement", "position": {"x": 50, "y": 50}}],
+            "nodes_upsert": [
+                {"id": "a", "name": "A", "kind": "settlement", "position": {"x": 50, "y": 50}}
+            ],
             "decor": _decor_payload(),
         },
     )
@@ -181,7 +190,9 @@ def test_region_map_decor_replaced_when_patch_provides_decor() -> None:
     initial = merge_region_map_patch(
         None,
         {
-            "nodes_upsert": [{"id": "a", "name": "A", "kind": "settlement", "position": {"x": 50, "y": 50}}],
+            "nodes_upsert": [
+                {"id": "a", "name": "A", "kind": "settlement", "position": {"x": 50, "y": 50}}
+            ],
             "decor": _decor_payload(),
         },
     )
@@ -209,7 +220,12 @@ def test_city_map_decor_set_once_semantics() -> None:
             "region_node_id": "phandalin",
             "name": "Phandalin",
             "nodes_upsert": [
-                {"id": "inn", "name": "Stonehill Inn", "kind": "tavern", "position": {"x": 38, "y": 52}}
+                {
+                    "id": "inn",
+                    "name": "Stonehill Inn",
+                    "kind": "tavern",
+                    "position": {"x": 38, "y": 52},
+                }
             ],
             "decor": _decor_payload(),
         },

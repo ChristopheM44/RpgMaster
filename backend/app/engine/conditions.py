@@ -16,6 +16,7 @@ Special cases documented inline:
 - EXHAUSTION level 3+: disadvantage on attack rolls and saving throws
                        (see ExhaustionEffects).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -62,10 +63,10 @@ class ConditionEffects:
     attack_advantage: bool = False
 
     # Rolls made against the afflicted creature
-    melee_attacked_advantage: bool = False    # melee attacks have advantage vs this creature
+    melee_attacked_advantage: bool = False  # melee attacks have advantage vs this creature
     ranged_attacked_disadvantage: bool = False  # ranged attacks have disadvantage vs this creature
-    attacked_advantage: bool = False           # ALL attacks (melee+ranged) have advantage
-    attacked_disadvantage: bool = False        # ALL attacks have disadvantage
+    attacked_advantage: bool = False  # ALL attacks (melee+ranged) have advantage
+    attacked_disadvantage: bool = False  # ALL attacks have disadvantage
 
     # Critical hit rule: melee hits within 5 ft are automatic crits
     auto_crit_melee: bool = False
@@ -102,38 +103,31 @@ CONDITION_EFFECTS: dict[Condition, ConditionEffects] = {
         attack_disadvantage=True,
         attacked_advantage=True,
     ),
-
     # Charmed: can't attack the charmer (position/target logic, not toggles here)
     Condition.CHARMED: ConditionEffects(),
-
     # Deafened: can't hear (no direct combat mechanic in SRD combat rolls)
     Condition.DEAFENED: ConditionEffects(),
-
     # Frightened: disadv on attacks/checks while source is in sight;
     # can't move closer (movement logic outside engine)
     Condition.FRIGHTENED: ConditionEffects(
         attack_disadvantage=True,
         ability_check_disadvantage=True,
     ),
-
     # Grappled: speed 0 (grappler can drag)
     Condition.GRAPPLED: ConditionEffects(
         speed_zero=True,
     ),
-
     # Incapacitated: no actions or reactions
     Condition.INCAPACITATED: ConditionEffects(
         no_actions=True,
         no_reactions=True,
         no_bonus_actions=True,
     ),
-
     # Invisible: adv on own attacks, disadv against it
     Condition.INVISIBLE: ConditionEffects(
         attack_advantage=True,
         attacked_disadvantage=True,
     ),
-
     # Paralyzed: incapacitated + speed 0 + auto-fail STR/DEX saves +
     #            all attacks have adv + melee crits within 5 ft
     Condition.PARALYZED: ConditionEffects(
@@ -146,7 +140,6 @@ CONDITION_EFFECTS: dict[Condition, ConditionEffects] = {
         attacked_advantage=True,
         auto_crit_melee=True,
     ),
-
     # Petrified: same as paralyzed + resistance to all damage (apply at damage layer)
     Condition.PETRIFIED: ConditionEffects(
         no_actions=True,
@@ -158,20 +151,17 @@ CONDITION_EFFECTS: dict[Condition, ConditionEffects] = {
         attacked_advantage=True,
         auto_crit_melee=True,
     ),
-
     # Poisoned: disadv on attack rolls and ability checks
     Condition.POISONED: ConditionEffects(
         attack_disadvantage=True,
         ability_check_disadvantage=True,
     ),
-
     # Prone: disadv on own attacks; melee attacks have adv vs it, ranged have disadv
     Condition.PRONE: ConditionEffects(
         attack_disadvantage=True,
         melee_attacked_advantage=True,
         ranged_attacked_disadvantage=True,
     ),
-
     # Restrained: disadv on own attacks + DEX saves; adv against it; speed 0
     Condition.RESTRAINED: ConditionEffects(
         attack_disadvantage=True,
@@ -181,7 +171,6 @@ CONDITION_EFFECTS: dict[Condition, ConditionEffects] = {
         # Note: restrained gives disadv on DEX saves, not auto-fail.
         # Handled separately by attack_disadvantage flag on saves if needed.
     ),
-
     # Stunned: incapacitated + speed 0 + auto-fail STR/DEX + adv attacks against it
     Condition.STUNNED: ConditionEffects(
         no_actions=True,
@@ -192,7 +181,6 @@ CONDITION_EFFECTS: dict[Condition, ConditionEffects] = {
         fail_dex_saves=True,
         attacked_advantage=True,
     ),
-
     # Unconscious: incapacitated + prone + speed 0 + auto-fail STR/DEX +
     #              adv attacks against it + melee crits + breaks concentration
     Condition.UNCONSCIOUS: ConditionEffects(
@@ -220,11 +208,12 @@ class ExhaustionEffects:
 
     Effects are cumulative: level 3 includes all level 1 and 2 effects.
     """
-    ability_check_disadvantage: bool = False   # level 1+
-    speed_halved: bool = False                 # level 2+
+
+    ability_check_disadvantage: bool = False  # level 1+
+    speed_halved: bool = False  # level 2+
     attack_and_save_disadvantage: bool = False  # level 3+
-    max_hp_halved: bool = False                # level 4+
-    speed_zero: bool = False                   # level 5+
+    max_hp_halved: bool = False  # level 4+
+    speed_zero: bool = False  # level 5+
     # level 6 = death (creature dies)
 
 

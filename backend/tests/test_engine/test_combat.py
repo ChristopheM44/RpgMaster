@@ -1,4 +1,5 @@
 """Tests for engine/combat.py"""
+
 from __future__ import annotations
 
 import random
@@ -79,13 +80,12 @@ class TestSortInitiative:
 
 class TestRollAttack:
     def test_hit_when_total_gte_ac(self):
-        # Seed so d20 = 15; attack_bonus = 5 → total 20 vs AC 18 → hit
-        rng = random.Random(0)
-        # Consume seed to get deterministic d20 = 15
-        # We'll just verify the logic by forcing a known result
+        # attack_bonus = 5, deterministic rng → on vérifie la logique de touche
         result = roll_attack(attack_bonus=5, target_ac=15, rng=seeded(7))
         assert isinstance(result, AttackResult)
-        assert result.hit == (result.d20_roll == 20 or (result.d20_roll != 1 and result.total >= 15))
+        assert result.hit == (
+            result.d20_roll == 20 or (result.d20_roll != 1 and result.total >= 15)
+        )
 
     def test_natural_20_always_hits(self):
         # Keep trying until we get a nat 20 (use many seeds)

@@ -12,6 +12,7 @@ Covers:
 
 No I/O, no async, no database access.
 """
+
 from __future__ import annotations
 
 import random
@@ -33,15 +34,15 @@ from app.engine.combat import AttackResult, DamageResult, roll_attack, roll_dama
 # Full casters: Wizard, Cleric, Druid, Bard, Sorcerer
 # Key: character level → {slot_level: count}
 FULL_CASTER_SLOTS: dict[int, dict[int, int]] = {
-    1:  {1: 2},
-    2:  {1: 3},
-    3:  {1: 4, 2: 2},
-    4:  {1: 4, 2: 3},
-    5:  {1: 4, 2: 3, 3: 2},
-    6:  {1: 4, 2: 3, 3: 3},
-    7:  {1: 4, 2: 3, 3: 3, 4: 1},
-    8:  {1: 4, 2: 3, 3: 3, 4: 2},
-    9:  {1: 4, 2: 3, 3: 3, 4: 3, 5: 1},
+    1: {1: 2},
+    2: {1: 3},
+    3: {1: 4, 2: 2},
+    4: {1: 4, 2: 3},
+    5: {1: 4, 2: 3, 3: 2},
+    6: {1: 4, 2: 3, 3: 3},
+    7: {1: 4, 2: 3, 3: 3, 4: 1},
+    8: {1: 4, 2: 3, 3: 3, 4: 2},
+    9: {1: 4, 2: 3, 3: 3, 4: 3, 5: 1},
     10: {1: 4, 2: 3, 3: 3, 4: 3, 5: 2},
     11: {1: 4, 2: 3, 3: 3, 4: 3, 5: 2, 6: 1},
     12: {1: 4, 2: 3, 3: 3, 4: 3, 5: 2, 6: 1},
@@ -57,15 +58,15 @@ FULL_CASTER_SLOTS: dict[int, dict[int, int]] = {
 
 # Half casters: Paladin, Ranger (slots start at class level 2)
 HALF_CASTER_SLOTS: dict[int, dict[int, int]] = {
-    1:  {},
-    2:  {1: 2},
-    3:  {1: 3},
-    4:  {1: 3},
-    5:  {1: 4, 2: 2},
-    6:  {1: 4, 2: 2},
-    7:  {1: 4, 2: 3},
-    8:  {1: 4, 2: 3},
-    9:  {1: 4, 2: 3, 3: 2},
+    1: {},
+    2: {1: 2},
+    3: {1: 3},
+    4: {1: 3},
+    5: {1: 4, 2: 2},
+    6: {1: 4, 2: 2},
+    7: {1: 4, 2: 3},
+    8: {1: 4, 2: 3},
+    9: {1: 4, 2: 3, 3: 2},
     10: {1: 4, 2: 3, 3: 2},
     11: {1: 4, 2: 3, 3: 3},
     12: {1: 4, 2: 3, 3: 3},
@@ -82,15 +83,15 @@ HALF_CASTER_SLOTS: dict[int, dict[int, int]] = {
 # Third casters: Eldritch Knight (Fighter), Arcane Trickster (Rogue)
 # Slots start at class level 3
 THIRD_CASTER_SLOTS: dict[int, dict[int, int]] = {
-    1:  {},
-    2:  {},
-    3:  {1: 2},
-    4:  {1: 3},
-    5:  {1: 3},
-    6:  {1: 3},
-    7:  {1: 4, 2: 2},
-    8:  {1: 4, 2: 2},
-    9:  {1: 4, 2: 2},
+    1: {},
+    2: {},
+    3: {1: 2},
+    4: {1: 3},
+    5: {1: 3},
+    6: {1: 3},
+    7: {1: 4, 2: 2},
+    8: {1: 4, 2: 2},
+    9: {1: 4, 2: 2},
     10: {1: 4, 2: 3},
     11: {1: 4, 2: 3},
     12: {1: 4, 2: 3},
@@ -249,10 +250,10 @@ class SpellCastResult:
     """Result of attempting to cast a spell."""
 
     spell_name: str
-    spell_level: int           # minimum level of the spell
-    slot_level: int            # actual slot used (≥ spell_level when upcasting)
-    upcasted: bool             # True when slot_level > spell_level
-    concentration: bool        # True if this spell requires concentration
+    spell_level: int  # minimum level of the spell
+    slot_level: int  # actual slot used (≥ spell_level when upcasting)
+    upcasted: bool  # True when slot_level > spell_level
+    concentration: bool  # True if this spell requires concentration
     previous_concentration: str  # Name of the concentration spell that was ended ("" if none)
     slots_remaining: dict[int, int]  # Slot snapshot after casting
 
@@ -262,7 +263,7 @@ class ConcentrationCheckResult:
     """Result of a concentration check triggered by taking damage."""
 
     damage_taken: int
-    dc: int                    # max(10, damage_taken // 2)
+    dc: int  # max(10, damage_taken // 2)
     d20_roll: int
     modifier: int
     total: int
@@ -342,13 +343,9 @@ def cast_spell(
         ValueError: If slot_level < spell_level, or no slot of that level is available.
     """
     if slot_level < spell_level:
-        raise ValueError(
-            f"Cannot cast a level-{spell_level} spell in a level-{slot_level} slot."
-        )
+        raise ValueError(f"Cannot cast a level-{spell_level} spell in a level-{slot_level} slot.")
     if spell_level > 0 and not slots.has_slot(slot_level):
-        raise ValueError(
-            f"No spell slots of level {slot_level} remaining."
-        )
+        raise ValueError(f"No spell slots of level {slot_level} remaining.")
 
     # End previous concentration if needed
     prev_concentration = ""
@@ -449,9 +446,7 @@ def upcast_damage(
         ValueError: If slot_level < spell_level.
     """
     if slot_level < spell_level:
-        raise ValueError(
-            f"slot_level ({slot_level}) must be ≥ spell_level ({spell_level})."
-        )
+        raise ValueError(f"slot_level ({slot_level}) must be ≥ spell_level ({spell_level}).")
 
     levels_above = slot_level - spell_level
 
@@ -475,6 +470,7 @@ def upcast_damage(
 
     # Roll extra dice (also doubled on crit)
     from app.engine.dice import roll_dice as _roll_dice
+
     actual_extra = extra_count * 2 if critical else extra_count
     extra_rolls = _roll_dice(extra_sides, actual_extra, rng)
 

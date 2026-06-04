@@ -399,9 +399,7 @@ def test_sanitize_gm_dossier_preserves_rich_npc_persona_from_forge() -> None:
             }
         ]
     }
-    dossier = sanitize_gm_dossier(
-        forge_output, campaign, contract={"visible_chapters": []}
-    )
+    dossier = sanitize_gm_dossier(forge_output, campaign, contract={"visible_chapters": []})
     npcs = dossier["important_npcs"]
     assert len(npcs) == 1
     persona = npcs[0]
@@ -434,9 +432,7 @@ def test_sanitize_gm_dossier_preserves_bestiary_monster_persona() -> None:
             }
         ]
     }
-    dossier = sanitize_gm_dossier(
-        forge_output, campaign, contract={"visible_chapters": []}
-    )
+    dossier = sanitize_gm_dossier(forge_output, campaign, contract={"visible_chapters": []})
     bestiary = dossier["bestiary"]
     assert len(bestiary) == 1
     assert bestiary[0]["behavior_pattern"] == "cunning"
@@ -538,9 +534,7 @@ def test_sanitize_gm_dossier_coerces_legacy_npc_dict() -> None:
             {"name": "Garrik"},
         ]
     }
-    dossier = sanitize_gm_dossier(
-        forge_output, campaign, contract={"visible_chapters": []}
-    )
+    dossier = sanitize_gm_dossier(forge_output, campaign, contract={"visible_chapters": []})
     npcs = dossier["important_npcs"]
     assert len(npcs) == 2
     bram = next(n for n in npcs if n["name"] == "Bram")
