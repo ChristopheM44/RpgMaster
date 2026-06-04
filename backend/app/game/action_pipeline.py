@@ -1261,6 +1261,15 @@ class ActionPipeline:
         enriched["actor_id"] = effective_actor_id
         enriched["actor_name"] = effective_actor_name
         enriched["actor_kind"] = enriched.get("actor_kind") or request.actor_kind
+        # G-bis : un jet subi par un acteur doit porter son nom (speaker de la
+        # carte de jet). _normalize_roll_event laisse tomber character_name ; on
+        # le restaure ici depuis l'acteur, sinon la persistance retombe sur
+        # « Système » (message_service:76) et le rendu live sur « — ». Lecture
+        # de payload (et non enriched) pour éviter le piège str(None) == "None".
+        if not enriched.get("character_name"):
+            fallback_name = payload.get("actor_name") or actor_name
+            if fallback_name:
+                enriched["character_name"] = str(fallback_name)
         enriched["action_type"] = request.action_type
         enriched["target_id"] = target_id
         if request.scene_interaction_context:

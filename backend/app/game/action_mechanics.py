@@ -143,6 +143,7 @@ class ActionMechanics:
                 "success": raw.get("success"),
                 "breakdown": raw.get("breakdown"),
                 "character_id": raw.get("actor_id") or raw.get("character_id"),
+                "character_name": raw.get("character_name"),
                 "social_target_id": raw.get("social_target_id") or raw.get("target_id"),
             }
 

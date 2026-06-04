@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.game.action_mechanics import ActionMechanics
+from app.game.action_pipeline import ActionPipeline, ActionRequest
 from app.game.action_resolver import ActionResolver
 from app.game.roll_executor import execute_roll_request
 from app.game.session_manager import ActiveSession
@@ -145,6 +146,80 @@ def test_roll_executor_never_yields_empty_character_name() -> None:
     assert event["character_name"]  # non vide
     assert event["character_id"] == "vael-1"
     assert _persist_speaker(event) != "Système"
+
+
+def test_scene_interaction_roll_keeps_character_name_through_roundtrip() -> None:
+    # G-bis — un jet d'interaction de scène (clic-POI) traverse
+    # execute_roll_request → _normalize_roll_event → _enrich_roll_event sans
+    # perdre character_name, donc n'est jamais persisté « Système » ni rendu « — ».
+    active = SimpleNamespace(
+        state_data={
+            "characters": {
+                "thorvald-1": {
+                    "name": "Thorvald",
+                    "ability_scores": {"int": 8},  # mod -1, comme la chronique
+                    "level": 1,
+                    "skill_proficiencies": [],
+                }
+            }
+        }
+    )
+    # Reproduit _resolve_scene_interaction_roll (action_pipeline.py:1066-1085) :
+    # payload d'execute_roll_request, puis update type=skill_check + actor_id.
+    raw = execute_roll_request({"skill": "investigation", "dc": 12}, "thorvald-1", active)
+    assert raw is not None
+    raw.update({"type": "skill_check", "actor_id": "thorvald-1"})
+
+    normalized = ActionMechanics()._normalize_roll_event(raw)
+    request = ActionRequest(
+        session_id="s1",
+        action_type="custom",
+        actor_id="thorvald-1",
+        actor_kind="player",
+    )
+    enriched = ActionPipeline._enrich_roll_event(normalized, request, "Thorvald", None)
+
+    assert enriched["character_name"] == "Thorvald"
+    assert _persist_speaker(enriched) == "Thorvald"
+    assert _persist_speaker(enriched) != "Système"
+
+
+def test_enrich_roll_event_backfills_character_name_from_actor() -> None:
+    # Filet déterministe : même si character_name est absent du payload normalisé
+    # (autre branche de _normalize_roll_event, ex. attaque), l'enrichissement le
+    # restaure depuis l'acteur — jamais « Système » pour un acteur identifié.
+    request = ActionRequest(
+        session_id="s1",
+        action_type="attack",
+        actor_id="elara-1",
+        actor_kind="companion",
+    )
+    enriched = ActionPipeline._enrich_roll_event(
+        {"dice_notation": "1d20", "rolls": [13], "total": 18, "modifier": 5},
+        request,
+        "Elara",
+        None,
+    )
+
+    assert enriched["character_name"] == "Elara"
+    assert _persist_speaker(enriched) == "Elara"
+
+
+def test_enrich_roll_event_without_actor_name_stays_systeme_not_none() -> None:
+    # Garde anti-piège str(None) : sans nom d'acteur disponible, character_name
+    # reste absent → speaker « Système » (comportement actuel), JAMAIS « None ».
+    request = ActionRequest(session_id="s1", action_type="custom", actor_kind="player")
+    enriched = ActionPipeline._enrich_roll_event(
+        {"dice_notation": "1d20", "rolls": [5], "total": 5, "modifier": 0},
+        request,
+        None,  # type: ignore[arg-type]  # acteur inconnu (jet d'environnement non rattaché)
+        None,
+    )
+
+    assert not enriched.get("character_name")
+    speaker = _persist_speaker(enriched)
+    assert speaker == "Système"
+    assert speaker != "None"
 
 
 @pytest.mark.asyncio
