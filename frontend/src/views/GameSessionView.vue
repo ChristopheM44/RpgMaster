@@ -12,7 +12,6 @@ import CombatLayout from '../components/combat/CombatLayout.vue'
 import Battlemap from '../components/combat/Battlemap.vue'
 import MapTabs from '../components/map/MapTabs.vue'
 import ActionBar from '../components/common/ActionBar.vue'
-import SaveLoadPanel from '../components/ui/SaveLoadPanel.vue'
 import AdventureStartModal from '../components/ui/AdventureStartModal.vue'
 import ConfirmDialog from '../components/common/ConfirmDialog.vue'
 import RestDialog from '../components/ui/RestDialog.vue'
@@ -32,7 +31,6 @@ const sessionStore = useSessionStore()
 const { connect, disconnect, reconnect, sendAction, triggerAiReactions, reconnectCount, isReconnecting, isDisconnected } = useWebSocket(sessionId)
 
 const startingGame = ref(false)
-const showSaveLoad = ref(false)
 const showStartModal = ref(false)
 const routeStartPending = ref(route.query.start === '1')
 const showChroniclesConfirm = ref(false)
@@ -82,11 +80,6 @@ async function initSession() {
 
   connect(charStore.myCharacter?.id)
   await startPendingRouteSession()
-}
-
-async function handleLoadComplete() {
-  showSaveLoad.value = false
-  await initSession()
 }
 
 function requestGoToChronicles() {
@@ -522,11 +515,6 @@ onUnmounted(() => { disconnect() })
           @click="handleTriggerAi"
         >🤖 IA réagit</button>
 
-        <button
-          class="rpg-btn-secondary !py-1.5 !px-4 !text-[11px]"
-          @click="showSaveLoad = !showSaveLoad"
-        >💾 Sauvegarder</button>
-
         <div class="exph-divider" />
 
         <div class="exph-online">
@@ -547,15 +535,6 @@ onUnmounted(() => { disconnect() })
         >← Chroniques</button>
       </div>
     </header>
-
-    <!-- Save/Load dropdown -->
-    <div
-      v-if="showSaveLoad"
-      class="rpg-save-popover fixed right-6 top-14 z-50 w-80 rounded-b-xl border p-5 shadow-2xl"
-    >
-      <div class="rpg-eyebrow mb-3">✦ Sauvegardes</div>
-      <SaveLoadPanel :session-id="sessionId" @load-complete="handleLoadComplete" />
-    </div>
 
     <!-- MapTabs (legacy) : caché en exploration V2 — le scope est piloté par ScopeTabs dans MapColumn. -->
     <MapTabs
@@ -674,7 +653,7 @@ onUnmounted(() => { disconnect() })
     <ConfirmDialog
       v-if="showChroniclesConfirm"
       title="Quitter la session ?"
-      message="Vous serez déconnecté et retournerez aux Chroniques. La progression non sauvegardée peut être perdue."
+      message="Vous serez déconnecté et retournerez aux Chroniques."
       confirm-label="Quitter"
       cancel-label="Rester"
       tone="warning"
