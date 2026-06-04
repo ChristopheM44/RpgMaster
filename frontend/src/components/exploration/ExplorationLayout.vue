@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // V2 « Diptyque équilibré » — Map gauche 50% + Récit droite 50%
 // Carnet ouvert via bouton dans la top bar de la map.
-import { onMounted, onUnmounted } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { useSessionStore } from '../../stores/session'
 import { useExplorationPois } from '../../composables/useExplorationPois'
 import {
@@ -20,6 +20,11 @@ const emit = defineEmits<{
 
 const sessionStore = useSessionStore()
 const { findPoi } = useExplorationPois()
+const mapFullscreen = ref(false)
+
+function toggleMapFullscreen() {
+  mapFullscreen.value = !mapFullscreen.value
+}
 
 function scenePoiExtra(
   poiId: string,
@@ -87,7 +92,8 @@ function onKey(e: KeyboardEvent) {
   if (e.key === '3') { sessionStore.setMapScope('region'); return }
   // Esc → ferme inspector ou popover
   if (e.key === 'Escape') {
-    if (sessionStore.carnetOpen) sessionStore.toggleCarnet(false)
+    if (mapFullscreen.value) mapFullscreen.value = false
+    else if (sessionStore.carnetOpen) sessionStore.toggleCarnet(false)
     else if (sessionStore.selectedId) sessionStore.selectEntity(null)
   }
 }
@@ -100,9 +106,11 @@ onUnmounted(() => { document.removeEventListener('keydown', onKey) })
   <div class="exploration-v2">
     <div class="exploration-body">
       <MapColumn
+        :fullscreen="mapFullscreen"
         @act="onAct"
         @approach="onApproach"
         @open-sheet="(id) => emit('openSheet', id)"
+        @toggle-fullscreen="toggleMapFullscreen"
       />
       <NarrativeColumn @decide="onDecide" />
     </div>

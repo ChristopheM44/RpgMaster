@@ -13,10 +13,17 @@ import MapLegend from './MapLegend.vue'
 import SelectionInspector from './SelectionInspector.vue'
 import CarnetPopover from './CarnetPopover.vue'
 
+const props = withDefaults(defineProps<{
+  fullscreen?: boolean
+}>(), {
+  fullscreen: false,
+})
+
 const emit = defineEmits<{
   act: [id: string]
   approach: [id: string]
   openSheet: [id: string]
+  toggleFullscreen: []
 }>()
 
 const sessionStore = useSessionStore()
@@ -65,7 +72,7 @@ function toggleCarnet() {
 </script>
 
 <template>
-  <section class="map-column">
+  <section class="map-column" :class="{ 'is-fullscreen': props.fullscreen }">
     <!-- Top bar -->
     <div class="map-topbar">
       <ScopeTabs />
@@ -76,7 +83,16 @@ function toggleCarnet() {
         <span class="map-topbar-meta">{{ metaByScope }}</span>
       </div>
 
-      <button class="map-tool" title="Plein écran">⛶ Plein écran</button>
+      <button
+        class="map-tool"
+        :class="{ 'is-active': props.fullscreen }"
+        type="button"
+        :title="props.fullscreen ? 'Revenir en fenêtre' : 'Plein écran'"
+        @click="emit('toggleFullscreen')"
+      >
+        <span class="map-tool-icon">{{ props.fullscreen ? '↙' : '⛶' }}</span>
+        <span>{{ props.fullscreen ? 'Fenêtre' : 'Plein écran' }}</span>
+      </button>
 
       <button
         class="carnet-btn"
@@ -120,6 +136,25 @@ function toggleCarnet() {
   min-height: 0;
   position: relative;
   border-right: 1px solid var(--color-border);
+}
+
+.map-column.is-fullscreen {
+  position: fixed;
+  inset: 12px;
+  z-index: 60;
+  overflow: hidden;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-elev);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+}
+
+.map-column.is-fullscreen .map-topbar {
+  background: var(--color-bg-elev);
+}
+
+.map-column.is-fullscreen .map-canvas {
+  padding: 20px;
 }
 
 .map-topbar {
@@ -176,6 +211,19 @@ function toggleCarnet() {
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
+  transition: background 120ms, color 120ms, border-color 120ms;
+}
+
+.map-tool:hover,
+.map-tool.is-active {
+  border-color: var(--color-border-strong);
+  color: var(--color-gold);
+  background: rgba(240, 199, 100, 0.10);
+}
+
+.map-tool-icon {
+  font-size: 11px;
+  line-height: 1;
 }
 
 .carnet-btn {

@@ -1,16 +1,19 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import { nextTick } from 'vue'
 
 import ExplorationLayout from '../ExplorationLayout.vue'
 import { useGameStore } from '../../../stores/game'
 
 const MapColumnStub = {
-  emits: ['act', 'approach', 'openSheet'],
+  props: ['fullscreen'],
+  emits: ['act', 'approach', 'openSheet', 'toggleFullscreen'],
   template: `
-    <div>
+    <div data-testid="map-stub" :data-fullscreen="fullscreen ? 'true' : 'false'">
       <button data-testid="act-poi" @click="$emit('act', 'khalid_guide')">act</button>
       <button data-testid="approach-poi" @click="$emit('approach', 'dalle_fendue')">approach</button>
+      <button data-testid="toggle-fullscreen" @click="$emit('toggleFullscreen')">fullscreen</button>
     </div>
   `,
 }
@@ -90,5 +93,28 @@ describe('ExplorationLayout', () => {
         scene_interaction_intent: 'approach',
       },
     ])
+  })
+
+  it('toggles the exploration map fullscreen state and closes it with Escape', async () => {
+    const wrapper = mount(ExplorationLayout, {
+      global: {
+        stubs: {
+          MapColumn: MapColumnStub,
+          NarrativeColumn: true,
+          BottomBar: true,
+        },
+      },
+    })
+
+    expect(wrapper.find('[data-testid="map-stub"]').attributes('data-fullscreen')).toBe('false')
+
+    await wrapper.find('[data-testid="toggle-fullscreen"]').trigger('click')
+    expect(wrapper.find('[data-testid="map-stub"]').attributes('data-fullscreen')).toBe('true')
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await nextTick()
+
+    expect(wrapper.find('[data-testid="map-stub"]').attributes('data-fullscreen')).toBe('false')
+    wrapper.unmount()
   })
 })
