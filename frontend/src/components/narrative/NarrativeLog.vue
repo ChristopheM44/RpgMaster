@@ -27,13 +27,21 @@ const aiCharIds = computed(() =>
   new Set(characterStore.sessionCharacters.filter(c => c.is_ai).map(c => c.id)),
 )
 const hasThinkingEntry = computed(() =>
-  gameStore.isProcessing || gameStore.isGmThinking || gameStore.isPlayerAiThinking,
+  gameStore.isProcessing ||
+  gameStore.isGmThinking ||
+  gameStore.isPlayerAiThinking ||
+  gameStore.isNpcThinking,
 )
-const thinkingLabel = computed(() =>
-  gameStore.isPlayerAiThinking && !gameStore.isGmThinking
+const thinkingLabel = computed(() => {
+  // Un PNJ qui répond a priorité : « Khalid répond » plutôt que « le MJ réfléchit ».
+  if (gameStore.isNpcThinking && !gameStore.isGmThinking) {
+    const names = gameStore.npcThinkingNames
+    return names.length === 1 ? `${names[0]} répond` : 'Un personnage répond'
+  }
+  return gameStore.isPlayerAiThinking && !gameStore.isGmThinking
     ? 'Le joueur IA réfléchit'
-    : 'Le Maître du Jeu réfléchit',
-)
+    : 'Le Maître du Jeu réfléchit'
+})
 
 function audioStatusFor(entry: NarrativeEntryModel) {
   return entry.narration_id ? gameStore.audioStatusByNarrationId[entry.narration_id] : undefined

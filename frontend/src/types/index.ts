@@ -832,7 +832,7 @@ export interface TurnStartPayload {
 }
 
 export interface AiThinkingPayload {
-  agent_kind: 'gm' | 'player_ai'
+  agent_kind: 'gm' | 'player_ai' | 'npc'
   thinking: boolean
   character_id?: string
   character_name?: string

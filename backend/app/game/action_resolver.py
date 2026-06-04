@@ -18,7 +18,7 @@ from app.agents.combat_gm_agent import CombatGMAgent
 from app.agents.gm_agent import GMAgent
 from app.game.action_mechanics import ActionMechanics
 from app.game.action_orchestrator import ActionOrchestrator
-from app.game.event_bus import event_bus
+from app.game.event_bus import EventType, event_bus
 from app.game.session_manager import ActiveSession
 from app.game.social_scene_state import finalize_npc_dialogue_state, prepare_npc_dialogue_state
 from app.game.visible_events import clean_dialogue_text, publish_visible_entry
@@ -172,6 +172,79 @@ class ActionResolver:
         return self._combat_gm
 
     async def resolve_npc_dialogue(
+        self,
+        session_id: str,
+        content: str | None,
+        character_id: str | None,
+        target_id: str | None,
+        active: ActiveSession,
+        db: Any | None = None,
+        roll_results: dict[str, Any] | None = None,
+    ) -> bool:
+        """Wrapper public : indicateur « {PNJ} répond… » + garde anti-concurrence (N1).
+
+        - Publie un indicateur `ai_thinking` (kind ``npc``) pendant la génération,
+          pour que le joueur sache qu'une réplique arrive (sinon il repose la
+          question et le PNJ répond deux fois).
+        - Garde étroit : si une réplique du MÊME PNJ est déjà en vol, on coalesce
+          le 2ᵉ déclencheur. On ne bride JAMAIS une relance d'un autre PNJ ni une
+          relance séquentielle après la fin de la première (relance multi-PNJ
+          légitime préservée).
+        """
+        from app.game.social_resolution import _poi_by_id, resolve_npc_target_id
+
+        npc_id = resolve_npc_target_id(content, active.state_data, target_id)
+        if not npc_id:
+            return False
+        if npc_id in active.npc_dialogue_in_flight:
+            logger.debug("resolve_npc_dialogue : réplique déjà en vol pour %s, coalescing", npc_id)
+            return False
+
+        # Nom d'affichage de l'indicateur : npc_states puis POI (premier contact),
+        # jamais l'id brut s'il existe un nom — c'est du texte joueur visible
+        # (« {PNJ} répond »), pas une couture mécanique.
+        npc_states = active.state_data.get("npc_states", {})
+        npc_entry = npc_states.get(npc_id) if isinstance(npc_states, dict) else None
+        npc_name = str((npc_entry or {}).get("name") or "")
+        if not npc_name:
+            poi = _poi_by_id(active.state_data, npc_id)
+            if isinstance(poi, dict):
+                npc_name = str(poi.get("name") or "")
+        npc_name = npc_name or npc_id
+
+        active.npc_dialogue_in_flight.add(npc_id)
+        try:
+            await self._publish_npc_thinking(session_id, True, npc_id, npc_name)
+            return await self._resolve_npc_dialogue_impl(
+                session_id=session_id,
+                content=content,
+                character_id=character_id,
+                target_id=target_id,
+                active=active,
+                db=db,
+                roll_results=roll_results,
+            )
+        finally:
+            active.npc_dialogue_in_flight.discard(npc_id)
+            await self._publish_npc_thinking(session_id, False, npc_id, npc_name)
+
+    async def _publish_npc_thinking(
+        self, session_id: str, thinking: bool, npc_id: str, npc_name: str
+    ) -> None:
+        """Indicateur d'attente pour une réplique de PNJ (agent_kind ``npc``)."""
+        await event_bus.publish_to_session(
+            session_id,
+            EventType.AI_THINKING,
+            {
+                "agent_kind": "npc",
+                "thinking": thinking,
+                "character_id": npc_id,
+                "character_name": npc_name,
+            },
+            source="action_resolver",
+        )
+
+    async def _resolve_npc_dialogue_impl(
         self,
         session_id: str,
         content: str | None,

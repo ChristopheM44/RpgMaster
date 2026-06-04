@@ -91,6 +91,8 @@ export const useGameStore = defineStore('game', () => {
   const isGmThinking = ref(false)
   const thinkingCharacterIds = ref<Set<string>>(new Set())
   const thinkingCharacterNames = ref<Record<string, string>>({})
+  // PNJ dont une réplique est en cours de génération (indicateur « X répond… », N1)
+  const thinkingNpcNames = ref<Record<string, string>>({})
   const seenEventIds = ref<Set<string>>(new Set())
 
   // ─── Computed ───────────────────────────────────────────────────────────────
@@ -98,7 +100,11 @@ export const useGameStore = defineStore('game', () => {
   const activeCombatant = computed(() =>
     combatants.value.find((c) => c.id === currentTurnId.value) ?? null,
   )
-  const isAnyAiThinking = computed(() => isGmThinking.value || thinkingCharacterIds.value.size > 0)
+  const isNpcThinking = computed(() => Object.keys(thinkingNpcNames.value).length > 0)
+  const npcThinkingNames = computed(() => Object.values(thinkingNpcNames.value))
+  const isAnyAiThinking = computed(
+    () => isGmThinking.value || thinkingCharacterIds.value.size > 0 || isNpcThinking.value,
+  )
   const isPlayerAiThinking = computed(() => thinkingCharacterIds.value.size > 0)
   const playerAiThinkingNames = computed(() =>
     [...thinkingCharacterIds.value].map((id) => thinkingCharacterNames.value[id] ?? id),
@@ -451,6 +457,7 @@ export const useGameStore = defineStore('game', () => {
     isGmThinking.value = false
     thinkingCharacterIds.value = new Set()
     thinkingCharacterNames.value = {}
+    thinkingNpcNames.value = {}
     error.value = msg
     if (msg) addSystemEntry(msg)
   }
@@ -464,9 +471,10 @@ export const useGameStore = defineStore('game', () => {
     isGmThinking.value = false
     thinkingCharacterIds.value = new Set()
     thinkingCharacterNames.value = {}
+    thinkingNpcNames.value = {}
   }
 
-  function applyAiThinking(payload: { agent_kind: 'gm' | 'player_ai'; thinking: boolean; character_id?: string; character_name?: string }) {
+  function applyAiThinking(payload: { agent_kind: 'gm' | 'player_ai' | 'npc'; thinking: boolean; character_id?: string; character_name?: string }) {
     if (payload.agent_kind === 'gm') {
       isGmThinking.value = payload.thinking
       if (payload.thinking) {
@@ -476,6 +484,17 @@ export const useGameStore = defineStore('game', () => {
     }
 
     if (!payload.character_id) return
+
+    if (payload.agent_kind === 'npc') {
+      const nextNpc = { ...thinkingNpcNames.value }
+      if (payload.thinking) {
+        nextNpc[payload.character_id] = payload.character_name ?? payload.character_id
+      } else {
+        delete nextNpc[payload.character_id]
+      }
+      thinkingNpcNames.value = nextNpc
+      return
+    }
 
     const next = new Set(thinkingCharacterIds.value)
     const nextNames = { ...thinkingCharacterNames.value }
@@ -581,6 +600,7 @@ export const useGameStore = defineStore('game', () => {
     isGmThinking.value = false
     thinkingCharacterIds.value = new Set()
     thinkingCharacterNames.value = {}
+    thinkingNpcNames.value = {}
     seenEventIds.value = new Set()
     adventureJournal.value = null
     quests.value = []
@@ -621,6 +641,8 @@ export const useGameStore = defineStore('game', () => {
     isAnyAiThinking,
     isPlayerAiThinking,
     playerAiThinkingNames,
+    isNpcThinking,
+    npcThinkingNames,
     isInCombat,
     activeCombatant,
     applyJournalUpdated,

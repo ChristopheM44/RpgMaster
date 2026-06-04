@@ -43,4 +43,30 @@ describe('NarrativeLog thinking state', () => {
 
     expect(wrapper.text()).not.toContain('Le joueur IA réfléchit')
   })
+
+  it('shows the NPC name responding while an NPC reply is in flight (N1)', async () => {
+    const store = useGameStore()
+    const wrapper = mount(NarrativeLog)
+
+    store.applyAiThinking({
+      agent_kind: 'npc',
+      thinking: true,
+      character_id: 'khalid_guide',
+      character_name: 'Khalid le Guide',
+    })
+    await nextTick()
+
+    // Indicateur dédié PNJ — surtout PAS « Le joueur IA réfléchit » (couture).
+    expect(wrapper.text()).toContain('Khalid le Guide répond')
+    expect(wrapper.text()).not.toContain('Le joueur IA réfléchit')
+
+    store.applyAiThinking({
+      agent_kind: 'npc',
+      thinking: false,
+      character_id: 'khalid_guide',
+    })
+    await nextTick()
+
+    expect(wrapper.text()).not.toContain('Khalid le Guide répond')
+  })
 })

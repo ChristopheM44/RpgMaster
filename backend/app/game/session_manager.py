@@ -73,6 +73,10 @@ class ActiveSession:
     # Intent classifié par le MJ pour la dernière action joueur :
     # 'social' | 'environmental' | 'mixed' | None
     last_gm_intent: str | None = None
+    # Ids de PNJ dont une réplique est actuellement en cours de génération
+    # (garde anti-concurrence étroit : un 2ᵉ déclencheur du MÊME PNJ pendant
+    # qu'une réplique est en vol est coalescé — N1). Transitoire, jamais persisté.
+    npc_dialogue_in_flight: set[str] = field(default_factory=set)
 
     def mark_dirty(self) -> None:
         self.is_dirty = True

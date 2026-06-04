@@ -10,6 +10,7 @@ Le GMAgent est mocké (on n'appelle jamais le vrai LLM).
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -987,3 +988,154 @@ class TestNpcDialogueRouting:
         # Fallback : string legacy passée
         assert call_kwargs["npc_personality"] == "Méfiante mais bienveillante"
         assert isinstance(call_kwargs["npc_personality"], str)
+
+
+class TestNpcDialogueIndicatorAndGuard:
+    """N1 — indicateur « {PNJ} répond… » + garde anti-concurrence du wrapper.
+
+    On isole le *wrapper* ``resolve_npc_dialogue`` (l'impl est couverte par
+    ``TestNpcDialogueRouting``) : ce qu'on teste ici, c'est uniquement
+    l'indicateur publié autour de la génération et le coalescing concurrent.
+    """
+
+    async def test_npc_dialogue_publishes_npc_thinking_indicator(self) -> None:
+        from app.game.event_bus import EventType, event_bus
+
+        active = ActiveSession(
+            session_id="sess-n1",
+            phase=SessionStatus.EXPLORATION,
+            state_data={"npc_states": {"azaka": {"name": "Azaka"}}},
+        )
+        resolver = ActionResolver(gm_agent=MagicMock())
+
+        with (
+            patch.object(resolver, "_resolve_npc_dialogue_impl", new=AsyncMock(return_value=True)),
+            patch.object(event_bus, "publish_to_session", new=AsyncMock()) as pub,
+        ):
+            result = await resolver.resolve_npc_dialogue(
+                session_id="sess-n1",
+                content="Azaka, réponds.",
+                character_id="hero-1",
+                target_id="azaka",
+                active=active,
+                db=None,
+            )
+
+        assert result is True
+        thinking_payloads = [
+            call.args[2]
+            for call in pub.call_args_list
+            if len(call.args) >= 3 and call.args[1] == EventType.AI_THINKING
+        ]
+        assert {
+            "agent_kind": "npc",
+            "thinking": True,
+            "character_id": "azaka",
+            "character_name": "Azaka",
+        } in thinking_payloads
+        assert {
+            "agent_kind": "npc",
+            "thinking": False,
+            "character_id": "azaka",
+            "character_name": "Azaka",
+        } in thinking_payloads
+        # L'indicateur est éteint et la marque libérée après coup.
+        assert "azaka" not in active.npc_dialogue_in_flight
+
+    async def test_concurrent_same_npc_dialogue_is_coalesced(self) -> None:
+        from app.game.event_bus import event_bus
+
+        active = ActiveSession(
+            session_id="sess-n1",
+            phase=SessionStatus.EXPLORATION,
+            state_data={"npc_states": {"azaka": {"name": "Azaka"}}},
+        )
+        resolver = ActionResolver(gm_agent=MagicMock())
+
+        gate = asyncio.Event()
+        impl_calls = 0
+
+        async def blocking_impl(**_kwargs: object) -> bool:
+            nonlocal impl_calls
+            impl_calls += 1
+            await gate.wait()
+            return True
+
+        with (
+            patch.object(resolver, "_resolve_npc_dialogue_impl", new=blocking_impl),
+            patch.object(event_bus, "publish_to_session", new=AsyncMock()),
+        ):
+            first = asyncio.create_task(
+                resolver.resolve_npc_dialogue(
+                    session_id="sess-n1",
+                    content="Azaka ?",
+                    character_id="hero-1",
+                    target_id="azaka",
+                    active=active,
+                    db=None,
+                )
+            )
+            # Laisser la 1ʳᵉ réplique entrer en vol (bornage anti-hang).
+            for _ in range(100):
+                if impl_calls:
+                    break
+                await asyncio.sleep(0)
+            assert impl_calls == 1
+            assert "azaka" in active.npc_dialogue_in_flight
+
+            # 2ᵉ déclencheur concurrent du MÊME PNJ → coalescé (pas de 2ᵉ génération).
+            second = await resolver.resolve_npc_dialogue(
+                session_id="sess-n1",
+                content="Azaka, réponds !",
+                character_id="hero-1",
+                target_id="azaka",
+                active=active,
+                db=None,
+            )
+            assert second is False
+            assert impl_calls == 1
+
+            gate.set()
+            assert await first is True
+
+        # La relance séquentielle (après libération) n'est PAS bridée.
+        assert "azaka" not in active.npc_dialogue_in_flight
+
+    async def test_first_contact_indicator_uses_poi_name_not_raw_id(self) -> None:
+        """Premier contact d'un PNJ encore en POI : l'indicateur montre le NOM du
+        POI, jamais l'id brut (sinon couture mécanique « masked_stranger répond »)."""
+        from app.game.event_bus import EventType, event_bus
+
+        active = ActiveSession(
+            session_id="sess-n1",
+            phase=SessionStatus.EXPLORATION,
+            state_data={
+                # PNJ pas encore promu dans npc_states — il n'existe que comme POI.
+                "npc_states": {},
+                "current_scene": {
+                    "pois": [{"id": "masked_stranger", "name": "Inconnu masqué", "kind": "npc"}]
+                },
+            },
+        )
+        resolver = ActionResolver(gm_agent=MagicMock())
+
+        with (
+            patch.object(resolver, "_resolve_npc_dialogue_impl", new=AsyncMock(return_value=True)),
+            patch.object(event_bus, "publish_to_session", new=AsyncMock()) as pub,
+        ):
+            await resolver.resolve_npc_dialogue(
+                session_id="sess-n1",
+                content="Qui es-tu ?",
+                character_id="hero-1",
+                target_id="masked_stranger",
+                active=active,
+                db=None,
+            )
+
+        names = {
+            call.args[2].get("character_name")
+            for call in pub.call_args_list
+            if len(call.args) >= 3 and call.args[1] == EventType.AI_THINKING
+        }
+        assert names == {"Inconnu masqué"}
+        assert "masked_stranger" not in names
