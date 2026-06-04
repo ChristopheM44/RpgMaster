@@ -1363,3 +1363,63 @@ export interface CampaignResetResponse {
   characters_reset: number
   sessions_removed: number
 }
+
+export interface ChronicleArchiveManifest {
+  campaign: {
+    id: string
+    name: string
+    updated_at?: string
+  }
+  sessions: Array<{
+    id: string
+    name: string
+    status: SessionStatus | string
+    created_at?: string
+    updated_at?: string
+  }>
+  includes: {
+    gm_private: boolean
+    messages: number
+    save_slots: number
+    characters: number
+    assets: boolean
+  }
+  warnings?: string[]
+  [key: string]: unknown
+}
+
+export interface ChronicleArchivePayload {
+  format: 'rpgmaster.chronicle'
+  format_version: number
+  exported_at?: string
+  app_version?: string
+  manifest?: ChronicleArchiveManifest
+  campaign?: Record<string, unknown>
+  dossier?: Record<string, unknown> | null
+  sessions?: Array<Record<string, unknown>>
+  [key: string]: unknown
+}
+
+export interface ChronicleImportConflict {
+  kind: string
+  id: string
+}
+
+export interface ChronicleImportPreview {
+  manifest: ChronicleArchiveManifest
+  conflicts: ChronicleImportConflict[]
+  warnings: string[]
+}
+
+export interface ChronicleImportResponse {
+  campaign: Campaign
+  active_session_id: string | null
+  imported: {
+    sessions: number
+    characters: number
+    messages: number
+    save_slots: number
+    game_states?: number
+  }
+  warnings: string[]
+}

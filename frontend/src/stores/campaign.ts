@@ -14,6 +14,9 @@ import type {
   CampaignPlayerContract,
   CampaignResetResponse,
   CampaignScenario,
+  ChronicleArchivePayload,
+  ChronicleImportPreview,
+  ChronicleImportResponse,
 } from '../types'
 
 export const useCampaignStore = defineStore('campaign', () => {
@@ -75,6 +78,50 @@ export const useCampaignStore = defineStore('campaign', () => {
       return dossier
     } catch {
       error.value = 'Erreur de chargement des notes MJ'
+      return null
+    }
+  }
+
+  async function exportChronicle(campaignId: string): Promise<Blob | null> {
+    error.value = null
+    try {
+      return await campaignApi.exportChronicle(campaignId)
+    } catch {
+      error.value = "Erreur lors de l'export de la chronique"
+      return null
+    }
+  }
+
+  async function previewChronicleImport(
+    body: ChronicleArchivePayload,
+  ): Promise<ChronicleImportPreview | null> {
+    error.value = null
+    try {
+      return await campaignApi.previewChronicleImport(body)
+    } catch {
+      error.value = "Archive de chronique invalide"
+      return null
+    }
+  }
+
+  async function importChronicle(
+    body: ChronicleArchivePayload,
+  ): Promise<ChronicleImportResponse | null> {
+    error.value = null
+    try {
+      const data = await campaignApi.importChronicle(body)
+      const idx = campaigns.value.findIndex((c) => c.id === data.campaign.id)
+      if (idx === -1) {
+        campaigns.value.unshift(data.campaign)
+      } else {
+        campaigns.value[idx] = data.campaign
+      }
+      currentCampaign.value = data.campaign
+      delete scenarios.value[data.campaign.id]
+      delete gmDossiers.value[data.campaign.id]
+      return data
+    } catch {
+      error.value = "Erreur lors de l'import de la chronique"
       return null
     }
   }
@@ -206,6 +253,9 @@ export const useCampaignStore = defineStore('campaign', () => {
     fetchCampaign,
     fetchScenario,
     fetchGmDossier,
+    exportChronicle,
+    previewChronicleImport,
+    importChronicle,
     importSource,
     forgeDraft,
     startForgeDraftJob,

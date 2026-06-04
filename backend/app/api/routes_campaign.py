@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
@@ -21,7 +23,7 @@ from app.schemas.campaign import (
     SynthesizeCanonBody,
     ValidateContractBody,
 )
-from app.services import campaign_dossier_service, campaign_service
+from app.services import campaign_dossier_service, campaign_service, chronicle_archive_service
 
 router = APIRouter()
 
@@ -52,12 +54,57 @@ async def list_campaigns(db: AsyncSession = Depends(get_db)):
     return responses
 
 
+@router.post("/import/preview")
+async def preview_chronicle_import(body: dict, db: AsyncSession = Depends(get_db)):
+    try:
+        return await chronicle_archive_service.preview_import(body, db)
+    except chronicle_archive_service.ChronicleArchiveError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/import")
+async def import_chronicle(body: dict, db: AsyncSession = Depends(get_db)):
+    try:
+        result = await chronicle_archive_service.import_chronicle(body, db)
+    except chronicle_archive_service.ChronicleArchiveConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"message": str(exc), "conflicts": exc.conflicts},
+        ) from exc
+    except chronicle_archive_service.ChronicleArchiveError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return {
+        "campaign": await _campaign_response(result.campaign, db),
+        "active_session_id": result.active_session_id,
+        "imported": result.imported,
+        "warnings": result.warnings,
+    }
+
+
 @router.get("/{campaign_id}", response_model=CampaignResponse)
 async def get_campaign(campaign_id: str, db: AsyncSession = Depends(get_db)):
     campaign = await campaign_service.get_campaign(campaign_id, db)
     if campaign is None:
         raise HTTPException(status_code=404, detail="Campaign not found")
     return await _campaign_response(campaign, db)
+
+
+@router.get("/{campaign_id}/export")
+async def export_chronicle(campaign_id: str, db: AsyncSession = Depends(get_db)):
+    try:
+        archive = await chronicle_archive_service.export_chronicle(campaign_id, db)
+    except chronicle_archive_service.ChronicleArchiveNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    filename = chronicle_archive_service.safe_archive_filename(
+        str(archive.get("campaign", {}).get("name") or campaign_id)
+    )
+    return Response(
+        content=json.dumps(archive, ensure_ascii=False, indent=2),
+        media_type="application/json; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.delete("/{campaign_id}", status_code=204)

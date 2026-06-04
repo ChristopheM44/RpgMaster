@@ -88,4 +88,61 @@ describe('campaignApi', () => {
     )
     expect(options.method).toBe('POST')
   })
+
+  it('downloads chronicle exports as blobs', async () => {
+    const blob = new Blob(['{"format":"rpgmaster.chronicle"}'], {
+      type: 'application/json',
+    })
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      blob: vi.fn().mockResolvedValue(blob),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(campaignApi.exportChronicle('campaign-1')).resolves.toEqual(blob)
+
+    const [, options] = fetchMock.mock.calls[0]
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'http://localhost:8000/api/campaigns/campaign-1/export',
+    )
+    expect((options.headers as Headers).has('Content-Type')).toBe(false)
+  })
+
+  it('posts chronicle import previews', async () => {
+    const archive = {
+      format: 'rpgmaster.chronicle' as const,
+      format_version: 1,
+    }
+    const payload = {
+      manifest: {
+        campaign: { id: 'campaign-1', name: 'Brumes' },
+        sessions: [],
+        includes: {
+          gm_private: true,
+          messages: 0,
+          save_slots: 0,
+          characters: 0,
+          assets: false,
+        },
+      },
+      conflicts: [],
+      warnings: [],
+    }
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue(payload),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(campaignApi.previewChronicleImport(archive)).resolves.toEqual(payload)
+
+    const [, options] = fetchMock.mock.calls[0]
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'http://localhost:8000/api/campaigns/import/preview',
+    )
+    expect(options.method).toBe('POST')
+    expect(options.body).toBe(JSON.stringify(archive))
+  })
 })

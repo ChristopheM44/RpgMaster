@@ -10,17 +10,20 @@ import type {
   CampaignScenario,
   CampaignSessionSummary,
   CampaignVisibleChapter,
+  ChronicleImportResponse,
   SessionStatus,
 } from '../types'
 import ConfirmDialog from '../components/common/ConfirmDialog.vue'
 import CampaignForgeModal from './CampaignForgeModal.vue'
 import CampaignCharacterPanel from '../components/campaign/CampaignCharacterPanel.vue'
+import CampaignTransferModal from '../components/campaign/CampaignTransferModal.vue'
 
 const router = useRouter()
 const campaignStore = useCampaignStore()
 const gameStore = useGameStore()
 
 type DetailTab = 'sessions' | 'scenario' | 'notes' | 'groupe'
+type TransferMode = 'import' | 'export'
 
 const DETAIL_TABS: Array<{ id: DetailTab; label: string; icon: string }> = [
   { id: 'sessions', label: 'Sessions', icon: '◆' },
@@ -55,6 +58,7 @@ const GM_SECTIONS: Array<{ key: keyof CampaignGmDossier; label: string }> = [
 const selectedCampaign = ref<Campaign | null>(null)
 const activeTab = ref<DetailTab>('sessions')
 const showForge = ref(false)
+const transferMode = ref<TransferMode | null>(null)
 const showAdvance = ref(false)
 const confirmDeleteId = ref<string | null>(null)
 const confirmResetId = ref<string | null>(null)
@@ -136,6 +140,28 @@ async function selectCampaign(campaign: Campaign) {
 
 function openForge() {
   showForge.value = true
+}
+
+function openImportTransfer() {
+  transferMode.value = 'import'
+}
+
+function openExportTransfer() {
+  if (!selectedCampaign.value) return
+  transferMode.value = 'export'
+}
+
+function closeTransfer() {
+  transferMode.value = null
+}
+
+async function handleChronicleImported(payload: ChronicleImportResponse) {
+  transferMode.value = null
+  await campaignStore.fetchCampaigns()
+  selectedCampaign.value =
+    campaignStore.campaigns.find((campaign) => campaign.id === payload.campaign.id)
+    ?? payload.campaign
+  activeTab.value = 'sessions'
 }
 
 async function handleForgeCompleted(payload: { campaignId: string; newSessionId: string }) {
@@ -396,9 +422,14 @@ function itemDetail(item: unknown): string {
             Reprenez vos aventures depuis leur chronique. Même un one-shot garde son fil — groupe, session active, quêtes, PNJ et mémoire jouée.
           </p>
         </div>
-        <button class="rpg-btn-primary shrink-0" @click="openForge">
-          <span>✦</span> Forger une chronique
-        </button>
+        <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <button class="rpg-btn-secondary" type="button" @click="openImportTransfer">
+            Importer une chronique
+          </button>
+          <button class="rpg-btn-primary" type="button" @click="openForge">
+            <span>✦</span> Forger une chronique
+          </button>
+        </div>
       </div>
 
       <div class="min-h-0 flex-1 overflow-y-auto px-6 pb-8 md:px-14">
@@ -480,7 +511,16 @@ function itemDetail(item: unknown): string {
         <div class="rpg-campaign-side-glow pointer-events-none absolute -right-10 -top-16 h-56 w-56 rounded-full" />
         <div class="relative">
           <div class="rpg-eyebrow"><span class="rpg-sparkle">✦</span>Campagne sélectionnée</div>
-          <h2 class="mt-1 font-display text-[28px] font-bold leading-tight">{{ selectedCampaign.name }}</h2>
+          <div class="mt-1 flex items-start justify-between gap-3">
+            <h2 class="font-display text-[28px] font-bold leading-tight">{{ selectedCampaign.name }}</h2>
+            <button
+              class="rpg-btn-secondary shrink-0 !px-3 !py-1.5 !text-[10px]"
+              type="button"
+              @click="openExportTransfer"
+            >
+              Exporter
+            </button>
+          </div>
           <p class="mt-1 line-clamp-2 font-serif text-[13px] italic text-parchment-dark">
             {{ selectedCampaign.tagline || selectedCampaign.description || 'Chronique à forger.' }}
           </p>
@@ -841,6 +881,14 @@ function itemDetail(item: unknown): string {
       v-if="showForge"
       @close="showForge = false"
       @forge-completed="handleForgeCompleted"
+    />
+
+    <CampaignTransferModal
+      v-if="transferMode"
+      :mode="transferMode"
+      :campaign="selectedCampaign"
+      @close="closeTransfer"
+      @imported="handleChronicleImported"
     />
 
     <Teleport to="body">

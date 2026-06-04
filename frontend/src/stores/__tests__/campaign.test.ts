@@ -12,8 +12,13 @@ vi.mock('../../services/api', () => ({
     get: vi.fn(),
     getScenario: vi.fn(),
     getGmDossier: vi.fn(),
+    exportChronicle: vi.fn(),
+    previewChronicleImport: vi.fn(),
+    importChronicle: vi.fn(),
     importSource: vi.fn(),
     forgeDraft: vi.fn(),
+    startForgeDraftJob: vi.fn(),
+    getForgeDraftJob: vi.fn(),
     validateContract: vi.fn(),
     attachSession: vi.fn(),
     advance: vi.fn(),
@@ -54,7 +59,7 @@ function campaign(overrides: Partial<Campaign> = {}): Campaign {
 describe('useCampaignStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.mocked(campaignApi.reset).mockReset()
+    vi.clearAllMocks()
   })
 
   it('replaces a reset campaign and invalidates cached dossier data', async () => {
@@ -84,5 +89,30 @@ describe('useCampaignStore', () => {
     expect(store.currentCampaign).toEqual(after)
     expect(store.scenarios['campaign-1']).toBeUndefined()
     expect(store.gmDossiers['campaign-1']).toBeUndefined()
+  })
+
+  it('adds an imported chronicle and invalidates cached dossier data', async () => {
+    const store = useCampaignStore()
+    const imported = campaign({ id: 'campaign-imported', name: 'Archive' })
+    store.campaigns = [campaign()]
+    store.scenarios = { 'campaign-imported': { played_summary: 'ancien' } as never }
+    store.gmDossiers = { 'campaign-imported': { active_chapter_id: 'chapter_1' } as never }
+    vi.mocked(campaignApi.importChronicle).mockResolvedValue({
+      campaign: imported,
+      active_session_id: 'current-session',
+      imported: { sessions: 1, characters: 1, messages: 2, save_slots: 1 },
+      warnings: [],
+    })
+
+    const result = await store.importChronicle({
+      format: 'rpgmaster.chronicle',
+      format_version: 1,
+    })
+
+    expect(result?.campaign).toEqual(imported)
+    expect(store.campaigns[0]).toEqual(imported)
+    expect(store.currentCampaign).toEqual(imported)
+    expect(store.scenarios['campaign-imported']).toBeUndefined()
+    expect(store.gmDossiers['campaign-imported']).toBeUndefined()
   })
 })

@@ -41,6 +41,9 @@ import type {
   CampaignPlayerContract,
   CampaignResetResponse,
   CampaignScenario,
+  ChronicleArchivePayload,
+  ChronicleImportPreview,
+  ChronicleImportResponse,
 } from '../types'
 
 const BASE_URL = 'http://localhost:8000/api'
@@ -63,6 +66,22 @@ export async function request<T>(path: string, options?: RequestInit): Promise<T
   }
   if (res.status === 204) return undefined as T
   return res.json()
+}
+
+export async function requestBlob(path: string, options?: RequestInit): Promise<Blob> {
+  const headers = new Headers(options?.headers)
+  const token = path.startsWith('/admin/') ? (ADMIN_ACCESS_TOKEN || ACCESS_TOKEN) : ACCESS_TOKEN
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+
+  const res = await fetch(`${BASE_URL}${path}`, {
+    ...options,
+    headers,
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`API ${res.status}: ${text}`)
+  }
+  return res.blob()
 }
 
 // ─── Sessions ─────────────────────────────────────────────────────────────────
@@ -244,6 +263,21 @@ export const campaignApi = {
 
   getGmDossier: (id: string) =>
     request<CampaignGmDossierResponse>(`/campaigns/${id}/gm-dossier`),
+
+  exportChronicle: (campaignId: string) =>
+    requestBlob(`/campaigns/${campaignId}/export`),
+
+  previewChronicleImport: (body: ChronicleArchivePayload) =>
+    request<ChronicleImportPreview>('/campaigns/import/preview', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  importChronicle: (body: ChronicleArchivePayload) =>
+    request<ChronicleImportResponse>('/campaigns/import', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 
   importSource: (campaignId: string, body: CampaignImportSourceBody) =>
     request<CampaignImportSourceResponse>(`/campaigns/${campaignId}/import-source`, {
