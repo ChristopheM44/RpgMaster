@@ -208,6 +208,7 @@ async def forge_draft(
     active_chapter_id = str(generated.get("active_chapter_id") or "").strip()
     if not active_chapter_id:
         active_chapter_id = _first_chapter_id(contract, gm_dossier)
+    seed_region_map_from_dossier(gm_dossier, contract, active_chapter_id)
 
     dossier.player_contract = contract
     dossier.gm_dossier = gm_dossier
@@ -329,14 +330,18 @@ async def reset_played_state(campaign: Campaign, db: AsyncSession) -> CampaignDo
     contract["played_summary"] = ""
 
     gm_dossier = sanitize_gm_dossier(dossier.gm_dossier or {}, campaign, contract)
+    # Réinitialise la carte jouée, puis re-sème la piste vers l'objectif du premier
+    # chapitre (N3) — ne nulle plus aveuglément la carte.
     gm_dossier["region_map"] = None
     gm_dossier["city_maps"] = {}
     gm_dossier["active_city_id"] = None
+    active_chapter_id = _first_chapter_id(contract, gm_dossier)
+    seed_region_map_from_dossier(gm_dossier, contract, active_chapter_id)
 
     dossier.player_contract = contract
     dossier.gm_dossier = gm_dossier
     dossier.played_canon = empty_played_canon()
-    dossier.active_chapter_id = _first_chapter_id(contract, gm_dossier)
+    dossier.active_chapter_id = active_chapter_id
     await db.flush()
     return dossier
 
@@ -1116,6 +1121,7 @@ async def _run_forge_job(
     active_chapter_id = str(outline.get("active_chapter_id") or "").strip()
     if not active_chapter_id:
         active_chapter_id = _first_chapter_id(contract, gm_dossier)
+    seed_region_map_from_dossier(gm_dossier, contract, active_chapter_id)
 
     dossier.player_contract = contract
     dossier.gm_dossier = gm_dossier
@@ -1521,6 +1527,31 @@ def sanitize_gm_dossier(
     )
 
 
+def seed_region_map_from_dossier(
+    gm_dossier: dict[str, Any],
+    contract: dict[str, Any],
+    active_chapter_id: str,
+) -> None:
+    """Sème ``gm_dossier['region_map']`` depuis l'endpoint du chapitre actif (N3).
+
+    Mutation en place. No-op si une carte existe déjà ou si le chapitre actif ne
+    porte pas d'``objective_endpoint``. Le nœud-objectif devient une destination
+    atteignable que le MJ peut router (``nearby_map_nodes``) au lieu d'un POI
+    terminal bloqué — cf. ``map_service.build_seed_region_map``.
+    """
+    if not isinstance(gm_dossier, dict) or gm_dossier.get("region_map"):
+        return
+    chapter = _private_active_chapter_for_context(gm_dossier, contract, active_chapter_id)
+    endpoint = chapter.get("objective_endpoint")
+    if not endpoint:
+        return
+    opening = chapter.get("opening_scene") or {}
+    start_name = opening.get("venue") or opening.get("place")
+    seed = map_service.build_seed_region_map(start_name, endpoint)
+    if seed:
+        gm_dossier["region_map"] = seed
+
+
 def sanitize_played_canon(data: dict[str, Any]) -> dict[str, Any]:
     canon = empty_played_canon()
     if not isinstance(data, dict):
@@ -1903,6 +1934,7 @@ def _private_active_chapter_for_context(
         "title",
         "state",
         "objective",
+        "objective_endpoint",
         "stakes",
         "initial_state",
         "opening_scene",
@@ -2119,6 +2151,40 @@ def _sanitize_opening_scene(chapter: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# Genres de nœud régionaux autorisés pour la destination d'un objectif (N3).
+_OBJECTIVE_ENDPOINT_KINDS = {
+    "settlement",
+    "landmark",
+    "wilderness",
+    "dungeon",
+    "crossroads",
+    "ruin",
+}
+
+
+def _sanitize_objective_endpoint(value: Any) -> dict[str, str] | None:
+    """Destination structurée de l'objectif du chapitre (N3) : ``{name, kind, hint}``.
+
+    Renvoie ``None`` si absent ou sans nom. ``kind`` est contraint aux genres de
+    nœud régionaux (défaut ``landmark``). Le ``name`` et le ``hint`` doivent rester
+    non-spoiler : ils deviennent le nom de nœud et le travel_hint d'une arête
+    VISIBLE sur la carte joueur (cf. ``map_service.build_seed_region_map``).
+    """
+    if not isinstance(value, dict):
+        return None
+    name = _text(value.get("name") or "", 120)
+    if not name:
+        return None
+    kind = str(value.get("kind") or "").strip().lower()
+    if kind not in _OBJECTIVE_ENDPOINT_KINDS:
+        kind = "landmark"
+    return {
+        "name": name,
+        "kind": kind,
+        "hint": _text(value.get("hint") or "", 280),
+    }
+
+
 def _sanitize_private_chapter(chapter: Any, index: int) -> dict[str, Any]:
     data = chapter if isinstance(chapter, dict) else {}
     state = str(data.get("state") or ("active" if index == 0 else "planned")).lower()
@@ -2129,6 +2195,7 @@ def _sanitize_private_chapter(chapter: Any, index: int) -> dict[str, Any]:
         "title": _text(data.get("title") or f"Chapitre {index + 1}", 120),
         "state": state,
         "objective": _text(data.get("objective") or "", 700),
+        "objective_endpoint": _sanitize_objective_endpoint(data.get("objective_endpoint")),
         "stakes": _text(data.get("stakes") or "", 700),
         "initial_state": _text(data.get("initial_state") or "", 900),
         "opening_scene": _sanitize_opening_scene(data),

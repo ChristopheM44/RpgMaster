@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -136,6 +137,98 @@ def update_city_node_status(
         updated_at=_now_iso(),
     )
     return _dump(merged)
+
+
+# Positions de départ d'une carte fraîchement semée. Distinctes pour que le nœud
+# de départ et le nœud-objectif ne se superposent jamais (MapNodePosition vaut
+# 50,50 par défaut → sinon carte dégénérée).
+_SEED_START_POSITION = {"x": 30.0, "y": 58.0}
+_SEED_ENDPOINT_POSITION = {"x": 68.0, "y": 40.0}
+_SEED_REGION_NODE_KINDS = {
+    "settlement",
+    "landmark",
+    "wilderness",
+    "dungeon",
+    "crossroads",
+    "ruin",
+}
+
+
+def build_seed_region_map(
+    start_name: str | None,
+    endpoint: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Construit une carte régionale minimale donnant une destination à l'objectif.
+
+    N3 : sans nœud de destination, le MJ n'a nulle part où router le groupe, et un
+    objectif du type « atteindre la source » dégénère en POI terminal bloqué
+    (cul-de-sac). On sème deux nœuds — le départ (``current``) et l'aboutissement de
+    l'objectif (``rumored``) — reliés par UNE arête **visible**, pour que
+    l'endpoint apparaisse dans ``nearby_map_nodes`` (le MJ peut router) et se lise
+    comme une piste directionnelle non-spoiler côté joueur.
+
+    *endpoint* est ``{name, kind, hint}``. Renvoie ``None`` si l'endpoint manque ou
+    n'a pas de nom (pas de seed, aucun changement).
+    """
+    if not isinstance(endpoint, dict):
+        return None
+    endpoint_name = str(endpoint.get("name") or "").strip()
+    if not endpoint_name:
+        return None
+
+    start_label = str(start_name or "").strip() or "Point de départ"
+    start_id = _seed_node_id(start_label, "depart")
+    endpoint_id = _seed_node_id(endpoint_name, "objectif")
+    if endpoint_id == start_id:
+        endpoint_id = f"{endpoint_id}_objectif"[:80]
+
+    kind = str(endpoint.get("kind") or "").strip().lower()
+    if kind not in _SEED_REGION_NODE_KINDS:
+        kind = "landmark"
+    hint = str(endpoint.get("hint") or "").strip() or None
+
+    seed_data = {
+        "id": "region",
+        "name": "Région",
+        "current_node_id": start_id,
+        "nodes": [
+            {
+                "id": start_id,
+                "name": start_label,
+                "kind": "settlement",
+                "position": _SEED_START_POSITION,
+                "status": "current",
+            },
+            {
+                "id": endpoint_id,
+                "name": endpoint_name,
+                "kind": kind,
+                "position": _SEED_ENDPOINT_POSITION,
+                "status": "rumored",
+            },
+        ],
+        "edges": [
+            {
+                "id": f"vers_{endpoint_id}"[:80],
+                "from": start_id,
+                "to": endpoint_id,
+                "kind": "path",
+                "travel_hint": hint,
+                "hidden": False,
+            }
+        ],
+        "updated_at": _now_iso(),
+    }
+    try:
+        seed = RegionMap.model_validate(seed_data)
+    except ValidationError:
+        return None
+    return _dump(seed)
+
+
+def _seed_node_id(label: str, fallback: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")[:80].strip("_")
+    return slug or fallback
 
 
 def public_region_map(region_map: dict[str, Any] | None) -> dict[str, Any] | None:

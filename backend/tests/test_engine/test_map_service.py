@@ -2,10 +2,18 @@ import pytest
 
 from app.services.map_service import (
     MapPatchError,
+    build_seed_region_map,
+    compact_map_context,
     merge_city_map_patch,
     merge_region_map_patch,
     public_region_map,
 )
+
+ENDPOINT = {
+    "name": "Les Profondeurs noyées",
+    "kind": "dungeon",
+    "hint": "plus bas, là où l'eau disparaît",
+}
 
 
 def node(node_id: str, kind: str = "settlement", status: str = "known") -> dict:
@@ -278,3 +286,75 @@ def test_public_region_map_filters_hidden_edges() -> None:
 
     assert public is not None
     assert [edge["id"] for edge in public["edges"]] == ["shown"]
+
+
+# ─────────────────────────── build_seed_region_map (N3) ──────────────────────
+
+
+def test_build_seed_region_map_links_start_to_rumored_endpoint() -> None:
+    seed = build_seed_region_map("Oasis d'Émeraude", ENDPOINT)
+
+    assert seed is not None
+    nodes = {n["id"]: n for n in seed["nodes"]}
+    assert len(nodes) == 2
+    start = next(n for n in seed["nodes"] if n["status"] == "current")
+    endpoint = next(n for n in seed["nodes"] if n["status"] == "rumored")
+    assert start["name"] == "Oasis d'Émeraude"
+    assert endpoint["name"] == "Les Profondeurs noyées"
+    assert endpoint["kind"] == "dungeon"
+    # current_node_id pointe sur le départ → nearby_map_nodes peut router.
+    assert seed["current_node_id"] == start["id"]
+    # Distinct ids ET positions distinctes (pas de carte dégénérée 1-nœud).
+    assert start["id"] != endpoint["id"]
+    assert start["position"] != endpoint["position"]
+    # Une seule arête, VISIBLE (le choix design : piste flou mais visible).
+    assert len(seed["edges"]) == 1
+    edge = seed["edges"][0]
+    assert edge["from"] == start["id"]
+    assert edge["to"] == endpoint["id"]
+    assert edge.get("hidden", False) is False
+
+
+def test_build_seed_region_map_returns_none_without_endpoint() -> None:
+    assert build_seed_region_map("Oasis", None) is None
+    assert build_seed_region_map("Oasis", {}) is None
+    assert build_seed_region_map("Oasis", {"kind": "dungeon", "hint": "x"}) is None
+
+
+def test_build_seed_region_map_defaults_unknown_kind_and_start() -> None:
+    seed = build_seed_region_map(None, {"name": "Le Sanctuaire", "kind": "spaceship"})
+    assert seed is not None
+    endpoint = next(n for n in seed["nodes"] if n["status"] == "rumored")
+    start = next(n for n in seed["nodes"] if n["status"] == "current")
+    assert endpoint["kind"] == "landmark"  # genre inconnu → fallback
+    assert start["name"] == "Point de départ"  # nom de départ manquant → générique
+
+
+def test_build_seed_region_map_keeps_distinct_ids_when_names_collide() -> None:
+    seed = build_seed_region_map("La Source", {"name": "La Source", "kind": "wilderness"})
+    assert seed is not None
+    ids = [n["id"] for n in seed["nodes"]]
+    assert len(set(ids)) == 2  # pas d'auto-arête / nœud unique
+
+
+def test_seed_endpoint_visible_to_player_as_lead() -> None:
+    """Option A : le joueur voit la piste (arête visible), via public_region_map."""
+    seed = build_seed_region_map("Oasis", ENDPOINT)
+    public = public_region_map(seed)
+
+    assert public is not None
+    # L'arête visible survit → le joueur a une direction (nom flou, non-spoiler).
+    assert len(public["edges"]) == 1
+    assert any(n["status"] == "rumored" for n in public["nodes"])
+
+
+def test_seed_endpoint_reaches_gm_through_compacted_context() -> None:
+    """Le contexte carte du MJ passe par compact_map_context : l'arête doit survivre."""
+    seed = build_seed_region_map("Oasis", ENDPOINT)
+    compacted = compact_map_context(seed, {}, None)
+
+    region = compacted["region_map"]
+    assert region is not None
+    # L'arête (visible) survit à la compaction → nearby_map_nodes la verra côté MJ.
+    assert len(region["edges"]) == 1
+    assert region["current_node_id"] == seed["current_node_id"]

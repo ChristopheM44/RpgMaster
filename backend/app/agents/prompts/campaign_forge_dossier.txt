@@ -34,6 +34,7 @@ Contraintes importantes :
 - "hook" est le prologue public de table : explique concrètement pourquoi les PJ sont là, d'où vient la mission, qui les a mandatés ou alertés si c'est établi, et quel enjeu immédiat les pousse à agir. Il ne décrit pas ce qu'ils voient physiquement et ne révèle aucun secret.
 - "known_objectives" contient au moins un objectif public jouable, formulé comme une tâche claire que les PJ peuvent poursuivre dès l'ouverture.
 - "initial_state" résume le contexte narratif du chapitre.
+- "objective_endpoint" (par chapitre) décrit le LIEU d'ABOUTISSEMENT de l'objectif comme une destination ATTEIGNABLE, jamais un cul-de-sac : `name` = nom évocateur et NON-SPOILER du lieu (jamais le secret qu'il abrite), `kind` parmi settlement|landmark|wilderness|dungeon|ruin|crossroads, `hint` = courte indication de voyage non-spoiler (direction, distance, repère). Ce lieu devient une destination connue du MJ, posée comme une piste VISIBLE sur la carte, vers laquelle router le groupe quand l'objectif progresse.
 - "opening_scene" décrit uniquement ce que les PJ voient physiquement au début : lieu précis, PNJ réellement présents, indices visibles et sorties immédiates.
 - Écris de la prose de table concrète, pas des rôles fonctionnels. Interdits : "présent pour accueillir le groupe", "hôte du lieu", "se tient face au groupe pour exposer l'urgence", "présent pour soutenir la scène".
 - "opening_scene.description" doit être un paragraphe de 2-3 phrases avec au moins deux registres sensoriels et un moment dramatique précis. Ne résume pas la mission.
@@ -75,6 +76,7 @@ Réponds avec ce JSON exact :
         "title": "Titre",
         "state": "active",
         "objective": "Objectif ouvert",
+        "objective_endpoint": {"name": "Nom évocateur et non-spoiler du lieu d'aboutissement", "kind": "dungeon", "hint": "Courte indication de voyage non-spoiler vers ce lieu"},
         "stakes": "Enjeux",
         "initial_state": "Contexte narratif du chapitre, pas forcément visible dans la première scène",
         "opening_scene": {

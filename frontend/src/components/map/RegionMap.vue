@@ -25,8 +25,17 @@ const reachableNodes = computed(() =>
   props.map ? findReachableNodes(props.map.nodes, props.map.edges, props.map.current_node_id) : [],
 )
 const reachableIds = computed(() => reachableNodes.value.map((node) => node.id))
+// Un nœud `rumored` (rumeur / objectif semé N3) reste une PISTE visible — pin + chemin
+// surlignés — mais pas une destination de voyage en un clic : on ne « téléporte » pas
+// vers l'aboutissement de l'objectif au tour 1. Il devient voyageable une fois confirmé
+// par le jeu (le MJ le passe en known/visited).
 const canTravel = computed(() =>
-  Boolean(selectedNode.value && reachableIds.value.includes(selectedNode.value.id) && !props.readonly),
+  Boolean(
+    selectedNode.value &&
+      selectedNode.value.status !== 'rumored' &&
+      reachableIds.value.includes(selectedNode.value.id) &&
+      !props.readonly,
+  ),
 )
 
 watch(() => props.map?.id, () => {
