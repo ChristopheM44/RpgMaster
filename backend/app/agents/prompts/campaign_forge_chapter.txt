@@ -24,6 +24,7 @@ Contraintes absolues :
 - Ne saute pas le chapitre, même s'il est bref dans la source.
 - Si ce chapitre est le SEUL de la campagne (`chapter_total == 1`, cas one-shot), il doit porter l'arc dramatique COMPLET : `secrets`, `complications`, `stakes` et `objective` doivent couvrir la montée en tension, le climax et une résolution possible — pas seulement une scène d'introduction.
 - "initial_state" résume le contexte narratif privé du chapitre.
+- "objective_endpoint" décrit le LIEU d'ABOUTISSEMENT de l'objectif comme une destination ATTEIGNABLE, jamais un cul-de-sac : `name` = nom évocateur et NON-SPOILER du lieu (jamais le secret qu'il abrite), `kind` parmi settlement|landmark|wilderness|dungeon|ruin|crossroads, `hint` = courte indication de voyage non-spoiler (direction, distance, repère). Ce lieu devient une destination connue du MJ, posée comme une piste VISIBLE sur la carte, vers laquelle router le groupe quand l'objectif progresse.
 - "opening_scene" décrit seulement ce que les PJ voient physiquement au début du chapitre.
 - L'ouverture doit pouvoir servir un prologue public clair avec le contrat joueur : si un PNJ commanditaire/guide est présent ou attendu, indique-le dans `present_npcs` uniquement s'il est physiquement là, sinon garde-le dans le contexte (`initial_state`, `involved_npcs`) sans l'ajouter à la scène.
 - "opening_scene.description" doit être un paragraphe concret de 2-3 phrases avec au moins deux registres sensoriels.
@@ -39,6 +40,7 @@ Réponds avec un seul objet JSON valide, sans markdown :
   "title": "Titre",
   "state": "active",
   "objective": "Objectif ouvert",
+  "objective_endpoint": {"name": "Nom évocateur et non-spoiler du lieu d'aboutissement", "kind": "dungeon", "hint": "Courte indication de voyage non-spoiler vers ce lieu"},
   "stakes": "Enjeux",
   "initial_state": "Contexte narratif privé du chapitre",
   "opening_scene": {

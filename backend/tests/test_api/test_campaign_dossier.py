@@ -1024,3 +1024,105 @@ async def test_gm_prompt_context_resets_canon_on_initial_session(async_client, d
     assert played.get("rolling_summary", "") == ""
     assert played.get("established_facts", []) == []
     assert "session précédente" not in json.dumps(private_context, ensure_ascii=False).lower()
+
+
+class TestObjectiveEndpointSeeding:
+    """N3 — objective_endpoint sanitization + seed du region_map depuis le dossier."""
+
+    def test_sanitize_objective_endpoint_validates_and_defaults_kind(self):
+        out = campaign_dossier_service._sanitize_objective_endpoint(
+            {"name": "  Le Cœur Violet  ", "kind": "weird", "hint": "tout au fond"}
+        )
+        assert out == {"name": "Le Cœur Violet", "kind": "landmark", "hint": "tout au fond"}
+
+    def test_sanitize_objective_endpoint_none_without_name(self):
+        assert campaign_dossier_service._sanitize_objective_endpoint({"kind": "dungeon"}) is None
+        assert campaign_dossier_service._sanitize_objective_endpoint(None) is None
+
+    def test_sanitize_private_chapter_carries_endpoint(self):
+        ch = campaign_dossier_service._sanitize_private_chapter(
+            {"id": "chapter_1", "objective_endpoint": {"name": "X", "kind": "ruin", "hint": "h"}},
+            0,
+        )
+        assert ch["objective_endpoint"] == {"name": "X", "kind": "ruin", "hint": "h"}
+        bare = campaign_dossier_service._sanitize_private_chapter({"id": "chapter_1"}, 0)
+        assert bare["objective_endpoint"] is None
+
+    def test_seed_region_map_from_dossier_seeds_from_active_chapter(self):
+        gm_dossier = {
+            "chapters": [
+                {
+                    "id": "chapter_1",
+                    "state": "active",
+                    "objective_endpoint": {
+                        "name": "La Crypte du Cœur",
+                        "kind": "dungeon",
+                        "hint": "sous l'arche brisée",
+                    },
+                    "opening_scene": {"venue": "Parvis des Ruines", "place": "Ruines Blanches"},
+                }
+            ],
+        }
+        contract = {"visible_chapters": [{"id": "chapter_1", "state": "active"}]}
+        campaign_dossier_service.seed_region_map_from_dossier(gm_dossier, contract, "chapter_1")
+
+        region = gm_dossier["region_map"]
+        assert region is not None
+        assert any(n["name"] == "La Crypte du Cœur" for n in region["nodes"])
+        start = next(n for n in region["nodes"] if n["status"] == "current")
+        assert start["name"] == "Parvis des Ruines"
+
+    def test_seed_region_map_from_dossier_noop_without_endpoint(self):
+        gm_dossier = {"chapters": [{"id": "chapter_1", "state": "active"}]}
+        contract = {"visible_chapters": [{"id": "chapter_1", "state": "active"}]}
+        campaign_dossier_service.seed_region_map_from_dossier(gm_dossier, contract, "chapter_1")
+        assert gm_dossier.get("region_map") is None
+
+    def test_seed_region_map_from_dossier_noop_when_map_exists(self):
+        gm_dossier = {
+            "region_map": {"id": "already"},
+            "chapters": [
+                {
+                    "id": "chapter_1",
+                    "state": "active",
+                    "objective_endpoint": {"name": "La Crypte", "kind": "dungeon", "hint": "x"},
+                    "opening_scene": {"venue": "Parvis"},
+                }
+            ],
+        }
+        contract = {"visible_chapters": [{"id": "chapter_1", "state": "active"}]}
+        campaign_dossier_service.seed_region_map_from_dossier(gm_dossier, contract, "chapter_1")
+        assert gm_dossier["region_map"] == {"id": "already"}
+
+
+@pytest.mark.asyncio
+async def test_forge_dossier_seeds_region_map_from_objective_endpoint(async_client, monkeypatch):
+    """N3 — la forge sème dossier.gm_dossier.region_map quand le chapitre a un endpoint."""
+
+    class EndpointForgeAgent(DummyForgeAgent):
+        async def forge_dossier(self, campaign, brief, options, import_sources):
+            data = await super().forge_dossier(campaign, brief, options, import_sources)
+            data["gm_dossier"]["chapters"][0]["objective_endpoint"] = {
+                "name": "La Crypte du Cœur",
+                "kind": "dungeon",
+                "hint": "sous l'arche brisée",
+            }
+            return data
+
+    monkeypatch.setattr(campaign_dossier_service, "CampaignForgeAgent", EndpointForgeAgent)
+
+    campaign = await _create_campaign(async_client)
+    draft = await async_client.post(
+        f"/api/campaigns/{campaign['id']}/forge-draft",
+        json={"brief": {"title": "Ruines"}, "options": {}},
+    )
+    assert draft.status_code == 200
+
+    gm = await async_client.get(f"/api/campaigns/{campaign['id']}/gm-dossier")
+    assert gm.status_code == 200
+    region_map = gm.json()["gm_dossier"]["region_map"]
+    assert region_map is not None
+    assert any(
+        node["name"] == "La Crypte du Cœur" and node["status"] == "rumored"
+        for node in region_map["nodes"]
+    )

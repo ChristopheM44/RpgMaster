@@ -327,6 +327,36 @@ def test_extract_scene_anchor_uses_location_venue() -> None:
     assert anchor["location_place"] == "Port Nyanzaru"
 
 
+def test_extract_scene_anchor_surfaces_seeded_objective_endpoint() -> None:
+    """N3 : l'endpoint semé remonte dans nearby_map_nodes via le contexte compacté du MJ.
+
+    On passe par compact_map_context (chemin réel _game_state_for_gm) pour prouver
+    que l'arête visible survit à la projection et que le MJ peut router vers la
+    destination de l'objectif au lieu d'un cul-de-sac.
+    """
+    from app.agents.gm_agent import _extract_scene_anchor
+    from app.services.map_service import build_seed_region_map, compact_map_context
+
+    seed = build_seed_region_map(
+        "Oasis d'Émeraude",
+        {"name": "Les Profondeurs noyées", "kind": "dungeon", "hint": "plus bas"},
+    )
+    anchor = _extract_scene_anchor(
+        {
+            "adventure_journal": {
+                "location_place": "Oasis d'Émeraude",
+                "time_of_day": "morning",
+            },
+            "world_maps": compact_map_context(seed, {}, None),
+        }
+    )
+
+    nearby = anchor["nearby_map_nodes"]
+    assert any(
+        node["name"] == "Les Profondeurs noyées" and node["kind"] == "dungeon" for node in nearby
+    )
+
+
 def test_extract_active_quest_brief_returns_public_objective_only() -> None:
     """_extract_active_quest_brief expose known_objectives, jamais le hook."""
     from app.agents.gm_agent import _extract_active_quest_brief
