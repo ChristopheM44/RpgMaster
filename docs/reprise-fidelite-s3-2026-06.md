@@ -34,9 +34,9 @@ Donjon « Les Ruines Blanches → Crypte du Cœur ». Table = **Thorvald (PC hum
 | **N1** | Double réponse PNJ : pas d'indicateur « le PNJ répond » + pas de garde anti-concurrence | ✅ **livré 2026-06-04** |
 | **N2** | 2 déconnexions WS | ❌ **hors scope** (dev back en cours pendant la partie, pas un bug) |
 | **N3** | Objectif sans **route jouable** ni **destination atteignable** (le bassin/fissure « cul-de-sac ») | ✅ **LIVRÉ 2026-06-05** (seed carte + A2 nudge ; **mécanisme corrigé** : edge VISIBLE + nom flou, pas edge caché — la version verrouillée était inerte. Voir section dédiée) |
-| **N5** | PNJ détenteur d'un secret sans **levier jouable** (Khalid esquive 3×, aucun Insight/Intimidation) | ⏳ ouvert (prompt) |
+| **N5** | PNJ détenteur d'un secret sans **levier jouable** (Khalid esquive 3×, aucun Insight/Intimidation) | ✅ **LIVRÉ 2026-06-05** (prompt, replay-gated — cf. lot renforts) |
 | **N4** | 3 jets ratés d'affilée sur la carcasse → **aucun fail-forward** + roll-spam | ⏳ ouvert (prompt + E1) |
-| **N6** | Intro : *où* clair, *origine/pourquoi* sous-surfacé (tension avec P3 « jamais d'étiquette ») | ⏳ ouvert (nudge prompt) |
+| **N6** | Intro : *où* clair, *origine/pourquoi* sous-surfacé (tension avec P3 « jamais d'étiquette ») | ✅ **LIVRÉ 2026-06-05** (= R4, prompt, replay-gated — cf. lot renforts) |
 | — | Fuite anglais « own » dans la prose FR ; prose « dread » répétitive | ⚪ bas (model-quality) |
 
 ## Ce qui est fait — N1 (livré)
@@ -116,13 +116,20 @@ Régression Q7 (attribution jet clic-POI) fermée. **2 edits complémentaires** 
 
 </details>
 
-## Backlog restant (plus léger, après N3)
+## Lot renforts prompt — ✅ LIVRÉ (2026-06-05) : R2 + R3 + R4/N6 + N5
 
-- **N5** — PNJ réticent : après ≥2 esquives sur un sujet qu'il connaît, surfacer un *Insight* contesté + option Intimidation/Persuasion (sous-cas de F).
+Quatre nudges de prompt **cheap, groupés** (aucune logique Python touchée). **Portée honnête** : comme F-visible et les lots prompt antérieurs, l'**efficacité** est **replay-gated** — pas de test unitaire déterministe ; seul le garde-fou dur (templates qui compilent + suite verte) est passé.
+
+- **R3 — arbitrage du monde** ([gm_narrate.txt](../backend/app/agents/prompts/gm_narrate.txt), nouveau bullet « ARBITRAGE DU MONDE » après INTENTION≠FAIT) : quand un joueur affirme/interroge un état du monde (« la sortie a disparu ? »), le MJ **tranche explicitement** (confirme ou infirme le beat), **jamais** de délégation à un compagnon IA ; une sortie d'arrivée reste franchissable tant qu'aucun beat ne l'a fermée. Recoupe N3.
+- **R2 — inventaire PC humain** ([gm_narrate.txt](../backend/app/agents/prompts/gm_narrate.txt), append au bullet PC humain `is_ai:false`) : ne **jamais** placer un objet dans l'inventaire d'un PC humain ni narrer qu'il ramasse/empoche/équipe/emporte sans **action déclarée** (ou `loot_grant` canonique) — une **suggestion de compagnon ne vaut pas action du PC**.
+- **N5 — PNJ réticent → levier** ([gm_npc_dialogue.txt](../backend/app/agents/prompts/gm_npc_dialogue.txt), nouveau bullet « PNJ RÉTICENT ») : après **≥2 esquives** sur un sujet qu'il connaît (secrets/dossier), le MJ **télégraphe** la dissimulation (≤1 didascalie) **et** émet un `roll_request` d'**Intuition** (Insight, DC = sa garde ; ex. JSON fourni) + invite **dans sa voix** à le presser (Intimidation) ou le rassurer (Persuasion). Chemin vérifié : le `roll_request` du dialogue PNJ publie via `gm_response_executor.execute_roll_request` (chemin **propre**, garde `character_name` — **pas** de régression R1). **Hors portée de ce chemin** : les boutons POI Intimidation/Persuasion littéraux (la `narration` du PNJ = sa réplique parlée seule) → l'invite est diégétique, le `roll_request` est la prise concrète.
+- **R4/N6 — ouverture** ([gm_open_scene.txt:27/:33](../backend/app/agents/prompts/gm_open_scene.txt) + variante lobby [gm_open_scene_lobby.txt:27](../backend/app/agents/prompts/gm_open_scene_lobby.txt)) : si le dossier **nomme** un commanditaire → le **nommer + visage** tissé en fiction (pas « votre employeur » anonyme, pas de ligne d'exposition « Commanditaire : … », pas de présence physique s'il est absent) ; **tisser l'objectif en UNE phrase d'enjeu**, jamais en **liste d'infinitifs**. Garde-fou P3 préservé (diégétique). Conditionnel « si le dossier le nomme » → on n'invente pas un commanditaire (sinon recoupe N3/forge).
+
+**Vérif** : 4 templates compilent ; `test_agents+test_game` **557 ✓** ; suite complète **1898 ✓** (+1 ERROR = flake d'isolation `test_ws_game::TestJoin` PRÉ-EXISTANT, passe isolé). Aucun test n'assoit sur les lignes touchées (« INTENTION ≠ FAIT ÉTABLI » et le mot « commanditaire » préservés). **Reste : confirmer en replay live** (les 4 sont prompt-médiés).
+
+## Backlog restant (après N3 + lot renforts prompt)
+
 - **N4** — fail-forward : garantir qu'un indice-clé livre **au moins une bribe** sur échec ; éviter la triple-narration « horreur indéfinissable ». À coupler à **E1**.
-- **N6** — origine d'ouverture : nudge `gm_open_scene.txt` (ancrer *d'où vient la mission* / *qui l'a confiée*, sans étiquette) ou renfort journal. **Précision R4 (4ᵉ chro)** : **nommer/donner un visage** au commanditaire si le dossier l'établit + **tisser** l'objectif en une phrase d'enjeu (jamais une **liste d'infinitifs**).
-- **R2** — relique ramassée sans déclaration : renfort `gm_narrate.txt:111` — ne **jamais** placer un objet dans l'inventaire d'un PC humain (ni narrer qu'il ramasse) **sans action déclarée** par lui (ou `loot_grant` canonique) ; une **suggestion de compagnon ne vaut pas action du PC humain**. (Prompt, cheap.)
-- **R3** — assertions-monde : quand un joueur **affirme/interroge un état du monde** (sortie disparue, passage bloqué, objet présent), le MJ **tranche explicitement** (confirme le *beat* ou infirme) — **jamais** de délégation de cet arbitrage à un compagnon IA. Recoupe N3 (sortie de retour persistée). (Prompt, cheap.)
 - **E1** — plafond compagnons IA : capper `_run_companion_responses` (chemin social broadcast non plafonné, [narrative_flow_service.py:484](../backend/app/services/narrative_flow_service.py)) — anti roll-spam. Doser en replay live.
 - **Qualité-modèle** (bas) : fuite « own » ; variété de prose.
 
