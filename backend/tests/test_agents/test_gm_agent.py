@@ -921,3 +921,38 @@ async def test_think_delegates_to_combat_in_combat(gm_agent: GMAgent) -> None:
         response = await gm_agent.think(context)
 
     assert "combat" in response.content.lower()
+
+
+def test_format_outcome_roll_emits_fail_forward_material() -> None:
+    """N4 — le formateur curé doit transmettre la matière de fail-forward au MJ.
+
+    Sans cela, les champs injectés par le pipeline seraient perdus avant le prompt
+    et la consigne fail-forward de gm_narrate_outcome ne se déclencherait jamais.
+    """
+    roll = {
+        "actor_name": "Thorvald",
+        "label": "INT (Investigation)",
+        "breakdown": "5 + -1 = 4 vs DC 14 ✗",
+        "margin": -10,
+        "success": False,
+        "fail_forward": True,
+        "fail_forward_subject": "Oiseau pétrifié",
+        "fail_forward_detail": "Un passereau changé en cristal violet.",
+        "fail_forward_attempt": 2,
+    }
+    text = GMAgent._format_outcome_roll(roll)
+    assert "fail_forward=true" in text
+    assert "fail_forward_subject=Oiseau pétrifié" in text
+    assert "fail_forward_detail=" in text
+    assert "fail_forward_attempt=2" in text
+
+
+def test_format_outcome_roll_omits_fail_forward_when_absent() -> None:
+    roll = {
+        "actor_name": "Thorvald",
+        "label": "INT (Investigation)",
+        "breakdown": "18 + -1 = 17 vs DC 14 ✓",
+        "success": True,
+    }
+    text = GMAgent._format_outcome_roll(roll)
+    assert "fail_forward" not in text

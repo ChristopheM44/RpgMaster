@@ -3364,3 +3364,97 @@ class TestDetectNpcTargetByDescription:
         text = "J'examine la tente bleue au cœur du marché."
         npc_id = resolve_npc_target_id(text, state)
         assert npc_id is None
+
+
+class TestFailForward:
+    """N4 — fail-forward déterministe + anti-roll-spam sur échec d'investigation.
+
+    Chronique « Haut les Cœurs » : Thorvald rate l'investigation de
+    `clue_corrupted_bird` (msg 3, total 4 vs DC 14), le MJ écrit « ne livre aucun
+    secret immédiat », puis Thorvald relance le MÊME jet sur le MÊME POI (msg 9).
+    """
+
+    @staticmethod
+    def _active_with_clue_poi() -> ActiveSession:
+        return ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.EXPLORATION,
+            state_data={
+                "current_scene": {
+                    "pois": [
+                        {
+                            "id": "clue_corrupted_bird",
+                            "name": "Oiseau pétrifié",
+                            "description": (
+                                "Un passereau changé en cristal violet, figé en plein cri."
+                            ),
+                        }
+                    ]
+                }
+            },
+        )
+
+    @staticmethod
+    def _failed_roll(
+        *,
+        poi: str = "clue_corrupted_bird",
+        label: str = "INT (Investigation)",
+        intent: str = "search",
+    ) -> dict:
+        return {
+            "success": False,
+            "scene_poi_id": poi,
+            "scene_poi_name": "Oiseau pétrifié",
+            "scene_interaction_intent": intent,
+            "label": label,
+            "dc": 14,
+            "total": 4,
+        }
+
+    def test_failed_investigation_injects_material(self) -> None:
+        active = self._active_with_clue_poi()
+        out = ActionPipeline._inject_fail_forward(self._failed_roll(), active)
+        assert out["fail_forward"] is True
+        assert out["fail_forward_attempt"] == 1
+        assert out["fail_forward_subject"] == "Oiseau pétrifié"
+        # Le MJ reçoit de la matière concrète (la description du POI) à révéler.
+        assert "cristal" in out["fail_forward_detail"].lower()
+
+    def test_identical_reroll_same_skill_escalates(self) -> None:
+        active = self._active_with_clue_poi()
+        ActionPipeline._inject_fail_forward(self._failed_roll(), active)
+        out2 = ActionPipeline._inject_fail_forward(self._failed_roll(), active)
+        assert out2["fail_forward_attempt"] == 2
+
+    def test_switching_skill_resets_counter(self) -> None:
+        # Investigation → Arcane = nouvelle approche, pas du spam : repart à 1.
+        active = self._active_with_clue_poi()
+        ActionPipeline._inject_fail_forward(self._failed_roll(label="INT (Investigation)"), active)
+        out = ActionPipeline._inject_fail_forward(self._failed_roll(label="INT (Arcana)"), active)
+        assert out["fail_forward_attempt"] == 1
+
+    def test_success_does_not_inject(self) -> None:
+        active = self._active_with_clue_poi()
+        roll = self._failed_roll()
+        roll["success"] = True
+        out = ActionPipeline._inject_fail_forward(roll, active)
+        assert "fail_forward" not in out
+
+    def test_saving_throw_does_not_inject(self) -> None:
+        active = self._active_with_clue_poi()
+        out = ActionPipeline._inject_fail_forward(
+            self._failed_roll(label="DEX Save", intent=""), active
+        )
+        assert "fail_forward" not in out
+
+    def test_no_poi_does_not_inject(self) -> None:
+        active = self._active_with_clue_poi()
+        out = ActionPipeline._inject_fail_forward(self._failed_roll(poi=""), active)
+        assert "fail_forward" not in out
+
+    def test_non_investigative_action_does_not_inject(self) -> None:
+        active = self._active_with_clue_poi()
+        out = ActionPipeline._inject_fail_forward(
+            self._failed_roll(label="STR (Athletics)", intent="climb"), active
+        )
+        assert "fail_forward" not in out

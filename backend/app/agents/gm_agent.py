@@ -639,10 +639,25 @@ class GMAgent(BaseAgent):
             else str(result.get("total", "?"))
         )
         actor = f"{result.get('actor_name')} — " if result.get("actor_name") else ""
-        return (
+        line = (
             f"- {actor}{result.get('label', 'Jet')}: "
             f"{result.get('breakdown', '')}{target}{margin} → {outcome}"
         )
+        if result.get("fail_forward"):
+            # N4 : transmettre la matière de fail-forward au MJ. Ce formateur est
+            # curé (il ne dumpe pas le dict brut) ; sans ces lignes, les champs
+            # injectés par ActionPipeline._inject_fail_forward seraient perdus et
+            # la consigne du prompt gm_narrate_outcome ne se déclencherait jamais.
+            line += "\n  fail_forward=true"
+            line += f"\n  fail_forward_subject={result.get('fail_forward_subject', '')}"
+            detail = result.get("fail_forward_detail")
+            if detail:
+                line += f"\n  fail_forward_detail={detail}"
+            hint = result.get("fail_forward_hint")
+            if hint:
+                line += f"\n  fail_forward_hint={hint}"
+            line += f"\n  fail_forward_attempt={result.get('fail_forward_attempt')}"
+        return line
 
     async def _call_and_parse(
         self,

@@ -724,6 +724,32 @@ class AIPlayerManager:
                         inner_reasoning="Pas de menace confirmée par le MJ — attente.",
                     )
 
+            # Transition guard BEFORE publishing: a companion cannot unilaterally
+            # cross a scene boundary (step through an exit and trigger the
+            # next-scene reveal) ahead of the human PC. Same shape as the combat
+            # guard above: they may take point at the threshold and propose the
+            # crossing, but the GM resolves it only when the human leads the move.
+            if (
+                active.phase.value == "exploration"
+                and action.action_type == "move"
+                and self._move_crosses_scene_boundary(action, active.state_data)
+                and not self._human_led_transition(action_text, active.state_data)
+            ):
+                action = PlayerActionChoice(
+                    action_type="wait",
+                    action_description=(
+                        "Le personnage prend les devants jusqu'au seuil mais attend le groupe."
+                    ),
+                    roleplay_text=(
+                        "(s'avance jusqu'au seuil, prêt à passer, mais attend que le reste "
+                        "du groupe franchisse la frontière)"
+                    ),
+                    inner_reasoning=(
+                        "Franchir seul ce seuil déclencherait la scène suivante à la place "
+                        "du joueur humain — je prends position et j'attends qu'il mène."
+                    ),
+                )
+
             # Publish post-guard roleplay
             visible_text = self._visible_action_text(action, char_name)
             scene_id = str(uuid.uuid4())
@@ -834,6 +860,71 @@ class AIPlayerManager:
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _move_crosses_scene_boundary(
+        action: PlayerActionChoice, state_data: dict[str, Any]
+    ) -> bool:
+        """True si ce déplacement compagnon franchit une frontière de scène.
+
+        On ne considère QUE les sorties (``current_scene.exits``) menant vers une
+        autre scène : un déplacement intra-scène (vers un POI/zone du lieu courant,
+        ex. « le centre de la nef ») n'est jamais bloqué. Le signal fort est
+        ``action.target`` (= l'id de sortie résolu, ex. ``exit_to_garden``) ; le
+        texte de l'action sert de signal secondaire (libellé/destination).
+        """
+        if getattr(action, "action_type", "") != "move":
+            return False
+        scene = state_data.get("current_scene") or {}
+        exits = scene.get("exits") if isinstance(scene, dict) else None
+        if not isinstance(exits, list) or not exits:
+            return False
+        from app.game.travel_detection import _normalize_text
+
+        target = _normalize_text(str(getattr(action, "target", "") or ""))
+        desc = _normalize_text(
+            f"{getattr(action, 'action_description', '') or ''} "
+            f"{getattr(action, 'roleplay_text', '') or ''}"
+        )
+        for exit_data in exits:
+            if not isinstance(exit_data, dict):
+                continue
+            for ident in (
+                _normalize_text(str(exit_data.get("id") or "")),
+                _normalize_text(str(exit_data.get("element_id") or "")),
+            ):
+                if ident and target and (target == ident or ident in target or target in ident):
+                    return True
+            for label in (
+                _normalize_text(str(exit_data.get("leads_to") or "")),
+                _normalize_text(str(exit_data.get("label") or "")),
+            ):
+                if not label or len(label) < 4:
+                    continue
+                if target and (target == label or label in target):
+                    return True
+                if label in desc:
+                    return True
+        return False
+
+    @staticmethod
+    def _human_led_transition(action_text: str | None, state_data: dict[str, Any]) -> bool:
+        """True si l'action humaine déclencheuse menait elle-même la transition.
+
+        Quand le joueur humain voyage/avance lui-même vers une frontière (« on
+        entre dans le jardin »), un compagnon peut le suivre à travers le seuil :
+        c'est collaboratif, pas une usurpation d'agence. Sans intention de voyage
+        humaine (le joueur a fait tout autre chose), le franchissement spontané du
+        compagnon reste bloqué.
+        """
+        if not action_text:
+            return False
+        try:
+            from app.game.travel_detection import detect_travel_intent
+
+            return bool(detect_travel_intent(action_text, state_data).is_travel)
+        except Exception:
+            return False
 
     @staticmethod
     async def _publish_companion_visible(

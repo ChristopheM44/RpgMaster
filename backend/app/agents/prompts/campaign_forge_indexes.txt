@@ -23,8 +23,10 @@ INDEX SRD MONSTRES COMPACT :
 
 Contraintes :
 - Ne regénère pas `chapters`; ils sont déjà définitifs.
-- "important_npcs" contient les PNJ RÉCURRENTS de la campagne au format NPCPersona structuré.
-- Génère les PNJ nécessaires aux scènes d'ouverture et aux arcs récurrents.
+- "important_npcs" contient les PNJ RÉCURRENTS de la campagne au format NPCPersona structuré (2 à 4 PNJ).
+- L'un des `important_npcs` est le COMMANDITAIRE : la personne qui mandate/engage/alerte le groupe, DÉJÀ nommée dans `player_contract.hook`. Reprends EXACTEMENT le même nom propre que dans le hook, mets `archetype: "commanditaire"`, `attitude_default` à "friendly" ou "helpful", `motivations.visible` qui dit pourquoi il a besoin du groupe, et (optionnel) un `quest_hooks`. Ses secrets et `motivations.hidden` restent GM-only. N'ajoute PAS de commanditaire seulement si le hook établit explicitement que les PJ agissent de leur propre initiative.
+- `importance` vaut EXACTEMENT l'une de ces valeurs : `light`, `standard` ou `rich` (jamais "high", "major", etc.). Laisse `standard` par défaut.
+- Génère aussi les autres PNJ nécessaires aux scènes d'ouverture et aux arcs récurrents.
 - "bestiary" contient seulement les monstres signatures, pas les créatures SRD génériques.
 - "custom_monsters" contient les variantes mécaniques inventées, chacune avec un `base_srd_id` présent dans l'index SRD compact.
 - "items" contient les objets custom de campagne au format EquipmentItem compact ; mets `unique: true` pour les récompenses qui ne doivent être attribuées qu'une fois.
@@ -37,19 +39,19 @@ Réponds avec un seul objet JSON valide, sans markdown :
   "narrative_arc": "Arc privé global",
   "important_npcs": [
     {
-      "id": "pnj_id_kebab_case",
-      "name": "Nom du PNJ",
-      "archetype": "mentor",
-      "short_description": "1 phrase qui brieffe le MJ sur ce PNJ.",
-      "voice": {"gender": "neutral", "age_range": "adult", "speech_register": "formal", "pitch": "medium", "rate": "normal", "accent": null, "timbre": null},
-      "motivations": {"visible": ["objectif apparent"], "hidden": ["motivation cachée"], "fears": []},
-      "knowledge": {"knows": ["fait connu"], "ignores": ["limite de savoir"], "rumors": []},
+      "id": "commanditaire_kebab_case",
+      "name": "Nom propre EXACT repris du hook",
+      "archetype": "commanditaire",
+      "short_description": "Le commanditaire qui mandate le groupe : 1 phrase pour briefer le MJ.",
+      "voice": {"gender": "female", "age_range": "adult", "speech_register": "formal", "pitch": "medium", "rate": "normal", "accent": null, "timbre": null},
+      "motivations": {"visible": ["pourquoi il/elle a besoin du groupe"], "hidden": ["motivation cachée GM-only"], "fears": []},
+      "knowledge": {"knows": ["ce qu'il/elle sait de la mission"], "ignores": ["limite de savoir"], "rumors": []},
       "relationships": [],
       "importance": "standard",
       "persona_type": "npc",
-      "attitude_default": "indifferent",
+      "attitude_default": "friendly",
       "secrets": [],
-      "quest_hooks": [],
+      "quest_hooks": ["amorce de quête liée à la mission"],
       "catchphrases": []
     }
 	  ],

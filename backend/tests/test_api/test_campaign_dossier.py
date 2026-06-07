@@ -610,6 +610,46 @@ def test_resolve_duration_preserves_existing_when_no_options():
     assert svc._resolve_duration({}, {}, unknown, 2) == "3-5 sessions"
 
 
+def test_coerce_persona_salvages_drifted_enum():
+    """Régression : un enum halluciné (`importance: "high"`) ne doit PAS faire tomber
+    une persona par ailleurs valide — il est retiré et le défaut du schéma s'applique.
+
+    Reproduit le commanditaire réellement forgé (Alistair Thorne) qui était droppé,
+    laissant `important_npcs` vide alors que le hook le nommait pourtant. Couvre aussi
+    un enum imbriqué fautif (`voice.pitch`)."""
+    svc = campaign_dossier_service
+    item = {
+        "id": "alistair_thorne",
+        "name": "Alistair Thorne",
+        "archetype": "commanditaire",
+        "short_description": "Marchand opulent et méticuleux.",
+        "voice": {"gender": "male", "age_range": "adult", "pitch": "deep"},
+        "motivations": {"visible": ["Livrer ses marchandises"]},
+        "importance": "high",  # hors plage : light|standard|rich
+        "persona_type": "npc",
+        "attitude_default": "friendly",
+    }
+    out = svc._coerce_persona(item, "npc")
+    assert out is not None, "la persona ne doit plus être droppée pour un enum dérivé"
+    assert out["name"] == "Alistair Thorne"
+    assert out["archetype"] == "commanditaire"
+    assert out["importance"] == "standard"  # défaut appliqué (jamais "rich"/realtime)
+    assert out["voice"]["pitch"] == "medium"  # enum imbriqué retombé sur le défaut
+    assert out["attitude_default"] == "friendly"  # enum valide préservé
+
+
+def test_coerce_persona_still_rejects_garbage_without_identity():
+    """La leniency sur les enum ne doit PAS laisser passer une persona sans identité :
+    id/name/archetype/short_description sont des `str` requis (erreur missing/type,
+    pas literal) → toujours rejetée."""
+    svc = campaign_dossier_service
+    # Ni name/title/id : rejet immédiat (avant même la validation).
+    assert svc._coerce_persona({"importance": "high"}, "npc") is None
+    # archetype présent (saute la coercion legacy) mais id/name/short_description manquants :
+    # erreurs missing (str requis), pas literal → non poppées → rejet après nettoyage enum.
+    assert svc._coerce_persona({"archetype": "commanditaire", "importance": "high"}, "npc") is None
+
+
 @pytest.mark.asyncio
 async def test_forge_job_one_shot_scope_yields_single_chapter_and_session(async_client):
     campaign = await _create_campaign(async_client)

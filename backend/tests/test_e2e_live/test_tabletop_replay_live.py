@@ -490,3 +490,287 @@ async def test_live_llm_opening_weaves_contract_without_labels() -> None:
     # P3 — le LLM tisse le contrat en fiction sans recopier l'étiquette du brief.
     assert "Accroche" not in narration, f"étiquette recopiée dans l'ouverture : {narration!r}"
     assert "Mission confiée" not in narration, f"étiquette dans l'ouverture : {narration!r}"
+
+
+def _proper_noun_tokens(name: str) -> list[str]:
+    """Tokens d'un nom ressemblant à des noms propres (cohérence hook↔persona↔narration)."""
+    stop = {
+        "le",
+        "la",
+        "les",
+        "du",
+        "de",
+        "des",
+        "un",
+        "une",
+        "sir",
+        "dame",
+        "messire",
+        "dom",
+        "frere",
+        "frère",
+        "soeur",
+        "sœur",
+        "capitaine",
+        "marchand",
+        "marchande",
+        "pretre",
+        "prêtre",
+        "pretresse",
+        "prêtresse",
+        "noble",
+        "seigneur",
+        "roi",
+        "reine",
+        "guilde",
+        "archiviste",
+        "maitre",
+        "maître",
+        "intendant",
+        "intendante",
+        "baron",
+        "baronne",
+        "comte",
+        "comtesse",
+        "abbe",
+        "abbé",
+        "doyen",
+        "doyenne",
+        "magistrat",
+    }
+    tokens = re.findall(r"[A-Za-zÀ-ÿ]{3,}", name)
+    return [t for t in tokens if t.lower() not in stop]
+
+
+@pytest.mark.live_llm
+async def test_live_llm_forge_names_commissioner_and_opening_incarnates(db_session) -> None:
+    """R4/N6 + N3 bout-en-bout : forge RÉELLE → ouverture RÉELLE.
+
+    Forge une campagne « groupe engagé » avec le vrai LLM, puis vérifie :
+      - FORME des données : commanditaire NOMMÉ dans important_npcs ET dans le hook
+        (cohérence), objective_endpoint par chapitre, region_map semé (départ
+        `current` + endpoint `rumored` + arête visible) ;
+      - FIDÉLITÉ de l'ouverture LIVE : la narration NOMME le commanditaire et ne
+        retombe pas sur « vos employeurs » anonyme, sans étiquette de fiche.
+    """
+    import uuid
+
+    from app.api.routes_game import _build_opening_brief
+    from app.models.campaign import Campaign
+    from app.services import campaign_dossier_service as svc
+
+    session_id = f"live-forge-{uuid.uuid4().hex[:8]}"
+    campaign = Campaign(
+        name="L'Escorte des Cendres",
+        description=(
+            "Un riche marchand engage une petite bande d'aventuriers pour escorter "
+            "une cargaison précieuse jusqu'à une cité lointaine, à travers des terres "
+            "infestées de pillards."
+        ),
+        session_ids=[session_id],
+        current_session_index=0,
+    )
+    db_session.add(campaign)
+    await db_session.commit()
+    await db_session.refresh(campaign)
+
+    brief = {"pitch": campaign.description, "title": campaign.name}
+    options = {"narrative_structure": "epic_5_acts", "scope": "one-shot", "starting_level": 1}
+
+    dossier = await svc._run_forge_job(uuid.uuid4().hex, campaign.id, brief, options, db_session)
+    gm_dossier = dossier.gm_dossier
+    contract = dossier.player_contract
+    hook = str(contract.get("hook") or "")
+    important_npcs = list(gm_dossier.get("important_npcs") or [])
+
+    print("\n================ FORGE: HOOK ================")
+    print(hook)
+    print("================ IMPORTANT_NPCS ================")
+    for npc in important_npcs:
+        print(
+            f"- {npc.get('name')} | archetype={npc.get('archetype')} | "
+            f"attitude={npc.get('attitude_default')} | "
+            f"visible={npc.get('motivations', {}).get('visible')}"
+        )
+
+    # --- Acceptance #1 : commanditaire NOMMÉ dans important_npcs ---
+    assert important_npcs, "la forge doit produire des important_npcs (commanditaire compris)"
+    commissioner = next(
+        (n for n in important_npcs if "commanditaire" in str(n.get("archetype") or "").casefold()),
+        None,
+    )
+    if commissioner is None:  # repli : le PNJ dont le nom propre apparaît dans le hook
+        for npc in important_npcs:
+            tokens = _proper_noun_tokens(str(npc.get("name") or ""))
+            if any(t.lower() in hook.lower() for t in tokens):
+                commissioner = npc
+                break
+    assert commissioner is not None, (
+        "aucun commanditaire identifiable dans important_npcs: "
+        f"{[(n.get('name'), n.get('archetype')) for n in important_npcs]}"
+    )
+    commissioner_name = str(commissioner.get("name") or "").strip()
+    name_tokens = _proper_noun_tokens(commissioner_name)
+    assert name_tokens, f"le commanditaire doit avoir un nom propre: {commissioner_name!r}"
+
+    # --- Gate (advisor) : le hook NOMME le commanditaire (cohérence hook↔persona) ---
+    assert any(t.lower() in hook.lower() for t in name_tokens), (
+        f"le hook ne nomme pas le commanditaire {commissioner_name!r}: {hook!r}"
+    )
+    hook_low = hook.lower()
+    for anon in ("vos employeurs", "votre employeur", "vos patrons", "votre patron"):
+        assert anon not in hook_low, f"hook avec employeur anonyme ({anon!r}): {hook!r}"
+
+    # --- N3 : objective_endpoint par chapitre ---
+    chapters = list(gm_dossier.get("chapters") or [])
+    assert chapters, "le dossier doit porter au moins un chapitre"
+    endpoint = chapters[0].get("objective_endpoint") or {}
+    print("================ OBJECTIVE_ENDPOINT (ch.1) ================")
+    print(endpoint)
+    assert isinstance(endpoint, dict) and str(endpoint.get("name") or "").strip(), (
+        f"chapitre sans objective_endpoint nommé: {endpoint!r}"
+    )
+    assert str(endpoint.get("kind") or "").strip(), "objective_endpoint sans kind"
+
+    # --- N3 : region_map semé (départ current + endpoint rumored + arête visible) ---
+    region_map = gm_dossier.get("region_map") or {}
+    nodes = list(region_map.get("nodes") or [])
+    edges = list(region_map.get("edges") or [])
+    statuses = {str(n.get("status") or "") for n in nodes}
+    print("================ REGION_MAP ================")
+    print("nodes:", [(n.get("name"), n.get("status")) for n in nodes])
+    print("edges:", [(e.get("from"), e.get("to"), e.get("kind"), e.get("hidden")) for e in edges])
+    assert "current" in statuses, f"region_map sans nœud `current`: {statuses}"
+    assert "rumored" in statuses, f"region_map sans endpoint `rumored`: {statuses}"
+    assert any(not e.get("hidden") for e in edges), "region_map sans arête visible vers l'endpoint"
+
+    # --- Ouverture LIVE via le VRAI chemin de surfaçage (gm_private_context) ---
+    await svc.validate_contract(campaign.id, contract, db_session)
+    campaign_context = await svc.compile_campaign_context_for_session(session_id, db_session)
+    assert campaign_context is not None
+    opening_scene = (campaign_context.get("active_chapter") or {}).get("opening_scene") or {}
+    state_data = {
+        "characters": {"thorvald": {"name": "Thorvald", "level": 1, "is_ai": False}},
+        "adventure_journal": {
+            "location_region": str(opening_scene.get("region") or ""),
+            "location_place": str(opening_scene.get("place") or "un lieu de départ"),
+            "time_of_day": str(opening_scene.get("time_of_day") or "morning"),
+            "day_number": 1,
+        },
+        "campaign_context": campaign_context,
+    }
+    gm_prompt_context = await svc.build_gm_prompt_context(session_id, db_session, state_data)
+    assert gm_prompt_context.get("important_npcs"), "important_npcs doit remonter côté MJ privé"
+    prompt_state = dict(state_data)
+    prompt_state["_gm_prompt_context"] = gm_prompt_context
+
+    opening_brief = _build_opening_brief(state_data)
+    assert "Accroche publique" in opening_brief
+    response = await GMAgent().open_scene(game_state=prompt_state, opening_brief=opening_brief)
+    narration = str(getattr(response, "narration", "") or "")
+
+    print("================ OUVERTURE (narration LIVE) ================")
+    print(narration)
+    print("================ known_objectives ================")
+    print(contract.get("known_objectives"))
+    print("============================================================\n")
+
+    assert narration.strip(), "le LLM doit produire une ouverture jouable"
+    assert narration != _FALLBACK_NARRATION, (
+        "Le LLM configuré ne répond pas : les replays live doivent échouer explicitement."
+    )
+    # R4/N6 : la narration NOMME le commanditaire (pas « vos employeurs »).
+    narration_low = narration.lower()
+    assert any(t.lower() in narration_low for t in name_tokens), (
+        f"l'ouverture ne nomme pas le commanditaire {commissioner_name!r}:\n{narration}"
+    )
+    for anon in ("vos employeurs", "votre employeur", "vos patrons", "votre patron"):
+        assert anon not in narration_low, f"employeur anonyme ({anon!r}):\n{narration}"
+    # P3 : pas d'étiquette de fiche dans la narration.
+    assert "Accroche" not in narration, f"étiquette dans l'ouverture:\n{narration}"
+    assert "Mission confiée" not in narration, f"étiquette dans l'ouverture:\n{narration}"
+    assert not re.search(r"Commanditaire\s*:", narration), f"étiquette commanditaire:\n{narration}"
+
+
+@pytest.mark.live_llm
+async def test_live_llm_opening_names_absent_commissioner_without_materializing() -> None:
+    """R4/N6 — cas « named-but-absent » : le commanditaire est ABSENT de la scène
+    (groupe déjà en route, ``present_npcs=[]``) mais nommé dans le hook + le dossier MJ.
+
+    Discrimine le renfort `gm_open_scene.txt:27` : NOMMER le commanditaire comme source
+    HORS-SCÈNE de la mission ≠ le matérialiser. Le run forge réel l'avait placé présent
+    au campement de départ (cas facile) ; ici on prouve qu'il est cité même absent, sans
+    retomber sur « vos employeurs » et sans le faire surgir physiquement.
+    """
+    from app.api.routes_game import _build_opening_brief
+
+    commissioner = {
+        "id": "veyra_alenne",
+        "name": "la marchande Veyra Alenne",
+        "archetype": "commanditaire",
+        "short_description": "Marchande prudente qui a financé l'expédition depuis Sel-d'Ambre.",
+        "voice": {"gender": "female", "age_range": "adult", "speech_register": "formal"},
+        "motivations": {"visible": ["Récupérer sa cargaison disparue avant la foire"]},
+        "importance": "standard",
+        "persona_type": "npc",
+        "attitude_default": "friendly",
+        "quest_hooks": ["Prime promise au retour de la cargaison"],
+    }
+    game_state = {
+        "characters": {"thorvald": {"name": "Thorvald", "level": 1, "is_ai": False}},
+        "adventure_journal": {
+            "location_region": "Les Marches Grises",
+            "location_place": "Piste forestière, loin de toute ville",
+            "time_of_day": "afternoon",
+            "day_number": 2,
+        },
+        "campaign_context": {
+            "player_contract": {
+                "hook": (
+                    "La marchande Veyra Alenne vous a engagés à Sel-d'Ambre pour retrouver "
+                    "sa cargaison disparue sur la piste des Marches Grises avant la foire."
+                ),
+                "known_objectives": ["Retrouver la cargaison disparue de Veyra Alenne"],
+            },
+            "active_chapter": {
+                "opening_scene": {
+                    "region": "Les Marches Grises",
+                    "place": "Piste forestière, loin de toute ville",
+                    "description": (
+                        "La piste s'enfonce sous des pins serrés ; l'ornière est fraîche, "
+                        "creusée de roues lourdes."
+                    ),
+                    "present_npcs": [],  # commanditaire ABSENT de la scène
+                    "visible_clues": [],
+                    "exits": [],
+                },
+            },
+        },
+        # Surfaçage MJ réel : la persona du commanditaire vit dans gm_private_context.
+        "_gm_prompt_context": {"important_npcs": [commissioner]},
+    }
+
+    opening_brief = _build_opening_brief(game_state)
+    assert "Accroche publique" in opening_brief
+    assert "PNJ présents" not in opening_brief, (
+        "garde : le commanditaire doit rester absent de la scène"
+    )
+
+    response = await GMAgent().open_scene(game_state=game_state, opening_brief=opening_brief)
+    narration = str(getattr(response, "narration", "") or "")
+
+    print("\n========= OUVERTURE (commanditaire ABSENT, narration LIVE) =========")
+    print(narration)
+    print("====================================================================\n")
+
+    assert narration.strip(), "le LLM doit produire une ouverture jouable"
+    assert narration != _FALLBACK_NARRATION, (
+        "Le LLM configuré ne répond pas : les replays live doivent échouer explicitement."
+    )
+    narration_low = narration.lower()
+    # Cœur du cas : le commanditaire absent est NOMMÉ (pas « vos employeurs »).
+    assert "veyra" in narration_low, f"commanditaire absent NON nommé:\n{narration}"
+    for anon in ("vos employeurs", "votre employeur", "vos patrons", "votre patron"):
+        assert anon not in narration_low, f"employeur anonyme ({anon!r}):\n{narration}"
+    assert "Accroche" not in narration, f"étiquette dans l'ouverture:\n{narration}"
+    assert not re.search(r"Commanditaire\s*:", narration), f"étiquette commanditaire:\n{narration}"
