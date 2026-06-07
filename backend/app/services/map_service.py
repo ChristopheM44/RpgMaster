@@ -231,6 +231,41 @@ def _seed_node_id(label: str, fallback: str) -> str:
     return slug or fallback
 
 
+def seed_node_id(label: str, fallback: str) -> str:
+    """Slug stable d'un nœud semé, partagé par le seed de forge (N3) et le seed
+    d'ouverture (``routes_game._opening_response``).
+
+    Exposé pour que les DEUX chemins de seeding produisent le MÊME id pour un même
+    lieu — sinon ils créent des nœuds doublons (ex. ``le_chemin_des_p_lerins`` côté
+    forge vs ``chemin_pelerins`` côté ouverture) et la fusion pollue la carte.
+    """
+    return _seed_node_id(label, fallback)
+
+
+def seed_endpoint_node(endpoint: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Champs canoniques ``{id, name, kind, hint}`` pour un ``objective_endpoint``.
+
+    Source unique partagée entre ``build_seed_region_map`` (forge N3) et le seed
+    d'ouverture : garantit que le nœud-objectif ``rumored`` porte le NOM du lieu
+    (non-spoiler) et non le texte brut de l'objectif. Renvoie ``None`` si l'endpoint
+    n'a pas de nom utilisable (pas de nœud-objectif).
+    """
+    if not isinstance(endpoint, dict):
+        return None
+    name = str(endpoint.get("name") or "").strip()
+    if not name:
+        return None
+    kind = str(endpoint.get("kind") or "").strip().lower()
+    if kind not in _SEED_REGION_NODE_KINDS:
+        kind = "landmark"
+    return {
+        "id": _seed_node_id(name, "objectif"),
+        "name": name,
+        "kind": kind,
+        "hint": str(endpoint.get("hint") or "").strip() or None,
+    }
+
+
 def public_region_map(region_map: dict[str, Any] | None) -> dict[str, Any] | None:
     if not isinstance(region_map, dict):
         return None

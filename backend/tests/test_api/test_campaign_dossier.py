@@ -1166,3 +1166,55 @@ async def test_forge_dossier_seeds_region_map_from_objective_endpoint(async_clie
         node["name"] == "La Crypte du Cœur" and node["status"] == "rumored"
         for node in region_map["nodes"]
     )
+
+
+def test_cap_forged_monsters_to_party_level_substitutes_overpowered_boss() -> None:
+    """#7 : un boss CR 5 (shambling_mound) forgé pour un groupe niveau 1 est abaissé."""
+    from app.engine.encounter_builder import monster_cr
+    from app.engine.srd_data import get_monsters
+
+    gm_dossier = {
+        "custom_monsters": [
+            {
+                "id": "corrupted_guardian",
+                "base_srd_id": "shambling_mound",
+                "name": "Gardien Corrompu",
+                "stat_overrides": {"cr": None, "hp": None, "ac": None},
+            }
+        ],
+        "bestiary": [{"name": "Gardien", "monster_srd_id": "shambling_mound"}],
+        "chapters": [
+            {"id": "chapter_1", "possible_srd_encounters": ["shambling_mound", "aigle"]}
+        ],
+    }
+
+    campaign_dossier_service._cap_forged_monsters_to_party_level(gm_dossier, 1)
+
+    monsters = get_monsters()
+    max_cr = 3.0  # niveau 1 + 2
+
+    new_base = gm_dossier["custom_monsters"][0]["base_srd_id"]
+    assert new_base != "shambling_mound"
+    assert (monster_cr(new_base, monsters) or 0) <= max_cr
+
+    new_bestiary = gm_dossier["bestiary"][0]["monster_srd_id"]
+    assert new_bestiary != "shambling_mound"
+    assert (monster_cr(new_bestiary, monsters) or 0) <= max_cr
+
+    enc = gm_dossier["chapters"][0]["possible_srd_encounters"]
+    assert "shambling_mound" not in enc
+    assert "aigle" in enc  # CR 0, déjà dans la tranche → conservé
+
+
+def test_cap_forged_monsters_leaves_in_band_boss_untouched() -> None:
+    """Un boss déjà adapté au niveau n'est pas modifié."""
+    gm_dossier = {
+        "custom_monsters": [
+            {"id": "ogre_boss", "base_srd_id": "ogre", "stat_overrides": {}}
+        ],
+        "bestiary": [],
+        "chapters": [],
+    }
+    # ogre = CR 2 ; pour un groupe niveau 1 (plafond 3) il reste tel quel.
+    campaign_dossier_service._cap_forged_monsters_to_party_level(gm_dossier, 1)
+    assert gm_dossier["custom_monsters"][0]["base_srd_id"] == "ogre"

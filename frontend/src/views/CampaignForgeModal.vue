@@ -22,7 +22,7 @@ type ImportKind = 'url' | 'text' | 'file_text'
 const TONES = ['Dark fantasy', 'Mystère', 'Politique', 'Exploration', 'Combat tactique', 'Romance', 'Cosmique']
 const OPTIONS_AMBIANCE = [
   'High fantasy (Magie & Héroïsme)',
-  'Dark fantasy (Survie & Corruption)',
+  'Dark fantasy (Survie & Ténèbres)',
   'Low fantasy (Magie rare & Réalisme)',
   'Sword & Sorcery (Magie occulte & Cités antiques)',
   'Dungeon crawler (Ruines & Souterrains)',

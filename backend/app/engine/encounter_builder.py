@@ -116,6 +116,82 @@ def assess_difficulty(party_levels: list[int], monster_xp_list: list[int]) -> st
     return "deadly"
 
 
+def _as_cr(value: Any) -> float | None:
+    """Coerce a SRD ``cr`` field (int/float/'1/2' string) to a float, or None."""
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    text = str(value).strip()
+    if not text:
+        return None
+    if "/" in text:
+        num, _, den = text.partition("/")
+        try:
+            return float(num) / float(den)
+        except (ValueError, ZeroDivisionError):
+            return None
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def max_solo_cr_for_party_level(level: int) -> float:
+    """CR plafond raisonnable pour un monstre signature SEUL face à un groupe à ce niveau.
+
+    Volontairement conservateur aux bas niveaux : un CR 5 (shambling mound) lâché sur
+    un groupe niveau 1 (~4× le budget mortel) provoque un TPK. ``level + 2`` est un
+    PLAFOND de garde-fou (≈ « deadly » solo), pas une cible — le contenu reste libre
+    en dessous. Garde-fou côté forge uniquement (cf. choix produit #7).
+    """
+    lvl = max(1, min(20, int(level)))
+    return float(lvl + 2)
+
+
+def monster_cr(monster_id: str, monsters: list[dict[str, Any]]) -> float | None:
+    """CR d'un monstre SRD par id, ou None si inconnu."""
+    for monster in monsters:
+        if str(monster.get("id") or "") == monster_id:
+            return _as_cr(monster.get("cr"))
+    return None
+
+
+def cr_appropriate_substitute(
+    monster_id: str,
+    monsters: list[dict[str, Any]],
+    max_cr: float,
+) -> str | None:
+    """Renvoie un id SRD adapté au plafond de CR pour remplacer ``monster_id``.
+
+    - Si ``monster_id`` est inconnu : ``None`` (le caller garde l'original).
+    - Si son CR est déjà ``<= max_cr`` : renvoie ``monster_id`` inchangé.
+    - Sinon : renvoie l'id du monstre de CR le plus haut ``<= max_cr``, en préférant
+      le MÊME type (plante→plante…), repli sur tout type ; ``None`` si aucun candidat.
+    """
+    by_id = {str(m.get("id") or ""): m for m in monsters if m.get("id")}
+    current = by_id.get(monster_id)
+    if current is None:
+        return None
+    cur_cr = _as_cr(current.get("cr"))
+    if cur_cr is None or cur_cr <= max_cr:
+        return monster_id
+
+    cur_type = str(current.get("type") or "").lower()
+    candidates = [
+        (str(m.get("id")), cr, str(m.get("type") or "").lower())
+        for m in monsters
+        if (cr := _as_cr(m.get("cr"))) is not None and cr <= max_cr and m.get("id")
+    ]
+    if not candidates:
+        return None
+    same_type = [c for c in candidates if c[2] == cur_type]
+    pool = same_type or candidates
+    # CR le plus haut sous le plafond ; départage déterministe par id.
+    best = max(pool, key=lambda c: (c[1], c[0]))
+    return best[0]
+
+
 def _first_attack_action(monster: dict[str, Any]) -> dict[str, Any]:
     """Return the first action that has an attack_bonus, or empty dict."""
     for action in monster.get("actions", []):

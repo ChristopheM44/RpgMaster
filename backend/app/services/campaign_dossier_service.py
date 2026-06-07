@@ -1118,6 +1118,10 @@ async def _run_forge_job(
         gm_raw = dict(global_indexes)
         gm_raw["chapters"] = private_chapters
     gm_dossier = sanitize_gm_dossier(gm_raw, campaign, contract)
+    _cap_forged_monsters_to_party_level(
+        gm_dossier,
+        int(getattr(campaign, "starting_level", 1) or 1),
+    )
     _validate_chapter_alignment(contract, gm_dossier)
     active_chapter_id = str(outline.get("active_chapter_id") or "").strip()
     if not active_chapter_id:
@@ -2286,6 +2290,101 @@ def _sanitize_custom_items(value: Any, cap: int = 50) -> list[dict[str, Any]]:
         if len(out) >= cap:
             break
     return out
+
+
+def _cap_forged_monsters_to_party_level(gm_dossier: dict[str, Any], party_level: int) -> None:
+    """Abaisse les monstres forgés trop puissants pour le niveau de départ (#7).
+
+    Garde-fou côté FORGE uniquement (cf. choix produit) : substitue le
+    ``base_srd_id`` / ``monster_srd_id`` / les rencontres SRD dont le CR dépasse le
+    plafond du niveau, au lieu de bricoler les stats à la main. Mutation en place.
+    N'affecte que les chroniques en cours de génération (pas le rejeu).
+    """
+    from app.engine.encounter_builder import (  # noqa: PLC0415
+        cr_appropriate_substitute,
+        max_solo_cr_for_party_level,
+        monster_cr,
+    )
+    from app.engine.srd_data import get_monsters  # noqa: PLC0415
+
+    if not isinstance(gm_dossier, dict):
+        return
+    monsters = get_monsters()
+    max_cr = max_solo_cr_for_party_level(party_level)
+
+    def _num_or_none(value: Any) -> float | None:
+        return float(value) if isinstance(value, (int, float)) else None
+
+    def _over(srd_id: Any, override_cr: Any) -> bool:
+        if not srd_id:
+            return False
+        eff = _num_or_none(override_cr)
+        if eff is None:
+            eff = monster_cr(str(srd_id), monsters)
+        return eff is not None and eff > max_cr
+
+    # 1. Monstres custom : substitue la base et neutralise les overrides numériques
+    #    (pour hériter de la base abaissée plutôt que de garder des stats trop hautes).
+    for cm in gm_dossier.get("custom_monsters") or []:
+        if not isinstance(cm, dict):
+            continue
+        base_id = cm.get("base_srd_id")
+        overrides = cm.get("stat_overrides") if isinstance(cm.get("stat_overrides"), dict) else {}
+        if not _over(base_id, overrides.get("cr")):
+            continue
+        sub = cr_appropriate_substitute(str(base_id), monsters, max_cr)
+        if not sub or sub == base_id:
+            continue
+        logger.warning(
+            "Forge: monstre custom '%s' (base %s) au-dessus du plafond CR %.2f pour "
+            "niveau %s → base abaissée sur %s.",
+            cm.get("id"),
+            base_id,
+            max_cr,
+            party_level,
+            sub,
+        )
+        cm["base_srd_id"] = sub
+        for key in ("cr", "xp", "hp", "ac", "attack_bonus", "damage_dice"):
+            if key in overrides:
+                overrides[key] = None
+        cm["stat_overrides"] = overrides
+
+    # 2. Bestiaire (personas de monstre liées à un id SRD).
+    for mp in gm_dossier.get("bestiary") or []:
+        if not isinstance(mp, dict):
+            continue
+        sid = mp.get("monster_srd_id")
+        if not _over(sid, None):
+            continue
+        sub = cr_appropriate_substitute(str(sid), monsters, max_cr)
+        if sub and sub != sid:
+            logger.warning(
+                "Forge: bestiaire '%s' au-dessus du plafond CR %.2f niveau %s → %s.",
+                sid,
+                max_cr,
+                party_level,
+                sub,
+            )
+            mp["monster_srd_id"] = sub
+
+    # 3. Rencontres SRD possibles par chapitre (mooks).
+    for chapter in gm_dossier.get("chapters") or []:
+        if not isinstance(chapter, dict):
+            continue
+        enc = chapter.get("possible_srd_encounters")
+        if not isinstance(enc, list):
+            continue
+        capped: list[str] = []
+        for raw_id in enc:
+            mid = str(raw_id)
+            if not _over(mid, None):
+                capped.append(mid)
+                continue
+            sub = cr_appropriate_substitute(mid, monsters, max_cr)
+            capped.append(sub if sub else mid)
+        seen: set[str] = set()
+        chapter["possible_srd_encounters"] = [m for m in capped if not (m in seen or seen.add(m))]
 
 
 def _sanitize_custom_monsters(value: Any, cap: int = 50) -> list[dict[str, Any]]:

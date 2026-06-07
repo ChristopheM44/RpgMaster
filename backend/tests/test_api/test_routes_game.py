@@ -81,6 +81,115 @@ def test_opening_response_uses_opening_scene_as_physical_scene() -> None:
     assert any(exit_["leads_to"] == "trouver_source_malediction" for exit_ in scene.params["exits"])
 
 
+def test_opening_region_map_objective_node_uses_endpoint_not_objective_text() -> None:
+    """N3 : le seed d'ouverture doit s'aligner sur le seed de forge.
+
+    Le nœud-objectif ``rumored`` porte le NOM du lieu (``objective_endpoint.name``,
+    non-spoiler) et le MÊME id que ``build_seed_region_map`` — jamais le texte brut de
+    l'objectif. Sinon la fusion avec le seed N3 crée un nœud poubelle + des doublons.
+    """
+    from app.api.routes_game import _opening_response
+    from app.services import map_service
+
+    active = SimpleNamespace(state_data={"characters": {"thorvald": {"name": "Thorvald"}}})
+    endpoint = {
+        "name": "Le Sanctuaire d'Émeraude",
+        "kind": "ruin",
+        "hint": "Suivre le ruisseau vers le nord.",
+    }
+    campaign_context = {
+        "active_chapter": {
+            "objective_endpoint": endpoint,
+            "opening_scene": {
+                "region": "Plaines de Val-Vert",
+                "place": "Lisière du domaine corrompu",
+                "venue": "Le Chemin des Pèlerins",
+                "description": "Des oiseaux gisent dans l'herbe visqueuse.",
+            },
+        },
+        "player_contract": {
+            "hook": "La prêtresse vous mandate.",
+            "known_objectives": [
+                "Localiser la source de la corruption dans le sanctuaire et l'éradiquer."
+            ],
+        },
+    }
+
+    response = _opening_response(active, campaign_context=campaign_context)
+    region = _action_by_type(response.actions, "region_map_update")
+    assert region is not None
+    nodes = region.params["nodes_upsert"]
+
+    # Le nœud-objectif doit matcher le seed de forge (même id + nom de lieu).
+    expected_obj_id = map_service.seed_node_id("Le Sanctuaire d'Émeraude", "objectif")
+    expected_start_id = map_service.seed_node_id("Le Chemin des Pèlerins", "lieu_depart")
+    objective_nodes = [n for n in nodes if n.get("status") == "rumored"]
+    assert len(objective_nodes) == 1
+    obj = objective_nodes[0]
+    assert obj["id"] == expected_obj_id
+    assert obj["name"] == "Le Sanctuaire d'Émeraude"
+    assert obj["kind"] == "ruin"
+
+    # Le départ doit porter le même id que le seed de forge (pas de doublon).
+    assert region.params["current_node_id"] == expected_start_id
+    assert any(n["id"] == expected_start_id and n["status"] == "current" for n in nodes)
+
+    # Aucun nœud ne porte le texte brut de l'objectif (plus de nœud poubelle).
+    assert all("Localiser la source" not in str(n.get("name", "")) for n in nodes)
+
+
+def test_opening_seed_merges_idempotently_with_n3_forge_seed() -> None:
+    """N3 (intégration) : le patch d'ouverture fusionné SUR le seed de forge ne crée
+    ni nœud poubelle (texte d'objectif) ni doublon — il reste 2 nœuds (départ+objectif).
+    """
+    from app.api.routes_game import _opening_response
+    from app.services.map_service import build_seed_region_map, merge_region_map_patch
+
+    endpoint = {
+        "name": "Le Sanctuaire d'Émeraude",
+        "kind": "ruin",
+        "hint": "Suivre le ruisseau vers le nord.",
+    }
+    venue = "Le Chemin des Pèlerins"
+
+    # 1) Seed de forge (N3) déjà présent dans gm_dossier.region_map.
+    forge_seed = build_seed_region_map(venue, endpoint)
+    assert forge_seed is not None
+
+    # 2) Patch d'ouverture émis au démarrage de session.
+    active = SimpleNamespace(state_data={"characters": {"thorvald": {"name": "Thorvald"}}})
+    campaign_context = {
+        "active_chapter": {
+            "objective_endpoint": endpoint,
+            "opening_scene": {
+                "region": "Plaines de Val-Vert",
+                "place": "Lisière du domaine corrompu",
+                "venue": venue,
+                "description": "Des oiseaux gisent dans l'herbe visqueuse.",
+            },
+        },
+        "player_contract": {
+            "hook": "La prêtresse vous mandate.",
+            "known_objectives": ["Localiser la source de la corruption et l'éradiquer."],
+        },
+    }
+    response = _opening_response(active, campaign_context=campaign_context)
+    region_action = _action_by_type(response.actions, "region_map_update")
+    assert region_action is not None
+
+    # 3) Fusion ouverture → seed de forge (comme en jeu via merge_region_map_patch).
+    merged = merge_region_map_patch(forge_seed, region_action.params)
+    nodes = merged["nodes"]
+
+    assert len(nodes) == 2  # départ + objectif, pas 4 (avant : doublons + poubelle)
+    rumored = [n for n in nodes if n.get("status") == "rumored"]
+    current = [n for n in nodes if n.get("status") == "current"]
+    assert len(rumored) == 1
+    assert rumored[0]["name"] == "Le Sanctuaire d'Émeraude"
+    assert len(current) == 1
+    assert all("Localiser la source" not in str(n.get("name", "")) for n in nodes)
+
+
 def test_opening_response_does_not_add_route_exit_inside_square() -> None:
     from app.api.routes_game import _opening_response
 

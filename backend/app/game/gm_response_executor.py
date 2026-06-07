@@ -24,6 +24,7 @@ from app.config import (
     get_image_provider,
 )
 from app.engine.srd_data import find_equipment
+from app.game import companion_refs
 from app.game.event_bus import EventType, event_bus
 from app.game.scene_theme import coerce_scene_theme
 from app.game.session_manager import ActiveSession
@@ -164,7 +165,19 @@ class GMResponseExecutor:
                 continue
 
             if gm_action.type == "roll_request":
-                roll_evt = self.execute_roll_request(params, fallback_actor_id, active)
+                # Si le MJ n'a pas désigné de cible et que l'action joueur adresse un
+                # compagnon (« @shade examine… »), le jet revient à CE compagnon, pas à
+                # l'humain émetteur (bug #3). Même détecteur que le routage de narration.
+                roll_fallback = fallback_actor_id
+                if not params.get("target"):
+                    player_action = str((provenance_context or {}).get("player_action") or "")
+                    addressed = companion_refs.find_mentioned_companion(
+                        player_action,
+                        companion_refs.companion_index(active),
+                    )
+                    if addressed:
+                        roll_fallback = addressed
+                roll_evt = self.execute_roll_request(params, roll_fallback, active)
                 if roll_evt:
                     result.pending_rolls.append(roll_evt)
                     await self._event_bus.publish_to_session(

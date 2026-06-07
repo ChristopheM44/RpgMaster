@@ -31,7 +31,7 @@ Contraintes absolues :
 - "present_npcs[].description" décrit apparence visible, posture et/ou voix en 1-2 phrases.
 - "visible_clues[].description" doit être sensoriel et examinable.
 - Les chapitres sont des situations ouvertes, pas des scripts rigides.
-- Pour `possible_srd_encounters`, utilise uniquement des `id` présents dans l'index SRD compact.
+- Pour `possible_srd_encounters`, utilise uniquement des `id` présents dans l'index SRD compact, de CR adapté au niveau de départ du groupe (`options.starting_level`, champ `cr` dans l'index) : des créatures affrontables, jamais un monstre de CR très supérieur au niveau du groupe.
 - Pour une créature custom définie dans les index globaux, utilise `possible_custom_encounters` avec l'id custom sans préfixe.
 
 Réponds avec un seul objet JSON valide, sans markdown :

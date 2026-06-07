@@ -556,6 +556,63 @@ class TestPipelineExecutorUnits:
             "Les traces confirment un passage recent."
         )
 
+    def _active_with_companion(self) -> ActiveSession:
+        active = ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.EXPLORATION,
+            state_data={
+                "characters": {
+                    "hero_1": {"name": "Thorvald", "level": 1, "ability_scores": {"int": 10}},
+                    "shade": {"name": "Shade", "level": 1, "ability_scores": {"int": 16}},
+                },
+            },
+        )
+        active.ai_players = {"shade": MagicMock(character_name="Shade")}
+        return active
+
+    async def test_roll_request_attributed_to_addressed_companion(self) -> None:
+        """#3 : « @shade examine… » sans target → le jet revient à Shade, pas à l'humain."""
+        active = self._active_with_companion()
+        bus = _FakeBus()
+        response = AgentResponse(
+            content="Shade s'accroupit au bord du ruisseau.",
+            actions=[
+                GMAction(type="roll_request", params={"skill": "investigation", "dc": 10})
+            ],
+        )
+        await GMResponseExecutor(bus).execute_gm_response(
+            response,
+            active,
+            session_id=SESSION_ID,
+            fallback_actor_id="hero_1",
+            provenance_context={"player_action": "@shade vas examiner le ruisseau"},
+        )
+        rolls = [p for et, p in bus.published if et == EventType.ROLL_RESULT]
+        assert rolls
+        assert rolls[0]["character_id"] == "shade"
+        assert rolls[0]["character_name"] == "Shade"
+
+    async def test_roll_request_without_mention_stays_on_human(self) -> None:
+        """Sans @mention ni nom en tête, le jet reste sur l'humain émetteur."""
+        active = self._active_with_companion()
+        bus = _FakeBus()
+        response = AgentResponse(
+            content="Thorvald inspecte les traces.",
+            actions=[
+                GMAction(type="roll_request", params={"skill": "investigation", "dc": 10})
+            ],
+        )
+        await GMResponseExecutor(bus).execute_gm_response(
+            response,
+            active,
+            session_id=SESSION_ID,
+            fallback_actor_id="hero_1",
+            provenance_context={"player_action": "J'examine le ruisseau"},
+        )
+        rolls = [p for et, p in bus.published if et == EventType.ROLL_RESULT]
+        assert rolls
+        assert rolls[0]["character_id"] == "hero_1"
+
     async def test_false_player_gold_assertion_cannot_grant_currency(self, db_session) -> None:
         char = Character(
             name="Aria",
