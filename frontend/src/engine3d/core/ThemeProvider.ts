@@ -199,8 +199,8 @@ export const AMBIANCE_PRESETS: Record<AmbianceLight, AmbiancePreset> = {
     sunColor: '#7a8fc0', sunIntensity: 0.55, sunElevation: 0.8, pointLights: true,
   },
   torchlit: {
-    hemiSky: '#4a3a30', hemiGround: '#0c0a08', hemiIntensity: 0.42,
-    sunColor: '#ffb070', sunIntensity: 0.4, sunElevation: 0.9, pointLights: true,
+    hemiSky: '#5a463a', hemiGround: '#14100c', hemiIntensity: 0.62,
+    sunColor: '#ffb070', sunIntensity: 0.55, sunElevation: 0.9, pointLights: true,
   },
   overcast: {
     hemiSky: '#9aa0aa', hemiGround: '#20202a', hemiIntensity: 0.8,

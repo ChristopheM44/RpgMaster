@@ -54,6 +54,8 @@ export const TONE_HEX: Record<string, string> = {
   blood: '#e84545',
   arcane: '#c090ff',
   ember: '#ff8247',
+  green: '#6fd96f',
+  muted: '#8d8775',
 }
 
 export interface SceneAdapterInput {
@@ -71,8 +73,16 @@ export function buildSceneSpec(input: SceneAdapterInput): SceneSpec {
   const dims = { cols, rows }
   const theme = (scene?.scene_theme ?? 'forest') as SceneTheme
 
-  const ground = buildGround(scene, cols, rows, theme)
-  const { elements, blockedCells } = buildElements(scene, input, dims)
+  const linkedElementIds = new Set<string>()
+  for (const poi of input.pois) {
+    if (poi.elementId) linkedElementIds.add(poi.elementId)
+  }
+  const ground = buildGroundSpec(scene, cols, rows, theme)
+  const { elements, blockedCells } = buildElementSpecs(scene?.elements ?? [], {
+    dims,
+    linkedElementIds,
+    selectedElementId: resolveSelectedElementId(input, scene?.elements ?? []),
+  })
   const tokens = buildTokens(input, blockedCells)
 
   return {
@@ -91,7 +101,8 @@ export function buildSceneSpec(input: SceneAdapterInput): SceneSpec {
   }
 }
 
-function buildGround(scene: SceneLayout | null, cols: number, rows: number, theme: SceneTheme): GroundSpec {
+/** Partagé exploration/combat : spec de sol depuis SceneLayout + défauts thème. */
+export function buildGroundSpec(scene: SceneLayout | null, cols: number, rows: number, theme: SceneTheme): GroundSpec {
   const rawLight = scene?.ambiance?.light
   const light: AmbianceLight = AMBIANCE_LIGHTS.includes(rawLight as AmbianceLight)
     ? (rawLight as AmbianceLight)
@@ -114,27 +125,26 @@ function buildGround(scene: SceneLayout | null, cols: number, rows: number, them
   }
 }
 
-function buildElements(
-  scene: SceneLayout | null,
-  input: SceneAdapterInput,
-  dims: { cols: number; rows: number },
+export interface ElementSpecOptions {
+  dims: { cols: number; rows: number }
+  /** Éléments liés à un POI/sortie — cliquables même sans `interactive`. */
+  linkedElementIds: Set<string>
+  selectedElementId: string | null
+}
+
+/** Partagé exploration/combat : SceneElement[] → ElementSpec[] + cellules occupées. */
+export function buildElementSpecs(
+  rawElements: SceneElement[],
+  options: ElementSpecOptions,
 ): { elements: ElementSpec[]; blockedCells: Set<string> } {
   const blockedCells = new Set<string>()
-  const raw = (scene?.elements ?? []).filter((element) => element.visibility !== 'hidden')
-
-  // Ids d'éléments liés à un POI/sortie — cliquables même sans `interactive`.
-  const linkedIds = new Set<string>()
-  for (const poi of input.pois) {
-    if (poi.elementId) linkedIds.add(poi.elementId)
-  }
-
-  const selectedElementId = resolveSelectedElementId(input, raw)
+  const raw = rawElements.filter((element) => element.visibility !== 'hidden')
 
   const elements = raw.map((element) => {
-    for (const cell of elementCells(element, dims)) {
+    for (const cell of elementCells(element, options.dims)) {
       blockedCells.add(`${cell.col},${cell.row}`)
     }
-    const interactive = Boolean(element.interactive || linkedIds.has(element.id))
+    const interactive = Boolean(element.interactive || options.linkedElementIds.has(element.id))
     return {
       id: element.id,
       name: element.name,
@@ -146,7 +156,7 @@ function buildElements(
       subtle: element.visibility === 'subtle' && !element.discovered,
       interactive,
       inspectable: isElementInspectable(element, interactive),
-      selected: element.id === selectedElementId,
+      selected: element.id === options.selectedElementId,
     }
   })
 

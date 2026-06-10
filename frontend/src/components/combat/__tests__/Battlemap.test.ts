@@ -6,6 +6,44 @@ import Battlemap from '../Battlemap.vue'
 import { useCharacterStore } from '../../../stores/character'
 import { useGameStore } from '../../../stores/game'
 import type { CombatantState, SceneLayout } from '../../../types'
+import type { PickResult, RuntimeCallbacks, SceneSpec } from '../../../engine3d/types'
+
+// Le moteur WebGL est mocké : les tests pilotent les callbacks de picking
+// exactement comme le ferait un clic 3D, et inspectent la spec passée.
+const { runtimeMock, harness } = vi.hoisted(() => {
+  const runtimeMock = {
+    update: vi.fn<(spec: SceneSpec) => void>(),
+    moveToken: vi.fn(),
+    projectCell: vi.fn(() => ({ x: 0, y: 0 })),
+    projectToken: vi.fn(() => ({ x: 0, y: 0 })),
+    setZoomPreset: vi.fn(),
+    setRunning: vi.fn(),
+    resize: vi.fn(),
+    dispose: vi.fn(),
+  }
+  const harness: { callbacks: RuntimeCallbacks | null } = { callbacks: null }
+  return { runtimeMock, harness }
+})
+
+vi.mock('../../../engine3d', () => ({
+  createSceneRuntime: (_canvas: HTMLCanvasElement, callbacks: RuntimeCallbacks) => {
+    harness.callbacks = callbacks
+    return runtimeMock
+  },
+}))
+
+async function flushEngineBoot(): Promise<void> {
+  // Laisse l'import dynamique du moteur (mocké) se résoudre.
+  await new Promise((resolve) => setTimeout(resolve, 0))
+}
+
+function latestSpec(): SceneSpec {
+  return runtimeMock.update.mock.calls.at(-1)?.[0] as SceneSpec
+}
+
+function pickOnMap(pick: PickResult): void {
+  harness.callbacks?.onClick?.(pick, { x: 0, y: 0 })
+}
 
 const scene: SceneLayout = {
   cols: 8,
@@ -129,6 +167,8 @@ function combatant(overrides: Partial<CombatantState>): CombatantState {
 describe('Battlemap', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    runtimeMock.update.mockClear()
+    harness.callbacks = null
     const store = new Map<string, string>()
     Object.defineProperty(window, 'localStorage', {
       configurable: true,
@@ -151,13 +191,18 @@ describe('Battlemap', () => {
         myCharacterId: 'hero',
       },
     })
+    await flushEngineBoot()
+    expect(harness.callbacks).not.toBeNull()
 
     expect(wrapper.text()).toContain('Porte de chêne')
     expect(wrapper.text()).toContain('Puits scellé')
     expect(wrapper.find('[data-testid="legend-icon-exit-door"][data-icon-id="door"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="map-icon-exit-door"][data-icon-id="door"]').exists()).toBe(true)
+    const exitToken = latestSpec().tokens.find((token) => token.id === 'door')
+    expect(exitToken?.kind).toBe('exit')
+    expect(exitToken?.iconId).toBe('door')
 
-    await wrapper.find('button[aria-label="Porte de chêne"]').trigger('click')
+    pickOnMap({ type: 'token', id: 'door', tokenKind: 'exit' })
+    await wrapper.vm.$nextTick()
 
     expect(wrapper.emitted('sceneExit')).toBeUndefined()
     expect(wrapper.text()).toContain('Une porte renforcée')
@@ -174,12 +219,16 @@ describe('Battlemap', () => {
         sceneLayout: scene,
       },
     })
+    await flushEngineBoot()
 
-    await wrapper.find('button[aria-label="Puits scellé"]').trigger('click')
+    pickOnMap({ type: 'token', id: 'well', tokenKind: 'poi' })
+    await wrapper.vm.$nextTick()
 
     expect(wrapper.emitted('scenePoi')).toBeUndefined()
     expect(wrapper.find('[data-testid="legend-icon-poi-well"][data-icon-id="trap-danger"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="map-icon-poi-well"][data-icon-id="trap-danger"]').exists()).toBe(true)
+    const wellToken = latestSpec().tokens.find((token) => token.id === 'well')
+    expect(wellToken?.kind).toBe('poi')
+    expect(wellToken?.iconId).toBe('trap-danger')
     expect(wrapper.text()).toContain('Une brume froide')
     expect(wrapper.text()).toContain('Observer à distance')
     expect(wrapper.text()).toContain('Contourner')
@@ -206,8 +255,10 @@ describe('Battlemap', () => {
         sceneLayout: scene,
       },
     })
+    await flushEngineBoot()
 
-    await wrapper.find('button[aria-label="Toben"]').trigger('click')
+    pickOnMap({ type: 'token', id: 'toben', tokenKind: 'poi' })
+    await wrapper.vm.$nextTick()
 
     expect(wrapper.emitted('scenePoi')).toBeUndefined()
     expect(wrapper.text()).toContain('Se diriger vers')
@@ -230,20 +281,27 @@ describe('Battlemap', () => {
     ]])
   })
 
-  it('renders hostile and cover POIs semantically and hides duplicate exit POIs', () => {
+  it('renders hostile and cover POIs semantically and hides duplicate exit POIs', async () => {
     const wrapper = mount(Battlemap, {
       props: {
         mode: 'exploration',
         sceneLayout: dockScene,
       },
     })
+    await flushEngineBoot()
 
     expect(wrapper.find('[data-testid="legend-icon-poi-bandit_2"][data-icon-id="c-enemy"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="map-icon-poi-bandit_2"][data-icon-id="c-enemy"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="legend-icon-poi-barrels"][data-icon-id="c-half-cover"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="legend-icon-exit-dock_gate"][data-icon-id="door"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="legend-icon-poi-dock_gate"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="map-icon-poi-dock_gate"]').exists()).toBe(false)
+
+    const spec = latestSpec()
+    const poiTokens = spec.tokens.filter((token) => token.kind === 'poi')
+    expect(poiTokens.find((token) => token.id === 'bandit_2')?.iconId).toBe('c-enemy')
+    expect(poiTokens.find((token) => token.id === 'barrels')?.iconId).toBe('c-half-cover')
+    // Le POI doublon de sortie n'existe que comme token de sortie sur la carte.
+    expect(poiTokens.map((token) => token.id)).not.toContain('dock_gate')
+    expect(spec.tokens.find((token) => token.id === 'dock_gate')?.kind).toBe('exit')
   })
 
   it('merges custom POI interactions with defaults and prioritizes custom intents', async () => {
@@ -253,8 +311,10 @@ describe('Battlemap', () => {
         sceneLayout: scene,
       },
     })
+    await flushEngineBoot()
 
-    await wrapper.find('button[aria-label="Coffre rouillé"]').trigger('click')
+    pickOnMap({ type: 'token', id: 'chest', tokenKind: 'poi' })
+    await wrapper.vm.$nextTick()
 
     expect(wrapper.text()).toContain('Forcer')
     expect(wrapper.text()).toContain('Examiner')
@@ -312,13 +372,25 @@ describe('Battlemap', () => {
         interactionMode: 'move',
       },
     })
+    await flushEngineBoot()
 
     expect(wrapper.text()).toContain('Brasier')
     expect(wrapper.text()).toContain('Obstacles')
     expect(wrapper.find('[data-testid="legend-icon-zone-fire"][data-icon-id="c-danger-zone"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="legend-icon-obstacles"][data-icon-id="c-obstacle"]').exists()).toBe(true)
+    expect(latestSpec().overlay.reachable).toEqual([{ col: 1, row: 0 }])
 
-    await wrapper.find('button[aria-label="B1"]').trigger('click')
+    // handleCellClick priorise obstacle puis zone avant les cases accessibles.
+    pickOnMap({ type: 'cell', col: 2, row: 2 })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.text()).toContain('Décor tactique')
+
+    pickOnMap({ type: 'cell', col: 1, row: 2 })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.text()).toContain('Zone tactique de type hazard')
+
+    pickOnMap({ type: 'cell', col: 1, row: 0 })
+    await wrapper.vm.$nextTick()
 
     expect(wrapper.emitted('move')).toBeUndefined()
     expect(wrapper.text()).toContain('Déplacement préparé')
@@ -353,11 +425,16 @@ describe('Battlemap', () => {
         interactionMode: 'attack',
       },
     })
+    await flushEngineBoot()
 
-    await wrapper.find('button[aria-label="D1"]').trigger('click')
+    const goblinToken = latestSpec().tokens.find((token) => token.id === 'goblin')
+    expect(goblinToken?.kind).toBe('combatant')
+    expect(goblinToken?.targetable).toBe('attack')
+
+    pickOnMap({ type: 'token', id: 'goblin', tokenKind: 'combatant' })
+    await wrapper.vm.$nextTick()
 
     expect(wrapper.emitted('target')).toBeUndefined()
-    expect(wrapper.find('[data-testid="map-icon-target-goblin"][data-icon-id="c-atk-target"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('Confirmer attaque')
 
     await wrapper.find('[data-testid="map-confirm"]').trigger('click')
