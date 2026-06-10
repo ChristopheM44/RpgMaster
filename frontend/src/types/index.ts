@@ -627,6 +627,14 @@ export interface SceneLayout {
   state?: string
   physical_state?: string
   facts?: string[]
+  /** Hints 3D optionnels émis par le MJ (défauts sûrs côté client et backend). */
+  ambiance?: SceneAmbiance
+  vegetation_density?: number
+}
+
+export interface SceneAmbiance {
+  light?: 'day' | 'dusk' | 'night' | 'torchlit' | 'overcast'
+  fog_density?: number
 }
 
 export type SceneElementKind =
@@ -663,6 +671,9 @@ export interface SceneElement {
   state?: string
   physical_state?: string
   facts?: string[]
+  /** Hints 3D optionnels (mètres) — défauts par kind si absents. */
+  height_m?: number
+  elevation_m?: number
 }
 
 export interface SceneLayoutChangedPayload {

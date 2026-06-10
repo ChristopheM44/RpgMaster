@@ -1,28 +1,24 @@
 <script setup lang="ts">
+// Scène locale 3D (exploration). Même contrat qu'avant la refonte : sélection
+// via sessionStore.selectEntity (POI lié prioritaire sur élément interactif),
+// tooltip MapTooltip alimenté par useMapInspectables — seul le rendu change
+// (Scene3DCanvas + buildSceneSpec à la place du SVG LocalMapCanvas).
 import { computed, ref } from 'vue'
 import { useSessionStore } from '../../stores/session'
 import { useGameStore } from '../../stores/game'
 import { useExplorationParty } from '../../composables/useExplorationParty'
 import { useExplorationPois } from '../../composables/useExplorationPois'
 import {
-  elementCenter,
   entityForElement,
   entityForHero,
   entityForPoi,
   type MapInspectableEntity,
   useMapInspectables,
 } from '../../composables/useMapInspectables'
-import LocalMapCanvas from '../map/LocalMapCanvas.vue'
-import HeroToken from './HeroToken.vue'
-import PoiToken from './PoiToken.vue'
+import Scene3DCanvas from '../scene3d/Scene3DCanvas.vue'
 import MapTooltip from './MapTooltip.vue'
-import type { SceneElement } from '../../types'
-
-const props = withDefaults(defineProps<{
-  cell?: number
-}>(), {
-  cell: 44,
-})
+import { buildSceneSpec } from '../../engine3d/adapters/sceneAdapter'
+import type { PickResult } from '../../engine3d/types'
 
 const sessionStore = useSessionStore()
 const gameStore = useGameStore()
@@ -30,120 +26,86 @@ const { party } = useExplorationParty()
 const { pois } = useExplorationPois()
 const { findElement, linkedEntityIdForElement } = useMapInspectables()
 
+const host = ref<HTMLDivElement | null>(null)
 const tooltip = ref<{ entity: MapInspectableEntity; x: number; y: number } | null>(null)
+const bounds = ref({ width: 640, height: 480 })
 
-const selectedElementId = computed(() => {
-  const selected = pois.value.find((poi) => poi.id === sessionStore.selectedId)
-  if (selected?.elementId) return selected.elementId
-  return findElement(sessionStore.selectedId)?.id ?? null
-})
+const spec = computed(() => buildSceneSpec({
+  scene: gameStore.currentScene,
+  heroes: party.value,
+  pois: pois.value,
+  selectedId: sessionStore.selectedId,
+  highlightedIds: sessionStore.highlightedIds,
+}))
 
-const mapWidth = computed(() => (gameStore.currentScene?.cols ?? 12) * props.cell)
-const mapHeight = computed(() => (gameStore.currentScene?.rows ?? 12) * props.cell)
-
-function isSelected(id: string) {
-  return sessionStore.selectedId === id
-}
-
-function isHighlighted(id: string) {
-  return sessionStore.highlightedIds.includes(id)
-}
-
-function onClick(id: string) {
-  sessionStore.selectEntity(id)
-}
-
-function onElementClick(element: SceneElement) {
-  const linked = pois.value.find((poi) => poi.elementId === element.id)
-  if (linked) {
-    sessionStore.selectEntity(linked.id)
+function onPick(pick: PickResult): void {
+  if (pick.type === 'token') {
+    sessionStore.selectEntity(pick.id)
     return
   }
-  if (element.interactive) sessionStore.selectEntity(element.id)
-}
-
-function showHeroTooltip(id: string) {
-  const hero = party.value.find((item) => item.id === id)
-  if (!hero) return
-  tooltip.value = {
-    entity: entityForHero(hero),
-    x: hero.x * props.cell + props.cell / 2,
-    y: hero.y * props.cell + 2,
+  if (pick.type === 'element') {
+    const element = findElement(pick.id)
+    if (!element) return
+    // Parité SVG : un élément lié à un POI sélectionne le POI.
+    const linked = pois.value.find((poi) => poi.elementId === element.id)
+    if (linked) {
+      sessionStore.selectEntity(linked.id)
+      return
+    }
+    if (element.interactive) sessionStore.selectEntity(element.id)
   }
 }
 
-function showPoiTooltip(id: string) {
-  const poi = pois.value.find((item) => item.id === id)
-  if (!poi) return
-  tooltip.value = {
-    entity: entityForPoi(poi),
-    x: poi.x * props.cell + props.cell / 2,
-    y: poi.y * props.cell + 2,
-  }
-}
-
-function showElementTooltip(element: SceneElement | null) {
-  if (!element) {
-    hideTooltip()
+function onHover(pick: PickResult | null, screen: { x: number; y: number }): void {
+  if (!pick || pick.type === 'cell') {
+    tooltip.value = null
     return
   }
-
-  const linked = pois.value.find((poi) => poi.elementId === element.id)
-  const center = elementCenter(element.geometry)
-  tooltip.value = {
-    entity: linked
-      ? entityForPoi(linked)
-      : entityForElement(element, linkedEntityIdForElement(element.id)),
-    x: center.col * props.cell,
-    y: center.row * props.cell,
+  if (host.value) {
+    bounds.value = { width: host.value.clientWidth, height: host.value.clientHeight }
   }
-}
 
-function hideTooltip() {
-  tooltip.value = null
+  let entity: MapInspectableEntity | null = null
+  if (pick.type === 'token') {
+    const hero = party.value.find((item) => item.id === pick.id)
+    if (hero) {
+      entity = entityForHero(hero)
+    } else {
+      const poi = pois.value.find((item) => item.id === pick.id)
+      if (poi) entity = entityForPoi(poi)
+    }
+  } else {
+    const element = findElement(pick.id)
+    if (element) {
+      const linked = pois.value.find((poi) => poi.elementId === element.id)
+      entity = linked ? entityForPoi(linked) : entityForElement(element, linkedEntityIdForElement(element.id))
+    }
+  }
+
+  tooltip.value = entity ? { entity, x: screen.x, y: screen.y } : null
 }
 </script>
 
 <template>
-  <LocalMapCanvas
-    :scene="gameStore.currentScene"
-    :cell="cell"
-    mode="exploration"
-    :selected-element-id="selectedElementId"
-    @element-click="onElementClick"
-    @element-hover="showElementTooltip"
-  >
-    <PoiToken
-      v-for="poi in pois"
-      :key="poi.id"
-      :poi="poi"
-      :cell="cell"
-      :selected="isSelected(poi.id)"
-      :highlighted="isHighlighted(poi.id)"
-      @click="onClick"
-      @tooltip-show="showPoiTooltip"
-      @tooltip-hide="hideTooltip"
-    />
-
-    <HeroToken
-      v-for="hero in party"
-      :key="hero.id"
-      :hero="hero"
-      :cell="cell"
-      :selected="isSelected(hero.id)"
-      :highlighted="isHighlighted(hero.id)"
-      @click="onClick"
-      @tooltip-show="showHeroTooltip"
-      @tooltip-hide="hideTooltip"
-    />
-
-    <MapTooltip
-      v-if="tooltip"
-      :entity="tooltip.entity"
-      :x="tooltip.x"
-      :y="tooltip.y"
-      :bounds-width="mapWidth"
-      :bounds-height="mapHeight"
-    />
-  </LocalMapCanvas>
+  <div ref="host" class="scene-map3d">
+    <Scene3DCanvas :spec="spec" @pick="onPick" @hover="onHover">
+      <MapTooltip
+        v-if="tooltip"
+        :entity="tooltip.entity"
+        :x="tooltip.x"
+        :y="tooltip.y"
+        :bounds-width="bounds.width"
+        :bounds-height="bounds.height"
+      />
+    </Scene3DCanvas>
+  </div>
 </template>
+
+<style scoped>
+.scene-map3d {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 260px;
+}
+</style>
