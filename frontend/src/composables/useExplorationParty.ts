@@ -1,6 +1,6 @@
 // Composable Exploration V2 — adapte les vraies données de session (characterStore +
 // currentScene.party_positions) au shape `ExHero` attendu par les composants V2
-// (HeroToken, MapLegend, SelectionInspector, RefChip, CarnetGroupSection).
+// (SceneMap 3D, MapLegend, SelectionInspector, RefChip, CarnetGroupSection).
 import { computed } from 'vue'
 import { useCharacterStore } from '../stores/character'
 import { useGameStore } from '../stores/game'
