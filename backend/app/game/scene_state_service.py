@@ -78,7 +78,13 @@ def apply_scene_update(active: ActiveSession, params: dict[str, Any]) -> dict[st
     _merge_npc_updates(active, updated, params)
     reconcile_scene_npcs(active, updated)
 
-    local_map_service.enrich_scene_layout(updated)
+    journal = active.state_data.get("adventure_journal")
+    journal = journal if isinstance(journal, dict) else {}
+    time_of_day = journal.get("time_of_day")
+    local_map_service.enrich_scene_layout(
+        updated,
+        time_of_day=str(time_of_day) if time_of_day else None,
+    )
     active.state_data["current_scene"] = updated
     active.mark_dirty()
     return updated

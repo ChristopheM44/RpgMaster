@@ -164,6 +164,9 @@ QUAND ÉMETTRE UN ROLL_REQUEST — trois catégories, trois réponses :
   * Couverts et Dangers tactiques : Génère SYSTÉMATIQUEMENT 2 à 4 points d'intérêt jouables représentant des obstacles de combat : des couverts (kind "cover", icon "c-half-cover" comme des rochers ou des troncs d'arbres couchés) et des dangers (kind "hazard", icon "trap-danger" comme des zones de ronces ou des crevasses) pour enrichir la battlemap.
   * La scène doit offrir au moins trois prises jouables visibles au total entre POI tactiques, sorties, PNJ, indices (kind "clue", icon "clue") ou coffres de butin (kind "loot", icon "chest"). Évite les décors à bouton unique.
   * Carte locale partagée : scene_layout est la source unique pour exploration ET combat. Si la scène est intérieure (pièce, salle, taverne, cave, crypte, boutique, temple), ajoute elements avec murs, portes, fenêtres si plausibles, mobilier/couverts, lumières et dangers physiques.
+  * Indices 3D optionnels (sinon valeurs sûres par défaut) : chaque element peut porter "height_m" (0.2–8) et "elevation_m" (0–4) ;
+    le scene_layout peut porter "ambiance": {"light": "day|dusk|night|torchlit|overcast", "fog_density": 0..1}
+    et "vegetation_density": 0..1. N'inclus ces champs que s'ils précisent vraiment la scène.
   * Les éléments importants doivent correspondre aux clics : mets element_id sur le POI ou l'exit lié à l'élément. Porte navigable = exit avec element_id; porte non navigable importante = element + POI examinable.
   * En rencontre/combat dans le même lieu, ne régénère pas une carte différente : conserve le lieu et ajoute seulement les éléments manquants ou les POI ennemis/tactiques nécessaires.
   Respecte les catégories visuelles : ennemi visible = kind "enemy", icon "c-enemy"; PNJ = kind "npc", icon "npc"; couvert = kind "cover", icon "c-half-cover"; danger/piège = kind "hazard", icon "trap-danger"; butin/objet = kind "loot", icon "chest"; indice = kind "clue", icon "clue".
