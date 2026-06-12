@@ -158,4 +158,62 @@ describe('useExplorationPois', () => {
     expect(sorties.value.find((exit) => exit.id === 'open_path')?.active).toBe(true)
     expect(sorties.value.find((exit) => exit.id === 'sealed_gate')?.active).toBe(false)
   })
+
+  it("nettoie un libellé d'affordance à la 1re personne en verbe court (prompt préservé)", () => {
+    const gameStore = useGameStore()
+    gameStore.applySceneLayout({
+      scene: {
+        cols: 12,
+        rows: 12,
+        cell_size_m: 1.5,
+        scene_theme: 'plains',
+        pois: [
+          {
+            id: 'elara_pnj',
+            name: 'Elara',
+            kind: 'npc',
+            icon: 'npc',
+            position: { col: 5, row: 5 },
+            interactions: [
+              {
+                id: 'ask_elara',
+                label: 'je demande un avertissement',
+                intent: 'talk',
+                prompt: 'Je demande à Elara un avertissement.',
+              },
+            ],
+          },
+          {
+            id: 'puits',
+            name: 'Puits',
+            kind: 'hazard',
+            icon: 'trap-danger',
+            position: { col: 7, row: 5 },
+            interactions: [
+              {
+                id: 'corde',
+                label: 'Jeter une corde',
+                intent: 'use',
+                prompt: 'Je jette une corde dans le puits.',
+              },
+            ],
+          },
+        ],
+        exits: [],
+        party_positions: {},
+      },
+    })
+
+    const { pois } = useExplorationPois()
+    const npc = pois.value.find((p) => p.id === 'elara_pnj')
+    // Le bouton affiche un verbe court, pas la phrase à la 1re personne…
+    expect(npc?.actionLabel).toBe('Parler')
+    // …mais le prompt réellement envoyé reste intact.
+    expect(npc?.prompt).toBe('Je demande à Elara un avertissement.')
+
+    // Faux positif à éviter : un libellé impératif commençant par « Je… »
+    // (« Jeter ») ne doit PAS être écrasé.
+    const puits = pois.value.find((p) => p.id === 'puits')
+    expect(puits?.actionLabel).toBe('Jeter une corde')
+  })
 })

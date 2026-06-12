@@ -956,10 +956,32 @@ def _opening_response(
         location = f"{physical_place} ({physical_region})"
 
     objective = _opening_objective(campaign_context)
-    location_id = _safe_id(str(physical_venue or physical_place), "lieu_depart")
-    objective_id = _safe_id(objective, "objectif_rumeur") if objective else ""
-    if objective_id == location_id:
-        objective_id = ""
+    # Le seed d'ouverture doit s'aligner sur le seed de forge (N3) : même id de lieu
+    # de départ ET nœud-objectif tiré de `objective_endpoint` (nom de lieu non-spoiler),
+    # jamais du texte brut de l'objectif — sinon la carte régionale fusionnée se peuple
+    # d'un nœud poubelle (« Localiser la source… ») et de doublons de départ.
+    from app.services import map_service  # noqa: PLC0415
+
+    start_label = str(physical_venue or physical_place or "").strip()
+    chapter_endpoint = (
+        (campaign_context.get("active_chapter") or {}).get("objective_endpoint")
+        if isinstance(campaign_context, dict)
+        else None
+    )
+    endpoint_node = map_service.seed_endpoint_node(chapter_endpoint)
+    if endpoint_node:
+        location_id = map_service.seed_node_id(start_label, "lieu_depart")
+        objective_id = endpoint_node["id"]
+        if objective_id == location_id:
+            objective_id = f"{objective_id}_objectif"[:80]
+    else:
+        # Pas d'objective_endpoint (chronique legacy / hors-forge, donc pas de seed
+        # N3 avec lequel dédoublonner) : comportement historique — nœud-objectif
+        # dérivé du texte d'objectif.
+        location_id = _safe_id(str(physical_venue or physical_place), "lieu_depart")
+        objective_id = _safe_id(objective, "objectif_rumeur") if objective else ""
+        if objective_id == location_id:
+            objective_id = ""
     region_kind = _region_kind_for_location(physical_place)
     scene_brief = str(opening_scene.get("description") or "").strip()
     clues = list(opening_scene.get("visible_clues") or [])[:_OPENING_CLUES_MAX]
@@ -1120,8 +1142,8 @@ def _opening_response(
                         [
                             {
                                 "id": objective_id,
-                                "name": objective,
-                                "kind": "landmark",
+                                "name": endpoint_node["name"] if endpoint_node else objective,
+                                "kind": endpoint_node["kind"] if endpoint_node else "landmark",
                                 "position": {"x": 62, "y": 42},
                                 "status": "rumored",
                                 "description": "Destination ou piste connue, non encore vérifiée.",
@@ -1135,11 +1157,14 @@ def _opening_response(
                 "edges_upsert": (
                     [
                         {
-                            "id": f"route_{location_id}_{objective_id}",
+                            "id": f"vers_{objective_id}"[:80],
                             "from": location_id,
                             "to": objective_id,
                             "kind": "path",
-                            "travel_hint": "Trajet à confirmer par les choix du groupe.",
+                            "travel_hint": (
+                                (endpoint_node and endpoint_node["hint"])
+                                or "Trajet à confirmer par les choix du groupe."
+                            ),
                         }
                     ]
                     if objective_id

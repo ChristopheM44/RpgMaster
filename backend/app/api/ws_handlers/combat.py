@@ -804,12 +804,33 @@ async def auto_death_save(
         active.mark_dirty()
         narr = f"{name} est mort(e) — 3 échecs aux jets de sauvegarde."
 
+    # Le libellé du jet auto doit porter le compteur [x/3] comme le chemin manuel
+    # (action_mechanics._resolve_death_save) — sinon le joueur ne voit pas la
+    # spirale mortelle d'un compagnon ("Jet de sauvegarde — Nom" sans tally).
+    if result.critical_success:
+        ds_label = "Jet de sauvegarde contre la mort — 20 NATUREL ! Récupère 1 PV !"
+    elif result.critical_failure:
+        ds_label = (
+            f"Jet de sauvegarde contre la mort — 1 NATUREL ! ({ds.get('failures', 0)}/3 échecs)"
+        )
+    elif result.success:
+        ds_label = (
+            f"Jet de sauvegarde contre la mort — Succès ({result.d20_roll}) "
+            f"[{ds.get('successes', 0)}/3]"
+        )
+    else:
+        ds_label = (
+            f"Jet de sauvegarde contre la mort — Échec ({result.d20_roll}) "
+            f"[{ds.get('failures', 0)}/3]"
+        )
+
     death_save_payload = {
+        "type": "death_save",
         "dice_notation": "1d20",
         "rolls": [result.d20_roll],
         "total": result.d20_roll,
         "modifier": 0,
-        "label": f"Jet de sauvegarde — {name}",
+        "label": ds_label,
         "success": result.success,
         "character_id": combatant_id,
         "character_name": name,

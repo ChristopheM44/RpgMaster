@@ -31,8 +31,12 @@ Contraintes :
 - Les titres et résumés publics ne doivent pas révéler de secrets, twists, plans d'antagonistes ou contenu privé.
 - Chaque chapitre doit avoir un `id` stable `chapter_1`, `chapter_2`, etc. dans l'ordre de jeu.
 - Le premier chapitre est `active`, tous les suivants sont `planned`, sauf information jouée explicite.
-- `hook` est le prologue public de table : explique concrètement pourquoi les PJ sont là, d'où vient la mission, qui les a mandatés ou alertés si c'est établi, et quel enjeu immédiat les pousse à agir. Il ne décrit pas ce qu'ils voient physiquement et ne révèle aucun secret.
+- `hook` est le prologue public de table : explique concrètement pourquoi les PJ sont là, d'où vient la mission et quel enjeu immédiat les pousse à agir. Il ne décrit pas ce qu'ils voient physiquement et ne révèle aucun secret.
+- NOMME le commanditaire dans le `hook` : sauf si le groupe agit de sa propre initiative, la mission est confiée par une personne précise (marchand, capitaine, prêtre, noble, archiviste…). Donne-lui un NOM PROPRE et un titre, et bâtis l'accroche autour de cette personne (« la marchande Veyra vous engage pour… », « le capitaine borgne Doran vous a fait mander »). N'écris JAMAIS un commanditaire anonyme (« vos employeurs », « on vous a engagés », « une caravane vous embauche »). Réutilise ce même nom dans `important_npcs` plus tard. Si — et seulement si — les PJ agissent vraiment seuls, dis-le explicitement (personne ne les mandate) au lieu d'inventer un employeur flou.
+- Formule l'enjeu de la mission en UNE phrase d'objectif concret et incarné, jamais en liste d'infinitifs (« pénétrer…, identifier…, récupérer… ») qui sent l'objectif méta recopié.
 - `known_objectives` contient au moins un objectif public jouable, formulé comme une tâche claire que les PJ peuvent poursuivre dès l'ouverture.
+- VARIÉTÉ DU MOTEUR D'INTRIGUE : ne retombe pas par défaut sur le cliché « une corruption / un fléau / une ombre ancienne gangrène la terre, trouvez et purifiez la source ». Sauf si le brief ou les sources l'imposent explicitement, choisis un ressort d'intrigue DISTINCT et adapté aux tonalités : complot ou succession politique, disparition et enquête, guerre froide entre factions, dette/trahison/vengeance personnelle, phénomène inexpliqué à élucider, contrebande ou heist, négociation à haut risque, course contre un rival, catastrophe naturelle ou sociale, secret de famille. L'antagonisme peut être HUMAIN, social, économique ou mystérieux — pas forcément un monstre maléfique à abattre. Évite aussi les noms calqués sur « corruption/ténèbres/ombre » si ce n'est pas le cœur réel de l'intrigue.
+- PROFONDEUR NARRATIVE : l'intrigue doit dépasser le donjon-couloir « 3 salles + un boss ». Prévois (a) au moins un pilier NON-combat jouable (enquête, intrigue sociale, exploration à choix, négociation, infiltration) ; (b) une dimension humaine — au moins deux PNJ ou factions aux intérêts DIVERGENTS, pas seulement allié vs méchant ; (c) une vraie complication ou un retournement qui force un choix moral ou stratégique en cours de route. Les lieux visités doivent contraster (pas une simple enfilade de salles identiques).
 
 Réponds avec un seul objet JSON valide, sans markdown :
 {
@@ -41,7 +45,7 @@ Réponds avec un seul objet JSON valide, sans markdown :
     "pitch_public": "Pitch public sans spoiler",
     "tones": ["Mystère"],
     "duration": "Durée estimée",
-    "hook": "Prologue public : pourquoi les PJ sont là, d'où vient la mission, enjeu immédiat",
+    "hook": "Prologue public : le commanditaire NOMMÉ qui mandate le groupe et l'enjeu immédiat en une phrase, sans décrire ce qu'ils voient physiquement",
     "visible_chapters": [
       {
         "id": "chapter_1",

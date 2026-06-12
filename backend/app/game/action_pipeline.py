@@ -432,7 +432,7 @@ class ActionPipeline:
         if roll_results:
             mechanics = self._get_mechanics()
             roll_evt = mechanics._normalize_roll_event(roll_results)
-            roll_evt = self._enrich_roll_event(roll_evt, request, actor_name, target_id)
+            roll_evt = self._enrich_roll_event(roll_evt, request, actor_name, target_id, active)
             roll_events.append(roll_evt)
             await self._event_bus.publish_to_session(
                 request.session_id,
@@ -1253,6 +1253,7 @@ class ActionPipeline:
         request: ActionRequest,
         actor_name: str,
         target_id: str | None,
+        active: ActiveSession | None = None,
     ) -> dict[str, Any]:
         enriched = dict(payload)
         effective_actor_id = enriched.get("actor_id") or request.actor_id
@@ -1286,6 +1287,104 @@ class ActionPipeline:
                 enriched["margin"] = int(enriched["total"]) - int(enriched["dc"])
             except (TypeError, ValueError):
                 pass
+        if active is not None:
+            enriched = ActionPipeline._inject_fail_forward(enriched, active)
+        return enriched
+
+    @staticmethod
+    def _inject_fail_forward(
+        enriched: dict[str, Any], active: ActiveSession
+    ) -> dict[str, Any]:
+        """N4 — fail-forward sur un ÉCHEC de jet investigatif contre un POI.
+
+        Donne au MJ de quoi faire avancer la scène (bribe garantie sur le POI
+        examiné) au lieu de « tu ne découvres rien ». Compte les échecs par
+        (POI, compétence) : une relance à l'identique escalade (le MJ accorde
+        l'essentiel puis signale qu'il faut une autre approche), tandis qu'une
+        nouvelle approche (autre compétence) repart de zéro. Corrige le roll-spam
+        observé (échec stérile → relance du même jet sur le même POI).
+        """
+        if enriched.get("success") is not False:
+            return enriched
+        poi_id = str(enriched.get("scene_poi_id") or "").strip()
+        if not poi_id:
+            return enriched
+        label = str(enriched.get("label") or "").lower()
+        if any(bad in label for bad in ("save", "sauvegarde", "attack", "attaque")):
+            return enriched
+        intent = str(enriched.get("scene_interaction_intent") or "").lower()
+        investigative_skills = (
+            "investigation",
+            "perception",
+            "arcana",
+            "arcanes",
+            "insight",
+            "intuition",
+            "perspicacité",
+            "history",
+            "histoire",
+            "nature",
+            "religion",
+            "survival",
+            "survie",
+            "medicine",
+            "médecine",
+        )
+        investigative_intents = {
+            "search",
+            "examine",
+            "inspect",
+            "study",
+            "investigate",
+            "fouiller",
+            "examiner",
+            "inspecter",
+            "etudier",
+            "étudier",
+        }
+        if not (any(s in label for s in investigative_skills) or intent in investigative_intents):
+            return enriched
+
+        # Retrouver le POI courant pour sa description (matière de la bribe).
+        poi: dict[str, Any] | None = None
+        scene = active.state_data.get("current_scene") or {}
+        if isinstance(scene, dict):
+            for candidate in scene.get("pois") or []:
+                if isinstance(candidate, dict) and str(candidate.get("id") or "") == poi_id:
+                    poi = candidate
+                    break
+        poi_name = poi.get("name") if poi else ""
+        subject = str(enriched.get("scene_poi_name") or poi_name or "l'élément examiné")[:120]
+        detail = str((poi.get("description") if poi else "") or "")[:240]
+        # `hidden_fact` = hook de compat. ascendante : AUCUN écrivain ne le peuple
+        # aujourd'hui (les payoffs authorés vivent dans dossier.clues, liste séparée
+        # non câblée). Reste donc vide pour l'instant ; le MJ confabule une bribe
+        # cohérente depuis `detail` (description visible) + l'escalade sur relance.
+        # TODO(N4 suite) : câbler dossier.clues → POI.hidden_fact à la forge/seed.
+        hidden = str((poi.get("hidden_fact") if poi else "") or "")[:240]
+
+        # Compteur d'échecs par (POI, compétence) : relance identique → escalade,
+        # nouvelle approche → repart de zéro. On clé sur la compétence du jet
+        # (``label``, ex. « int (investigation) ») et non sur l'intent d'interaction
+        # (souvent « search » quelle que soit la compétence) — ainsi passer
+        # d'Investigation à Arcane est traité comme une approche neuve, pas un spam.
+        skill_key = (label or intent or "check").strip()
+        attempts = active.state_data.setdefault("clue_search_attempts", {})
+        if not isinstance(attempts, dict):
+            attempts = {}
+            active.state_data["clue_search_attempts"] = attempts
+        counter_key = f"{poi_id}::{skill_key}"
+        attempt = int(attempts.get(counter_key, 0) or 0) + 1
+        attempts[counter_key] = attempt
+        active.mark_dirty()
+
+        enriched["fail_forward"] = True
+        enriched["fail_forward_subject"] = subject
+        if detail:
+            enriched["fail_forward_detail"] = detail
+        if hidden:
+            enriched["fail_forward_hint"] = hidden
+        enriched["fail_forward_attempt"] = attempt
         return enriched
 
     @staticmethod
@@ -1319,6 +1418,7 @@ class ActionPipeline:
                 enriched["margin"] = int(enriched["total"]) - int(enriched["dc"])
             except (TypeError, ValueError):
                 pass
+        enriched = ActionPipeline._inject_fail_forward(enriched, active)
         other_names: list[str] = []
         characters = active.state_data.get("characters", {})
         if isinstance(characters, dict):

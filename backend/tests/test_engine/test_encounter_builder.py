@@ -358,3 +358,61 @@ class TestExpandToCombatants:
         assert "goblin_1" in ids
         assert "goblin_2" in ids
         assert "hobgoblin_1" in ids
+
+
+# ---------------------------------------------------------------------------
+# Garde-fou CR vs niveau du groupe (#7) — pure logic
+# ---------------------------------------------------------------------------
+
+
+def test_max_solo_cr_for_party_level_is_conservative_at_low_levels() -> None:
+    from app.engine.encounter_builder import max_solo_cr_for_party_level
+
+    assert max_solo_cr_for_party_level(1) == 3.0
+    assert max_solo_cr_for_party_level(5) == 7.0
+    # bornes
+    assert max_solo_cr_for_party_level(0) == 3.0
+    assert max_solo_cr_for_party_level(99) == 22.0
+
+
+def _fake_monsters() -> list[dict[str, Any]]:
+    return [
+        {"id": "twig", "type": "plant", "cr": 0.125},
+        {"id": "vine", "type": "plant", "cr": 0.5},
+        {"id": "awakened_tree", "type": "plant", "cr": 2.0},
+        {"id": "shambling_mound", "type": "plant", "cr": 5.0},
+        {"id": "ogre", "type": "giant", "cr": 2.0},
+        {"id": "dragon", "type": "dragon", "cr": 10.0},
+    ]
+
+
+def test_cr_appropriate_substitute_prefers_same_type_under_ceiling() -> None:
+    from app.engine.encounter_builder import cr_appropriate_substitute
+
+    monsters = _fake_monsters()
+    # CR5 plante, plafond 3 → meilleure plante <= 3 = awakened_tree (CR2).
+    assert cr_appropriate_substitute("shambling_mound", monsters, 3.0) == "awakened_tree"
+
+
+def test_cr_appropriate_substitute_keeps_in_band_monster() -> None:
+    from app.engine.encounter_builder import cr_appropriate_substitute
+
+    monsters = _fake_monsters()
+    assert cr_appropriate_substitute("vine", monsters, 3.0) == "vine"
+
+
+def test_cr_appropriate_substitute_unknown_returns_none() -> None:
+    from app.engine.encounter_builder import cr_appropriate_substitute
+
+    assert cr_appropriate_substitute("inconnu", _fake_monsters(), 3.0) is None
+
+
+def test_cr_appropriate_substitute_falls_back_to_any_type() -> None:
+    from app.engine.encounter_builder import cr_appropriate_substitute
+
+    # Aucune plante <= 0.2 : repli sur tout type (twig CR 0.125 reste le seul candidat).
+    monsters = [
+        {"id": "twig", "type": "plant", "cr": 0.125},
+        {"id": "shambling_mound", "type": "plant", "cr": 5.0},
+    ]
+    assert cr_appropriate_substitute("shambling_mound", monsters, 0.2) == "twig"

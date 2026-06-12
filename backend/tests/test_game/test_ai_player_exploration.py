@@ -1215,3 +1215,90 @@ async def test_context_reloaded_between_companions() -> None:
     # Shade (second) a vu le message de Thorin aussi (2 msgs)
     shade_received = captured_messages[1][1]
     assert len(shade_received) == 2
+
+
+# ---------------------------------------------------------------------------
+# P1 — Garde-fou de transition : un compagnon IA ne franchit pas seul une
+# frontière de scène (sortie) avant le joueur humain (chronique « Haut les
+# Cœurs » : Shade franchit `exit_to_garden` avant Thorvald, msg 41 → 42).
+# ---------------------------------------------------------------------------
+
+_BOUNDARY_SCENE: dict[str, Any] = {
+    "current_scene": {
+        "exits": [
+            {
+                "id": "exit_to_garden",
+                "label": "Porte du Jardin",
+                "leads_to": "Le Jardin Suspendu",
+                "element_id": "element_door_garden",
+            }
+        ],
+        "pois": [{"id": "zone_echo", "name": "Centre de la nef"}],
+    }
+}
+
+
+def _companion_move(
+    *,
+    target: str | None,
+    description: str = "Le personnage se déplace.",
+    roleplay: str = "(avance)",
+) -> PlayerActionChoice:
+    return PlayerActionChoice(
+        action_type="move",
+        action_description=description,
+        target=target,
+        roleplay_text=roleplay,
+    )
+
+
+def test_companion_move_to_exit_id_is_boundary_crossing() -> None:
+    action = _companion_move(target="exit_to_garden")
+    assert AIPlayerManager._move_crosses_scene_boundary(action, _BOUNDARY_SCENE) is True
+
+
+def test_companion_move_within_scene_is_not_boundary() -> None:
+    # « prend les devants vers le centre de la nef » : intra-scène, jamais bloqué.
+    action = _companion_move(target="zone_echo")
+    assert AIPlayerManager._move_crosses_scene_boundary(action, _BOUNDARY_SCENE) is False
+
+
+def test_non_move_action_never_crosses_boundary() -> None:
+    action = PlayerActionChoice(
+        action_type="examine",
+        action_description="examine la porte",
+        target="exit_to_garden",
+        roleplay_text="(observe la porte)",
+    )
+    assert AIPlayerManager._move_crosses_scene_boundary(action, _BOUNDARY_SCENE) is False
+
+
+def test_companion_move_matches_exit_by_label_in_text() -> None:
+    # Pas d'id en cible, mais le texte nomme la sortie : on bloque quand même.
+    action = _companion_move(
+        target=None, roleplay="(se faufile par la Porte du Jardin avant les autres)"
+    )
+    assert AIPlayerManager._move_crosses_scene_boundary(action, _BOUNDARY_SCENE) is True
+
+
+def test_human_led_transition_true_when_player_travels() -> None:
+    assert (
+        AIPlayerManager._human_led_transition("en route vers le Jardin Suspendu", _BOUNDARY_SCENE)
+        is True
+    )
+
+
+def test_human_led_transition_false_for_non_travel_action() -> None:
+    # Le rituel de sang de Thorvald (msg 39) n'est PAS un voyage : un compagnon ne
+    # doit pas enchaîner en franchissant le seuil (msg 41 doit être bloqué).
+    assert (
+        AIPlayerManager._human_led_transition(
+            "j'applique ma paume ensanglantée contre le bronze des sculptures",
+            _BOUNDARY_SCENE,
+        )
+        is False
+    )
+
+
+def test_human_led_transition_false_when_no_action_text() -> None:
+    assert AIPlayerManager._human_led_transition(None, _BOUNDARY_SCENE) is False

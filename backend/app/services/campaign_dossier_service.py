@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Any
 
 import httpx
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1117,6 +1118,10 @@ async def _run_forge_job(
         gm_raw = dict(global_indexes)
         gm_raw["chapters"] = private_chapters
     gm_dossier = sanitize_gm_dossier(gm_raw, campaign, contract)
+    _cap_forged_monsters_to_party_level(
+        gm_dossier,
+        int(getattr(campaign, "starting_level", 1) or 1),
+    )
     _validate_chapter_alignment(contract, gm_dossier)
     active_chapter_id = str(outline.get("active_chapter_id") or "").strip()
     if not active_chapter_id:
@@ -2287,6 +2292,101 @@ def _sanitize_custom_items(value: Any, cap: int = 50) -> list[dict[str, Any]]:
     return out
 
 
+def _cap_forged_monsters_to_party_level(gm_dossier: dict[str, Any], party_level: int) -> None:
+    """Abaisse les monstres forgés trop puissants pour le niveau de départ (#7).
+
+    Garde-fou côté FORGE uniquement (cf. choix produit) : substitue le
+    ``base_srd_id`` / ``monster_srd_id`` / les rencontres SRD dont le CR dépasse le
+    plafond du niveau, au lieu de bricoler les stats à la main. Mutation en place.
+    N'affecte que les chroniques en cours de génération (pas le rejeu).
+    """
+    from app.engine.encounter_builder import (  # noqa: PLC0415
+        cr_appropriate_substitute,
+        max_solo_cr_for_party_level,
+        monster_cr,
+    )
+    from app.engine.srd_data import get_monsters  # noqa: PLC0415
+
+    if not isinstance(gm_dossier, dict):
+        return
+    monsters = get_monsters()
+    max_cr = max_solo_cr_for_party_level(party_level)
+
+    def _num_or_none(value: Any) -> float | None:
+        return float(value) if isinstance(value, (int, float)) else None
+
+    def _over(srd_id: Any, override_cr: Any) -> bool:
+        if not srd_id:
+            return False
+        eff = _num_or_none(override_cr)
+        if eff is None:
+            eff = monster_cr(str(srd_id), monsters)
+        return eff is not None and eff > max_cr
+
+    # 1. Monstres custom : substitue la base et neutralise les overrides numériques
+    #    (pour hériter de la base abaissée plutôt que de garder des stats trop hautes).
+    for cm in gm_dossier.get("custom_monsters") or []:
+        if not isinstance(cm, dict):
+            continue
+        base_id = cm.get("base_srd_id")
+        overrides = cm.get("stat_overrides") if isinstance(cm.get("stat_overrides"), dict) else {}
+        if not _over(base_id, overrides.get("cr")):
+            continue
+        sub = cr_appropriate_substitute(str(base_id), monsters, max_cr)
+        if not sub or sub == base_id:
+            continue
+        logger.warning(
+            "Forge: monstre custom '%s' (base %s) au-dessus du plafond CR %.2f pour "
+            "niveau %s → base abaissée sur %s.",
+            cm.get("id"),
+            base_id,
+            max_cr,
+            party_level,
+            sub,
+        )
+        cm["base_srd_id"] = sub
+        for key in ("cr", "xp", "hp", "ac", "attack_bonus", "damage_dice"):
+            if key in overrides:
+                overrides[key] = None
+        cm["stat_overrides"] = overrides
+
+    # 2. Bestiaire (personas de monstre liées à un id SRD).
+    for mp in gm_dossier.get("bestiary") or []:
+        if not isinstance(mp, dict):
+            continue
+        sid = mp.get("monster_srd_id")
+        if not _over(sid, None):
+            continue
+        sub = cr_appropriate_substitute(str(sid), monsters, max_cr)
+        if sub and sub != sid:
+            logger.warning(
+                "Forge: bestiaire '%s' au-dessus du plafond CR %.2f niveau %s → %s.",
+                sid,
+                max_cr,
+                party_level,
+                sub,
+            )
+            mp["monster_srd_id"] = sub
+
+    # 3. Rencontres SRD possibles par chapitre (mooks).
+    for chapter in gm_dossier.get("chapters") or []:
+        if not isinstance(chapter, dict):
+            continue
+        enc = chapter.get("possible_srd_encounters")
+        if not isinstance(enc, list):
+            continue
+        capped: list[str] = []
+        for raw_id in enc:
+            mid = str(raw_id)
+            if not _over(mid, None):
+                capped.append(mid)
+                continue
+            sub = cr_appropriate_substitute(mid, monsters, max_cr)
+            capped.append(sub if sub else mid)
+        seen: set[str] = set()
+        chapter["possible_srd_encounters"] = [m for m in capped if not (m in seen or seen.add(m))]
+
+
 def _sanitize_custom_monsters(value: Any, cap: int = 50) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         return []
@@ -2333,7 +2433,10 @@ def _coerce_persona(item: Any, expected_type: str) -> dict[str, Any] | None:
     """Valide un item dict via Pydantic. Renvoie le dump validé, ou None si rejet.
 
     Migration douce : pour les NPC, accepte un ancien format (sans archetype) à condition
-    qu'il fournisse au minimum un name ou un id reconnaissables.
+    qu'il fournisse au minimum un name ou un id reconnaissables. Les champs enum/Literal
+    qui dérivent (ex. ``importance: "high"`` halluciné par le LLM) sont retirés pour
+    laisser le défaut du schéma s'appliquer, plutôt que de jeter une persona par ailleurs
+    valide — cf. ``_validate_persona_lenient``.
     """
     if not isinstance(item, dict):
         return None
@@ -2343,14 +2446,75 @@ def _coerce_persona(item: Any, expected_type: str) -> dict[str, Any] | None:
         if not (item.get("name") or item.get("title") or item.get("id")):
             return None
         payload = _coerce_legacy_npc_dict(payload)
+    persona = _validate_persona_lenient(payload, expected_type)
+    if persona is None or persona.persona_type != expected_type:
+        return None
+    return persona.model_dump(mode="json")
+
+
+# Types d'erreur Pydantic v2 d'un Literal/enum hors plage : on retire le champ fautif
+# (→ défaut du schéma) plutôt que de rejeter toute la persona.
+_PERSONA_ENUM_ERROR_TYPES = {"literal_error", "enum"}
+
+
+def _validate_persona_lenient(payload: dict[str, Any], expected_type: str) -> BasePersona | None:
+    """Valide une persona en tolérant UNE passe de champs enum/Literal dérivés.
+
+    Les champs d'identité (``id``/``name``/``archetype``/``short_description``) restent
+    des ``str`` : une valeur fautive y lève une erreur ``missing``/type, jamais
+    ``literal_error`` — la garbage sans identité est donc toujours rejetée. Seuls les
+    champs enum AVEC défaut (``importance``, ``attitude_default``, voix, ``behavior_pattern``…)
+    sont retirés puis re-validés une fois.
+    """
     try:
-        persona = persona_from_dict(payload)
+        return persona_from_dict(payload)
+    except ValidationError as exc:
+        cleaned = dict(payload)
+        popped = False
+        for error in exc.errors():
+            if error.get("type") in _PERSONA_ENUM_ERROR_TYPES and _pop_at_loc(
+                cleaned, error.get("loc") or ()
+            ):
+                popped = True
+        if not popped:
+            logger.debug("Invalid persona payload (%s): %s", expected_type, exc)
+            return None
+        try:
+            return persona_from_dict(cleaned)
+        except Exception as exc2:
+            logger.debug("Persona invalide après nettoyage enum (%s): %s", expected_type, exc2)
+            return None
     except Exception as exc:
         logger.debug("Invalid persona payload (%s): %s", expected_type, exc)
         return None
-    if persona.persona_type != expected_type:
-        return None
-    return persona.model_dump(mode="json")
+
+
+def _pop_at_loc(container: Any, loc: tuple[Any, ...]) -> bool:
+    """Retire la feuille ciblée par un ``loc`` d'erreur Pydantic. True si retirée.
+
+    Navigue dict/list (les index de liste sont des ``int``). En retirant la feuille,
+    un sous-champ enum reprend le défaut de son sous-modèle.
+    """
+    if not loc:
+        return False
+    *parents, last = loc
+    node = container
+    for key in parents:
+        if isinstance(node, dict):
+            node = node.get(key)
+        elif isinstance(node, list) and isinstance(key, int) and 0 <= key < len(node):
+            node = node[key]
+        else:
+            return False
+        if node is None:
+            return False
+    if isinstance(node, dict) and last in node:
+        del node[last]
+        return True
+    if isinstance(node, list) and isinstance(last, int) and 0 <= last < len(node):
+        node.pop(last)
+        return True
+    return False
 
 
 def _sanitize_personas_list(value: Any, expected_type: str, cap: int = 50) -> list[dict[str, Any]]:

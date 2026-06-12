@@ -88,6 +88,19 @@ function defaultActionLabel(kind: ExPoi['kind']): string {
   }
 }
 
+// Un libellé d'affordance doit être un verbe court (« Parler », « Fouiller »), pas un
+// prompt à la 1re personne. Le MJ écrit parfois une phrase complète dans `label`
+// (« je demande un avertissement ») : on retombe alors sur le libellé par défaut du
+// type — le `prompt` envoyé, lui, reste inchangé. Évite un bouton incohérent/bavard.
+function cleanActionLabel(raw: string | undefined, kind: ExPoi['kind']): string {
+  const s = (raw ?? '').trim()
+  if (!s) return defaultActionLabel(kind)
+  // Pronom de 1re personne uniquement ("je ...", "j'...") — pas "Jeter une corde".
+  if (/^je\b|^j['’]/i.test(s)) return defaultActionLabel(kind)
+  if (s.length > 28 || s.split(/\s+/).length > 4) return defaultActionLabel(kind)
+  return s
+}
+
 // Coordonnées col → lettre (col 0 = A, col 1 = B, ...).
 function colLetter(col: number): string {
   return String.fromCharCode(65 + Math.max(0, Math.min(25, col)))
@@ -99,7 +112,7 @@ function adaptPoi(p: PointOfInterest): ExPoi {
   const interactionDc = (interaction as { dc?: unknown } | undefined)?.dc
   const role = semanticRoleForPoi(p)
   const kind = roleToKind(role)
-  const actionLabel = interaction?.label ?? defaultActionLabel(kind)
+  const actionLabel = cleanActionLabel(interaction?.label, kind)
   return {
     id: p.id,
     kind,

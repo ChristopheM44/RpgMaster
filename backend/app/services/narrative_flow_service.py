@@ -18,6 +18,7 @@ from typing import Any, Literal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.schemas import PlayerActionChoice
+from app.game import companion_refs
 from app.game.ai_player_manager import (
     order_companion_spotlight,
     record_companion_spotlight,
@@ -479,6 +480,22 @@ class NarrativeFlowService:
         if not active.ai_players:
             return []
 
+        # Allume l'indicateur « réfléchit » des compagnons concernés AVANT toute I/O
+        # (lecture DB de l'historique, snapshot d'état) : le retour visuel doit
+        # apparaître dès qu'on décide de les faire répondre, pas plusieurs secondes
+        # après la réponse du MJ (#2 : l'indicateur doit coller au traitement réel).
+        # La boucle ci-dessous l'éteint compagnon par compagnon dès que chacun a répondu.
+        eligible_ids = [
+            char_id
+            for char_id in target_ids
+            if char_id != trigger_character_id and active.ai_players.get(char_id) is not None
+        ]
+        for char_id in eligible_ids:
+            agent = active.ai_players[char_id]
+            await self._publish_thinking(
+                session_id, True, char_id, str(getattr(agent, "character_name", char_id))
+            )
+
         recent_messages = await load_recent_messages(session_id, db) if db is not None else []
         visible_game_state = companion_visible_game_state(active.state_data)
         responses: list[dict[str, str]] = []
@@ -809,25 +826,18 @@ class NarrativeFlowService:
             return [resolved] if resolved else list(companions)
         return []
 
+    # Délègue à app.game.companion_refs : détecteur UNIQUE partagé avec
+    # gm_response_executor (attribution des jets) pour qu'aucun chemin ne diverge.
     @staticmethod
     def _companion_index(active: ActiveSession) -> dict[str, str]:
-        return {
-            str(char_id): str(getattr(agent, "character_name", char_id))
-            for char_id, agent in active.ai_players.items()
-        }
+        return companion_refs.companion_index(active)
 
     @staticmethod
     def _resolve_companion_reference(
         reference: str | None,
         companions: dict[str, str],
     ) -> str | None:
-        if not reference:
-            return None
-        normalized_ref = _normalize_text(reference)
-        for char_id, name in companions.items():
-            if normalized_ref in {_normalize_text(char_id), _normalize_text(name)}:
-                return char_id
-        return None
+        return companion_refs.resolve_companion_reference(reference, companions)
 
     @classmethod
     def _find_mentioned_companion(
@@ -835,22 +845,7 @@ class NarrativeFlowService:
         text: str,
         companions: dict[str, str],
     ) -> str | None:
-        raw = text or ""
-        normalized = _normalize_text(raw)
-        for char_id, name in companions.items():
-            name_norm = _normalize_text(name)
-            id_norm = _normalize_text(char_id)
-            if re.search(rf"(^|\s)@{re.escape(name_norm)}(\s|$)", normalized):
-                return char_id
-            if re.search(rf"(^|\s)@{re.escape(id_norm)}(\s|$)", normalized):
-                return char_id
-            if normalized.startswith(f"{name_norm} ") or normalized.startswith(f"{name_norm},"):
-                return char_id
-            if normalized.startswith(f"{name_norm} que") or normalized.startswith(
-                f"{name_norm} qu"
-            ):
-                return char_id
-        return None
+        return companion_refs.find_mentioned_companion(text, companions)
 
     @staticmethod
     def _visible_companion_text(choice: PlayerActionChoice, character_name: str) -> str:
