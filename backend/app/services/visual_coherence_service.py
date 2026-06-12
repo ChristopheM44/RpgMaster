@@ -60,8 +60,14 @@ def repair_state_visual_coherence(state_data: dict[str, Any]) -> bool:
     if scene.get("scene_theme") != repaired_theme:
         scene["scene_theme"] = repaired_theme
         changed = True
+    journal = state_data.get("adventure_journal")
+    journal = journal if isinstance(journal, dict) else {}
+    time_of_day = journal.get("time_of_day")
     before_scene = deepcopy(scene)
-    local_map_service.enrich_scene_layout(scene)
+    local_map_service.enrich_scene_layout(
+        scene,
+        time_of_day=str(time_of_day) if time_of_day else None,
+    )
     if scene != before_scene:
         changed = True
 

@@ -10,7 +10,6 @@ import NarrativeLog from '../components/narrative/NarrativeLog.vue'
 import ExplorationLayout from '../components/exploration/ExplorationLayout.vue'
 import CombatLayout from '../components/combat/CombatLayout.vue'
 import Battlemap from '../components/combat/Battlemap.vue'
-import MapTabs from '../components/map/MapTabs.vue'
 import ActionBar from '../components/common/ActionBar.vue'
 import AdventureStartModal from '../components/ui/AdventureStartModal.vue'
 import ConfirmDialog from '../components/common/ConfirmDialog.vue'
@@ -535,13 +534,6 @@ onUnmounted(() => { disconnect() })
         >← Chroniques</button>
       </div>
     </header>
-
-    <!-- MapTabs (legacy) : caché en exploration V2 — le scope est piloté par ScopeTabs dans MapColumn. -->
-    <MapTabs
-      v-if="gameStore.phase !== 'exploration' && (gameStore.regionMap || Object.keys(gameStore.cityMaps).length > 0)"
-      :session-id="sessionId"
-      @action="handleAction"
-    />
 
     <!-- ─── Cinematic Loader ─── -->
     <div v-if="showLoader" class="flex-1 flex flex-col justify-center items-center p-8 text-center bg-[#0e0d14] relative z-20">

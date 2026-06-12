@@ -24,6 +24,53 @@ SCENE_ELEMENT_GEOMETRIES = {"line", "rect", "ellipse"}
 VISUAL_ASSET_STATUSES = {"prompt_ready", "generating", "ready", "failed"}
 TERRAIN_TYPES = {"road", "street", "path", "plaza_paving", "water", "mud"}
 EXIT_PLACEMENTS = {"edge", "embedded"}
+SCENE_AMBIANCE_LIGHTS = {"day", "dusk", "night", "torchlit", "overcast"}
+
+# Défauts 3D optionnels — mêmes valeurs que le fallback client
+# (frontend/src/engine3d/adapters/sceneAdapter.ts) pour rester cohérent.
+ELEMENT_DEFAULT_HEIGHTS_M: dict[str, float] = {
+    "wall": 2.5,
+    "door": 2.2,
+    "window": 1.0,
+    "furniture": 0.8,
+    "cover": 1.0,
+    "hazard": 0.05,
+    "light": 1.6,
+    "stairs": 0.4,
+    "terrain": 0.02,
+    "decor": 0.6,
+}
+_DEFAULT_ELEMENT_HEIGHT_M = 0.6
+_EXTERIOR_WALL_HEIGHT_M = 1.2  # muret/palissade en extérieur, pas un mur porteur
+_ELEMENT_HEIGHT_MIN_M, _ELEMENT_HEIGHT_MAX_M = 0.2, 8.0
+_ELEMENT_ELEVATION_MIN_M, _ELEMENT_ELEVATION_MAX_M = 0.0, 4.0
+
+_THEME_VEGETATION_DENSITY: dict[str, float] = {
+    "forest": 0.8,
+    "swamp": 0.6,
+    "plains": 0.4,
+    "beach": 0.3,
+    "coastal": 0.3,
+    "rocky": 0.25,
+    "mountain": 0.25,
+    "desert": 0.15,
+    "city": 0.05,
+    "dungeon": 0.0,
+    "cave": 0.0,
+}
+_DEFAULT_VEGETATION_DENSITY = 0.3
+
+_THEME_FOG_DENSITY: dict[str, float] = {
+    "cave": 0.5,
+    "swamp": 0.4,
+    "dungeon": 0.35,
+    "mountain": 0.25,
+    "forest": 0.2,
+}
+_DEFAULT_FOG_DENSITY = 0.15
+
+_NIGHT_TIME_WORDS = ("night", "nuit")
+_DUSK_TIME_WORDS = ("dawn", "dusk", "aube", "crépuscule", "crepuscule", "soir")
 
 _INTERIOR_WORDS = {
     "interieur",
@@ -162,6 +209,16 @@ def normalize_scene_element(raw: Any, cols: int, rows: int) -> dict[str, Any] | 
         element["visibility"] = visibility
     if isinstance(raw.get("discovered"), bool):
         element["discovered"] = raw["discovered"]
+    height_m = _parse_optional_float(raw.get("height_m"))
+    if height_m is not None:
+        element["height_m"] = round(
+            max(_ELEMENT_HEIGHT_MIN_M, min(height_m, _ELEMENT_HEIGHT_MAX_M)), 3
+        )
+    elevation_m = _parse_optional_float(raw.get("elevation_m"))
+    if elevation_m is not None:
+        element["elevation_m"] = round(
+            max(_ELEMENT_ELEVATION_MIN_M, min(elevation_m, _ELEMENT_ELEVATION_MAX_M)), 3
+        )
     return element
 
 
@@ -241,8 +298,16 @@ def normalize_visual_asset(raw: Any) -> dict[str, Any] | None:
     return asset
 
 
-def enrich_scene_layout(layout: dict[str, Any]) -> dict[str, Any]:
-    """Add deterministic local-map elements where the GM supplied only POIs/exits."""
+def enrich_scene_layout(
+    layout: dict[str, Any],
+    *,
+    time_of_day: str | None = None,
+) -> dict[str, Any]:
+    """Add deterministic local-map elements where the GM supplied only POIs/exits.
+
+    ``time_of_day`` (journal wording, free-form) only drives the default
+    ambiance light when the GM did not provide a valid one.
+    """
     cols = int(layout.get("cols") or 12)
     rows = int(layout.get("rows") or 12)
     elements = [
@@ -265,6 +330,9 @@ def enrich_scene_layout(layout: dict[str, Any]) -> dict[str, Any]:
 
     _add_poi_elements(by_id, layout, cols, rows)
     _strip_unrevealed_subterranean_access(by_id, layout)
+    for element in by_id.values():
+        _apply_element_3d_defaults(element, interior=interior)
+    _apply_scene_3d_defaults(layout, time_of_day=time_of_day)
     layout["elements"] = list(by_id.values())[:96]
     return layout
 
@@ -988,6 +1056,58 @@ def _is_interior_scene(layout: dict[str, Any]) -> bool:
     }
 
 
+def _apply_element_3d_defaults(element: dict[str, Any], *, interior: bool) -> None:
+    """Guarantee concrete ``height_m``/``elevation_m`` on one element (3D hints)."""
+    kind = str(element.get("kind") or "")
+    height_m = _parse_optional_float(element.get("height_m"))
+    if height_m is not None:
+        element["height_m"] = round(
+            max(_ELEMENT_HEIGHT_MIN_M, min(height_m, _ELEMENT_HEIGHT_MAX_M)), 3
+        )
+    elif kind == "wall" and not interior:
+        element["height_m"] = _EXTERIOR_WALL_HEIGHT_M
+    else:
+        element["height_m"] = ELEMENT_DEFAULT_HEIGHTS_M.get(kind, _DEFAULT_ELEMENT_HEIGHT_M)
+    elevation_m = _parse_optional_float(element.get("elevation_m"))
+    if elevation_m is not None:
+        element["elevation_m"] = round(
+            max(_ELEMENT_ELEVATION_MIN_M, min(elevation_m, _ELEMENT_ELEVATION_MAX_M)), 3
+        )
+    else:
+        element["elevation_m"] = 0.0
+
+
+def _apply_scene_3d_defaults(layout: dict[str, Any], *, time_of_day: str | None) -> None:
+    """Guarantee concrete ``vegetation_density`` and ``ambiance`` on the layout."""
+    theme = str(layout.get("scene_theme") or "").strip().lower()
+
+    vegetation = _parse_optional_float(layout.get("vegetation_density"))
+    if vegetation is None:
+        vegetation = _THEME_VEGETATION_DENSITY.get(theme, _DEFAULT_VEGETATION_DENSITY)
+    layout["vegetation_density"] = round(max(0.0, min(vegetation, 1.0)), 3)
+
+    raw_ambiance = layout.get("ambiance")
+    raw_ambiance = raw_ambiance if isinstance(raw_ambiance, dict) else {}
+    light = str(raw_ambiance.get("light") or "").strip().lower()
+    if light not in SCENE_AMBIANCE_LIGHTS:
+        light = _default_ambiance_light(theme, time_of_day)
+    fog = _parse_optional_float(raw_ambiance.get("fog_density"))
+    if fog is None:
+        fog = _THEME_FOG_DENSITY.get(theme, _DEFAULT_FOG_DENSITY)
+    layout["ambiance"] = {"light": light, "fog_density": round(max(0.0, min(fog, 1.0)), 3)}
+
+
+def _default_ambiance_light(theme: str, time_of_day: str | None) -> str:
+    if theme in {"dungeon", "cave"}:
+        return "torchlit"
+    moment = str(time_of_day or "").strip().lower()
+    if any(word in moment for word in _NIGHT_TIME_WORDS):
+        return "night"
+    if any(word in moment for word in _DUSK_TIME_WORDS):
+        return "dusk"
+    return "day"
+
+
 def _is_plaza_scene(layout: dict[str, Any]) -> bool:
     corpus = _layout_corpus(layout)
     return any(word in corpus for word in _PLAZA_WORDS)
@@ -1083,6 +1203,16 @@ def _clamp_float(value: Any, minimum: float, maximum: float, default: float) -> 
     except (TypeError, ValueError):
         parsed = default
     return max(minimum, min(parsed, maximum))
+
+
+def _parse_optional_float(value: Any) -> float | None:
+    """Parse a float-ish value; ``None`` when absent or invalid (bools rejected)."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _clean_text(value: Any, *, max_len: int) -> str:

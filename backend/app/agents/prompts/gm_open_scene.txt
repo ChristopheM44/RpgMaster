@@ -43,6 +43,9 @@ Instructions :
   * Party (positions du groupe) : Place les personnages selon l'ouverture décrite. Si quelqu'un est explicitement près d'un POI ou d'un lieu, place son jeton à 1-2 cases de ce point ; sinon regroupe le groupe dans un cluster serré de 2 cases maximum au centre ou sur la piste.
   * Couverts et Dangers tactiques : Génère SYSTÉMATIQUEMENT 2 à 4 points d'intérêt jouables représentant des obstacles de combat : des couverts (kind "cover", icon "c-half-cover" comme des rochers ou des troncs d'arbres couchés) et des dangers (kind "hazard", icon "trap-danger" comme des zones de ronces ou des crevasses) pour enrichir la battlemap.
 - Carte locale partagée exploration/combat : si la scène est intérieure, ajoute `elements` avec murs, portes, fenêtres si plausibles, mobilier/couverts, dangers et lumières. Lie les POI/sorties importants avec `element_id`.
+- Indices 3D optionnels (sinon valeurs sûres par défaut) : chaque element peut porter "height_m" (0.2–8) et "elevation_m" (0–4) ;
+  le scene_layout peut porter "ambiance": {"light": "day|dusk|night|torchlit|overcast", "fog_density": 0..1}
+  et "vegetation_density": 0..1. N'inclus ces champs que s'ils précisent vraiment la scène.
 - Si un lieu régional, une ville, un quartier ou une destination est connu, émets region_map_update et/ou city_map_update par patch incrémental.
   Si c'est la PREMIÈRE FOIS que cette région/ville est introduite (absent de world_maps), inclus le champ "decor" dans le patch :
   forêts (cercles dispersés), montagnes si région montagnarde, côte/mer UNIQUEMENT si mer/rivage/port explicite, rivière si traversante.

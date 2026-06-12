@@ -1001,6 +1001,8 @@ class TestPipelineExecutorUnits:
                 "state": "examined",
                 "physical_state": "air froid, roche humide",
                 "facts": ["Une ventilation vient du nord."],
+                "ambiance": {"light": "torchlit", "fog_density": 0.6},
+                "vegetation_density": 0.2,
                 "pois": [
                     {
                         "id": "journal",
@@ -1023,6 +1025,8 @@ class TestPipelineExecutorUnits:
                         "state": "locked",
                         "physical_state": "grille rouillée",
                         "facts": ["Des bulles remontent par intervalles."],
+                        "height_m": 1.4,
+                        "elevation_m": 0.25,
                     }
                 ],
             }
@@ -1037,6 +1041,60 @@ class TestPipelineExecutorUnits:
         assert layout["elements"][0]["state"] == "locked"
         assert layout["elements"][0]["physical_state"] == "grille rouillée"
         assert layout["elements"][0]["facts"] == ["Des bulles remontent par intervalles."]
+        # Hints 3D : pass-through LLM conservé après clamp d'enrichissement.
+        assert layout["ambiance"] == {"light": "torchlit", "fog_density": 0.6}
+        assert layout["vegetation_density"] == 0.2
+        assert layout["elements"][0]["height_m"] == 1.4
+        assert layout["elements"][0]["elevation_m"] == 0.25
+        wall = next(element for element in layout["elements"] if element["kind"] == "wall")
+        assert wall["height_m"] == 2.5
+        assert wall["elevation_m"] == 0.0
+
+    def test_executor_scene_layout_drops_bad_3d_hint_types(self) -> None:
+        layout = GMResponseExecutor._normalize_scene_layout(
+            {
+                "cols": 8,
+                "rows": 8,
+                "terrain": "cave",
+                "scene_theme": "cave",
+                "ambiance": "pénombre",
+                "vegetation_density": "dense",
+                "pois": [],
+                "elements": [
+                    {
+                        "id": "stalagmite",
+                        "name": "Stalagmite",
+                        "kind": "cover",
+                        "geometry": {"type": "rect", "col": 4, "row": 4, "width": 1, "height": 1},
+                        "height_m": "haute",
+                        "elevation_m": None,
+                    }
+                ],
+            }
+        )
+
+        # Types invalides ignorés -> défauts sûrs injectés par l'enrichissement.
+        assert layout["ambiance"] == {"light": "torchlit", "fog_density": 0.5}
+        assert layout["vegetation_density"] == 0.0
+        stalagmite = next(
+            element for element in layout["elements"] if element["id"] == "stalagmite"
+        )
+        assert stalagmite["height_m"] == 1.0
+        assert stalagmite["elevation_m"] == 0.0
+
+    def test_executor_scene_layout_drops_boolean_vegetation_density(self) -> None:
+        layout = GMResponseExecutor._normalize_scene_layout(
+            {
+                "cols": 8,
+                "rows": 8,
+                "terrain": "clairière",
+                "scene_theme": "forest",
+                "vegetation_density": True,
+                "pois": [],
+            }
+        )
+
+        assert layout["vegetation_density"] == 0.8
 
     def test_actor_attribution_guard_repairs_wrong_companion_discovery(self) -> None:
         response = AgentResponse(content="Elara découvre les runes sous la dalle.", actions=[])

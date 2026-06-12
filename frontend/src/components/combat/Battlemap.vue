@@ -3,7 +3,9 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useCharacterStore } from '../../stores/character'
 import { useGameStore } from '../../stores/game'
 import RpgMapIcon from '../common/RpgMapIcon.vue'
-import LocalMapCanvas from '../map/LocalMapCanvas.vue'
+import Scene3DCanvas from '../scene3d/Scene3DCanvas.vue'
+import { buildCombatSpec } from '../../engine3d/adapters/combatAdapter'
+import type { PickResult } from '../../engine3d/types'
 import {
   resolveScenePoiInteractions,
   type ResolvedScenePoiInteraction,
@@ -16,7 +18,6 @@ import {
   iconForPoi,
   semanticRoleForPoi,
   type RpgMapIconId,
-  type RpgMapIconState,
 } from '../../icons/rpgMapIcons'
 import type {
   CombatantState,
@@ -33,233 +34,6 @@ type MapInteractionMode = 'inspect' | 'move' | 'attack' | 'spell'
 type MapZoom = 'normal' | 'large'
 type SelectionKind = 'poi' | 'exit' | 'party' | 'combatant' | 'move' | 'obstacle' | 'zone'
 
-interface BiomeStyle {
-  bgGradient: string
-  gridColor: string
-  trackColor: string
-  fogColors: string[]
-}
-
-const BIOMES: Record<SceneTheme, BiomeStyle> = {
-  forest: {
-    bgGradient: 'linear-gradient(135deg, #16201a 0%, #0e120e 100%)',
-    gridColor: 'rgba(255,235,180,0.04)',
-    trackColor: 'rgba(247,236,208,0.10)',
-    fogColors: [
-      'radial-gradient(ellipse 240px 120px at 25% 30%, rgba(58,90,58,0.30), transparent 70%)',
-      'radial-gradient(ellipse 200px 100px at 75% 25%, rgba(192,144,255,0.10), transparent 70%)',
-      'radial-gradient(ellipse 180px 90px at 80% 80%, rgba(255,130,71,0.06), transparent 70%)',
-      'radial-gradient(ellipse 220px 110px at 30% 80%, rgba(79,216,192,0.08), transparent 70%)',
-    ],
-  },
-  beach: {
-    bgGradient: 'linear-gradient(175deg, #1a2030 0%, #1a1810 60%, #12110b 100%)',
-    gridColor: 'rgba(255,235,180,0.05)',
-    trackColor: 'rgba(79,216,192,0.12)',
-    fogColors: [
-      'radial-gradient(ellipse 300px 80px at 50% 100%, rgba(79,216,192,0.22), transparent 70%)',
-      'radial-gradient(ellipse 260px 70px at 50% 90%, rgba(30,80,110,0.25), transparent 70%)',
-      'radial-gradient(ellipse 200px 120px at 20% 40%, rgba(247,236,208,0.06), transparent 70%)',
-      'radial-gradient(ellipse 180px 100px at 80% 50%, rgba(79,216,192,0.08), transparent 70%)',
-    ],
-  },
-  coastal: {
-    bgGradient: 'linear-gradient(170deg, #162028 0%, #18181a 60%, #10100d 100%)',
-    gridColor: 'rgba(255,235,180,0.04)',
-    trackColor: 'rgba(79,216,192,0.10)',
-    fogColors: [
-      'radial-gradient(ellipse 320px 90px at 50% 100%, rgba(79,216,192,0.18), transparent 70%)',
-      'radial-gradient(ellipse 240px 80px at 30% 85%, rgba(30,80,120,0.22), transparent 70%)',
-      'radial-gradient(ellipse 200px 100px at 75% 30%, rgba(192,144,255,0.08), transparent 70%)',
-      'radial-gradient(ellipse 150px 80px at 15% 50%, rgba(79,216,192,0.10), transparent 70%)',
-    ],
-  },
-  rocky: {
-    bgGradient: 'linear-gradient(135deg, #1c1814 0%, #14120e 100%)',
-    gridColor: 'rgba(255,235,180,0.04)',
-    trackColor: 'rgba(247,236,208,0.08)',
-    fogColors: [
-      'radial-gradient(ellipse 200px 120px at 30% 30%, rgba(120,100,70,0.18), transparent 70%)',
-      'radial-gradient(ellipse 240px 100px at 70% 65%, rgba(90,80,60,0.14), transparent 70%)',
-      'radial-gradient(ellipse 180px 90px at 20% 80%, rgba(192,144,255,0.06), transparent 70%)',
-      'radial-gradient(ellipse 160px 80px at 80% 20%, rgba(255,130,71,0.04), transparent 70%)',
-    ],
-  },
-  mountain: {
-    bgGradient: 'linear-gradient(160deg, #181820 0%, #12121a 100%)',
-    gridColor: 'rgba(255,235,180,0.04)',
-    trackColor: 'rgba(247,236,208,0.07)',
-    fogColors: [
-      'radial-gradient(ellipse 300px 80px at 50% 0%, rgba(180,180,220,0.12), transparent 70%)',
-      'radial-gradient(ellipse 240px 100px at 20% 30%, rgba(100,90,130,0.14), transparent 70%)',
-      'radial-gradient(ellipse 200px 80px at 80% 60%, rgba(120,100,150,0.10), transparent 70%)',
-      'radial-gradient(ellipse 180px 70px at 60% 80%, rgba(192,144,255,0.06), transparent 70%)',
-    ],
-  },
-  dungeon: {
-    bgGradient: 'linear-gradient(135deg, #0c0c10 0%, #080808 100%)',
-    gridColor: 'rgba(255,235,180,0.06)',
-    trackColor: 'rgba(247,236,208,0.08)',
-    fogColors: [
-      'radial-gradient(ellipse 180px 100px at 25% 30%, rgba(255,160,60,0.28), transparent 70%)',
-      'radial-gradient(ellipse 200px 80px at 75% 60%, rgba(192,144,255,0.08), transparent 70%)',
-      'radial-gradient(ellipse 240px 120px at 50% 80%, rgba(20,10,5,0.50), transparent 70%)',
-      'radial-gradient(ellipse 160px 80px at 20% 70%, rgba(232,69,69,0.06), transparent 70%)',
-    ],
-  },
-  cave: {
-    bgGradient: 'linear-gradient(135deg, #0a0a0c 0%, #060608 100%)',
-    gridColor: 'rgba(255,235,180,0.05)',
-    trackColor: 'rgba(247,236,208,0.06)',
-    fogColors: [
-      'radial-gradient(ellipse 160px 80px at 30% 40%, rgba(79,216,192,0.08), transparent 70%)',
-      'radial-gradient(ellipse 200px 100px at 70% 60%, rgba(192,144,255,0.07), transparent 70%)',
-      'radial-gradient(ellipse 240px 120px at 50% 50%, rgba(0,0,0,0.40), transparent 70%)',
-      'radial-gradient(ellipse 180px 90px at 20% 80%, rgba(255,130,71,0.05), transparent 70%)',
-    ],
-  },
-  city: {
-    bgGradient: 'linear-gradient(135deg, #16141e 0%, #0e0d14 100%)',
-    gridColor: 'rgba(255,235,180,0.06)',
-    trackColor: 'rgba(247,236,208,0.14)',
-    fogColors: [
-      'radial-gradient(ellipse 240px 120px at 30% 40%, rgba(240,199,100,0.08), transparent 70%)',
-      'radial-gradient(ellipse 200px 100px at 70% 30%, rgba(255,130,71,0.08), transparent 70%)',
-      'radial-gradient(ellipse 180px 90px at 80% 75%, rgba(192,144,255,0.08), transparent 70%)',
-      'radial-gradient(ellipse 220px 110px at 20% 80%, rgba(240,199,100,0.06), transparent 70%)',
-    ],
-  },
-  plains: {
-    bgGradient: 'linear-gradient(135deg, #181c14 0%, #10120c 100%)',
-    gridColor: 'rgba(255,235,180,0.04)',
-    trackColor: 'rgba(247,236,208,0.12)',
-    fogColors: [
-      'radial-gradient(ellipse 300px 60px at 50% 10%, rgba(180,200,100,0.08), transparent 70%)',
-      'radial-gradient(ellipse 240px 80px at 20% 50%, rgba(100,140,60,0.10), transparent 70%)',
-      'radial-gradient(ellipse 200px 70px at 80% 60%, rgba(180,200,100,0.08), transparent 70%)',
-      'radial-gradient(ellipse 260px 50px at 50% 90%, rgba(120,100,70,0.10), transparent 70%)',
-    ],
-  },
-  swamp: {
-    bgGradient: 'linear-gradient(135deg, #0e1410 0%, #0a100a 100%)',
-    gridColor: 'rgba(255,235,180,0.04)',
-    trackColor: 'rgba(79,216,192,0.10)',
-    fogColors: [
-      'radial-gradient(ellipse 260px 120px at 30% 60%, rgba(40,80,40,0.30), transparent 70%)',
-      'radial-gradient(ellipse 200px 100px at 70% 40%, rgba(192,144,255,0.10), transparent 70%)',
-      'radial-gradient(ellipse 240px 110px at 60% 80%, rgba(79,216,192,0.10), transparent 70%)',
-      'radial-gradient(ellipse 180px 80px at 10% 30%, rgba(40,90,40,0.20), transparent 70%)',
-    ],
-  },
-  desert: {
-    bgGradient: 'linear-gradient(135deg, #1e1810 0%, #18140a 100%)',
-    gridColor: 'rgba(255,235,180,0.05)',
-    trackColor: 'rgba(247,236,208,0.12)',
-    fogColors: [
-      'radial-gradient(ellipse 300px 60px at 50% 0%, rgba(255,180,60,0.10), transparent 70%)',
-      'radial-gradient(ellipse 240px 80px at 20% 50%, rgba(220,160,60,0.10), transparent 70%)',
-      'radial-gradient(ellipse 200px 70px at 80% 60%, rgba(255,130,71,0.08), transparent 70%)',
-      'radial-gradient(ellipse 260px 50px at 50% 100%, rgba(180,120,40,0.14), transparent 70%)',
-    ],
-  },
-}
-
-interface TrackVisual {
-  outerColor: string
-  outerWidthPct: number
-  innerColor: string
-  innerDash: string
-  innerWidthPct: number
-  strokeLinecap?: 'round' | 'butt' | 'square'
-}
-
-const TRACK_VISUALS: Record<SceneTheme, TrackVisual> = {
-  forest: {
-    outerColor: 'rgba(247,236,208,0.08)',
-    outerWidthPct: 0.75,
-    innerColor: 'rgba(139,90,43,0.3)',
-    innerDash: '4 6',
-    innerWidthPct: 0.15,
-  },
-  plains: {
-    outerColor: 'rgba(247,236,208,0.10)',
-    outerWidthPct: 0.7,
-    innerColor: 'rgba(111,217,111,0.2)',
-    innerDash: '5 5',
-    innerWidthPct: 0.15,
-  },
-  desert: {
-    outerColor: 'rgba(240,199,100,0.12)',
-    outerWidthPct: 0.8,
-    innerColor: 'rgba(240,199,100,0.4)',
-    innerDash: '10 8',
-    innerWidthPct: 0.18,
-  },
-  dungeon: {
-    outerColor: 'rgba(90,90,95,0.22)',
-    outerWidthPct: 0.85,
-    innerColor: 'rgba(160,160,170,0.35)',
-    innerDash: '14 3',
-    innerWidthPct: 0.75,
-    strokeLinecap: 'butt',
-  },
-  cave: {
-    outerColor: 'rgba(70,65,60,0.25)',
-    outerWidthPct: 0.8,
-    innerColor: 'rgba(140,130,120,0.3)',
-    innerDash: '8 6',
-    innerWidthPct: 0.65,
-    strokeLinecap: 'round',
-  },
-  beach: {
-    outerColor: 'rgba(79,216,192,0.10)',
-    outerWidthPct: 0.75,
-    innerColor: 'rgba(79,216,192,0.35)',
-    innerDash: '18 4',
-    innerWidthPct: 0.5,
-    strokeLinecap: 'butt',
-  },
-  coastal: {
-    outerColor: 'rgba(79,216,192,0.08)',
-    outerWidthPct: 0.7,
-    innerColor: 'rgba(247,236,208,0.25)',
-    innerDash: '20 5',
-    innerWidthPct: 0.45,
-    strokeLinecap: 'butt',
-  },
-  swamp: {
-    outerColor: 'rgba(40,30,20,0.35)',
-    outerWidthPct: 0.8,
-    innerColor: 'rgba(100,80,60,0.4)',
-    innerDash: '12 8',
-    innerWidthPct: 0.55,
-    strokeLinecap: 'butt',
-  },
-  mountain: {
-    outerColor: 'rgba(100,100,105,0.18)',
-    outerWidthPct: 0.7,
-    innerColor: 'rgba(200,200,205,0.25)',
-    innerDash: '3 9',
-    innerWidthPct: 0.25,
-    strokeLinecap: 'round',
-  },
-  rocky: {
-    outerColor: 'rgba(110,100,90,0.18)',
-    outerWidthPct: 0.75,
-    innerColor: 'rgba(180,170,160,0.3)',
-    innerDash: '4 8',
-    innerWidthPct: 0.2,
-    strokeLinecap: 'round',
-  },
-  city: {
-    outerColor: 'rgba(120,110,100,0.2)',
-    outerWidthPct: 0.9,
-    innerColor: 'rgba(240,199,100,0.25)',
-    innerDash: '16 4',
-    innerWidthPct: 0.8,
-    strokeLinecap: 'butt',
-  },
-}
 
 interface SelectedThing {
   kind: SelectionKind
@@ -336,10 +110,6 @@ const storagePrefix = computed(() => `rpg.map.${props.mode}`)
 const cols = computed(() => isExploration.value ? activeScene.value?.cols ?? 8 : gameStore.gridConfig?.cols ?? 10)
 const rows = computed(() => isExploration.value ? activeScene.value?.rows ?? 8 : gameStore.gridConfig?.rows ?? 8)
 const cellSizeM = computed(() => isExploration.value ? activeScene.value?.cell_size_m ?? 1.5 : gameStore.gridConfig?.cell_size_m ?? 1.5)
-const cellPx = computed(() => {
-  if (isFullscreen.value) return zoom.value === 'large' ? 64 : 54
-  return zoom.value === 'large' ? 56 : 44
-})
 const mapTitle = computed(() => isExploration.value ? 'Carte de scène' : 'Battlemap tactique')
 const terrainLabel = computed(() => activeScene.value?.terrain?.replaceAll('_', ' ') ?? 'lieu actuel')
 
@@ -408,12 +178,6 @@ const reachableCells = computed((): Set<string> => {
   return new Set((reachable?.free ?? []).map(positionKey))
 })
 
-const gridCells = computed(() =>
-  Array.from({ length: rows.value * cols.value }, (_, index) => ({
-    col: index % cols.value,
-    row: Math.floor(index / cols.value),
-  })),
-)
 
 const obstacles = computed(() => isExploration.value ? [] : gameStore.gridDecoration?.obstacles ?? [])
 const zones = computed(() => isExploration.value ? [] : gameStore.gridDecoration?.zones ?? [])
@@ -449,124 +213,7 @@ const theme = computed<SceneTheme>(() => {
   return activeScene.value?.scene_theme ?? (gameStore.gridConfig as any)?.scene_theme ?? 'forest'
 })
 
-const biome = computed(() => BIOMES[theme.value] ?? BIOMES.forest)
 
-const widthPx = computed(() => cols.value * cellPx.value)
-const heightPx = computed(() => rows.value * cellPx.value)
-
-// ── Décor de canopée (seulement pour les biomes végétaux) ──────────────────
-const canopyCircles: Array<[number, number]> = [
-  [1, 1], [3, 5], [8, 1], [10, 4], [2, 9], [8, 9], [10, 10], [6, 6],
-]
-
-const showCanopy = computed(() =>
-  ['forest', 'swamp', 'plains'].includes(theme.value)
-)
-
-const canopyColor = computed(() => {
-  if (theme.value === 'swamp') return 'rgba(30,60,30,0.30)'
-  if (theme.value === 'plains') return 'rgba(80,110,40,0.18)'
-  return 'rgba(58,90,58,0.25)'
-})
-
-// ── Décor eau (beach/coastal) ──────────────────────────────────────────────
-const showWater = computed(() => ['beach', 'coastal'].includes(theme.value))
-
-const waterRect = computed(() => ({
-  y: heightPx.value * 0.72,
-  height: heightPx.value * 0.28,
-}))
-
-function wavePath(yBase: number, amplitude: number, period: number): string {
-  const w = widthPx.value
-  const pts: string[] = [`M 0 ${yBase}`]
-  const steps = Math.ceil(w / period) + 1
-  for (let i = 0; i <= steps; i++) {
-    const x = i * period
-    const y = yBase + (i % 2 === 0 ? -amplitude : amplitude)
-    const cx = x - period / 2
-    pts.push(`Q ${cx} ${y} ${x} ${yBase}`)
-  }
-  return pts.join(' ')
-}
-
-const wave1 = computed(() => wavePath(waterRect.value.y + 6, 4, 40))
-const wave2 = computed(() => wavePath(waterRect.value.y + 14, 3, 50))
-
-// ── Décor rochers (rocky/mountain) ────────────────────────────────────────
-const showRocks = computed(() => ['rocky', 'mountain'].includes(theme.value))
-
-const rockClusters: Array<{ x: number; y: number; r: number }> = [
-  { x: 0.12, y: 0.15, r: 0.06 },
-  { x: 0.82, y: 0.10, r: 0.05 },
-  { x: 0.05, y: 0.65, r: 0.07 },
-  { x: 0.88, y: 0.72, r: 0.055 },
-  { x: 0.50, y: 0.08, r: 0.05 },
-  { x: 0.35, y: 0.85, r: 0.06 },
-  { x: 0.72, y: 0.42, r: 0.045 },
-]
-
-// ── Décor lampe/brasero (donjon/grotte) ────────────────────────────────────
-const showTorches = computed(() => ['dungeon', 'cave'].includes(theme.value))
-
-const torchPositions: Array<{ cx: number; cy: number }> = [
-  { cx: 0.08, cy: 0.12 },
-  { cx: 0.92, cy: 0.12 },
-  { cx: 0.08, cy: 0.88 },
-  { cx: 0.92, cy: 0.88 },
-]
-
-// ── Piste ──────────────────────────────────────────────────────────────────
-function pathTrack() {
-  const c = cellPx.value
-  const sceneExits = (activeScene.value?.exits ?? []).filter(e => e.position)
-  
-  if (sceneExits.length < 2) {
-    // Fallback to middle horizontal serpentine if less than 2 exits
-    const trackRow = Math.max(0, Math.min(rows.value - 1, Math.floor(rows.value / 2)))
-    return `M 0 ${(trackRow + 0.5) * c} Q ${3 * c} ${(trackRow - 1) * c} ${5 * c} ${trackRow * c} T ${cols.value * c} ${(trackRow + 0.5) * c}`
-  }
-  
-  // Sort exits by column to go left-to-right (or by row if it's more vertical than horizontal)
-  const sorted = [...sceneExits].sort((a, b) => (a.position?.col ?? 0) - (b.position?.col ?? 0))
-  const start = sorted[0]?.position
-  const end = sorted[sorted.length - 1]?.position
-  
-  if (!start || !end) {
-    const trackRow = Math.max(0, Math.min(rows.value - 1, Math.floor(rows.value / 2)))
-    return `M 0 ${(trackRow + 0.5) * c} Q ${3 * c} ${(trackRow - 1) * c} ${5 * c} ${trackRow * c} T ${cols.value * c} ${(trackRow + 0.5) * c}`
-  }
-  
-  const x1 = (start.col + 0.5) * c
-  const y1 = (start.row + 0.5) * c
-  const x2 = (end.col + 0.5) * c
-  const y2 = (end.row + 0.5) * c
-  
-  const dx = x2 - x1
-  const dy = y2 - y1
-  
-  if (Math.abs(dx) >= Math.abs(dy)) {
-    // Horizontal serpentine: S-curve via cubic bezier
-    const cx1 = x1 + dx * 0.35
-    const cy1 = y1 - c * 1.5
-    const cx2 = x1 + dx * 0.65
-    const cy2 = y2 + c * 1.5
-    return `M ${x1} ${y1} C ${cx1} ${cy1} ${cx2} ${cy2} ${x2} ${y2}`
-  } else {
-    // Vertical serpentine
-    const cy1 = y1 + dy * 0.35
-    const cx1 = x1 - c * 1.5
-    const cy2 = y1 + dy * 0.65
-    const cx2 = x2 + c * 1.5
-    return `M ${x1} ${y1} C ${cx1} ${cy1} ${cx2} ${cy2} ${x2} ${y2}`
-  }
-}
-
-const trackVisual = computed(() => TRACK_VISUALS[theme.value] ?? TRACK_VISUALS.forest)
-
-const mapBackground = computed(() => {
-  return biome.value.bgGradient
-})
 
 const legendEntries = computed<LegendEntry[]>(() => {
   if (isExploration.value) {
@@ -672,6 +319,99 @@ const selectedElementId = computed(() => {
   return null
 })
 
+// ─── Pont vers le moteur 3D ──────────────────────────────────────────────────
+
+const scene3dRef = ref<InstanceType<typeof Scene3DCanvas> | null>(null)
+
+const classById = computed<Record<string, string>>(() => {
+  const map: Record<string, string> = {}
+  for (const character of charStore.sessionCharacters) map[character.id] = character.char_class
+  return map
+})
+
+const combatSpec = computed(() => buildCombatSpec({
+  scene: activeScene.value,
+  gridConfig: gameStore.gridConfig,
+  isExploration: isExploration.value,
+  combatants: gameStore.combatants,
+  classById: classById.value,
+  myCharacterId: props.myCharacterId ?? null,
+  selectedCombatantId: gameStore.selectedCombatantId,
+  interactionMode: props.interactionMode,
+  reachableFree: !isExploration.value && props.isMyTurn && props.myCharacterId
+    ? gameStore.reachableCells[props.myCharacterId]?.free ?? []
+    : [],
+  gridDecoration: {
+    obstacles: obstacles.value,
+    zones: zones.value.map((zone) => ({
+      id: zone.id,
+      name: zone.name,
+      cells: zone.cells,
+      icon: iconForCombatZone(zone),
+    })),
+  },
+  partyMarkers: isExploration.value
+    ? partyMarkers.value.map((marker) => ({
+        id: marker.id,
+        name: marker.name,
+        col: marker.position.col,
+        row: marker.position.row,
+        isMe: marker.id === props.myCharacterId,
+        isAi: marker.iconId === 'ai-companion',
+      }))
+    : [],
+  pois: displayPois.value
+    .filter((poi) => poi.position)
+    .map((poi) => ({
+      id: poi.id,
+      name: poi.name,
+      col: poi.position.col,
+      row: poi.position.row,
+      iconId: iconForPoi(poi),
+      tone: toneForPoi(poi),
+      elementId: poi.element_id ?? null,
+    })),
+  exits: (activeScene.value?.exits ?? [])
+    .filter((exit) => exit.position)
+    .map((exit) => ({
+      id: exit.id,
+      label: exit.label,
+      col: exit.position.col,
+      row: exit.position.row,
+      iconId: iconForExit(exit),
+      active: exit.active ?? true,
+      elementId: exit.element_id ?? null,
+    })),
+  pendingMove: selected.value?.kind === 'move' ? selected.value.position : null,
+  selectedElementId: selectedElementId.value,
+}))
+
+/** Route un pick 3D vers les sélecteurs historiques (priorités préservées). */
+function onMapPick(pick: PickResult): void {
+  if (pick.type === 'cell') {
+    handleCellClick(pick.col, pick.row)
+    return
+  }
+  if (pick.type === 'element') {
+    const element = (activeScene.value?.elements ?? []).find((item) => item.id === pick.id)
+    if (element) selectSceneElement(element)
+    return
+  }
+  if (pick.tokenKind === 'combatant') {
+    const combatant = gameStore.combatants.find((item) => item.id === pick.id)
+    if (combatant) selectCombatant(combatant)
+  } else if (pick.tokenKind === 'exit') {
+    const exit = (activeScene.value?.exits ?? []).find((item) => item.id === pick.id)
+    if (exit) selectExit(exit)
+  } else if (pick.tokenKind === 'poi') {
+    const poi = displayPois.value.find((item) => item.id === pick.id)
+    if (poi) selectPoi(poi)
+  } else {
+    const marker = partyMarkers.value.find((item) => item.id === pick.id)
+    if (marker) selectParty(marker)
+  }
+}
+
 onMounted(loadPreferences)
 
 watch(storagePrefix, () => {
@@ -689,6 +429,7 @@ watch(
 watch([isCollapsed, zoom], () => {
   savePreference('collapsed', isCollapsed.value ? '1' : '0')
   savePreference('zoom', zoom.value)
+  scene3dRef.value?.setZoomPreset(zoom.value === 'large' ? 'close' : 'normal')
 })
 
 function loadPreferences() {
@@ -724,14 +465,6 @@ function formatMeters(value: number): string {
   return Number.isInteger(value) ? `${value} m` : `${value.toFixed(1)} m`
 }
 
-function hpPct(cur: number, max: number): number {
-  return Math.max(0, max > 0 ? (cur / max) * 100 : 0)
-}
-
-function tokenLabel(combatant: CombatantState): string {
-  if (combatant.token) return combatant.token
-  return tokenForName(combatant.name)
-}
 
 function tokenForName(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
@@ -739,15 +472,6 @@ function tokenForName(name: string): string {
   return letters.toUpperCase()
 }
 
-function tokenBackground(combatant: CombatantState): string {
-  if (combatant.kind === 'monster') {
-    return `radial-gradient(circle at 35% 25%, rgba(255,255,255,0.28), ${combatant.color ?? 'var(--color-blood)'} 62%, rgba(0,0,0,0.8))`
-  }
-  if (combatant.kind === 'pc' && (combatant.is_ai_controlled ?? combatant.is_ai)) {
-    return 'radial-gradient(circle at 35% 25%, rgba(255,255,255,0.25), var(--color-arcane) 58%, #7050b0)'
-  }
-  return 'radial-gradient(circle at 35% 25%, rgba(255,255,255,0.28), var(--color-arcane) 58%, var(--color-ember))'
-}
 
 function clampPosition(position: GridPosition): GridPosition {
   return {
@@ -756,24 +480,6 @@ function clampPosition(position: GridPosition): GridPosition {
   }
 }
 
-function markerStyle(position: GridPosition) {
-  const clamped = clampPosition(position)
-  return {
-    left: `${clamped.col * cellPx.value + cellPx.value / 2}px`,
-    top: `${clamped.row * cellPx.value + cellPx.value / 2}px`,
-    transform: 'translate(-50%, -50%)',
-  }
-}
-
-function cellBoxStyle(position: GridPosition) {
-  const clamped = clampPosition(position)
-  return {
-    left: `${clamped.col * cellPx.value}px`,
-    top: `${clamped.row * cellPx.value}px`,
-    width: `${cellPx.value}px`,
-    height: `${cellPx.value}px`,
-  }
-}
 
 function isDuplicateExitPoi(poi: PointOfInterest, exits: SceneExit[]): boolean {
   const role = semanticRoleForPoi(poi)
@@ -969,25 +675,6 @@ function combatSelectionIcon(combatant: CombatantState): RpgMapIconId {
   return iconForCombatant(combatant)
 }
 
-function targetIconForMode(): RpgMapIconId {
-  return props.interactionMode === 'spell' ? 'c-spell-target' : 'c-atk-target'
-}
-
-function targetLabelForMode(): string {
-  return props.interactionMode === 'spell' ? 'Cible de sort' : "Cible d'attaque"
-}
-
-function selectedIconState(kind: SelectionKind, id: string): RpgMapIconState {
-  return selected.value?.kind === kind && selected.value.id === id ? 'active' : 'normal'
-}
-
-function isSelectedPosition(kind: SelectionKind, position: GridPosition): boolean {
-  return selected.value?.kind === kind && positionKey(selected.value.position) === positionKey(position)
-}
-
-function reachableIconState(position: GridPosition): RpgMapIconState {
-  return isSelectedPosition('move', position) ? 'active' : 'normal'
-}
 
 function isLegendEntrySelected(entry: LegendEntry): boolean {
   if (!selected.value) return false
@@ -996,11 +683,6 @@ function isLegendEntrySelected(entry: LegendEntry): boolean {
   return Boolean(entry.position && positionKey(entry.position) === positionKey(selected.value.position))
 }
 
-function isInteractiveCell(col: number, row: number): boolean {
-  const key = `${col},${row}`
-  if (isExploration.value) return Boolean(exitMap.value[key] || poiMap.value[key] || partyMap.value[key])
-  return reachableCells.value.has(key) || Boolean(cellMap.value[key] || obstacleSet.value.has(key) || zoneByCell.value[key])
-}
 
 function handleCellClick(col: number, row: number) {
   const position = { col, row }
@@ -1194,226 +876,14 @@ function markerToneStyle(tone: LegendEntry['tone']) {
     </div>
 
     <div v-if="!isCollapsed" class="flex min-h-0 flex-1 flex-col lg:flex-row">
-      <div class="flex min-h-0 flex-1 items-center justify-center overflow-auto p-4">
-        <LocalMapCanvas
-          class="rpg-map-grid-frame relative overflow-hidden rounded border"
+      <div class="flex min-h-0 flex-1 overflow-hidden p-3">
+        <Scene3DCanvas
+          ref="scene3dRef"
+          class="rpg-map-grid-frame"
           data-testid="battlemap-grid"
-          :scene="activeScene"
-          :cell="cellPx"
-          :cols-fallback="cols"
-          :rows-fallback="rows"
-          :theme-fallback="theme"
-          :mode="isExploration ? 'exploration' : 'combat'"
-          :selected-element-id="selectedElementId"
-          @element-click="selectSceneElement"
+          :spec="combatSpec"
+          @pick="onMapPick"
         >
-          <!-- Zones et obstacles tactiques en combat -->
-          <template v-if="!isExploration">
-            <div
-              v-for="zone in zones"
-              :key="zone.id"
-            >
-              <button
-                v-for="cell in zone.cells"
-                :key="`${zone.id}-${cell.col},${cell.row}`"
-                class="rpg-map-zone-cell absolute z-10 flex items-center justify-center border bg-gold/10"
-                :style="cellBoxStyle(cell)"
-                type="button"
-                :aria-label="zone.name"
-                @click.stop="selectZone(cell, zone)"
-              >
-                <RpgMapIcon
-                  :data-testid="`map-icon-zone-${zone.id}`"
-                  :icon-id="iconForCombatZone(zone)"
-                  :size="Math.max(18, Math.min(28, cellPx * 0.52))"
-                  :state="isSelectedPosition('zone', cell) ? 'active' : 'normal'"
-                  :label="zone.name"
-                />
-              </button>
-            </div>
-            <button
-              v-for="obstacle in obstacles"
-              :key="`obstacle-${obstacle.col},${obstacle.row}`"
-              class="absolute z-20 flex items-center justify-center bg-black/45"
-              :style="{ ...cellBoxStyle(obstacle), color: 'var(--color-text-muted)' }"
-              type="button"
-              aria-label="Obstacle"
-              @click.stop="selectObstacle(obstacle)"
-            >
-              <RpgMapIcon
-                :data-testid="`map-icon-obstacle-${obstacle.col}-${obstacle.row}`"
-                icon-id="c-obstacle"
-                variant="mono"
-                :size="Math.max(18, Math.min(28, cellPx * 0.54))"
-                :state="isSelectedPosition('obstacle', obstacle) ? 'active' : 'normal'"
-                label="Obstacle"
-              />
-            </button>
-          </template>
-
-          <!-- Repères / POIs (Toujours visibles) -->
-          <button
-            v-for="poi in displayPois"
-            :key="`poi-${poi.id}`"
-            class="rpg-map-poi-marker absolute z-40 flex h-9 w-9 items-center justify-center rounded-lg border transition hover:scale-105"
-            :style="{ ...markerStyle(poi.position), ...markerToneStyle(toneForPoi(poi)) }"
-            type="button"
-            :aria-label="poi.name"
-            :title="poi.name"
-            @click.stop="selectPoi(poi)"
-          >
-            <RpgMapIcon
-              :data-testid="`map-icon-poi-${poi.id}`"
-              :icon-id="iconForPoi(poi)"
-              :size="24"
-              :state="selectedIconState('poi', poi.id)"
-              :label="poi.name"
-            />
-          </button>
-
-          <!-- Sorties actives (Toujours visibles pour fuir en combat) -->
-          <button
-            v-for="exit in activeScene?.exits ?? []"
-            :key="`exit-${exit.id}`"
-            class="rpg-map-exit-marker absolute z-40 flex h-10 w-10 items-center justify-center rounded-full border transition hover:scale-105"
-            :style="markerStyle(exit.position)"
-            type="button"
-            :aria-label="exit.label"
-            :title="exit.label"
-            @click.stop="selectExit(exit)"
-          >
-            <RpgMapIcon
-              :data-testid="`map-icon-exit-${exit.id}`"
-              :icon-id="iconForExit(exit)"
-              :size="25"
-              :state="selectedIconState('exit', exit.id)"
-              :label="exit.label"
-            />
-          </button>
-
-          <!-- Jetons de groupe d'exploration (Uniquement en exploration) -->
-          <template v-if="isExploration">
-            <button
-              v-for="marker in partyMarkers"
-              :key="`party-${marker.id}`"
-              class="rpg-map-party-marker absolute z-50 flex h-10 w-10 items-center justify-center rounded-full border text-[10px] font-bold text-white transition hover:scale-105"
-              :class="{ 'is-mine': marker.id === myCharacterId }"
-              :style="markerStyle(marker.position)"
-              type="button"
-              :aria-label="marker.name"
-              :title="marker.name"
-              @click.stop="selectParty(marker)"
-            >
-              <RpgMapIcon
-                :data-testid="`map-icon-party-${marker.id}`"
-                :icon-id="marker.iconId"
-                :size="25"
-                :state="selectedIconState('party', marker.id)"
-                :label="marker.name"
-              />
-            </button>
-          </template>
-
-          <button
-            v-for="cell in gridCells"
-            :key="`${cell.col},${cell.row}`"
-            class="absolute z-30 flex items-center justify-center"
-            :class="{ 'cursor-pointer': isInteractiveCell(cell.col, cell.row) }"
-            :style="{ left: `${cell.col * cellPx}px`, top: `${cell.row * cellPx}px`, width: `${cellPx}px`, height: `${cellPx}px` }"
-            type="button"
-            :aria-label="coordinateLabel(cell)"
-            @click="handleCellClick(cell.col, cell.row)"
-          >
-            <span
-              v-if="reachableCells.has(`${cell.col},${cell.row}`)"
-              class="flex h-7 w-7 items-center justify-center rounded-full border transition"
-              :class="interactionMode === 'move' ? 'bg-green/20 border-green/50' : 'bg-gold/10 border-gold/35'"
-            >
-              <RpgMapIcon
-                :data-testid="`map-icon-reachable-${cell.col}-${cell.row}`"
-                :icon-id="reachableIconState(cell) === 'active' ? 'c-move-dest' : 'c-move-tile'"
-                :size="18"
-                :state="reachableIconState(cell)"
-                label="Case accessible"
-              />
-            </span>
-
-            <div
-              v-if="cellMap[`${cell.col},${cell.row}`]"
-              class="relative flex h-10 w-10 items-center justify-center rounded-full border text-[11px] font-bold text-white transition-transform hover:scale-105"
-              :class="{
-                'ring-2 ring-blood/70': interactionMode === 'attack' && canTargetCombatant(cellMap[`${cell.col},${cell.row}`]!),
-                'ring-2 ring-arcane/70': interactionMode === 'spell' && canTargetCombatant(cellMap[`${cell.col},${cell.row}`]!),
-              }"
-              :style="{
-                background: tokenBackground(cellMap[`${cell.col},${cell.row}`]!),
-                borderColor: cellMap[`${cell.col},${cell.row}`]!.is_active
-                  ? 'var(--color-gold)'
-                  : cellMap[`${cell.col},${cell.row}`]!.id === gameStore.selectedCombatantId ? 'var(--color-parchment)' : 'rgba(247,236,208,0.28)',
-                boxShadow: cellMap[`${cell.col},${cell.row}`]!.is_active
-                  ? '0 0 0 2px rgba(247,199,107,0.28), 0 0 18px rgba(247,199,107,0.45)'
-                  : cellMap[`${cell.col},${cell.row}`]!.id === gameStore.selectedCombatantId ? '0 0 0 2px rgba(247,236,208,0.22)' : '0 5px 14px rgba(0,0,0,0.35)',
-              }"
-              :title="cellMap[`${cell.col},${cell.row}`]!.name"
-            >
-              {{ tokenLabel(cellMap[`${cell.col},${cell.row}`]!) }}
-              <RpgMapIcon
-                class="absolute -left-2 -top-2 rounded-full bg-bg-elev/95"
-                :data-testid="`map-icon-combatant-${cellMap[`${cell.col},${cell.row}`]!.id}`"
-                :icon-id="iconForCombatant(cellMap[`${cell.col},${cell.row}`]!)"
-                :size="18"
-                :state="cellMap[`${cell.col},${cell.row}`]!.hp_current <= 0 ? 'disabled' : 'normal'"
-                :label="cellMap[`${cell.col},${cell.row}`]!.name"
-              />
-              <RpgMapIcon
-                v-if="cellMap[`${cell.col},${cell.row}`]!.is_active"
-                class="absolute -right-2 -top-2 rounded-full bg-bg-elev/95"
-                :data-testid="`map-icon-active-${cellMap[`${cell.col},${cell.row}`]!.id}`"
-                icon-id="c-active-turn"
-                :size="18"
-                state="active"
-                label="Tour actif"
-              />
-              <RpgMapIcon
-                v-else-if="cellMap[`${cell.col},${cell.row}`]!.id === gameStore.selectedCombatantId"
-                class="absolute -right-2 -top-2 rounded-full bg-bg-elev/95"
-                :data-testid="`map-icon-selection-${cellMap[`${cell.col},${cell.row}`]!.id}`"
-                icon-id="c-selection"
-                :size="18"
-                state="active"
-                label="Sélection courante"
-              />
-              <RpgMapIcon
-                v-if="canTargetCombatant(cellMap[`${cell.col},${cell.row}`]!) && (interactionMode === 'attack' || interactionMode === 'spell')"
-                class="absolute -right-2 -bottom-2 rounded-full bg-bg-elev/95"
-                :data-testid="`map-icon-target-${cellMap[`${cell.col},${cell.row}`]!.id}`"
-                :icon-id="targetIconForMode()"
-                :size="19"
-                :state="isSelectedPosition('combatant', cellMap[`${cell.col},${cell.row}`]!.position ?? cell) ? 'active' : 'normal'"
-                :label="targetLabelForMode()"
-              />
-              <span class="absolute -bottom-1.5 h-1 w-8 overflow-hidden rounded-full bg-black/70">
-                <span
-                  class="block h-full rounded-full"
-                  :style="{
-                    width: `${hpPct(cellMap[`${cell.col},${cell.row}`]!.hp_current, cellMap[`${cell.col},${cell.row}`]!.hp_max)}%`,
-                    background: 'var(--color-green)',
-                  }"
-                />
-              </span>
-            </div>
-          </button>
-
-          <!-- ── Lean move preview ────────────────────────────────────────── -->
-          <!-- Ghost token pulsé à la destination (lean seulement) -->
-          <div
-            v-if="isLean && selected?.kind === 'move'"
-            class="pointer-events-none absolute z-[36] flex items-center justify-center"
-            :style="cellBoxStyle(selected.position)"
-          >
-            <div class="move-dest-ghost" />
-          </div>
-
           <!-- Mini-panel flottant de confirmation (lean seulement) -->
           <Transition name="move-confirm">
             <div
@@ -1483,7 +953,7 @@ function markerToneStyle(tone: LegendEntry['tone']) {
               </div>
             </div>
           </Transition>
-        </LocalMapCanvas>
+        </Scene3DCanvas>
       </div>
 
       <aside

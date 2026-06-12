@@ -946,7 +946,13 @@ class GMResponseExecutor:
         params: dict[str, Any],
         active: ActiveSession,
     ) -> None:
-        layout = self._normalize_scene_layout(params)
+        journal = active.state_data.get("adventure_journal")
+        journal = journal if isinstance(journal, dict) else {}
+        time_of_day = journal.get("time_of_day")
+        layout = self._normalize_scene_layout(
+            params,
+            time_of_day=str(time_of_day) if time_of_day else None,
+        )
         if not layout:
             logger.warning("scene_layout ignore : params invalides - %s", params)
             return
@@ -1765,7 +1771,12 @@ class GMResponseExecutor:
         layout["pois"] = filtered
 
     @classmethod
-    def _normalize_scene_layout(cls, params: dict[str, Any]) -> dict[str, Any]:
+    def _normalize_scene_layout(
+        cls,
+        params: dict[str, Any],
+        *,
+        time_of_day: str | None = None,
+    ) -> dict[str, Any]:
         raw = params.get("scene") or params.get("layout") or params
         if not isinstance(raw, dict):
             return {}
@@ -1822,6 +1833,15 @@ class GMResponseExecutor:
             facts = [item for item in facts if item]
             if facts:
                 layout["facts"] = facts[:24]
+        # Indices 3D optionnels — pass-through structurel uniquement, le clamp
+        # profond vit dans local_map_service.enrich_scene_layout.
+        if isinstance(raw.get("ambiance"), dict):
+            layout["ambiance"] = dict(raw["ambiance"])
+        vegetation_density = raw.get("vegetation_density")
+        if isinstance(vegetation_density, (int, float)) and not isinstance(
+            vegetation_density, bool
+        ):
+            layout["vegetation_density"] = float(vegetation_density)
 
         for idx, poi in enumerate(raw.get("pois", []) or []):
             if not isinstance(poi, dict):
@@ -1928,7 +1948,7 @@ class GMResponseExecutor:
         if visual_asset:
             layout["visual_asset"] = visual_asset
 
-        local_map_service.enrich_scene_layout(layout)
+        local_map_service.enrich_scene_layout(layout, time_of_day=time_of_day)
 
         if "visual_asset" not in layout and get_image_generation_enabled():
             image_model = get_image_model()
