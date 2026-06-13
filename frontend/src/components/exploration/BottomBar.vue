@@ -2,6 +2,7 @@
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useCharacterStore } from '../../stores/character'
 import { useGameStore } from '../../stores/game'
+import type { SceneOption } from '../../types'
 
 const emit = defineEmits<{
   action: [actionType: string, content?: string, targetId?: string, extra?: Record<string, unknown>]
@@ -33,6 +34,7 @@ const me = computed(() => charStore.myCharacter)
 const initial = computed(() => (me.value?.name ?? 'V').charAt(0).toUpperCase())
 
 const canSend = computed(() => gameStore.connected && !gameStore.isProcessing)
+const sceneOptions = computed(() => gameStore.sceneOptions.slice(0, 4))
 
 function submit() {
   const text = input.value.trim()
@@ -54,6 +56,15 @@ function onKeydown(e: KeyboardEvent) {
 function chooseTarget(id: string | null) {
   targetId.value = id
   menuOpen.value = false
+}
+
+function chooseSceneOption(option: SceneOption) {
+  if (!canSend.value) return
+  emit('action', option.action_type ?? 'free_text', option.prompt || option.label, undefined, {
+    scene_option_id: option.id,
+    scene_id: option.scene_id,
+    linked_poi_id: option.linked_poi_id,
+  })
 }
 
 function avatarStyle(color: string | undefined) {
@@ -78,94 +89,157 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="bottom-bar">
-    <!-- "Vous incarnez" block -->
-    <div class="bb-identity">
-      <div class="bb-avatar">{{ initial }}</div>
-      <div class="bb-identity-text">
-        <div class="bb-identity-eyebrow">Vous incarnez</div>
-        <div class="bb-identity-name">{{ me?.name ?? 'Thorvald' }}</div>
-      </div>
-    </div>
-
-    <!-- @ dropdown -->
-    <div ref="menuEl" class="bb-mention">
+  <div class="bottom-shell">
+    <div v-if="sceneOptions.length" class="bb-options" aria-label="Pistes de scène">
       <button
+        v-for="option in sceneOptions"
+        :key="option.id"
         type="button"
-        class="bb-mention-btn"
-        :class="{ 'is-active': targetCompanion }"
-        @click.stop="menuOpen = !menuOpen"
+        class="bb-option"
+        :disabled="!canSend"
+        @click="chooseSceneOption(option)"
       >
-        <span class="bb-mention-at">@</span>
-        <span class="bb-mention-label">{{ targetCompanion?.name ?? 'Parler à…' }}</span>
-        <span class="bb-mention-caret">▼</span>
+        <span class="bb-option-mark">✦</span>
+        <span>{{ option.label }}</span>
       </button>
-      <div v-if="menuOpen" class="bb-mention-menu">
-        <button
-          type="button"
-          class="bb-mention-item"
-          :class="{ 'is-active': !targetCompanion }"
-          @click="chooseTarget(null)"
-        >
-          <span style="font-size: 11px">✦</span> Au MJ / le groupe
-        </button>
-        <div class="bb-mention-divider" />
-        <button
-          v-for="c in aiCompanions"
-          :key="c.id"
-          type="button"
-          class="bb-mention-item"
-          :class="{ 'is-active': targetCompanion?.id === c.id }"
-          @click="chooseTarget(c.id)"
-        >
-          <span
-            class="bb-mention-avatar"
-            :style="avatarStyle('#c090ff')"
-          >{{ c.name.charAt(0).toUpperCase() }}</span>
-          {{ c.name }}
-          <span style="flex: 1" />
-          <span class="bb-mention-badge">IA</span>
-        </button>
-        <button
-          v-if="!aiCompanions.length"
-          type="button"
-          class="bb-mention-item bb-mention-empty"
-          disabled
-        >Aucun compagnon</button>
-      </div>
     </div>
 
-    <!-- Input -->
-    <input
-      v-model="input"
-      class="rpg-input bb-input"
-      :placeholder="placeholder"
-      :disabled="!canSend"
-      @keydown="onKeydown"
-    />
+    <div class="bottom-bar">
+      <!-- "Vous incarnez" block -->
+      <div class="bb-identity">
+        <div class="bb-avatar">{{ initial }}</div>
+        <div class="bb-identity-text">
+          <div class="bb-identity-eyebrow">Vous incarnez</div>
+          <div class="bb-identity-name">{{ me?.name ?? 'Thorvald' }}</div>
+        </div>
+      </div>
 
-    <!-- Send -->
-    <button
-      class="rpg-btn-primary bb-send"
-      :disabled="!input.trim() || !canSend"
-      @click="submit"
-    >
-      Envoyer <span class="bb-send-key">↵</span>
-    </button>
+      <!-- @ dropdown -->
+      <div ref="menuEl" class="bb-mention">
+        <button
+          type="button"
+          class="bb-mention-btn"
+          :class="{ 'is-active': targetCompanion }"
+          @click.stop="menuOpen = !menuOpen"
+        >
+          <span class="bb-mention-at">@</span>
+          <span class="bb-mention-label">{{ targetCompanion?.name ?? 'Parler à…' }}</span>
+          <span class="bb-mention-caret">▼</span>
+        </button>
+        <div v-if="menuOpen" class="bb-mention-menu">
+          <button
+            type="button"
+            class="bb-mention-item"
+            :class="{ 'is-active': !targetCompanion }"
+            @click="chooseTarget(null)"
+          >
+            <span style="font-size: 11px">✦</span> Au MJ / le groupe
+          </button>
+          <div class="bb-mention-divider" />
+          <button
+            v-for="c in aiCompanions"
+            :key="c.id"
+            type="button"
+            class="bb-mention-item"
+            :class="{ 'is-active': targetCompanion?.id === c.id }"
+            @click="chooseTarget(c.id)"
+          >
+            <span
+              class="bb-mention-avatar"
+              :style="avatarStyle('#c090ff')"
+            >{{ c.name.charAt(0).toUpperCase() }}</span>
+            {{ c.name }}
+            <span style="flex: 1" />
+            <span class="bb-mention-badge">IA</span>
+          </button>
+          <button
+            v-if="!aiCompanions.length"
+            type="button"
+            class="bb-mention-item bb-mention-empty"
+            disabled
+          >Aucun compagnon</button>
+        </div>
+      </div>
+
+      <!-- Input -->
+      <input
+        v-model="input"
+        class="rpg-input bb-input"
+        :placeholder="placeholder"
+        :disabled="!canSend"
+        @keydown="onKeydown"
+      />
+
+      <!-- Send -->
+      <button
+        class="rpg-btn-primary bb-send"
+        :disabled="!input.trim() || !canSend"
+        @click="submit"
+      >
+        Envoyer <span class="bb-send-key">↵</span>
+      </button>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.bottom-bar {
+.bottom-shell {
   flex-shrink: 0;
   border-top: 1px solid var(--color-border);
   background: var(--color-bg-elev);
+  position: relative;
+  z-index: 10;
+}
+
+.bb-options {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 10px 20px 0;
+}
+
+.bb-option {
+  min-height: 30px;
+  max-width: 260px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-gold) 10%, transparent);
+  color: var(--color-parchment);
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms, color 120ms;
+}
+
+.bb-option:hover:not(:disabled) {
+  border-color: var(--color-border-strong);
+  background: color-mix(in srgb, var(--color-gold) 16%, transparent);
+  color: var(--color-gold);
+}
+
+.bb-option:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.bb-option-mark {
+  color: var(--color-ember);
+}
+
+.bottom-bar {
   padding: 12px 20px;
   display: flex;
   align-items: center;
   gap: 10px;
-  position: relative;
-  z-index: 10;
 }
 
 /* Identity block */

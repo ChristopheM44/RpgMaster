@@ -35,6 +35,7 @@ def _state_with_secrets() -> dict:
         "npc_states": {"npc_a": {"name": "Aldric", "known_to_party": True}},
         "quests": [{"title": "Objectif public"}],
         "chronicle": [],
+        "scene_options": [{"id": "o1", "label": "Observer les lieux", "prompt": "J'observe."}],
         # GM-private — must never surface in either public view:
         "_gm_prompt_context": {"global_secrets": [TWIST_SECRET], "fronts": ["front secret"]},
         "gm_scene_state": {"current": {"notes": [GM_SCENE_NOTE], "goal": "objectif caché"}},
@@ -76,6 +77,7 @@ def test_player_payload_leaks_no_secret() -> None:
     _assert_no_marker(payload, "build_session_state_payload")
     for forbidden in ("_gm_prompt_context", "gm_scene_state", "campaign_context", "npc_states"):
         assert forbidden not in payload
+    assert payload["scene_options"][0]["label"] == "Observer les lieux"
 
 
 def test_public_facts_still_reach_companion() -> None:

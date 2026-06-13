@@ -21,6 +21,8 @@ import type {
   ClockUpdatedPayload,
   SceneLayout,
   SceneLayoutChangedPayload,
+  SceneOptionsUpdatedPayload,
+  SceneOption,
   GridDecoration,
   RegionMap,
   CityMap,
@@ -52,6 +54,18 @@ function stripSpeakerPrefix(text: string, speaker?: string): string {
   return text
 }
 
+function stripDialogueMetaMarkers(text: string): string {
+  return text
+    .replace(/(\([^)]*?),\s*(?:unplanned|planned)(\s*[^)]*\))/gi, '$1$2')
+    .replace(/\(\s*(?:unplanned|planned)\s*\)\s*/gi, '')
+    .replace(/^\s*(?:unplanned|planned)\s*[:：,\-–—]\s*/i, '')
+    .trim()
+}
+
+function cleanDialogueText(text: string, speaker?: string): string {
+  return stripDialogueMetaMarkers(stripSpeakerPrefix(text, speaker))
+}
+
 export const useGameStore = defineStore('game', () => {
   // ─── Session state ──────────────────────────────────────────────────────────
   const sessionId = ref<string | null>(null)
@@ -72,6 +86,7 @@ export const useGameStore = defineStore('game', () => {
   const quests = ref<Quest[]>([])
   const chronicle = ref<ChronicleEntry[]>([])
   const currentScene = ref<SceneLayout | null>(null)
+  const sceneOptions = ref<SceneOption[]>([])
   const sceneClocks = ref<ClockUpdatedPayload[]>([])
   const regionMap = ref<RegionMap | null>(null)
   const cityMaps = ref<Record<string, CityMap>>({})
@@ -125,6 +140,10 @@ export const useGameStore = defineStore('game', () => {
 
   function applySceneLayout(payload: SceneLayoutChangedPayload | SceneLayout) {
     currentScene.value = 'scene' in payload ? payload.scene : payload
+  }
+
+  function applySceneOptions(payload: SceneOptionsUpdatedPayload | SceneOption[]) {
+    sceneOptions.value = Array.isArray(payload) ? payload : payload.options
   }
 
   function applyClockUpdated(payload: ClockUpdatedPayload) {
@@ -199,6 +218,7 @@ export const useGameStore = defineStore('game', () => {
     if (payload.quests) quests.value = payload.quests
     if (payload.chronicle) chronicle.value = payload.chronicle
     if ('current_scene' in payload) currentScene.value = payload.current_scene ?? null
+    if ('scene_options' in payload) sceneOptions.value = payload.scene_options ?? []
     if ('scene_clocks' in payload) {
       sceneClocks.value = (payload.scene_clocks ?? []).filter(
         (clock) => clock.status !== 'resolved',
@@ -247,7 +267,7 @@ export const useGameStore = defineStore('game', () => {
     narrativeLog.value.push({
       id: crypto.randomUUID(),
       type,
-      text: type === 'dialogue' ? stripSpeakerPrefix(payload.text, payload.speaker) : payload.text,
+      text: type === 'dialogue' ? cleanDialogueText(payload.text, payload.speaker) : payload.text,
       narration_id: payload.narration_id,
       speaker: payload.speaker,
       speaker_id: payload.speaker_id,
@@ -572,7 +592,7 @@ export const useGameStore = defineStore('game', () => {
       return {
         id: m.id,
         type,
-        text: type === 'dialogue' ? stripSpeakerPrefix(m.content, m.speaker) : m.content,
+        text: type === 'dialogue' ? cleanDialogueText(m.content, m.speaker) : m.content,
         narration_id: m.id,
         speaker: m.speaker,
         speaker_id: metadataString('speaker_id') ?? metadataString('character_id'),
@@ -606,6 +626,7 @@ export const useGameStore = defineStore('game', () => {
     quests.value = []
     chronicle.value = []
     currentScene.value = null
+    sceneOptions.value = []
     sceneClocks.value = []
     regionMap.value = null
     cityMaps.value = {}
@@ -630,6 +651,7 @@ export const useGameStore = defineStore('game', () => {
     quests,
     chronicle,
     currentScene,
+    sceneOptions,
     sceneClocks,
     regionMap,
     cityMaps,
@@ -649,6 +671,7 @@ export const useGameStore = defineStore('game', () => {
     applyQuestUpdated,
     applyChronicleUpdated,
     applySceneLayout,
+    applySceneOptions,
     applyClockUpdated,
     applyRegionMap,
     applyCityMap,

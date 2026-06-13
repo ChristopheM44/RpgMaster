@@ -167,17 +167,16 @@ def carry_accompanying_npcs(
     which the GM then rationalises into fiction ("the guide disappeared"), a
     transition artifact that the canon synthesis later freezes as truth.
 
-    Rule (decision P1-C): any NPC that is a present POI of the *leaving* scene,
-    or already flagged ``disposition="accompanying"``, is carried into the new
-    scene — unless it is ``disposition="stationary"`` or already departed
-    (dead/left/missing/…). Carried NPCs are marked ``accompanying`` and their
-    ``last_location`` is moved to the new scene so the absence filter keeps
-    them, and a POI is injected when the layout omits them.
+    Rule: only NPCs explicitly flagged as travelling with the party are carried:
+    either ``npc_states[id].disposition == "accompanying"`` or a scene POI carries
+    ``disposition="accompanying"`` / ``accompanies_party=true``. Ordinary present
+    NPCs (quest-givers, merchants, local witnesses) stay in their scene unless the
+    GM or player establishes that they join the group.
 
-    Over-carry (a location-bound NPC following once) is intentionally tolerated
-    — it is mild and the GM corrects it (``stationary`` / explicit departure);
-    under-carry breaks the story and contaminates canon, so we bias to carry.
-    No-op when the new layout has no ``scene_id`` or names the same place.
+    Carried NPCs keep ``status="present"`` and have ``last_location`` moved to
+    the new scene so the absence filter keeps them, with a POI injected when the
+    layout omits them. No-op when the new layout has no ``scene_id`` or names the
+    same place.
     """
     if not isinstance(new_layout, dict):
         return
@@ -195,16 +194,16 @@ def carry_accompanying_npcs(
         npc_states = {}
         active.state_data["npc_states"] = npc_states
 
-    # NPC ids that were present POIs in the scene being left.
+    # NPC ids explicitly travelling from the scene being left.
     candidates: set[str] = set()
     if isinstance(old_scene, dict):
         for poi in old_scene.get("pois", []) or []:
             if not isinstance(poi, dict):
                 continue
-            kind = str(poi.get("kind") or "").strip().casefold()
-            icon = str(poi.get("icon") or "").strip().casefold()
             poi_id = str(poi.get("id") or "").strip()
-            if poi_id and (kind == "npc" or icon == "npc"):
+            disposition = str(poi.get("disposition") or "").strip().casefold()
+            accompanies_party = poi.get("accompanies_party") is True
+            if poi_id and (disposition == "accompanying" or accompanies_party):
                 candidates.add(poi_id)
     # …plus any NPC already travelling with the party.
     for npc_id, npc in npc_states.items():

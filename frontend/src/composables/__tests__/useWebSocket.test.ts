@@ -103,6 +103,37 @@ describe('useWebSocket', () => {
     vi.unstubAllGlobals()
   })
 
+  it('applies public scene options updates', () => {
+    const socket = useWebSocket('session-1')
+    const gameStore = useGameStore()
+
+    socket.connect('hero-1')
+    WebSocketMock.instances[0]!.open()
+
+    WebSocketMock.instances[0]!.onmessage?.({
+      data: JSON.stringify({
+        event_type: 'scene_options_updated',
+        payload: {
+          scene_id: 'dock',
+          options: [
+            {
+              id: 'option-1',
+              scene_id: 'dock',
+              label: 'Négocier avec le garde',
+              prompt: 'Je négocie avec le garde.',
+            },
+          ],
+        },
+      }),
+    })
+
+    expect(gameStore.sceneOptions).toHaveLength(1)
+    expect(gameStore.sceneOptions[0]?.label).toBe('Négocier avec le garde')
+
+    socket.disconnect()
+    vi.unstubAllGlobals()
+  })
+
   it('ignores malformed critical payloads', () => {
     const socket = useWebSocket('session-1')
     const gameStore = useGameStore()

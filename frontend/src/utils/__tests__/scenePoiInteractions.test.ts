@@ -40,6 +40,10 @@ describe('buildSceneExitPrompt — anti-doublon sur libellés réels', () => {
     expect(buildSceneExitPrompt('Aller vers la sacristie')).toBe('Aller vers la sacristie.')
   })
 
+  it('naturalise les libellés abstraits legacy', () => {
+    expect(buildSceneExitPrompt('Prendre la route')).toBe('Je prends la route.')
+  })
+
   it('préfixe les noms de lieu nus', () => {
     expect(buildSceneExitPrompt('Quartier du Marché')).toBe('Je me dirige vers Quartier du Marché.')
   })

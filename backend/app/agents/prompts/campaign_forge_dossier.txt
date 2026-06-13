@@ -46,6 +46,10 @@ Contraintes importantes :
 - "possible_srd_encounters" contient uniquement des ids présents dans l'index SRD compact.
 - "custom_monsters" contient les créatures inventées ou variantes mécaniques, basées sur un `base_srd_id` valide.
 - "items" contient les objets custom de la campagne au format équipement compact ; les objets uniques doivent avoir `unique: true`.
+- PROFONDEUR TABLE one-shot : même pour `duration: "1 session"`, le dossier doit contenir assez de matière pour 3-4h de jeu réel. Vise au minimum 2 PNJ importants aux intérêts divergents, 1 faction ou force opposée exploitable, 1 créature signature ou variante custom jouable, 1 récompense/objet unique lié au thème, 2-3 complications, 2-3 indices, 1 front avec escalade concrète et 1 mécanique légère déclenchable en scène.
+- Chaque élément privé doit être ACTIONNABLE : un PNJ a un levier social ou une information, un monstre a un comportement visible et un rôle tactique, un objet a une utilité ou une valeur de preuve/récompense, une complication a un déclencheur, une mécanique légère dit quand elle s'applique.
+- Les `fronts`, `factions`, `complications`, `clues`, `light_mechanics`, `custom_monsters` et `items` doivent pouvoir être utilisés par le MJ sans exposer les secrets : écris-les comme des coulisses et outils de table, pas comme de simples résumés littéraires.
+- Si `possible_custom_encounters` référence une créature inventée, crée OBLIGATOIREMENT l'entrée correspondante dans `custom_monsters[]` et, si elle est mémorable, une entrée liée dans `bestiary[]`.
 
 Réponds avec ce JSON exact :
 {

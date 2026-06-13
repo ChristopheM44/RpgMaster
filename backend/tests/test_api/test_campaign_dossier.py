@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import socket
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import select
@@ -648,6 +649,52 @@ def test_coerce_persona_still_rejects_garbage_without_identity():
     # archetype présent (saute la coercion legacy) mais id/name/short_description manquants :
     # erreurs missing (str requis), pas literal → non poppées → rejet après nettoyage enum.
     assert svc._coerce_persona({"archetype": "commanditaire", "importance": "high"}, "npc") is None
+
+
+def test_sanitize_gm_dossier_repairs_poor_one_shot_spine():
+    campaign = SimpleNamespace(name="Oneshot mince", description="Une enquête maritime.")
+    contract = {
+        "duration": "1 session",
+        "hook": "Valerius demande au groupe de comprendre les disparitions.",
+        "visible_chapters": [{"id": "chapter_1", "title": "Port d'Azur", "state": "active"}],
+    }
+    raw = {
+        "narrative_arc": "Un mystère trop court.",
+        "chapters": [
+            {
+                "id": "chapter_1",
+                "title": "Port d'Azur",
+                "state": "active",
+                "objective": "Résoudre le mystère.",
+                "opening_scene": {
+                    "place": "Port d'Azur",
+                    "present_npcs": [{"id": "valerius", "name": "Valerius"}],
+                },
+                "key_locations": [],
+                "complications": [],
+            }
+        ],
+        "important_npcs": [],
+        "fronts": [],
+        "factions": [],
+        "complications": [],
+    }
+
+    dossier = campaign_dossier_service.sanitize_gm_dossier(raw, campaign, contract)
+
+    chapter = dossier["chapters"][0]
+    assert chapter["objective_endpoint"]["name"].startswith("Point décisif")
+    assert len(chapter["complications"]) >= 2
+    assert any(npc["name"] == "Valerius" for npc in dossier["important_npcs"])
+    assert any(npc["archetype"] == "antagoniste" for npc in dossier["important_npcs"])
+    assert dossier["fronts"]
+    assert dossier["factions"]
+    assert dossier["custom_monsters"]
+    assert dossier["bestiary"]
+    assert dossier["items"]
+    assert dossier["light_mechanics"]
+    assert len(chapter["clues"]) >= 2
+    assert len(dossier["clues"]) >= 2
 
 
 @pytest.mark.asyncio

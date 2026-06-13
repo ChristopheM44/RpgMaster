@@ -1087,10 +1087,13 @@ def _opening_response(
         guessed_theme,
     )
     if objective and not objective_exit_suppressed:
+        objective_exit_label = "Vers l'objectif"
+        if isinstance(endpoint_node, dict) and endpoint_node.get("name"):
+            objective_exit_label = f"Vers {endpoint_node['name']}"
         exits.append(
             {
                 "id": "prendre_route_objectif",
-                "label": "Prendre la route",
+                "label": objective_exit_label,
                 "position": {"col": 10, "row": 7},
                 "leads_to": objective_id or "objectif",
                 "description": f"Se diriger vers : {objective}",

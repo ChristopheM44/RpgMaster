@@ -127,6 +127,46 @@ describe('useGameStore map decoration state', () => {
     expect(store.sceneClocks).toEqual([])
   })
 
+  it('hydrates and updates public scene options', () => {
+    const store = useGameStore()
+
+    store.applySessionState({
+      session_id: 'session-1',
+      phase: 'exploration',
+      turn_number: 1,
+      round_number: 0,
+      turn_order: [],
+      current_turn_index: 0,
+      valid_transitions: [],
+      scene_options: [
+        {
+          id: 'option-1',
+          scene_id: 'dock',
+          label: 'Interroger le témoin',
+          prompt: 'J’interroge le témoin.',
+        },
+      ],
+    })
+
+    expect(store.sceneOptions).toHaveLength(1)
+    expect(store.sceneOptions[0]?.label).toBe('Interroger le témoin')
+
+    store.applySceneOptions({
+      scene_id: 'dock',
+      options: [
+        {
+          id: 'option-2',
+          scene_id: 'dock',
+          label: 'Sécuriser la zone',
+          prompt: 'Je sécurise la zone.',
+        },
+      ],
+    })
+
+    expect(store.sceneOptions).toHaveLength(1)
+    expect(store.sceneOptions[0]?.id).toBe('option-2')
+  })
+
   it('logs disconnection only on connected to disconnected transitions', () => {
     const store = useGameStore()
 
@@ -261,7 +301,7 @@ describe('useGameStore map decoration state', () => {
     const store = useGameStore()
 
     store.addNarration({
-      text: 'Syndra laisse échapper un soupir las.',
+      text: 'Syndra (regard tendu, unplanned) laisse échapper un soupir las.',
       speaker: 'Syndra Silvane',
       speaker_kind: 'npc',
       entry_kind: 'dialogue',
@@ -269,7 +309,7 @@ describe('useGameStore map decoration state', () => {
 
     expect(store.narrativeLog[0]).toMatchObject({
       type: 'dialogue',
-      text: 'laisse échapper un soupir las.',
+      text: '(regard tendu) laisse échapper un soupir las.',
       speaker: 'Syndra Silvane',
     })
   })

@@ -496,6 +496,7 @@ export const WS_EVENT_TYPES_LIST = [
   'quest_updated',
   'chronicle_updated',
   'scene_layout_changed',
+  'scene_options_updated',
   'social_outcome',
   'clock_updated',
   'region_map_updated',
@@ -692,6 +693,20 @@ export interface SceneLayoutChangedPayload {
   scene: SceneLayout
 }
 
+export interface SceneOption {
+  id: string
+  scene_id?: string
+  label: string
+  prompt: string
+  action_type?: string
+  linked_poi_id?: string
+}
+
+export interface SceneOptionsUpdatedPayload {
+  scene_id?: string
+  options: SceneOption[]
+}
+
 export type SceneClockSeverity = 'low' | 'medium' | 'high' | 'critical'
 export type SceneClockStatus = 'active' | 'paused' | 'filled' | 'resolving' | 'resolved'
 
@@ -733,6 +748,7 @@ export interface SessionStatePayload {
   quests?: Quest[]
   chronicle?: ChronicleEntry[]
   current_scene?: SceneLayout | null
+  scene_options?: SceneOption[]
   scene_clocks?: SceneClock[]
   region_map?: RegionMap | null
   city_maps?: Record<string, CityMap>
@@ -1290,12 +1306,16 @@ export interface CampaignGmChapter {
   possible_exits?: unknown[]
   indicative_dcs?: unknown[]
   possible_srd_encounters?: string[]
+  possible_custom_encounters?: string[]
 }
 
 export interface CampaignGmDossier {
   narrative_arc?: string
   chapters?: CampaignGmChapter[]
   important_npcs?: unknown[]
+  bestiary?: unknown[]
+  items?: unknown[]
+  custom_monsters?: unknown[]
   locations?: unknown[]
   factions?: unknown[]
   secrets?: unknown[]

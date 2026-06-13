@@ -94,6 +94,10 @@ const EXIT_RESIDUAL_PREP_RE = /^(?:vers|jusqu['’]?\s*[àa]|aux?|à|a|dans|en)\
 // « Retour aux X », « S'enfoncer dans X »).
 const EXIT_HAS_MOVEMENT_RE = /^(?:s['’]\w|en\s+direction\b)|\b(?:vers|jusqu|aux?|dans)\b/i
 
+const EXIT_NATURAL_PROMPTS: Record<string, string> = {
+  'prendre la route': 'Je prends la route.',
+}
+
 /**
  * Retire un préfixe directionnel d'interface en tête de libellé de sortie.
  * Ne strippe que les amorces explicitement nommées et seulement quand elles
@@ -116,6 +120,8 @@ export function cleanExitLabel(label: string): string {
  */
 export function buildSceneExitPrompt(label: string): string {
   const trimmed = (label ?? '').trim()
+  const natural = EXIT_NATURAL_PROMPTS[trimmed.toLowerCase()]
+  if (natural) return natural
   if (EXIT_PREFIX_RE.test(trimmed)) {
     const rest = cleanExitLabel(trimmed)
     return EXIT_RESIDUAL_PREP_RE.test(rest)

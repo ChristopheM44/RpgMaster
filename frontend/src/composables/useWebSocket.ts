@@ -28,6 +28,7 @@ import type {
   CombatantStatusChangedPayload,
   CombatantRemovedPayload,
   SceneLayoutChangedPayload,
+  SceneOptionsUpdatedPayload,
   GridPosition,
   RegionMapUpdatedPayload,
   CityMapUpdatedPayload,
@@ -330,6 +331,9 @@ export function useWebSocket(sessionId: string) {
         break
       case 'scene_layout_changed':
         if (isSceneLayoutChangedPayload(msg.payload)) gameStore.applySceneLayout(msg.payload)
+        break
+      case 'scene_options_updated':
+        if (isSceneOptionsUpdatedPayload(msg.payload)) gameStore.applySceneOptions(msg.payload)
         break
       case 'clock_updated':
         gameStore.applyClockUpdated(msg.payload as import('../types').ClockUpdatedPayload)
@@ -641,6 +645,10 @@ function isSceneLayoutChangedPayload(value: unknown): value is SceneLayoutChange
     && typeof value.scene.cols === 'number'
     && typeof value.scene.rows === 'number'
   )
+}
+
+function isSceneOptionsUpdatedPayload(value: unknown): value is SceneOptionsUpdatedPayload {
+  return isRecord(value) && Array.isArray(value.options)
 }
 
 function isRegionMapUpdatedPayload(value: unknown): value is RegionMapUpdatedPayload {

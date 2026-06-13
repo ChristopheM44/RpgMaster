@@ -8,6 +8,8 @@ Il ne choisit pas les actions et ne fait pas avancer les tours.
 from __future__ import annotations
 
 import logging
+import re
+import unicodedata
 from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -372,6 +374,7 @@ class ActionPipeline:
             )
         if gm_response and phase_value == "EXPLORATION":
             gm_response = self._with_travel_scene_fallback(gm_response, request, active)
+            gm_response = self._with_journal_scene_fallback(gm_response, active)
 
         if gm_response:
             active.last_gm_intent = gm_response.action_intent
@@ -1110,21 +1113,27 @@ class ActionPipeline:
         request: ActionRequest,
         active: ActiveSession,
     ) -> AgentResponse:
-        """Deterministic transition when the player clearly travels to a *known*
-        destination but the GM forgot to emit a ``scene_layout``.
+        """Deterministic transition when the player clearly travels but the GM
+        forgot to emit a ``scene_layout``.
 
         Builds a sober-but-real layout for the destination so the move always
         happens (free text behaves like a POI click). The next GM turn enriches
         it, and ``_apply_scene_layout`` carries party-accompanying NPCs across —
         so a guide can never be lost just because the transition was implicit.
-        Conservative: only fires for a matched exit/map node, out of combat.
+        Conservative: only fires for explicit travel with a destination, out of
+        combat. Known exits/map nodes keep their canonical id; unknown explicit
+        destinations get a stable minimal scene id.
         """
         intent = request.travel_intent
         if not isinstance(intent, dict) or not intent.get("is_travel"):
             return response
         node_id = str(intent.get("destination_node_id") or "").strip()
-        if not node_id:
-            return response  # only auto-transition to a known exit/map node
+        destination = str(intent.get("destination") or "").strip()
+        if not node_id and not destination:
+            return response
+        scene_id = node_id or ActionPipeline._fallback_scene_id_for_label(destination)
+        if not scene_id:
+            return response
         if any(action.type == "scene_layout" for action in response.actions):
             return response  # the GM already moved the scene itself
 
@@ -1133,7 +1142,7 @@ class ActionPipeline:
         current_scene_id = (
             str(scene.get("scene_id") or "").strip() if isinstance(scene, dict) else ""
         )
-        if node_id == current_scene_id:
+        if scene_id == current_scene_id:
             return response  # already there
 
         # Human-readable label: prefer the matched exit, then a region-map node.
@@ -1151,33 +1160,10 @@ class ActionPipeline:
                     label = str(node.get("name") or "").strip()
                     break
         if not label:
-            label = str(intent.get("destination") or "").strip()
-        place = f"à {label}" if label else "sur les lieux"
-
-        # Cluster the party near the centre of the fresh map.
-        positions: dict[str, Any] = {}
-        spots = [(6, 6), (5, 6), (6, 7), (5, 7), (7, 6), (6, 5)]
-        characters = state.get("characters") or {}
-        if isinstance(characters, dict):
-            for index, char_id in enumerate(list(characters.keys())[:6]):
-                col, row = spots[index % len(spots)]
-                positions[str(char_id)] = {"col": col, "row": row}
+            label = destination
 
         response.actions.append(
-            GMAction(
-                type="scene_layout",
-                params={
-                    "scene_id": node_id,
-                    "cols": 12,
-                    "rows": 12,
-                    "cell_size_m": 1.5,
-                    "terrain": "unknown",
-                    "description": (f"Le groupe arrive {place}. Les lieux se précisent peu à peu."),
-                    "pois": [],
-                    "exits": [],
-                    "party_positions": positions,
-                },
-            )
+            ActionPipeline._minimal_scene_layout_action(scene_id, label, active)
         )
         # Keep the journal's location in sync with the new scene: the next turn's
         # anti-hallucination anchor (gm_narrate VERROU) reads location_place, so a
@@ -1190,9 +1176,113 @@ class ActionPipeline:
             )
         logger.info(
             "ActionPipeline : scene_layout de secours injecté pour un voyage vers '%s'",
-            node_id,
+            scene_id,
         )
         return response
+
+    @staticmethod
+    def _with_journal_scene_fallback(
+        response: AgentResponse,
+        active: ActiveSession,
+    ) -> AgentResponse:
+        """Keep public journal location and current_scene atomic.
+
+        If the GM updates ``adventure_journal.location_*`` but forgets the scene
+        layout, the next session_state would tell the UI two different places.
+        We inject a minimal destination scene so the map and journal cannot
+        diverge.
+        """
+        if any(action.type == "scene_layout" for action in response.actions):
+            return response
+
+        state = active.state_data if isinstance(active.state_data, dict) else {}
+        old_journal = state.get("adventure_journal") or {}
+        if not isinstance(old_journal, dict):
+            old_journal = {}
+
+        location_patch: dict[str, Any] | None = None
+        for action in response.actions:
+            if action.type != "journal_update" or not isinstance(action.params, dict):
+                continue
+            for key in ("location_venue", "location_place", "location_region"):
+                if key not in action.params:
+                    continue
+                new_value = str(action.params.get(key) or "").strip()
+                old_value = str(old_journal.get(key) or "").strip()
+                if new_value and new_value != old_value:
+                    location_patch = action.params
+                    break
+            if location_patch:
+                break
+        if not location_patch:
+            return response
+
+        label = str(
+            location_patch.get("location_venue")
+            or location_patch.get("location_place")
+            or location_patch.get("location_region")
+            or ""
+        ).strip()
+        scene_id = ActionPipeline._fallback_scene_id_for_label(label)
+        if not scene_id:
+            return response
+        current_scene = state.get("current_scene") or {}
+        current_scene_id = (
+            str(current_scene.get("scene_id") or "").strip()
+            if isinstance(current_scene, dict)
+            else ""
+        )
+        if scene_id == current_scene_id:
+            return response
+
+        response.actions.append(
+            ActionPipeline._minimal_scene_layout_action(scene_id, label, active)
+        )
+        logger.info(
+            "ActionPipeline : scene_layout de secours injecté pour journal_update vers '%s'",
+            label,
+        )
+        return response
+
+    @staticmethod
+    def _minimal_scene_layout_action(scene_id: str, label: str, active: ActiveSession) -> GMAction:
+        place = f"à {label}" if label else "sur les lieux"
+        return GMAction(
+            type="scene_layout",
+            params={
+                "scene_id": scene_id,
+                "cols": 12,
+                "rows": 12,
+                "cell_size_m": 1.5,
+                "terrain": "unknown",
+                "description": f"Le groupe arrive {place}. Les lieux se précisent peu à peu.",
+                "pois": [],
+                "exits": [],
+                "party_positions": ActionPipeline._fallback_party_positions(active),
+            },
+        )
+
+    @staticmethod
+    def _fallback_party_positions(active: ActiveSession) -> dict[str, Any]:
+        positions: dict[str, Any] = {}
+        spots = [(6, 6), (5, 6), (6, 7), (5, 7), (7, 6), (6, 5)]
+        state = active.state_data if isinstance(active.state_data, dict) else {}
+        characters = state.get("characters") or {}
+        if isinstance(characters, dict):
+            for index, char_id in enumerate(list(characters.keys())[:6]):
+                col, row = spots[index % len(spots)]
+                positions[str(char_id)] = {"col": col, "row": row}
+        return positions
+
+    @staticmethod
+    def _fallback_scene_id_for_label(label: str) -> str:
+        ascii_label = unicodedata.normalize("NFKD", label.strip().lower()).encode(
+            "ascii", "ignore"
+        ).decode("ascii")
+        normalized = re.sub(r"[^a-zA-Z0-9]+", "_", ascii_label).strip("_")
+        if not normalized:
+            return ""
+        return f"scene_{normalized[:48]}"
 
     @staticmethod
     def _with_scene_interaction_update_fallback(

@@ -1507,29 +1507,479 @@ def sanitize_gm_dossier(
             }
             for i, ch in enumerate(contract.get("visible_chapters", []))
         ]
-    return sanitize_gm_dossier_map_defaults(
+    dossier = {
+        "narrative_arc": _text(data.get("narrative_arc") or campaign.description, 2000),
+        "chapters": [_sanitize_private_chapter(ch, i) for i, ch in enumerate(chapters)],
+        "important_npcs": _sanitize_npc_personas(data.get("important_npcs")),
+        "bestiary": _sanitize_monster_personas(data.get("bestiary")),
+        "items": _sanitize_custom_items(data.get("items")),
+        "custom_monsters": _sanitize_custom_monsters(data.get("custom_monsters")),
+        "companion_seeds": _sanitize_companion_personas(data.get("companion_seeds")),
+        "locations": _generic_list(data.get("locations")),
+        "factions": _generic_list(data.get("factions")),
+        "secrets": _generic_list(data.get("secrets")),
+        "revelations": _generic_list(data.get("revelations")),
+        "fronts": _generic_list(data.get("fronts")),
+        "quests": _generic_list(data.get("quests")),
+        "complications": _generic_list(data.get("complications")),
+        "clues": _generic_list(data.get("clues")),
+        "light_mechanics": _generic_list(data.get("light_mechanics")),
+        "region_map": data.get("region_map"),
+        "city_maps": data.get("city_maps"),
+        "active_city_id": data.get("active_city_id"),
+    }
+    _repair_one_shot_table_spine(dossier, contract, campaign)
+    return sanitize_gm_dossier_map_defaults(dossier)
+
+
+def _repair_one_shot_table_spine(
+    dossier: dict[str, Any],
+    contract: dict[str, Any],
+    campaign: Campaign,
+) -> None:
+    """Repair future one-shot dossiers that are structurally too thin.
+
+    This is intentionally not a lore generator. It only fills the minimum
+    table-facing spine needed for the runtime to offer destinations, NPC
+    anchors, opposition pressure and playable complications.
+    """
+    chapters = dossier.get("chapters")
+    if not isinstance(chapters, list) or not chapters:
+        return
+    duration = str(contract.get("duration") or "").strip().lower()
+    is_one_shot = len(chapters) == 1 or duration in {"1 session", "one-shot", "oneshot"}
+    if not is_one_shot:
+        return
+
+    for chapter in chapters:
+        if not isinstance(chapter, dict):
+            continue
+        if not chapter.get("objective_endpoint"):
+            chapter["objective_endpoint"] = _fallback_objective_endpoint(chapter, campaign)
+        _ensure_one_shot_chapter_depth(chapter, campaign)
+
+    dossier["important_npcs"] = _ensure_one_shot_npc_depth(
+        dossier.get("important_npcs"),
+        chapters,
+        campaign,
+    )
+
+    if not dossier.get("fronts"):
+        dossier["fronts"] = [
+            {
+                "name": "Force opposée",
+                "agenda": "Empêcher le groupe de résoudre l'objectif sans coût.",
+                "clock": "La situation se durcit à chaque scène ignorée.",
+                "stages": [
+                    "Indices inquiétants et témoins nerveux",
+                    "Intervention d'agents ou de créatures mineures",
+                    "Confrontation ouverte autour de l'objectif",
+                ],
+            }
+        ]
+    if not dossier.get("factions"):
+        dossier["factions"] = [
+            {
+                "name": "Intérêts locaux",
+                "agenda": "Protéger sa réputation, ses biens ou son secret.",
+                "influence": "Locale",
+            }
+        ]
+    if not dossier.get("complications"):
+        dossier["complications"] = [
+            complication
+            for chapter in chapters
+            if isinstance(chapter, dict)
+            for complication in chapter.get("complications", [])
+        ][:4]
+    if not dossier.get("clues"):
+        dossier["clues"] = [
+            clue
+            for chapter in chapters
+            if isinstance(chapter, dict)
+            for clue in chapter.get("clues", [])
+        ][:6]
+
+    _ensure_one_shot_signature_monster(dossier, chapters, campaign)
+    _ensure_one_shot_reward_item(dossier, campaign)
+    _ensure_one_shot_light_mechanic(dossier)
+
+
+def _ensure_one_shot_chapter_depth(chapter: dict[str, Any], campaign: Campaign) -> None:
+    _append_unique_items(
+        chapter.setdefault("complications", []),
+        _fallback_chapter_complications(chapter),
+        min_count=2,
+        max_count=4,
+    )
+    _append_unique_items(
+        chapter.setdefault("clues", []),
+        _fallback_chapter_clues(chapter, campaign),
+        min_count=2,
+        max_count=5,
+    )
+    if not chapter.get("indicative_dcs"):
+        chapter["indicative_dcs"] = [
+            {"label": "Lire les signes de la scène", "ability": "wis", "dc": 12},
+            {"label": "Comprendre la nature de la menace", "ability": "int", "dc": 13},
+            {"label": "Obtenir un aveu ou un témoignage utile", "ability": "cha", "dc": 12},
+        ]
+
+
+def _fallback_chapter_complications(chapter: dict[str, Any]) -> list[dict[str, str]]:
+    endpoint = chapter.get("objective_endpoint") if isinstance(chapter, dict) else {}
+    endpoint_name = (
+        _text(endpoint.get("name") or "", 120) if isinstance(endpoint, dict) else ""
+    ) or "l'objectif"
+    return [
         {
-            "narrative_arc": _text(data.get("narrative_arc") or campaign.description, 2000),
-            "chapters": [_sanitize_private_chapter(ch, i) for i, ch in enumerate(chapters)],
-            "important_npcs": _sanitize_npc_personas(data.get("important_npcs")),
-            "bestiary": _sanitize_monster_personas(data.get("bestiary")),
-            "items": _sanitize_custom_items(data.get("items")),
-            "custom_monsters": _sanitize_custom_monsters(data.get("custom_monsters")),
-            "companion_seeds": _sanitize_companion_personas(data.get("companion_seeds")),
-            "locations": _generic_list(data.get("locations")),
-            "factions": _generic_list(data.get("factions")),
-            "secrets": _generic_list(data.get("secrets")),
-            "revelations": _generic_list(data.get("revelations")),
-            "fronts": _generic_list(data.get("fronts")),
-            "quests": _generic_list(data.get("quests")),
-            "complications": _generic_list(data.get("complications")),
-            "clues": _generic_list(data.get("clues")),
-            "light_mechanics": _generic_list(data.get("light_mechanics")),
-            "region_map": data.get("region_map"),
-            "city_maps": data.get("city_maps"),
-            "active_city_id": data.get("active_city_id"),
+            "name": "Pression active",
+            "trigger": "Le groupe tarde, échoue bruyamment ou ignore un indice.",
+            "effect": "La force opposée avance et rend le prochain choix plus coûteux.",
+        },
+        {
+            "name": "Choix de table",
+            "trigger": f"Le groupe approche de {endpoint_name}.",
+            "effect": "Une option sûre et une option risquée deviennent toutes deux viables.",
+        },
+        {
+            "name": "Témoin ou agent opportuniste",
+            "trigger": "Un indice important devient visible.",
+            "effect": "Un acteur secondaire tente d'en tirer profit avant les PJ.",
+        },
+    ]
+
+
+def _fallback_chapter_clues(chapter: dict[str, Any], campaign: Campaign) -> list[str]:
+    endpoint = chapter.get("objective_endpoint") if isinstance(chapter, dict) else {}
+    endpoint_name = (
+        _text(endpoint.get("name") or "", 120) if isinstance(endpoint, dict) else ""
+    ) or "la destination de l'objectif"
+    objective = _text(chapter.get("objective") or campaign.description or campaign.name, 180)
+    opening = chapter.get("opening_scene") if isinstance(chapter, dict) else {}
+    visible_clues: list[str] = []
+    if isinstance(opening, dict):
+        for clue in opening.get("visible_clues") or []:
+            if isinstance(clue, dict):
+                text = _text(clue.get("description") or clue.get("name") or "", 180)
+            else:
+                text = _text(clue, 180)
+            if text:
+                visible_clues.append(text)
+    return [
+        *visible_clues,
+        f"Un signe physique ou social relie la scène à {endpoint_name}.",
+        f"Une trace secondaire pointe vers l'enjeu public : {objective}.",
+        "Un témoin, une marque ou un reste matériel révèle que quelqu'un est déjà passé par là.",
+    ]
+
+
+def _ensure_one_shot_npc_depth(
+    value: Any,
+    chapters: list[dict[str, Any]],
+    campaign: Campaign,
+) -> list[dict[str, Any]]:
+    existing = list(value) if isinstance(value, list) else []
+    additions = _fallback_one_shot_npcs(chapters, campaign)
+    merged = _append_unique_items(existing, additions, min_count=2, max_count=4)
+    has_opposition = any(
+        _npc_identity_hints_at_opposition(npc)
+        for npc in merged
+        if isinstance(npc, dict)
+    )
+    if not has_opposition and len(merged) < 4:
+        _append_unique_items(
+            merged,
+            [_fallback_opposition_npc(campaign)],
+            min_count=len(merged) + 1,
+            max_count=4,
+        )
+    return _sanitize_npc_personas(merged)
+
+
+def _npc_identity_hints_at_opposition(npc: dict[str, Any]) -> bool:
+    corpus = " ".join(
+        str(npc.get(key) or "")
+        for key in ("archetype", "short_description", "attitude_default", "name")
+    ).casefold()
+    return any(word in corpus for word in ("antagon", "rival", "hostile", "oppos"))
+
+
+def _fallback_opposition_npc(campaign: Campaign) -> dict[str, Any]:
+    return {
+        "id": "agent_force_opposee",
+        "name": "Agent de la force opposée",
+        "archetype": "antagoniste",
+        "short_description": (
+            f"Rival opportuniste qui cherche à détourner l'objectif de {campaign.name}."
+        ),
+        "persona_type": "npc",
+        "importance": "standard",
+        "attitude_default": "hostile",
+        "voice": {"gender": "neutral", "age_range": "adult", "speech_register": "casual"},
+        "motivations": {
+            "visible": ["Gagner du temps et détourner l'attention du groupe."],
+            "hidden": ["Servir la force opposée sans révéler son commanditaire."],
+            "fears": ["Être exposé avant d'avoir obtenu ce qu'il veut."],
+        },
+        "knowledge": {
+            "knows": ["Une autre faction veut tirer profit de la crise."],
+            "ignores": ["La solution complète de l'objectif principal."],
+            "rumors": [],
+        },
+    }
+
+
+def _ensure_one_shot_signature_monster(
+    dossier: dict[str, Any],
+    chapters: list[dict[str, Any]],
+    campaign: Campaign,
+) -> None:
+    custom_monsters = list(dossier.get("custom_monsters") or [])
+    bestiary = list(dossier.get("bestiary") or [])
+    base_id = _first_chapter_srd_encounter(chapters) or "goblin"
+
+    if not custom_monsters and not bestiary:
+        custom_id = "menace_signature"
+        custom_monsters.append(
+            {
+                "id": custom_id,
+                "base_srd_id": base_id,
+                "name": "Signature Threat",
+                "name_fr": "Menace signature",
+                "description": (
+                    "Une variante locale marquée par le thème surnaturel de la chronique."
+                ),
+                "stat_overrides": {
+                    "traits": [
+                        {
+                            "name": "Adventure Mark",
+                            "name_fr": "Marque de chronique",
+                            "description": (
+                                "Son apparence et ses tactiques rappellent l'enjeu principal."
+                            ),
+                        }
+                    ]
+                },
+                "persona_id": "menace_signature_persona",
+            }
+        )
+        for chapter in chapters:
+            if not isinstance(chapter, dict):
+                continue
+            encounters = chapter.setdefault("possible_custom_encounters", [])
+            _append_unique_items(encounters, [custom_id], min_count=1, max_count=12)
+
+    if custom_monsters and not bestiary:
+        first_custom = next((item for item in custom_monsters if isinstance(item, dict)), None)
+        if first_custom is not None:
+            first_custom_id = normalize_content_id(first_custom.get("id"))
+            if first_custom_id and not any(
+                first_custom_id in (chapter.get("possible_custom_encounters") or [])
+                for chapter in chapters
+                if isinstance(chapter, dict)
+            ):
+                for chapter in chapters:
+                    if not isinstance(chapter, dict):
+                        continue
+                    encounters = chapter.setdefault("possible_custom_encounters", [])
+                    _append_unique_items(encounters, [first_custom_id], min_count=1, max_count=12)
+                    break
+            persona_id = normalize_content_id(first_custom.get("persona_id")) or (
+                f"{first_custom_id}_persona"
+            )
+            first_custom["persona_id"] = persona_id
+            bestiary.append(
+                {
+                    "id": persona_id,
+                    "name": _text(first_custom.get("name_fr") or first_custom.get("name"), 120)
+                    or "Menace signature",
+                    "archetype": "signature_threat",
+                    "short_description": (
+                        f"Créature qui matérialise la menace centrale de {campaign.name}."
+                    ),
+                    "persona_type": "monster",
+                    "importance": "standard",
+                    "monster_srd_id": first_custom.get("base_srd_id") or base_id,
+                    "behavior_pattern": "predatory",
+                    "combat_taunts": [],
+                    "surrender_threshold": None,
+                    "can_speak": False,
+                    "motivations": {
+                        "visible": ["Protéger ou étendre l'influence de la menace."],
+                        "hidden": [],
+                        "fears": [],
+                    },
+                    "knowledge": {
+                        "knows": ["Son territoire immédiat."],
+                        "ignores": [],
+                        "rumors": [],
+                    },
+                }
+            )
+
+    dossier["custom_monsters"] = _sanitize_custom_monsters(custom_monsters)
+    dossier["bestiary"] = _sanitize_monster_personas(bestiary)
+
+
+def _first_chapter_srd_encounter(chapters: list[dict[str, Any]]) -> str:
+    for chapter in chapters:
+        if not isinstance(chapter, dict):
+            continue
+        for item in chapter.get("possible_srd_encounters") or []:
+            monster_id = normalize_content_id(item)
+            if monster_id:
+                return monster_id
+    return ""
+
+
+def _ensure_one_shot_reward_item(dossier: dict[str, Any], campaign: Campaign) -> None:
+    items = list(dossier.get("items") or [])
+    if items:
+        dossier["items"] = _sanitize_custom_items(items)
+        return
+    safe_campaign = normalize_content_id(campaign.name) or "chronique"
+    items.append(
+        {
+            "id": f"relique_{safe_campaign}"[:80],
+            "template_id": f"relique_{safe_campaign}"[:80],
+            "name": "Adventure Relic",
+            "name_fr": f"Relique de {campaign.name}"[:120],
+            "item_type": "magic",
+            "rarity": "uncommon",
+            "unique": True,
+            "identified": False,
+            "hidden_properties": {
+                "story_role": "Récompense, levier social ou preuve liée à l'objectif."
+            },
         }
     )
+    dossier["items"] = _sanitize_custom_items(items)
+
+
+def _ensure_one_shot_light_mechanic(dossier: dict[str, Any]) -> None:
+    mechanics = list(dossier.get("light_mechanics") or [])
+    if mechanics:
+        dossier["light_mechanics"] = mechanics[:MAX_CANON_LIST_SIZE]
+        return
+    mechanics.append(
+        {
+            "id": "pression_de_scene",
+            "name": "Pression de scène",
+            "description": (
+                "Après trois hésitations majeures, échecs bruyants ou détours ignorés, "
+                "la force opposée gagne un avantage visible."
+            ),
+            "trigger": "Retard, échec significatif ou indice principal ignoré.",
+            "effect": "Ajoute un danger, ferme une option sûre ou rapproche une rencontre.",
+        }
+    )
+    dossier["light_mechanics"] = mechanics
+
+
+def _append_unique_items(
+    target: list[Any],
+    additions: list[Any],
+    *,
+    min_count: int,
+    max_count: int,
+) -> list[Any]:
+    if not isinstance(target, list):
+        target = []
+    seen = {_generic_identity(item) for item in target}
+    for item in additions:
+        if len(target) >= max_count or len(target) >= min_count:
+            break
+        identity = _generic_identity(item)
+        if not identity or identity in seen:
+            continue
+        target.append(item)
+        seen.add(identity)
+    return target
+
+
+def _generic_identity(item: Any) -> str:
+    if isinstance(item, dict):
+        for key in ("id", "name", "title", "label", "description", "effect"):
+            text = _text(item.get(key), 160)
+            if text:
+                return normalize_content_id(text, max_len=120)
+    return normalize_content_id(item, max_len=120)
+
+
+def _fallback_objective_endpoint(
+    chapter: dict[str, Any],
+    campaign: Campaign,
+) -> dict[str, str]:
+    title = _text(chapter.get("title") or campaign.name or "Objectif", 80)
+    for item in chapter.get("key_locations") or []:
+        if isinstance(item, dict):
+            name = _text(item.get("name") or item.get("title") or item.get("label") or "", 120)
+        else:
+            name = _text(item, 120)
+        if name:
+            return {
+                "name": name,
+                "kind": "landmark",
+                "hint": "Destination visible liée à l'objectif principal.",
+            }
+    return {
+        "name": f"Point décisif - {title}"[:120],
+        "kind": "landmark",
+        "hint": "Dernière étape non-spoiler de l'objectif principal.",
+    }
+
+
+def _fallback_one_shot_npcs(
+    chapters: list[dict[str, Any]],
+    campaign: Campaign,
+) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for chapter in chapters:
+        opening = chapter.get("opening_scene") if isinstance(chapter, dict) else {}
+        if isinstance(opening, dict):
+            for npc in opening.get("present_npcs") or []:
+                if isinstance(npc, dict):
+                    name = _text(npc.get("name") or npc.get("label") or npc.get("id") or "", 120)
+                else:
+                    name = _text(npc, 120)
+                if name:
+                    candidates.append(
+                        {
+                            "id": name.lower().replace(" ", "_"),
+                            "name": name,
+                            "archetype": "ancrage de scène",
+                            "short_description": f"{name}, PNJ présent dans l'ouverture.",
+                            "persona_type": "npc",
+                            "importance": "standard",
+                        }
+                    )
+    if not candidates:
+        candidates.append(
+            {
+                "id": "commanditaire_mission",
+                "name": "Commanditaire de la mission",
+                "archetype": "commanditaire",
+                "short_description": f"Figure qui rend l'objectif de {campaign.name} concret.",
+                "persona_type": "npc",
+                "importance": "standard",
+                "attitude_default": "friendly",
+                "motivations": {"visible": ["Obtenir l'aide du groupe avant que la crise empire."]},
+            }
+        )
+    candidates.append(
+        {
+            "id": "agent_force_opposee",
+            "name": "Agent de la force opposée",
+            "archetype": "antagoniste",
+            "short_description": "Présence active qui complique la résolution sans tout révéler.",
+            "persona_type": "npc",
+            "importance": "standard",
+            "attitude_default": "hostile",
+            "motivations": {"visible": ["Bloquer l'enquête ou détourner le groupe."]},
+        }
+    )
+    return _sanitize_npc_personas(candidates)
 
 
 def seed_region_map_from_dossier(

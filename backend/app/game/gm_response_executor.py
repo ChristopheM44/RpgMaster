@@ -447,6 +447,8 @@ class GMResponseExecutor:
             await self._apply_scene_update(session_id, params, active)
         elif action_type == "scene_progress_update":
             await self._apply_scene_progress_update(session_id, params, active)
+        elif action_type == "scene_options_update":
+            await self._apply_scene_options_update(session_id, params, active)
         elif action_type == "revelation":
             await self._apply_revelation(session_id, params, active, db)
         elif action_type == "social_outcome":
@@ -818,11 +820,7 @@ class GMResponseExecutor:
         params: dict[str, Any],
         active: ActiveSession,
     ) -> None:
-        """Store GM-only objective progress for the current scene.
-
-        The state is intentionally internal: no event is published to players.
-        """
-        del session_id
+        """Store GM-only objective progress and surface safe player-facing options."""
         if not isinstance(params, dict):
             return
 
@@ -924,6 +922,142 @@ class GMResponseExecutor:
 
         active.mark_dirty()
 
+        options = self._derive_scene_options(scene_entry, current_scene)
+        if options:
+            await self._apply_scene_options_update(
+                session_id,
+                {"scene_id": scene_id, "options": options},
+                active,
+            )
+
+    @staticmethod
+    def _derive_scene_options(
+        scene_entry: dict[str, Any],
+        current_scene: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        raw_options: list[Any] = []
+        approaches = scene_entry.get("approaches")
+        if isinstance(approaches, list):
+            raw_options.extend(approaches)
+
+        obstacles = scene_entry.get("obstacles")
+        if isinstance(obstacles, dict):
+            for obstacle in obstacles.values():
+                if not isinstance(obstacle, dict):
+                    continue
+                obstacle_approaches = obstacle.get("approaches")
+                if isinstance(obstacle_approaches, list):
+                    raw_options.extend(obstacle_approaches)
+                if len(raw_options) >= 4:
+                    break
+
+        if not raw_options and isinstance(current_scene, dict):
+            for poi in current_scene.get("pois") or []:
+                if not isinstance(poi, dict):
+                    continue
+                for interaction in poi.get("interactions") or []:
+                    if not isinstance(interaction, dict):
+                        continue
+                    label = str(interaction.get("label") or "").strip()
+                    if not label:
+                        continue
+                    raw_options.append(
+                        {
+                            "label": label,
+                            "prompt": interaction.get("prompt") or label,
+                            "linked_poi_id": poi.get("id"),
+                        }
+                    )
+                    if len(raw_options) >= 4:
+                        break
+                if len(raw_options) >= 4:
+                    break
+
+        scene_id = str(scene_entry.get("scene_id") or current_scene.get("scene_id") or "current")
+        return GMResponseExecutor._sanitize_scene_options(raw_options, scene_id)
+
+    @staticmethod
+    def _sanitize_scene_options(raw_options: Any, scene_id: str) -> list[dict[str, Any]]:
+        if not isinstance(raw_options, list):
+            return []
+        options: list[dict[str, Any]] = []
+        seen_labels: set[str] = set()
+        for index, raw in enumerate(raw_options):
+            raw_dict = raw if isinstance(raw, dict) else {}
+            if isinstance(raw, dict):
+                label = str(
+                    raw.get("label")
+                    or raw.get("title")
+                    or raw.get("name")
+                    or raw.get("approach")
+                    or ""
+                ).strip()
+                prompt = str(
+                    raw.get("prompt")
+                    or raw.get("action_prompt")
+                    or raw.get("text")
+                    or label
+                ).strip()
+            else:
+                label = str(raw or "").strip()
+                prompt = label
+
+            label = re.sub(r"\s+", " ", label)[:80].strip()
+            prompt = re.sub(r"\s+", " ", prompt)[:220].strip()
+            if len(label) < 3:
+                continue
+            label_key = label.casefold()
+            if label_key in seen_labels:
+                continue
+            seen_labels.add(label_key)
+
+            action_type = str(raw_dict.get("action_type") or "free_text").strip() or "free_text"
+            option_id = str(raw_dict.get("id") or "").strip()
+            if not option_id:
+                digest = hashlib.sha1(f"{scene_id}:{index}:{label}".encode()).hexdigest()[:8]
+                option_id = f"{scene_id}_option_{digest}"
+            option: dict[str, Any] = {
+                "id": option_id[:96],
+                "scene_id": scene_id,
+                "label": label,
+                "prompt": prompt or label,
+                "action_type": action_type[:40],
+            }
+            linked_poi_id = str(
+                raw_dict.get("linked_poi_id") or raw_dict.get("poi_id") or ""
+            ).strip()
+            if linked_poi_id:
+                option["linked_poi_id"] = linked_poi_id[:96]
+            options.append(option)
+            if len(options) >= 4:
+                break
+        return options
+
+    async def _apply_scene_options_update(
+        self,
+        session_id: str,
+        params: dict[str, Any],
+        active: ActiveSession,
+    ) -> None:
+        current_scene = active.state_data.get("current_scene")
+        if not isinstance(current_scene, dict):
+            current_scene = {}
+        scene_id = str(
+            params.get("scene_id")
+            or current_scene.get("scene_id")
+            or current_scene.get("id")
+            or "current"
+        ).strip() or "current"
+        options = self._sanitize_scene_options(params.get("options") or [], scene_id)
+        active.state_data["scene_options"] = options
+        active.mark_dirty()
+        await self._event_bus.publish_to_session(
+            session_id,
+            EventType.SCENE_OPTIONS_UPDATED,
+            {"scene_id": scene_id, "options": options},
+            source=self._source,
+        )
+
     @staticmethod
     def _merge_progress_fields(
         target: dict[str, Any],
@@ -972,6 +1106,7 @@ class GMResponseExecutor:
         # …then re-list the locals the LLM forgot (merchant in his own shop).
         inject_resident_npc_pois(active, layout)
         active.state_data["current_scene"] = layout
+        active.state_data["scene_options"] = []
         self._register_scene_npcs(layout, active)
         reconcile_scene_npcs(active, layout)
         active.mark_dirty()
@@ -979,6 +1114,12 @@ class GMResponseExecutor:
             session_id,
             EventType.SCENE_LAYOUT_CHANGED,
             {"scene": layout},
+            source=self._source,
+        )
+        await self._event_bus.publish_to_session(
+            session_id,
+            EventType.SCENE_OPTIONS_UPDATED,
+            {"scene_id": layout.get("scene_id") or "current", "options": []},
             source=self._source,
         )
         self._trigger_visual_asset_generation(session_id, layout, scope="scene")

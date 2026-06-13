@@ -38,7 +38,12 @@ def test_build_session_state_payload_maps_turn_entries() -> None:
         round_number=1,
         turn_manager=_TurnManager(),
         game_loop=_GameLoop(),
-        state_data={"quests": [{"id": "q1"}], "chronicle": [], "current_scene": None},
+        state_data={
+            "quests": [{"id": "q1"}],
+            "chronicle": [],
+            "current_scene": None,
+            "scene_options": [{"id": "o1", "label": "Observer", "prompt": "J'observe."}],
+        },
     )
 
     payload = build_session_state_payload("session-1", active)
@@ -56,6 +61,9 @@ def test_build_session_state_payload_maps_turn_entries() -> None:
         }
     ]
     assert payload["valid_transitions"] == ["encounter_start", "combat"]
+    assert payload["scene_options"] == [
+        {"id": "o1", "label": "Observer", "prompt": "J'observe."}
+    ]
 
 
 def test_compute_ac_from_equipment_applies_armor_dex_cap_and_shield() -> None:

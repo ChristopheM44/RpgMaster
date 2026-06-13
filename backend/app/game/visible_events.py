@@ -68,6 +68,8 @@ _NAME_STOPWORDS: frozenset[str] = frozenset(
     "dom don lord lady ser saint sainte".split()
 )
 
+_DIALOGUE_META_MARKERS = r"(?:unplanned|planned)"
+
 
 def _speaker_name_candidates(speaker_name: str) -> list[str]:
     """Noms candidats pour un préfixe : nom complet + tokens propres (≥ 3 car.,
@@ -151,6 +153,19 @@ def _strip_speaker_prefix(text: str, speaker: str) -> str:
     return text
 
 
+def _strip_dialogue_meta_markers(text: str) -> str:
+    """Remove internal planning tags that can leak from LLM stage labels."""
+    s = str(text or "")
+    s = re.sub(
+        rf"(?i)(\([^)]*?),\s*{_DIALOGUE_META_MARKERS}(\s*[^)]*\))",
+        r"\1\2",
+        s,
+    )
+    s = re.sub(rf"(?i)\(\s*{_DIALOGUE_META_MARKERS}\s*\)\s*", "", s)
+    s = re.sub(rf"(?i)^\s*{_DIALOGUE_META_MARKERS}\s*[:：,\-–—]\s*", "", s)
+    return s.strip()
+
+
 def clean_dialogue_text(text: str, speaker: str | None) -> str:
     """Nettoie une réplique de PNJ destinée à l'affichage joueur.
 
@@ -168,6 +183,7 @@ def clean_dialogue_text(text: str, speaker: str | None) -> str:
     cleaned = _strip_enclosing_quotes(text)
     cleaned = _strip_speaker_prefix(cleaned, speaker_name)
     cleaned = _strip_enclosing_quotes(cleaned)
+    cleaned = _strip_dialogue_meta_markers(cleaned)
     return cleaned
 
 

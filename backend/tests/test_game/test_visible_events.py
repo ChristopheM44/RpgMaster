@@ -37,6 +37,12 @@ def _has_no_enclosing_quotes(text: str) -> bool:
         ("Bram répond « Je n'ai rien vu. »", "Bram", "Je n'ai rien vu."),
         # Guillemets englobant l'attribution complète.
         ("« Valerius : Suis-moi. »", "Valerius", "Suis-moi."),
+        # Marqueur interne de planification parfois injecté dans une didascalie.
+        (
+            "(Elle hoche la tête avec une rigidité militaire, unplanned) Très bien.",
+            "Amirale Vance",
+            "(Elle hoche la tête avec une rigidité militaire) Très bien.",
+        ),
     ],
 )
 def test_clean_dialogue_strips_seams(raw: str, speaker: str, expected: str) -> None:

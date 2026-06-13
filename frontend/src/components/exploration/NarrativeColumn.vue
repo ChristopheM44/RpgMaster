@@ -69,16 +69,22 @@ function onClickOutside(e: MouseEvent) {
   }
 }
 
-// Auto-scroll vers la dernière entrée à chaque ajout
-watch(count, async () => {
+async function scrollToBottom() {
   await nextTick()
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
   if (scrollEl.value) {
     scrollEl.value.scrollTop = scrollEl.value.scrollHeight
   }
+}
+
+// Auto-scroll vers la dernière entrée à chaque ajout et après restauration d'historique.
+watch(count, () => {
+  void scrollToBottom()
 })
 
 onMounted(() => {
   document.addEventListener('click', onClickOutside)
+  void scrollToBottom()
 })
 
 onUnmounted(() => {

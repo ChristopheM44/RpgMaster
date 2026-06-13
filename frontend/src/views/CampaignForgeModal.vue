@@ -18,6 +18,13 @@ const campaignStore = useCampaignStore()
 
 type ForgeMode = 'scratch' | 'import'
 type ImportKind = 'url' | 'text' | 'file_text'
+type DepthMetric = {
+  id: string
+  label: string
+  count: number
+  target: string
+  ok: boolean
+}
 
 const TONES = ['Dark fantasy', 'Mystère', 'Politique', 'Exploration', 'Combat tactique', 'Romance', 'Cosmique']
 const OPTIONS_AMBIANCE = [
@@ -108,6 +115,8 @@ const gmDossier = computed<CampaignGmDossier | null>(() => {
   if (!forgeCampaignId.value) return null
   return campaignStore.gmDossiers[forgeCampaignId.value]?.gm_dossier ?? null
 })
+
+const dossierDepthDiagnostics = computed(() => buildDepthDiagnostics(gmDossier.value))
 
 const forgeProgressPercent = computed(() => {
   if (!forgeJob.value) return 0
@@ -394,6 +403,77 @@ function cloneContract(contract: CampaignPlayerContract): CampaignPlayerContract
 
 function asList(value: unknown): unknown[] {
   return Array.isArray(value) ? value : []
+}
+
+function countNestedList(items: unknown[], key: string): number {
+  return items.reduce<number>((total, item) => {
+    if (!item || typeof item !== 'object') return total
+    return total + asList((item as Record<string, unknown>)[key]).length
+  }, 0)
+}
+
+function buildDepthDiagnostics(dossier: CampaignGmDossier | null): {
+  score: number
+  total: number
+  label: string
+  metrics: DepthMetric[]
+} {
+  if (!dossier) return { score: 0, total: 0, label: 'En attente', metrics: [] }
+  const chapters = asList(dossier.chapters)
+  const metrics: DepthMetric[] = [
+    {
+      id: 'npcs',
+      label: 'PNJ pivots',
+      count: asList(dossier.important_npcs).length,
+      target: '2+',
+      ok: asList(dossier.important_npcs).length >= 2,
+    },
+    {
+      id: 'pressure',
+      label: 'Forces en tension',
+      count: asList(dossier.fronts).length + asList(dossier.factions).length,
+      target: '2+',
+      ok: asList(dossier.fronts).length + asList(dossier.factions).length >= 2,
+    },
+    {
+      id: 'threats',
+      label: 'Menaces jouables',
+      count: asList(dossier.bestiary).length + asList(dossier.custom_monsters).length,
+      target: '1+',
+      ok: asList(dossier.bestiary).length + asList(dossier.custom_monsters).length >= 1,
+    },
+    {
+      id: 'rewards',
+      label: 'Récompenses',
+      count: asList(dossier.items).length,
+      target: '1+',
+      ok: asList(dossier.items).length >= 1,
+    },
+    {
+      id: 'complications',
+      label: 'Complications',
+      count: asList(dossier.complications).length + countNestedList(chapters, 'complications'),
+      target: '2+',
+      ok: asList(dossier.complications).length + countNestedList(chapters, 'complications') >= 2,
+    },
+    {
+      id: 'clues',
+      label: 'Indices',
+      count: asList(dossier.clues).length + countNestedList(chapters, 'clues'),
+      target: '2+',
+      ok: asList(dossier.clues).length + countNestedList(chapters, 'clues') >= 2,
+    },
+    {
+      id: 'mechanics',
+      label: 'Mécanique légère',
+      count: asList(dossier.light_mechanics).length,
+      target: '1+',
+      ok: asList(dossier.light_mechanics).length >= 1,
+    },
+  ]
+  const score = metrics.filter((metric) => metric.ok).length
+  const label = score === metrics.length ? 'Prête pour table' : `${score} / ${metrics.length}`
+  return { score, total: metrics.length, label, metrics }
 }
 
 function handleBackdrop() {
@@ -818,6 +898,30 @@ function handleFooterBack() {
                   <p class="mt-2 font-serif text-sm leading-relaxed text-parchment-dark">
                     {{ gmDossier?.narrative_arc || 'Aucun arc narratif privé.' }}
                   </p>
+                </div>
+
+                <div v-if="dossierDepthDiagnostics.total" class="rounded-lg border border-border bg-surface p-4">
+                  <div class="flex items-center justify-between gap-3">
+                    <div>
+                      <div class="text-[9px] font-bold uppercase tracking-[0.22em] text-text-muted">Diagnostic de profondeur</div>
+                      <div class="mt-1 font-display text-sm font-bold text-parchment">
+                        {{ dossierDepthDiagnostics.label }}
+                      </div>
+                    </div>
+                    <div class="font-mono text-lg font-bold text-gold">
+                      {{ dossierDepthDiagnostics.score }}/{{ dossierDepthDiagnostics.total }}
+                    </div>
+                  </div>
+                  <div class="mt-3 flex flex-wrap gap-1.5">
+                    <span
+                      v-for="metric in dossierDepthDiagnostics.metrics"
+                      :key="metric.id"
+                      class="rounded border px-2 py-1 font-mono text-[9px] uppercase tracking-wider"
+                      :class="metric.ok ? 'border-green/30 bg-green/10 text-green' : 'border-blood/30 bg-blood/10 text-blood'"
+                    >
+                      {{ metric.label }} {{ metric.count }}/{{ metric.target }}
+                    </span>
+                  </div>
                 </div>
 
                 <div v-if="asList(gmDossier?.important_npcs).length" class="space-y-2">

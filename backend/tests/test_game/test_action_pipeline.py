@@ -292,7 +292,17 @@ class TestPipelineExecutorUnits:
         assert scene_state["goal"] == "Comprendre et neutraliser la source."
         assert obstacle["progress"] == 1
         assert "purifier" in obstacle["approaches"]
-        assert bus.published == []
+        assert [event for event, _ in bus.published] == [EventType.SCENE_OPTIONS_UPDATED]
+        public_options = bus.published[0][1]["options"]
+        assert [option["label"] for option in public_options] == [
+            "analyser",
+            "purifier",
+            "contourner",
+        ]
+        public_payload = json.dumps(bus.published, ensure_ascii=False)
+        assert "La corruption vient d'un conduit enterré." not in public_payload
+        assert "La soif avance." not in public_payload
+        assert "La piste du puits ancien s'ouvre." not in public_payload
 
     async def test_hide_action_rolls_stealth_and_consumes_combat_action(self) -> None:
         active = _make_combat_active()
@@ -889,8 +899,74 @@ class TestPipelineExecutorUnits:
         ]
         assert scene["exits"][0]["description"] == "Issue solide vers une pièce voisine."
         assert scene["exits"][0]["position"] == {"col": 7, "row": 4}
-        assert bus.published[-1][0] == EventType.SCENE_LAYOUT_CHANGED
-        assert bus.published[-1][1]["scene"] == scene
+        scene_events = [
+            payload for event, payload in bus.published if event == EventType.SCENE_LAYOUT_CHANGED
+        ]
+        assert scene_events[-1]["scene"] == scene
+        assert bus.published[-1][0] == EventType.SCENE_OPTIONS_UPDATED
+        assert bus.published[-1][1]["options"] == []
+        assert active.state_data["scene_options"] == []
+
+    async def test_executor_scene_progress_update_publishes_public_options(self) -> None:
+        active = ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.EXPLORATION,
+            state_data={
+                "current_scene": {
+                    "scene_id": "cave_cristal",
+                    "cols": 12,
+                    "rows": 12,
+                    "pois": [],
+                    "exits": [],
+                }
+            },
+        )
+        bus = _FakeBus()
+        executor = GMResponseExecutor(bus)
+
+        response = AgentResponse(
+            content="Le cristal cède par endroits.",
+            actions=[
+                GMAction(
+                    type="scene_progress_update",
+                    params={
+                        "scene_id": "cave_cristal",
+                        "goal": "Libérer la prison",
+                        "approaches": [
+                            "Analyser les runes",
+                            {"label": "Forcer une brèche", "prompt": "Je force une brèche."},
+                        ],
+                    },
+                )
+            ],
+        )
+
+        await executor.execute_gm_response(response, active, session_id=SESSION_ID)
+
+        assert active.state_data["scene_options"] == [
+            {
+                "id": active.state_data["scene_options"][0]["id"],
+                "scene_id": "cave_cristal",
+                "label": "Analyser les runes",
+                "prompt": "Analyser les runes",
+                "action_type": "free_text",
+            },
+            {
+                "id": active.state_data["scene_options"][1]["id"],
+                "scene_id": "cave_cristal",
+                "label": "Forcer une brèche",
+                "prompt": "Je force une brèche.",
+                "action_type": "free_text",
+            },
+        ]
+        option_events = [
+            payload for event, payload in bus.published if event == EventType.SCENE_OPTIONS_UPDATED
+        ]
+        assert option_events[-1]["scene_id"] == "cave_cristal"
+        assert [option["label"] for option in option_events[-1]["options"]] == [
+            "Analyser les runes",
+            "Forcer une brèche",
+        ]
 
     async def test_executor_scene_update_merges_discoveries_positions_and_absent_npc(self) -> None:
         active = ActiveSession(

@@ -27,7 +27,7 @@ SCHÉMA DE RÉPONSE JSON (obligatoire) :
   "narration": "Le texte narratif vu par les joueurs (2 à 4 paragraphes, en français).",
   "actions": [
     {
-      "type": "roll_request | damage_apply | condition_add | condition_remove | combatant_status | state_transition | encounter_setup | stealth_event | scene_layout | scene_update | scene_progress_update | revelation | journal_update | quest_add | chronicle_add | social_outcome | clock_start | region_map_update | city_map_update | node_status_update | xp_grant | currency_grant | currency_spend | loot_grant | item_remove",
+      "type": "roll_request | damage_apply | condition_add | condition_remove | combatant_status | state_transition | encounter_setup | stealth_event | scene_layout | scene_update | scene_progress_update | scene_options_update | revelation | journal_update | quest_add | chronicle_add | social_outcome | clock_start | region_map_update | city_map_update | node_status_update | xp_grant | currency_grant | currency_spend | loot_grant | item_remove",
       "target": "id_du_personnage ou null",
       "params": {}
     }
@@ -111,8 +111,10 @@ TYPES D'ACTIONS :
                     fournis toujours une `note` expliquant le départ (enlevé, tué, s'enfuit, reste
                     en arrière), sinon le changement est ignoré et le PNJ reste présent au groupe.
 - scene_progress_update : note privée MJ-only sur l'objectif et les obstacles de la scène.
-                    Cette action ne publie aucun événement joueur et sert à te rappeler les prises
-                    jouables, progrès, révélations, coûts et issues d'un obstacle.
+                    Cette action sert à te rappeler les prises jouables, progrès, révélations,
+                    coûts et issues d'un obstacle. Les champs `approaches`/`visible_options`
+                    sont aussi dérivés en options publiques courtes : ils ne doivent donc contenir
+                    que des pistes jouables non-spoiler, jamais des secrets MJ.
                     (params: {"scene_id":"oasis_corrompue","goal":"Comprendre et neutraliser la source",
                     "status":"active","obstacle_id":"eau_noire","name":"Eau corrompue","progress":1,
                     "max_progress":3,"approaches":["analyser","purifier","contourner","interroger Khalid"],
@@ -121,6 +123,11 @@ TYPES D'ACTIONS :
                     "success_outcome":"La piste vers le puits ancien devient évidente."})
                     Utilise-le quand une scène à objectif progresse, même sur échec. Ne révèle pas
                     les secrets dans la narration visible avant une action, un indice ou un jet.
+- scene_options_update : remplace explicitement les options publiques de scène si les approches
+                    dérivées ne suffisent pas.
+                    (params: {"scene_id":"oasis_corrompue","options":[{"label":"Interroger Khalid",
+                    "prompt":"Je demande à Khalid ce qu'il sait de cette eau.","action_type":"free_text"}]})
+                    Limite-toi à 2-4 options courtes et réellement jouables.
 - revelation      : note privée MJ-only — enregistre UN secret au moment exact où il est
                     révélé aux joueurs en jeu (par un indice gagné, un aveu, un jet réussi).
                     N'émets cette action QUE quand le secret vient d'être effectivement dévoilé,

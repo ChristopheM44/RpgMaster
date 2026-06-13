@@ -65,6 +65,30 @@ _TRAVEL_MARKERS_EXPLICIT: tuple[str, ...] = (
     "je pars vers",
     "je pars a",
     "je pars pour",
+    "je remonte vers",
+    "je remonte a",
+    "nous remontons vers",
+    "nous remontons a",
+    "on remonte vers",
+    "on remonte a",
+    "je reviens vers",
+    "je reviens a",
+    "nous revenons vers",
+    "nous revenons a",
+    "je retourne voir",
+    "nous retournons voir",
+    "retournons voir",
+    "retourner voir",
+    "revenir voir",
+    "je sors vers",
+    "je sors par",
+    "je sors de",
+    "nous sortons vers",
+    "nous sortons par",
+    "nous sortons de",
+    "je quitte",
+    "nous quittons",
+    "on quitte",
     "je me rends a",
     "je me rends vers",
     "je me rends au",
@@ -228,6 +252,76 @@ def _match_destination_to_state(
     return None
 
 
+def _match_exit_by_terms(
+    normalized_text: str,
+    state_data: dict[str, Any],
+    terms: tuple[str, ...],
+) -> tuple[str | None, str | None]:
+    scene = state_data.get("current_scene") or {}
+    if not isinstance(scene, dict):
+        return None, None
+    for exit_data in scene.get("exits") or []:
+        if not isinstance(exit_data, dict):
+            continue
+        exit_label = str(exit_data.get("label") or "")
+        exit_leads = str(exit_data.get("leads_to") or "")
+        exit_description = str(exit_data.get("description") or "")
+        exit_text = _normalize_text(f"{exit_label} {exit_leads} {exit_description}")
+        if not exit_text:
+            continue
+        if any(term in normalized_text for term in terms) and any(
+            term in exit_text for term in terms
+        ):
+            return exit_label or exit_leads, exit_leads or str(exit_data.get("id") or "") or None
+    return None, None
+
+
+def _detect_contextual_return_destination(
+    normalized_text: str,
+    state_data: dict[str, Any],
+) -> TravelIntent | None:
+    surface_terms = ("surface", "sortie", "dehors", "rivage", "port")
+    sea_terms = ("mer", "ocean", "rivage", "baie", "port")
+
+    if (
+        "surface" in normalized_text
+        or "profondeur" in normalized_text
+        or "profondeurs" in normalized_text
+    ) and any(word in normalized_text for word in ("remont", "reven", "retour", "quitt", "sort")):
+        label, node_id = _match_exit_by_terms(normalized_text, state_data, surface_terms)
+        return TravelIntent(
+            is_travel=True,
+            destination=label or "la surface",
+            destination_node_id=node_id,
+            confidence="explicit",
+        )
+
+    if any(word in normalized_text for word in ("ramen", "remet", "rend")) and any(
+        term in normalized_text for term in sea_terms
+    ):
+        label, node_id = _match_exit_by_terms(normalized_text, state_data, sea_terms)
+        return TravelIntent(
+            is_travel=True,
+            destination=label or "la mer",
+            destination_node_id=node_id,
+            confidence="explicit",
+        )
+
+    if (
+        "quitter les profondeurs" in normalized_text
+        or "quittons les profondeurs" in normalized_text
+    ):
+        label, node_id = _match_exit_by_terms(normalized_text, state_data, surface_terms)
+        return TravelIntent(
+            is_travel=True,
+            destination=label or "la surface",
+            destination_node_id=node_id,
+            confidence="explicit",
+        )
+
+    return None
+
+
 def detect_travel_intent(
     player_text: str,
     state_data: dict[str, Any],
@@ -251,6 +345,9 @@ def detect_travel_intent(
         return TravelIntent()
 
     normalized = _normalize_text(player_text)
+    contextual = _detect_contextual_return_destination(normalized, state_data)
+    if contextual is not None:
+        return contextual
 
     # 1. Chercher les marqueurs explicites
     for marker in _TRAVEL_MARKERS_EXPLICIT:
