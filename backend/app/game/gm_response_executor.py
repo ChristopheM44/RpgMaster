@@ -1852,7 +1852,7 @@ class GMResponseExecutor:
             position = cls._normalize_position(poi.get("position"), cols, rows)
             if position is None:
                 continue
-            poi_id = str(poi.get("id") or f"poi_{idx + 1}")
+            poi_id = normalize_content_id(poi.get("id")) or f"poi_{idx + 1}"
             normalized_poi = {
                 "id": poi_id,
                 "name": str(poi.get("name") or poi_id),
@@ -1896,7 +1896,7 @@ class GMResponseExecutor:
             position = cls._normalize_position(exit_data.get("position"), cols, rows)
             if position is None:
                 continue
-            exit_id = str(exit_data.get("id") or f"exit_{idx + 1}")
+            exit_id = normalize_content_id(exit_data.get("id")) or f"exit_{idx + 1}"
             normalized_exit = {
                 "id": exit_id,
                 "label": str(exit_data.get("label") or exit_id),
@@ -1999,7 +1999,7 @@ class GMResponseExecutor:
                 intent = "custom"
 
             interaction: dict[str, Any] = {
-                "id": cls._clean_optional_text(raw.get("id"), max_len=48) or f"custom_{idx + 1}",
+                "id": normalize_content_id(raw.get("id"), max_len=48) or f"custom_{idx + 1}",
                 "label": label,
                 "intent": intent,
             }

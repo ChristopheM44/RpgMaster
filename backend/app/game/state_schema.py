@@ -7,6 +7,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.session import SessionStatus
+from app.schemas.campaign_content import normalize_content_id
 
 STATE_SCHEMA_VERSION = 1
 
@@ -74,6 +75,30 @@ class GameStateData(BaseModel):
         return value
 
 
+def _normalize_scene_ids(scene: dict[str, Any]) -> None:
+    """Sanitize legacy POI/interaction/exit ids in-place to match WS identifier rules."""
+    pois = scene.get("pois")
+    if isinstance(pois, list):
+        for idx, poi in enumerate(pois):
+            if not isinstance(poi, dict):
+                continue
+            poi["id"] = normalize_content_id(poi.get("id")) or f"poi_{idx + 1}"
+            interactions = poi.get("interactions")
+            if isinstance(interactions, list):
+                for j, interaction in enumerate(interactions):
+                    if not isinstance(interaction, dict):
+                        continue
+                    interaction["id"] = (
+                        normalize_content_id(interaction.get("id"), max_len=48) or f"custom_{j + 1}"
+                    )
+    exits = scene.get("exits")
+    if isinstance(exits, list):
+        for idx, exit_data in enumerate(exits):
+            if not isinstance(exit_data, dict):
+                continue
+            exit_data["id"] = normalize_content_id(exit_data.get("id")) or f"exit_{idx + 1}"
+
+
 def migrate_state_data(raw: Any) -> dict[str, Any]:
     """Return a versioned state dict while preserving unknown game data."""
     if not isinstance(raw, dict):
@@ -87,6 +112,9 @@ def migrate_state_data(raw: Any) -> dict[str, Any]:
         lowered = phase.lower()
         if lowered in {status.value for status in SessionStatus}:
             migrated["phase"] = lowered
+    current_scene = migrated.get("current_scene")
+    if isinstance(current_scene, dict):
+        _normalize_scene_ids(current_scene)
     validate_state_data(migrated)
     return migrated
 

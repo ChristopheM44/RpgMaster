@@ -32,8 +32,14 @@ export class SceneRuntime implements SceneRuntimeHandle {
   private overlay = new OverlayLayer()
   private hemi: THREE.HemisphereLight
   private sun: THREE.DirectionalLight
-  /** Plancher de lisibilité en ambiance sombre (night/torchlit) — jamais de noir total. */
-  private ambientFloor = new THREE.AmbientLight('#181410', 0)
+  /** Plancher de lisibilité en ambiance sombre (night/torchlit) — jamais de noir total.
+   *  Couleur chaude ET assez claire : un AmbientLight quasi noir ne relève rien,
+   *  quelle que soit l'intensité (lumière sombre × sol sombre = sol noir). */
+  private ambientFloor = new THREE.AmbientLight('#423626', 0)
+  /** Luminosité UI : valeurs de base de l'ambiance courante × multiplicateur joueur. */
+  private brightness = 1
+  private baseExposure = 1.05
+  private baseAmbient = 0
   private clock = new THREE.Clock()
   private rafId: number | null = null
   private running = true
@@ -107,15 +113,18 @@ export class SceneRuntime implements SceneRuntimeHandle {
     this.scene.background = background
     const diag = gridDiagonal(this.dims)
     const density = spec.ground.ambiance.fogDensity
-    this.scene.fog = new THREE.Fog(background, diag * (1.15 - 0.55 * density), diag * (3.0 - 1.4 * density))
+    // Plan proche repoussé au-delà de l'aire jouable (caméra ~1.05×diag) : avant,
+    // le brouillard mordait le centre de la salle et le fondait vers le noir.
+    this.scene.fog = new THREE.Fog(background, diag * (1.35 - 0.45 * density), diag * (3.2 - 1.2 * density))
 
     this.hemi.color = new THREE.Color(preset.hemiSky)
     this.hemi.groundColor = new THREE.Color(preset.hemiGround)
     this.hemi.intensity = preset.hemiIntensity
     this.sun.color = new THREE.Color(preset.sunColor)
     this.sun.intensity = preset.sunIntensity
-    this.renderer.toneMappingExposure = preset.exposure
-    this.ambientFloor.intensity = preset.pointLights ? 0.22 : 0
+    this.baseExposure = preset.exposure
+    this.baseAmbient = preset.pointLights ? 0.52 : 0
+    this.applyBrightness()
     this.sun.position.set(diag * 0.55, Math.sin(preset.sunElevation) * diag * 0.9, diag * 0.3)
     this.sun.target.position.set(0, 0, 0)
     const shadowSpan = Math.max(this.dims.cols, this.dims.rows) / 2 + 2
@@ -158,6 +167,17 @@ export class SceneRuntime implements SceneRuntimeHandle {
 
   setZoomPreset(preset: ZoomPreset): void {
     this.rig.setZoomPreset(preset)
+  }
+
+  setBrightness(value: number): void {
+    this.brightness = Math.min(2, Math.max(0.5, value))
+    this.applyBrightness()
+  }
+
+  /** Applique le multiplicateur joueur aux valeurs de base de l'ambiance courante. */
+  private applyBrightness(): void {
+    this.renderer.toneMappingExposure = this.baseExposure * this.brightness
+    this.ambientFloor.intensity = this.baseAmbient * this.brightness
   }
 
   setRunning(running: boolean): void {

@@ -131,6 +131,8 @@ export interface SceneRuntimeHandle {
   projectToken(id: string): { x: number; y: number } | null
   setZoomPreset(preset: ZoomPreset): void
   setRunning(running: boolean): void
+  /** Multiplicateur de luminosité piloté par l'UI (exposition + plancher ambiant). */
+  setBrightness(value: number): void
   resize(): void
   dispose(): void
 }

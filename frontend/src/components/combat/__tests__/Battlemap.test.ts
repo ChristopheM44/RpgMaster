@@ -18,6 +18,7 @@ const { runtimeMock, harness } = vi.hoisted(() => {
     projectToken: vi.fn(() => ({ x: 0, y: 0 })),
     setZoomPreset: vi.fn(),
     setRunning: vi.fn(),
+    setBrightness: vi.fn(),
     resize: vi.fn(),
     dispose: vi.fn(),
   }

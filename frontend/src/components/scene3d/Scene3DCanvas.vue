@@ -19,6 +19,18 @@ const canvas = ref<HTMLCanvasElement | null>(null)
 const runtime = shallowRef<SceneRuntimeHandle | null>(null)
 const loading = ref(true)
 
+// Luminosité réglable par le joueur (exposition + plancher ambiant), persistée.
+const BRIGHTNESS_KEY = 'rpg-scene-brightness'
+function loadBrightness(): number {
+  try {
+    const raw = Number(localStorage.getItem(BRIGHTNESS_KEY))
+    return Number.isFinite(raw) && raw >= 0.5 && raw <= 2 ? raw : 1
+  } catch {
+    return 1 // localStorage indisponible (SSR/tests)
+  }
+}
+const brightness = ref(loadBrightness())
+
 let resizeObserver: ResizeObserver | null = null
 let intersectionObserver: IntersectionObserver | null = null
 let disposed = false
@@ -33,6 +45,7 @@ async function boot(): Promise<void> {
       onHover: (pick, screen) => emit('hover', pick, screen),
     })
     loading.value = false
+    runtime.value.setBrightness(brightness.value)
     if (props.spec) runtime.value.update(props.spec)
     runtime.value.resize()
   } catch (error) {
@@ -70,6 +83,15 @@ function onContextLost(event: Event): void {
 
 watch(() => props.spec, (spec) => {
   if (spec) runtime.value?.update(spec)
+})
+
+watch(brightness, (value) => {
+  runtime.value?.setBrightness(value)
+  try {
+    localStorage.setItem(BRIGHTNESS_KEY, String(value))
+  } catch {
+    /* localStorage indisponible (SSR/tests) */
+  }
 })
 
 onBeforeUnmount(() => {
@@ -115,6 +137,20 @@ defineExpose({ moveToken, projectToken, projectCell, setZoomPreset })
         {{ String.fromCharCode(64 + spec.ground.cols) }}{{ spec.ground.rows }}
         · {{ spec.ground.cols }}×{{ spec.ground.rows }}
       </div>
+
+      <!-- Réglage de luminosité de la scène (exposition). -->
+      <label class="scene3d-brightness" title="Luminosité de la scène">
+        <span class="scene3d-brightness-icon" aria-hidden="true">☀</span>
+        <input
+          v-model.number="brightness"
+          type="range"
+          min="0.5"
+          max="2"
+          step="0.05"
+          class="scene3d-brightness-range"
+          aria-label="Luminosité de la scène"
+        />
+      </label>
     </template>
 
     <slot />
@@ -193,5 +229,39 @@ defineExpose({ moveToken, projectToken, projectCell, setZoomPreset })
 .scene3d-coord.bottom-right {
   right: 6px;
   bottom: 6px;
+}
+
+.scene3d-brightness {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 8px;
+  background: rgba(14, 13, 20, 0.72);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  pointer-events: auto;
+  opacity: 0.55;
+  transition: opacity 120ms ease;
+}
+
+.scene3d-brightness:hover {
+  opacity: 1;
+}
+
+.scene3d-brightness-icon {
+  font-size: 11px;
+  line-height: 1;
+  color: var(--color-gold);
+}
+
+.scene3d-brightness-range {
+  width: 84px;
+  height: 3px;
+  accent-color: var(--color-ember);
+  cursor: pointer;
 }
 </style>

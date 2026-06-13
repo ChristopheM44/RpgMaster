@@ -135,13 +135,15 @@ export class ScatterLayer {
       this.group.add(container)
 
       if (ctx.ambiance.pointLights && lights < MAX_TORCH_LIGHTS) {
+        // Portée allongée (~16 m ≈ 11 cellules) pour traverser une salle entière :
+        // à 8 m les torches d'angle mouraient avant le centre. Chute plus douce.
         const light = new THREE.PointLight(
           new THREE.Color(ctx.tokens.ember),
-          4.5,
-          metersToWorld(8, ground.cellSizeM),
-          1.7,
+          8,
+          metersToWorld(16, ground.cellSizeM),
+          1.5,
         )
-        light.position.set(center.x, 1.25, center.z)
+        light.position.set(center.x, 1.6, center.z)
         this.group.add(light)
         lights += 1
       }

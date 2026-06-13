@@ -142,11 +142,11 @@ export const BIOME_3D: Record<SceneTheme, Biome3D> = {
     fog: '#1a1a26', scatter: ['rock', 'stone', 'tree_pine'], cornerTorches: false,
   },
   dungeon: {
-    ground: '#15151c', groundAccent: '#1c1c24', grid: '#ffebb4', gridOpacity: 0.07,
+    ground: '#3e3e48', groundAccent: '#4a4a55', grid: '#ffebb4', gridOpacity: 0.08,
     fog: '#131017', scatter: [], cornerTorches: true,
   },
   cave: {
-    ground: '#121216', groundAccent: '#18181e', grid: '#ffebb4', gridOpacity: 0.06,
+    ground: '#383844', groundAccent: '#44444f', grid: '#ffebb4', gridOpacity: 0.07,
     fog: '#0e0e13', scatter: ['rock', 'mushroom'], cornerTorches: true,
   },
   city: {
@@ -158,7 +158,7 @@ export const BIOME_3D: Record<SceneTheme, Biome3D> = {
     fog: '#141810', scatter: ['grass', 'bush', 'flower', 'tree_pine'], cornerTorches: false,
   },
   swamp: {
-    ground: '#0e1410', groundAccent: '#12190f', grid: '#ffebb4', gridOpacity: 0.05,
+    ground: '#172019', groundAccent: '#1d271b', grid: '#ffebb4', gridOpacity: 0.05,
     fog: '#0c140e', scatter: ['tree_dark', 'lily', 'mushroom', 'grass'], cornerTorches: false,
   },
   desert: {
@@ -199,14 +199,14 @@ export const AMBIANCE_PRESETS: Record<AmbianceLight, AmbiancePreset> = {
     exposure: 1.05,
   },
   night: {
-    hemiSky: '#3a4a6a', hemiGround: '#0a0a12', hemiIntensity: 0.68,
-    sunColor: '#7a8fc0', sunIntensity: 0.72, sunElevation: 0.8, pointLights: true,
-    exposure: 1.12,
+    hemiSky: '#3a4a6a', hemiGround: '#0a0a12', hemiIntensity: 0.9,
+    sunColor: '#7a8fc0', sunIntensity: 0.88, sunElevation: 0.8, pointLights: true,
+    exposure: 1.22,
   },
   torchlit: {
-    hemiSky: '#5a463a', hemiGround: '#14100c', hemiIntensity: 0.85,
-    sunColor: '#ffb070', sunIntensity: 0.75, sunElevation: 0.9, pointLights: true,
-    exposure: 1.18,
+    hemiSky: '#5a463a', hemiGround: '#14100c', hemiIntensity: 1.1,
+    sunColor: '#ffb070', sunIntensity: 1.0, sunElevation: 0.9, pointLights: true,
+    exposure: 1.32,
   },
   overcast: {
     hemiSky: '#9aa0aa', hemiGround: '#20202a', hemiIntensity: 0.8,

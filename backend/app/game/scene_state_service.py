@@ -13,6 +13,7 @@ from copy import deepcopy
 from typing import Any
 
 from app.game.session_manager import ActiveSession
+from app.schemas.campaign_content import normalize_content_id
 from app.services import local_map_service
 
 logger = logging.getLogger(__name__)
@@ -596,7 +597,7 @@ def _normalize_poi(
 ) -> dict[str, Any] | None:
     if not isinstance(raw, dict):
         return None
-    poi_id = _clean_text(raw.get("id"), max_len=80)
+    poi_id = normalize_content_id(raw.get("id"), max_len=80)
     if not poi_id:
         return None
     base = dict(existing or {})
@@ -636,7 +637,16 @@ def _normalize_poi_patch(raw: dict[str, Any], cols: int, rows: int) -> dict[str,
     if facts:
         patch["facts"] = facts
     if isinstance(raw.get("interactions"), list):
-        patch["interactions"] = [item for item in raw["interactions"] if isinstance(item, dict)][:5]
+        interactions: list[dict[str, Any]] = []
+        for idx, item in enumerate(raw["interactions"]):
+            if not isinstance(item, dict):
+                continue
+            entry = dict(item)
+            entry["id"] = normalize_content_id(entry.get("id"), max_len=48) or f"custom_{idx + 1}"
+            interactions.append(entry)
+            if len(interactions) >= 5:
+                break
+        patch["interactions"] = interactions
     return patch
 
 

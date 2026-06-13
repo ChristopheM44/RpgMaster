@@ -140,11 +140,44 @@ export function buildProceduralElement(spec: ElementSpec, ctx: ElementBuildCtx):
     return mesh
   }
 
+  // Enceinte circulaire (mur ellipse) : coque OUVERTE rendue côté intérieur
+  // (BackSide). La paroi face caméra est culled → on voit DANS la caverne ; la
+  // paroi opposée sert de fond. Pas de chapeau plein qui enterrerait l'intérieur,
+  // pas d'ombre projetée vers le centre — sinon le mur redevient un dôme opaque.
+  const addEnclosureShell = (material: THREE.MeshStandardMaterial): void => {
+    const shellMat = material.clone()
+    shellMat.side = THREE.BackSide
+    const shell = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, height, 48, 1, true), shellMat)
+    shell.scale.set(foot.sizeX, 1, foot.sizeZ)
+    shell.position.y = elevation + height / 2
+    group.add(shell)
+  }
+
+  // Grand rectangle = pièce close : 4 segments de mur en périmètre, centre dégagé.
+  const addRectFrame = (material: THREE.MeshStandardMaterial): void => {
+    const t = Math.min(0.3, foot.sizeX / 2, foot.sizeZ / 2)
+    const segments = [
+      { sx: foot.sizeX, sz: t, px: 0, pz: -foot.sizeZ / 2 + t / 2 },
+      { sx: foot.sizeX, sz: t, px: 0, pz: foot.sizeZ / 2 - t / 2 },
+      { sx: t, sz: foot.sizeZ, px: -foot.sizeX / 2 + t / 2, pz: 0 },
+      { sx: t, sz: foot.sizeZ, px: foot.sizeX / 2 - t / 2, pz: 0 },
+    ]
+    for (const seg of segments) {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(seg.sx, height, seg.sz), material)
+      mesh.position.set(seg.px, elevation + height / 2, seg.pz)
+      mesh.receiveShadow = true
+      group.add(mesh)
+    }
+  }
+
   switch (spec.kind) {
     case 'wall': {
       const stone = desaturated(color(tokens.dim), 0.25).multiplyScalar(0.82)
       const material = makeMaterial(`#${stone.getHexString()}`, subtle, { roughness: 0.96 })
-      addVolume(material)
+      const geom = spec.geometry
+      if (geom.type === 'ellipse') addEnclosureShell(material)
+      else if (geom.type === 'rect' && geom.width > 1 && geom.height > 1) addRectFrame(material)
+      else addVolume(material) // mur 1 cellule (pilier) ou segment droit : plein
       break
     }
     case 'door': {

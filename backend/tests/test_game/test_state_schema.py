@@ -21,3 +21,29 @@ def test_migrate_state_data_normalizes_uppercase_phase() -> None:
 def test_validate_state_data_rejects_unknown_phase() -> None:
     with pytest.raises(ValueError):
         validate_state_data({"schema_version": STATE_SCHEMA_VERSION, "phase": "dream"})
+
+
+def test_migrate_state_data_normalizes_scene_poi_ids() -> None:
+    migrated = migrate_state_data(
+        {
+            "current_scene": {
+                "pois": [
+                    {
+                        "id": "prison_sirène",
+                        "name": "La Prison de Cristal",
+                        "interactions": [
+                            {"id": "libérer la sirène", "label": "Briser le cristal", "intent": "use"}
+                        ],
+                    },
+                    {"id": "", "name": "Sans id"},
+                ],
+                "exits": [{"id": "retour côté nord"}],
+            }
+        }
+    )
+
+    scene = migrated["current_scene"]
+    assert scene["pois"][0]["id"] == "prison_sirne"
+    assert scene["pois"][0]["interactions"][0]["id"] == "librer_la_sirne"
+    assert scene["pois"][1]["id"] == "poi_2"
+    assert scene["exits"][0]["id"] == "retour_ct_nord"
