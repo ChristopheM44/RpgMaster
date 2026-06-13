@@ -4,6 +4,7 @@ import {
   modelForClass,
   modelForElement,
   modelForMonster,
+  modelForNpc,
   SCATTER_MODELS,
   SCATTER_TARGET_HEIGHT_M,
 } from '../assets/manifest'
@@ -39,12 +40,39 @@ describe('manifest 3D', () => {
     }
   })
 
-  it('monstres : squelettes détectés, autres → null (pion procédural)', () => {
+  it('monstres : squelettes détectés, humanoïdes approximés, bêtes → null (pion)', () => {
     expect(modelForMonster('Squelette archer')).toBe('monster/skeleton_mage')
     expect(modelForMonster('skeleton warrior')).toBe('monster/skeleton_warrior')
     expect(modelForMonster('liche ancienne')).toBe('monster/skeleton_mage')
-    expect(modelForMonster('gobelin fourbe')).toBeNull()
+    // Humanoïdes sans modèle dédié → silhouette approchante.
+    expect(modelForMonster('gobelin fourbe')).toBe('monster/skeleton_minion')
+    expect(modelForMonster('Kobold éclaireur')).toBe('monster/skeleton_minion')
+    expect(modelForMonster('Orc des collines')).toBe('monster/skeleton_warrior')
+    expect(modelForMonster('Chamane gnoll')).toBe('monster/skeleton_mage')
+    expect(modelForMonster('Spectre hurlant')).toBe('monster/skeleton_rogue')
+    // Bêtes : un squelette serait pire que l'abstraction du pion.
+    expect(modelForMonster('Loup affamé')).toBeNull()
+    expect(modelForMonster('Araignée géante')).toBeNull()
     expect(modelForMonster(undefined)).toBeNull()
+    // Priorité conservée : la règle liche prime sur la règle nécromant.
+    expect(modelForMonster('liche nécromancienne')).toBe('monster/skeleton_mage')
+  })
+
+  it('PNJ : mots-clés FR/EN → modèle de personnage, défaut → null (pion)', () => {
+    expect(modelForNpc('Garde du pont')).toBe('char/knight')
+    expect(modelForNpc('Capitaine Aldric, sentinelle')).toBe('char/knight')
+    expect(modelForNpc('Vieille sorcière des marais')).toBe('char/mage')
+    expect(modelForNpc('Prêtresse de la Lumière')).toBe('char/mage')
+    expect(modelForNpc('Silhouette encapuchonnée')).toBe('char/rogue_hooded')
+    expect(modelForNpc('Forgeron taciturne')).toBe('char/barbarian')
+    expect(modelForNpc('Aubergiste jovial')).toBe('char/rogue')
+    expect(modelForNpc('Merchant of curiosities')).toBe('char/rogue')
+    expect(modelForNpc('Vieil homme énigmatique')).toBeNull()
+    expect(modelForNpc(null)).toBeNull()
+    for (const corpus of ['Garde', 'Sorcière', 'Mendiant', 'Forgeron', 'Villageois']) {
+      const key = modelForNpc(corpus)
+      if (key) expect(MODEL_MANIFEST[key], `clé manquante: ${key}`).toBeDefined()
+    }
   })
 
   it('éléments : mots-clés FR → props, cover par défaut → caisses, sinon null', () => {

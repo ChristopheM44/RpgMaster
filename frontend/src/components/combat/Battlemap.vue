@@ -5,7 +5,9 @@ import { useGameStore } from '../../stores/game'
 import RpgMapIcon from '../common/RpgMapIcon.vue'
 import Scene3DCanvas from '../scene3d/Scene3DCanvas.vue'
 import { buildCombatSpec } from '../../engine3d/adapters/combatAdapter'
+import { aoeCells } from '../../engine3d/adapters/aoe'
 import type { PickResult } from '../../engine3d/types'
+import { chebyshevLine } from '../../engine3d/utils/gridMath'
 import {
   resolveScenePoiInteractions,
   type ResolvedScenePoiInteraction,
@@ -22,6 +24,7 @@ import {
 import type {
   CombatantState,
   GridPosition,
+  PendingSpellAim,
   PointOfInterest,
   ScenePoiInteraction,
   SceneExit,
@@ -75,12 +78,15 @@ const props = withDefaults(defineProps<{
   isMyTurn?: boolean
   speedM?: number
   interactionMode?: MapInteractionMode
+  /** Sort à aire en cours de visée (CombatLayout V2) — null sinon. */
+  pendingSpell?: PendingSpellAim | null
   panelHeight?: string
 }>(), {
   mode: 'combat',
   variant: 'standard',
   sceneLayout: null,
   interactionMode: 'inspect',
+  pendingSpell: null,
   panelHeight: undefined,
 })
 
@@ -93,6 +99,8 @@ const emit = defineEmits<{
   target: [targetId: string, mode: MapInteractionMode]
   modeChange: [mode: MapInteractionMode]
   flee: [exitId: string]
+  /** Sort à aire confirmé : cellule centrale du gabarit + cible la plus proche dessous. */
+  castAt: [col: number, row: number, targetId: string | undefined]
 }>()
 
 const gameStore = useGameStore()
@@ -177,6 +185,67 @@ const reachableCells = computed((): Set<string> => {
   const reachable = gameStore.reachableCells[props.myCharacterId]
   return new Set((reachable?.free ?? []).map(positionKey))
 })
+
+/** Chemin prévisualisé vers la destination en attente : A* backend si fourni
+ *  (reachableCells.paths, départ inclus), sinon ligne Chebyshev. */
+const pendingPath = computed((): GridPosition[] => {
+  if (isExploration.value || selected.value?.kind !== 'move' || !props.myCharacterId) return []
+  const destination = selected.value.position
+  const fromStore = gameStore.reachableCells[props.myCharacterId]?.paths?.[positionKey(destination)]
+  if (fromStore?.length) return fromStore
+  return myPos.value ? chebyshevLine(myPos.value, destination) : []
+})
+
+// ── Visée de sort à aire (gabarit AoE) ───────────────────────────────────────
+/** Cellule cliquée pour ancrer le gabarit ; le survol prévisualise avant le clic. */
+const aimedCell = ref<GridPosition | null>(null)
+const hoveredCell = ref<GridPosition | null>(null)
+
+watch(() => [props.pendingSpell, props.interactionMode], () => {
+  aimedCell.value = null
+  hoveredCell.value = null
+})
+
+const aoePreview = computed((): { cells: GridPosition[]; center: GridPosition; valid: boolean } | null => {
+  const spell = props.pendingSpell
+  if (!spell || isExploration.value || !myPos.value) return null
+  const center = spell.origin === 'self' ? myPos.value : aimedCell.value ?? hoveredCell.value
+  if (!center) return null
+  const valid =
+    spell.origin === 'self'
+    || distanceCells(myPos.value, center) * cellSizeM.value <= Math.max(spell.rangeM, cellSizeM.value)
+  const cells = aoeCells({
+    shape: spell.shape,
+    sizeM: spell.sizeM,
+    cellSizeM: cellSizeM.value,
+    origin: { col: myPos.value.col, row: myPos.value.row },
+    target: { col: center.col, row: center.row },
+    dims: { cols: cols.value, rows: rows.value },
+  })
+  return { cells, center, valid }
+})
+
+/** Confirmation possible : sort self (gabarit fixe) ou cellule ancrée valide. */
+const aoeReadyToCast = computed(() => {
+  const preview = aoePreview.value
+  if (!preview || !props.pendingSpell) return false
+  if (props.pendingSpell.origin === 'self') return true
+  return aimedCell.value !== null && preview.valid
+})
+
+function confirmCastAt() {
+  const preview = aoePreview.value
+  if (!preview || !aoeReadyToCast.value) return
+  const covered = new Set(preview.cells.map((cell) => positionKey(cell)))
+  const candidates = gameStore.combatants.filter(
+    (c) => c.kind === 'monster' && c.hp_current > 0 && c.position && covered.has(positionKey(c.position)),
+  )
+  candidates.sort(
+    (a, b) => distanceCells(a.position!, preview.center) - distanceCells(b.position!, preview.center),
+  )
+  emit('castAt', preview.center.col, preview.center.row, candidates[0]?.id)
+  aimedCell.value = null
+}
 
 
 const obstacles = computed(() => isExploration.value ? [] : gameStore.gridDecoration?.obstacles ?? [])
@@ -370,6 +439,7 @@ const combatSpec = computed(() => buildCombatSpec({
       iconId: iconForPoi(poi),
       tone: toneForPoi(poi),
       elementId: poi.element_id ?? null,
+      role: semanticRoleForPoi(poi),
     })),
   exits: (activeScene.value?.exits ?? [])
     .filter((exit) => exit.position)
@@ -383,6 +453,8 @@ const combatSpec = computed(() => buildCombatSpec({
       elementId: exit.element_id ?? null,
     })),
   pendingMove: selected.value?.kind === 'move' ? selected.value.position : null,
+  pendingPath: pendingPath.value,
+  pendingAoe: aoePreview.value,
   selectedElementId: selectedElementId.value,
 }))
 
@@ -391,6 +463,14 @@ function onMapPick(pick: PickResult): void {
   if (pick.type === 'cell') {
     handleCellClick(pick.col, pick.row)
     return
+  }
+  // Visée AoE : cliquer un combattant ancre le gabarit sur sa cellule.
+  if (props.pendingSpell && props.interactionMode === 'spell' && pick.type === 'token') {
+    const combatant = gameStore.combatants.find((item) => item.id === pick.id)
+    if (combatant?.position && props.pendingSpell.origin === 'point') {
+      aimedCell.value = combatant.position
+      return
+    }
   }
   if (pick.type === 'element') {
     const element = (activeScene.value?.elements ?? []).find((item) => item.id === pick.id)
@@ -403,12 +483,30 @@ function onMapPick(pick: PickResult): void {
   } else if (pick.tokenKind === 'exit') {
     const exit = (activeScene.value?.exits ?? []).find((item) => item.id === pick.id)
     if (exit) selectExit(exit)
-  } else if (pick.tokenKind === 'poi') {
+  } else if (pick.tokenKind === 'poi' || pick.tokenKind === 'npc') {
     const poi = displayPois.value.find((item) => item.id === pick.id)
     if (poi) selectPoi(poi)
   } else {
     const marker = partyMarkers.value.find((item) => item.id === pick.id)
     if (marker) selectParty(marker)
+  }
+}
+
+/** Survol : prévisualise le gabarit AoE avant le clic d'ancrage. */
+function onMapHover(pick: PickResult | null): void {
+  if (!props.pendingSpell || props.interactionMode !== 'spell') {
+    hoveredCell.value = null
+    return
+  }
+  if (!pick) {
+    hoveredCell.value = null
+    return
+  }
+  if (pick.type === 'cell') {
+    hoveredCell.value = { col: pick.col, row: pick.row }
+  } else if (pick.type === 'token') {
+    const combatant = gameStore.combatants.find((item) => item.id === pick.id)
+    if (combatant?.position) hoveredCell.value = combatant.position
   }
 }
 
@@ -694,6 +792,12 @@ function handleCellClick(col: number, row: number) {
     return
   }
 
+  // Visée de sort à aire : le clic ancre le gabarit, rien d'autre.
+  if (props.pendingSpell && props.interactionMode === 'spell') {
+    if (props.pendingSpell.origin === 'point') aimedCell.value = position
+    return
+  }
+
   const combatant = cellMap.value[key]
   if (combatant) {
     selectCombatant(combatant)
@@ -883,6 +987,7 @@ function markerToneStyle(tone: LegendEntry['tone']) {
           data-testid="battlemap-grid"
           :spec="combatSpec"
           @pick="onMapPick"
+          @hover="onMapHover"
         >
           <!-- Mini-panel flottant de confirmation (lean seulement) -->
           <Transition name="move-confirm">
@@ -914,6 +1019,41 @@ function markerToneStyle(tone: LegendEntry['tone']) {
                   type="button"
                   data-testid="lean-cancel-move"
                   @click="selected = null"
+                >✕</button>
+              </div>
+            </div>
+          </Transition>
+
+          <!-- Mini-panel flottant de confirmation pour SORT À AIRE (lean seulement) -->
+          <Transition name="move-confirm">
+            <div
+              v-if="isLean && pendingSpell && aoeReadyToCast"
+              class="move-confirm-wrapper"
+            >
+              <div class="move-confirm-panel flex items-center gap-2" style="border-color: var(--color-arcane); box-shadow: 0 4px 24px rgba(192, 144, 255, 0.25);">
+                <!-- Info gabarit -->
+                <div class="move-confirm-info" style="border-right-color: rgba(192, 144, 255, 0.2);">
+                  <span class="move-confirm-icon" style="color: var(--color-arcane);">✦</span>
+                  <div>
+                    <div class="move-confirm-label" style="color: var(--color-arcane);">Zone d'effet</div>
+                    <div class="move-confirm-dest">
+                      {{ aoePreview ? coordinateLabel(aoePreview.center) : '' }}
+                    </div>
+                  </div>
+                </div>
+                <!-- Actions -->
+                <button
+                  class="move-confirm-btn"
+                  style="background: rgba(192, 144, 255, 0.15); border-color: rgba(192, 144, 255, 0.5); color: var(--color-arcane);"
+                  type="button"
+                  data-testid="lean-confirm-cast"
+                  @click="confirmCastAt"
+                >Lancer ✦</button>
+                <button
+                  class="move-confirm-btn move-confirm-btn--cancel"
+                  type="button"
+                  data-testid="lean-cancel-cast"
+                  @click="aimedCell = null"
                 >✕</button>
               </div>
             </div>

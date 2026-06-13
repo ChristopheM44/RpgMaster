@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   cellCenterToWorld,
+  chebyshevLine,
   clampCell,
   gridDiagonal,
   gridPointToWorld,
@@ -19,6 +20,21 @@ describe('gridMath', () => {
 
     const last = cellCenterToWorld(11, 7, dims)
     expect(worldToCell(last.x, last.z, dims)).toEqual({ col: 11, row: 7 })
+  })
+
+  it('chebyshevLine : diagonale puis droite, départ inclus', () => {
+    expect(chebyshevLine({ col: 0, row: 0 }, { col: 0, row: 0 })).toEqual([{ col: 0, row: 0 }])
+    expect(chebyshevLine({ col: 0, row: 0 }, { col: 2, row: 1 })).toEqual([
+      { col: 0, row: 0 },
+      { col: 1, row: 1 },
+      { col: 2, row: 1 },
+    ])
+    expect(chebyshevLine({ col: 3, row: 3 }, { col: 1, row: 0 })).toEqual([
+      { col: 3, row: 3 },
+      { col: 2, row: 2 },
+      { col: 1, row: 1 },
+      { col: 1, row: 0 },
+    ])
   })
 
   it('worldToCell retourne null hors grille', () => {

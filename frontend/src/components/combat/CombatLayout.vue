@@ -18,6 +18,7 @@ import { computed, ref } from 'vue'
 import { useGameStore } from '../../stores/game'
 import { useCharacterStore } from '../../stores/character'
 import { useSessionStore } from '../../stores/session'
+import type { PendingSpellAim, SrdSpell } from '../../types'
 import InitiativeTimeline from './InitiativeTimeline.vue'
 import Battlemap from './Battlemap.vue'
 import TokenInspector from './TokenInspector.vue'
@@ -42,6 +43,9 @@ const speedM = computed(() => {
 
 type MapInteractionMode = 'inspect' | 'move' | 'attack' | 'spell'
 const mapMode = ref<MapInteractionMode>('inspect')
+
+/** Sort à aire en cours de visée sur la carte (gabarit AoE). */
+const pendingSpell = ref<{ spellId: string; slotLevel: number; aim: PendingSpellAim } | null>(null)
 
 const sceneLabel = computed(() => {
   const scene = gameStore.currentScene
@@ -88,6 +92,33 @@ function handleHotSeatAction(
 
 function handleMapMode(mode: 'inspect' | 'move' | 'attack' | 'spell') {
   mapMode.value = mode
+  if (mode !== 'spell') pendingSpell.value = null
+}
+
+function handleAimSpell(spell: SrdSpell, slotLevel: number) {
+  pendingSpell.value = {
+    spellId: spell.id,
+    slotLevel,
+    aim: {
+      rangeM: spell.range_m,
+      shape: spell.area_shape ?? 'sphere',
+      sizeM: spell.area_size_m ?? 1.5,
+      origin: spell.area_origin === 'self' || spell.area_shape === 'emanation' ? 'self' : 'point',
+    },
+  }
+  mapMode.value = 'spell'
+}
+
+function handleCastAt(col: number, row: number, targetId: string | undefined) {
+  const pending = pendingSpell.value
+  if (!pending) return
+  emit('action', 'cast_spell', undefined, targetId, {
+    spell_id: pending.spellId,
+    slot_level: pending.slotLevel,
+    target_cell: { col, row },
+  })
+  pendingSpell.value = null
+  mapMode.value = 'inspect'
 }
 
 // Add ally / enemy (forward to parent via action event)
@@ -134,7 +165,6 @@ function rerollInit() { emit('action', 'reroll_initiative') }
               @click="mapMode = mapMode === 'move' ? 'inspect' : 'move'"
             >✥ Déplacer</button>
             <button class="map-tool" title="Mesurer">📏 Mesurer</button>
-            <button class="map-tool" title="Zone d'effet">⊕ Aire</button>
             <button
               class="map-tool"
               title="Annuler le mode"
@@ -152,10 +182,12 @@ function rerollInit() { emit('action', 'reroll_initiative') }
           :is-my-turn="isMyTurn"
           :speed-m="speedM"
           :interaction-mode="mapMode"
+          :pending-spell="pendingSpell?.aim ?? null"
           @move="handleMapMove"
           @target="handleMapTarget"
           @mode-change="handleMapMode"
           @flee="handleMapFlee"
+          @cast-at="handleCastAt"
         />
 
         <!-- Token inspector (absolute overlay, top-right) -->
@@ -187,6 +219,7 @@ function rerollInit() { emit('action', 'reroll_initiative') }
     <HotSeatBar
       @action="handleHotSeatAction"
       @map-mode="handleMapMode"
+      @aim-spell="handleAimSpell"
     />
   </div>
 </template>

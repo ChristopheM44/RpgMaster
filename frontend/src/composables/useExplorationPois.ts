@@ -41,7 +41,7 @@ function poiTone(role: PoiSemanticRole): ExPoi['tone'] {
 function roleToKind(role: PoiSemanticRole): ExPoi['kind'] {
   switch (role) {
     case 'enemy':
-      return 'hazard'
+      return 'enemy'
     case 'npc':
       return 'npc'
     case 'hazard':
@@ -77,6 +77,8 @@ function defaultActionLabel(kind: ExPoi['kind']): string {
       return 'Parler'
     case 'loot':
       return 'Fouiller'
+    case 'enemy':
+      return 'Observer'
     case 'hazard':
       return 'Examiner'
     case 'cover':

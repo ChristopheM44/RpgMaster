@@ -7,9 +7,7 @@ from app.game import companion_refs
 
 def _active(names: dict[str, str]) -> SimpleNamespace:
     return SimpleNamespace(
-        ai_players={
-            cid: SimpleNamespace(character_name=name) for cid, name in names.items()
-        }
+        ai_players={cid: SimpleNamespace(character_name=name) for cid, name in names.items()}
     )
 
 
@@ -38,9 +36,7 @@ def test_find_mentioned_companion_conservative_no_match() -> None:
     companions = {"shade": "Shade", "elara": "Elara"}
     # Mention non-initiale et sans @ : on n'attribue pas le jet au compagnon.
     assert (
-        companion_refs.find_mentioned_companion(
-            "Je demande à Elara ce qu'elle ressent", companions
-        )
+        companion_refs.find_mentioned_companion("Je demande à Elara ce qu'elle ressent", companions)
         is None
     )
     assert companion_refs.find_mentioned_companion("J'examine le ruisseau", companions) is None

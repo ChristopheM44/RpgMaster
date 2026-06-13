@@ -6,7 +6,8 @@
 import type { ExHero, ExPoi } from '../../fixtures/exploration'
 import type { SceneElement, SceneLayout, SceneTheme } from '../../types'
 import type { AmbianceLight, ElementSpec, GroundSpec, SceneSpec, TokenSpec } from '../types'
-import { modelForClass } from '../assets/manifest'
+import { modelForClass, modelForMonster, modelForNpc } from '../assets/manifest'
+import { resolveTokenOverlaps } from './tokenCollision'
 import { rectCells } from '../utils/gridMath'
 
 // Mêmes valeurs que local_map_service (backend) — défauts par kind en mètres.
@@ -37,10 +38,11 @@ const VEGETATION_BY_THEME: Record<SceneTheme, number> = {
   cave: 0,
 }
 
+// MIROIR de _THEME_FOG_DENSITY (backend local_map_service.py) — modifier les deux ensemble.
 const FOG_BY_THEME: Partial<Record<SceneTheme, number>> = {
-  cave: 0.5,
+  cave: 0.35,
   swamp: 0.4,
-  dungeon: 0.35,
+  dungeon: 0.25,
   mountain: 0.25,
   forest: 0.2,
 }
@@ -93,11 +95,14 @@ export function buildSceneSpec(input: SceneAdapterInput): SceneSpec {
       reachable: [],
       reachableEmphasis: 'idle',
       destination: null,
+      path: [],
+      aoe: null,
       zones: [],
       obstacles: [],
       cellPicking: false,
     },
     scatterBlockedCells: [...blockedCells],
+    elevationByCell: buildElevationByCell(elements, dims),
   }
 }
 
@@ -141,7 +146,7 @@ export function buildElementSpecs(
   const raw = rawElements.filter((element) => element.visibility !== 'hidden')
 
   const elements = raw.map((element) => {
-    for (const cell of elementCells(element, options.dims)) {
+    for (const cell of elementCells(element.geometry, options.dims)) {
       blockedCells.add(`${cell.col},${cell.row}`)
     }
     const interactive = Boolean(element.interactive || options.linkedElementIds.has(element.id))
@@ -161,6 +166,29 @@ export function buildElementSpecs(
   })
 
   return { elements, blockedCells }
+}
+
+/**
+ * Hauteur de surface par cellule (MÈTRES) — seuls `stairs` et `terrain`
+ * portent un token (on marche sur le DESSUS : elevation_m + height_m).
+ * Conflit multi-éléments → max. Carte creuse : le terrain plat par défaut
+ * (0.02 m) reste hors carte — seuil à 0.05 m.
+ */
+export function buildElevationByCell(
+  elements: ElementSpec[],
+  dims: { cols: number; rows: number },
+): Record<string, number> {
+  const byCell: Record<string, number> = {}
+  for (const element of elements) {
+    if (element.kind !== 'stairs' && element.kind !== 'terrain') continue
+    const surfaceM = element.elevationM + element.heightM
+    if (surfaceM <= 0.05) continue
+    for (const cell of elementCells(element.geometry, dims)) {
+      const key = `${cell.col},${cell.row}`
+      byCell[key] = Math.max(byCell[key] ?? 0, surfaceM)
+    }
+  }
+  return byCell
 }
 
 /** Même prédicat que feu LocalMapCanvas : murs/terrain/décor non inspectables. */
@@ -205,6 +233,31 @@ function buildTokens(input: SceneAdapterInput, blockedCells: Set<string>): Token
 
   for (const poi of input.pois) {
     blockedCells.add(`${poi.x},${poi.y}`)
+    // PNJ/ennemis : personnages 3D animés (pas des marqueurs d'icône).
+    if (poi.kind === 'npc' || poi.kind === 'enemy') {
+      const isEnemy = poi.kind === 'enemy'
+      tokens.push({
+        id: poi.id,
+        kind: 'npc',
+        name: poi.title,
+        col: poi.x,
+        row: poi.y,
+        accent: isEnemy ? TONE_HEX.blood ?? '#e84545' : TONE_HEX.teal ?? '#4fd8c0',
+        modelKey: isEnemy
+          ? modelForMonster(`${poi.title} ${poi.desc}`)
+          : modelForNpc(`${poi.title} ${poi.desc}`),
+        initials: poi.title.slice(0, 2).toUpperCase(),
+        hpRatio: null,
+        selected: input.selectedId === poi.id,
+        highlighted: input.highlightedIds.includes(poi.id),
+        active: false,
+        targetable: null,
+        defeated: false,
+        iconId: null,
+        exitActive: false,
+      })
+      continue
+    }
     const isExit = poi.kind === 'sortie'
     tokens.push({
       id: poi.id,
@@ -226,11 +279,10 @@ function buildTokens(input: SceneAdapterInput, blockedCells: Set<string>): Token
     })
   }
 
-  return tokens
+  return resolveTokenOverlaps(tokens)
 }
 
-function elementCells(element: SceneElement, dims: { cols: number; rows: number }): { col: number; row: number }[] {
-  const geometry = element.geometry
+function elementCells(geometry: SceneElement['geometry'], dims: { cols: number; rows: number }): { col: number; row: number }[] {
   if (geometry.type === 'rect') {
     return rectCells(geometry.col, geometry.row, geometry.width, geometry.height, dims)
   }

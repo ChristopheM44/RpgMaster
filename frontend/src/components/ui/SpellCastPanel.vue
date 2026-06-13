@@ -7,6 +7,8 @@ import type { SrdSpell } from '../../types'
 
 const emit = defineEmits<{
   confirm: [spellId: string, slotLevel: number, targetId: string | undefined]
+  /** Sort à aire : visée sur la carte au lieu de la liste de cibles. */
+  aim: [spell: SrdSpell, slotLevel: number]
   cancel: []
 }>()
 
@@ -54,10 +56,18 @@ const combatTargets = computed(() => {
   return gameStore.combatants.filter((c) => c.id !== myId && c.kind === 'monster')
 })
 
+// Sort à aire : visée sur la carte 3D (gabarit) plutôt que liste de cibles.
+const isAreaSpell = computed(() => {
+  const spell = selectedSpell.value
+  return Boolean(
+    spell && spell.attack_type === 'area' && spell.area_shape && gameStore.isInCombat,
+  )
+})
+
 // Un sort nécessite de choisir une cible si : jet d'attaque, auto_hit ou save+dégâts
 const needsTarget = computed(() => {
   const spell = selectedSpell.value
-  if (!spell) return false
+  if (!spell || isAreaSpell.value) return false
   const isTargeted =
     ['ranged_spell', 'melee_spell', 'auto_hit'].includes(spell.attack_type ?? '') ||
     (spell.save !== null && spell.damage_dice !== null)
@@ -87,7 +97,9 @@ function selectSpell(spell: SrdSpell) {
   if (spell.level === 0) {
     // Cantrip : pas d'emplacement à choisir
     selectedSlotLevel.value = 0
-    if (needsTarget.value) {
+    if (isAreaSpell.value) {
+      emit('aim', spell, 0)
+    } else if (needsTarget.value) {
       step.value = 3
     } else {
       emit('confirm', spell.id, 0, undefined)
@@ -100,7 +112,9 @@ function selectSpell(spell: SrdSpell) {
 
 function confirmSlot() {
   if (!selectedSpell.value) return
-  if (needsTarget.value) {
+  if (isAreaSpell.value) {
+    emit('aim', selectedSpell.value, selectedSlotLevel.value)
+  } else if (needsTarget.value) {
     step.value = 3
   } else {
     emit('confirm', selectedSpell.value.id, selectedSlotLevel.value, undefined)
@@ -228,8 +242,9 @@ onMounted(async () => {
           >← Retour</button>
           <button
             class="flex-1 rounded border border-arcane/50 bg-arcane/15 py-2 text-sm font-semibold text-arcane hover:bg-arcane/25 transition-colors"
+            data-testid="spell-confirm-slot"
             @click="confirmSlot"
-          >Confirmer →</button>
+          >{{ isAreaSpell ? 'Viser sur la carte ⊕' : 'Confirmer →' }}</button>
         </div>
       </div>
 

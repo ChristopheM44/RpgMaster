@@ -959,6 +959,7 @@ class GMResponseExecutor:
 
         from app.game.scene_state_service import (
             carry_accompanying_npcs,
+            inject_resident_npc_pois,
             reconcile_scene_npcs,
         )
 
@@ -968,6 +969,8 @@ class GMResponseExecutor:
         # the absence filter runs, so a travel transition can't silently drop them.
         carry_accompanying_npcs(active, old_scene, layout)
         self._filter_absent_npc_pois(layout, active)
+        # …then re-list the locals the LLM forgot (merchant in his own shop).
+        inject_resident_npc_pois(active, layout)
         active.state_data["current_scene"] = layout
         self._register_scene_npcs(layout, active)
         reconcile_scene_npcs(active, layout)

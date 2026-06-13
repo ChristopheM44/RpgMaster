@@ -143,6 +143,29 @@ def cells_reachable_with_pathfinding(
     return {"free": free, "with_dash": with_dash, "paths": paths}
 
 
+def nearest_free_cell(
+    start: GridPosition,
+    occupied: set[tuple[int, int]],
+    grid_cols: int,
+    grid_rows: int,
+) -> GridPosition:
+    """First free cell at growing Chebyshev distance from ``start``.
+
+    Deterministic scan (row-major within each ring); returns ``start`` when the
+    whole grid is saturated.
+    """
+    for radius in range(0, max(grid_cols, grid_rows)):
+        for row in range(start.row - radius, start.row + radius + 1):
+            for col in range(start.col - radius, start.col + radius + 1):
+                if max(abs(col - start.col), abs(row - start.row)) != radius:
+                    continue
+                if not (0 <= col < grid_cols and 0 <= row < grid_rows):
+                    continue
+                if (col, row) not in occupied:
+                    return GridPosition(col=col, row=row)
+    return start
+
+
 def initialize_positions(
     player_ids: list[str],
     npc_ids: list[str],
@@ -154,9 +177,17 @@ def initialize_positions(
 
     Players start at their exploration coordinates if valid. Otherwise, they start
     near the bottom two rows. NPCs start in the top two rows.
-    Spreads remaining combatants evenly across the columns.
+    Spreads remaining combatants evenly across the columns. Every placement goes
+    through ``nearest_free_cell`` so no two combatants share a cell (duplicate
+    exploration coordinates included).
     """
     positions: dict[str, GridPosition] = {}
+    occupied: set[tuple[int, int]] = set()
+
+    def place(cid: str, wanted: GridPosition) -> None:
+        cell = nearest_free_cell(wanted, occupied, grid_cols, grid_rows)
+        positions[cid] = cell
+        occupied.add((cell.col, cell.row))
 
     def spread(ids: list[str], row_start: int) -> None:
         n = len(ids)
@@ -169,7 +200,7 @@ def initialize_positions(
             col = max(0, min(col, grid_cols - 1))
             row = row_start + (i % 2)  # alternate rows to avoid stacking
             row = min(row, grid_rows - 1)
-            positions[cid] = GridPosition(col=col, row=row)
+            place(cid, GridPosition(col=col, row=row))
 
     # 1. Place players using exploration positions if available and valid
     fallback_players = []
@@ -181,7 +212,7 @@ def initialize_positions(
                 col = int(pos_data["col"])
                 row = int(pos_data["row"])
                 if 0 <= col < grid_cols and 0 <= row < grid_rows:
-                    positions[pid] = GridPosition(col=col, row=row)
+                    place(pid, GridPosition(col=col, row=row))
                     continue
             except (ValueError, TypeError):
                 pass

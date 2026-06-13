@@ -12,10 +12,13 @@ import SpellCastPanel from '../ui/SpellCastPanel.vue'
 import RpgMapIcon from '../common/RpgMapIcon.vue'
 import { hpColor } from '../../utils/combatUtils'
 import type { RpgMapIconId } from '../../icons/rpgMapIcons'
+import type { SrdSpell } from '../../types'
 
 const emit = defineEmits<{
   action: [actionType: string, content?: string, targetId?: string, extra?: Record<string, unknown>]
   mapMode: [mode: 'inspect' | 'move' | 'attack' | 'spell']
+  /** Sort à aire : le joueur vise le gabarit sur la carte. */
+  aimSpell: [spell: SrdSpell, slotLevel: number]
 }>()
 
 const gameStore = useGameStore()
@@ -143,6 +146,11 @@ function onSpellConfirm(spellId: string, slotLevel: number, targetId: string | u
   emit('action', 'cast_spell', undefined, targetId, { spell_id: spellId, slot_level: slotLevel })
 }
 
+function onSpellAim(spell: SrdSpell, slotLevel: number) {
+  showSpellPanel.value = false
+  emit('aimSpell', spell, slotLevel)
+}
+
 function confirmAttackTarget(targetId: string) {
   showTargetSelector.value = false
   emit('action', 'attack', undefined, targetId)
@@ -156,7 +164,7 @@ function onItemAction(item: Record<string, unknown>, actionType: 'use_item' | 'e
 
 <template>
   <!-- Overlays -->
-  <SpellCastPanel v-if="showSpellPanel" @confirm="onSpellConfirm" @cancel="showSpellPanel = false" />
+  <SpellCastPanel v-if="showSpellPanel" @confirm="onSpellConfirm" @aim="onSpellAim" @cancel="showSpellPanel = false" />
 
   <div v-if="showItemPicker" class="fixed inset-0 z-40 flex items-end justify-center bg-black/60" @click.self="showItemPicker = false">
     <div class="rpg-card w-full max-w-md rounded-t-xl p-4 shadow-xl">

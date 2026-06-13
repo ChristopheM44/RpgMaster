@@ -21,6 +21,7 @@ export interface ExPoi {
   id: string
   kind:
     | 'npc'
+    | 'enemy'
     | 'clue'
     | 'hazard'
     | 'cover'

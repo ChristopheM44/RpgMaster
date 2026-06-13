@@ -47,7 +47,7 @@ export interface ElementSpec {
   selected: boolean
 }
 
-export type TokenKind = 'hero' | 'poi' | 'exit' | 'combatant'
+export type TokenKind = 'hero' | 'poi' | 'exit' | 'combatant' | 'npc'
 
 export interface TokenSpec {
   id: string
@@ -72,6 +72,9 @@ export interface TokenSpec {
   iconId: string | null
   /** Exit uniquement. */
   exitActive: boolean
+  /** Offsets monde sub-cellule (anti-chevauchement) — voir tokenCollision.ts. */
+  offsetX?: number
+  offsetZ?: number
 }
 
 export interface ZoneSpec {
@@ -87,6 +90,10 @@ export interface OverlaySpec {
   reachableEmphasis: 'move' | 'idle'
   /** Destination de déplacement sélectionnée (ghost teal pulsant). */
   destination: GridPoint | null
+  /** Chemin de déplacement prévisualisé (départ → destination, départ inclus). */
+  path: GridPoint[]
+  /** Gabarit de zone d'effet (sort à aire) — invalid = hors portée (teinte muted). */
+  aoe: { cells: GridPoint[]; center: GridPoint; valid: boolean } | null
   zones: ZoneSpec[]
   obstacles: GridPoint[]
   /** Active le picking des cellules de sol (mode move). */
@@ -100,6 +107,8 @@ export interface SceneSpec {
   overlay: OverlaySpec
   /** Cellules "col,row" interdites au scatter (occupées par éléments/tokens). */
   scatterBlockedCells: string[]
+  /** Hauteur de surface en MÈTRES par cellule "col,row" (stairs/terrain surélevés). */
+  elevationByCell: Record<string, number>
 }
 
 export type PickResult =

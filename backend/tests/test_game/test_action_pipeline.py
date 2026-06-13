@@ -576,9 +576,7 @@ class TestPipelineExecutorUnits:
         bus = _FakeBus()
         response = AgentResponse(
             content="Shade s'accroupit au bord du ruisseau.",
-            actions=[
-                GMAction(type="roll_request", params={"skill": "investigation", "dc": 10})
-            ],
+            actions=[GMAction(type="roll_request", params={"skill": "investigation", "dc": 10})],
         )
         await GMResponseExecutor(bus).execute_gm_response(
             response,
@@ -598,9 +596,7 @@ class TestPipelineExecutorUnits:
         bus = _FakeBus()
         response = AgentResponse(
             content="Thorvald inspecte les traces.",
-            actions=[
-                GMAction(type="roll_request", params={"skill": "investigation", "dc": 10})
-            ],
+            actions=[GMAction(type="roll_request", params={"skill": "investigation", "dc": 10})],
         )
         await GMResponseExecutor(bus).execute_gm_response(
             response,
@@ -1074,7 +1070,7 @@ class TestPipelineExecutorUnits:
         )
 
         # Types invalides ignorés -> défauts sûrs injectés par l'enrichissement.
-        assert layout["ambiance"] == {"light": "torchlit", "fog_density": 0.5}
+        assert layout["ambiance"] == {"light": "torchlit", "fog_density": 0.35}
         assert layout["vegetation_density"] == 0.0
         stalagmite = next(
             element for element in layout["elements"] if element["id"] == "stalagmite"

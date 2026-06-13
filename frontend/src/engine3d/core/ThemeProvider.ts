@@ -142,12 +142,12 @@ export const BIOME_3D: Record<SceneTheme, Biome3D> = {
     fog: '#1a1a26', scatter: ['rock', 'stone', 'tree_pine'], cornerTorches: false,
   },
   dungeon: {
-    ground: '#0c0c10', groundAccent: '#121218', grid: '#ffebb4', gridOpacity: 0.07,
-    fog: '#0a0708', scatter: [], cornerTorches: true,
+    ground: '#15151c', groundAccent: '#1c1c24', grid: '#ffebb4', gridOpacity: 0.07,
+    fog: '#131017', scatter: [], cornerTorches: true,
   },
   cave: {
-    ground: '#0a0a0c', groundAccent: '#0e0e12', grid: '#ffebb4', gridOpacity: 0.06,
-    fog: '#060608', scatter: ['rock', 'mushroom'], cornerTorches: true,
+    ground: '#121216', groundAccent: '#18181e', grid: '#ffebb4', gridOpacity: 0.06,
+    fog: '#0e0e13', scatter: ['rock', 'mushroom'], cornerTorches: true,
   },
   city: {
     ground: '#181623', groundAccent: '#1d1b29', grid: '#ffebb4', gridOpacity: 0.07,
@@ -183,28 +183,35 @@ export interface AmbiancePreset {
   sunElevation: number
   /** PointLights sur les éléments `light` actives uniquement en torchlit. */
   pointLights: boolean
+  /** Tone mapping exposure — relevé en ambiance sombre pour rester lisible. */
+  exposure: number
 }
 
 export const AMBIANCE_PRESETS: Record<AmbianceLight, AmbiancePreset> = {
   day: {
     hemiSky: '#bfd4e8', hemiGround: '#2a2640', hemiIntensity: 0.95,
     sunColor: '#fff1d6', sunIntensity: 1.55, sunElevation: 0.95, pointLights: false,
+    exposure: 1.05,
   },
   dusk: {
     hemiSky: '#8a6a5a', hemiGround: '#1a1420', hemiIntensity: 0.7,
     sunColor: '#ff9a5a', sunIntensity: 1.1, sunElevation: 0.4, pointLights: false,
+    exposure: 1.05,
   },
   night: {
-    hemiSky: '#3a4a6a', hemiGround: '#0a0a12', hemiIntensity: 0.5,
-    sunColor: '#7a8fc0', sunIntensity: 0.55, sunElevation: 0.8, pointLights: true,
+    hemiSky: '#3a4a6a', hemiGround: '#0a0a12', hemiIntensity: 0.68,
+    sunColor: '#7a8fc0', sunIntensity: 0.72, sunElevation: 0.8, pointLights: true,
+    exposure: 1.12,
   },
   torchlit: {
-    hemiSky: '#5a463a', hemiGround: '#14100c', hemiIntensity: 0.62,
-    sunColor: '#ffb070', sunIntensity: 0.55, sunElevation: 0.9, pointLights: true,
+    hemiSky: '#5a463a', hemiGround: '#14100c', hemiIntensity: 0.85,
+    sunColor: '#ffb070', sunIntensity: 0.75, sunElevation: 0.9, pointLights: true,
+    exposure: 1.18,
   },
   overcast: {
     hemiSky: '#9aa0aa', hemiGround: '#20202a', hemiIntensity: 0.8,
     sunColor: '#cfd4da', sunIntensity: 0.85, sunElevation: 0.85, pointLights: false,
+    exposure: 1.05,
   },
 }
 

@@ -60,10 +60,11 @@ _THEME_VEGETATION_DENSITY: dict[str, float] = {
 }
 _DEFAULT_VEGETATION_DENSITY = 0.3
 
+# MIROIR de FOG_BY_THEME (frontend engine3d/adapters/sceneAdapter.ts) — modifier les deux ensemble.
 _THEME_FOG_DENSITY: dict[str, float] = {
-    "cave": 0.5,
+    "cave": 0.35,
     "swamp": 0.4,
-    "dungeon": 0.35,
+    "dungeon": 0.25,
     "mountain": 0.25,
     "forest": 0.2,
 }

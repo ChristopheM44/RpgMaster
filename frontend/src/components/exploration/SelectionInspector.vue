@@ -69,6 +69,7 @@ const eyebrow = computed(() => {
   if (isSortie.value) return 'Sortie'
   switch (poi.value?.kind) {
     case 'npc': return 'PNJ'
+    case 'enemy': return 'Ennemi'
     case 'clue': return 'Indice'
     case 'hazard': return 'Danger'
     case 'cover': return 'Couvert'
@@ -108,6 +109,7 @@ const inspectorSymbol = computed(() => {
   if (poi.value?.iconSymbol) return poi.value.iconSymbol
   switch (poi.value?.kind) {
     case 'npc': return '◉'
+    case 'enemy': return '⚔'
     case 'clue': return '✦'
     case 'hazard': return '⚠'
     case 'cover': return '◆'

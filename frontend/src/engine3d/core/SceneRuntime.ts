@@ -15,7 +15,7 @@ import { GroundLayer } from '../layers/GroundLayer'
 import { OverlayLayer } from '../layers/OverlayLayer'
 import { ScatterLayer } from '../layers/ScatterLayer'
 import { TokenLayer } from '../layers/TokenLayer'
-import { cellCenterToWorld, gridDiagonal } from '../utils/gridMath'
+import { cellCenterToWorld, gridDiagonal, metersToWorld } from '../utils/gridMath'
 
 export class SceneRuntime implements SceneRuntimeHandle {
   private renderer: THREE.WebGLRenderer
@@ -32,6 +32,8 @@ export class SceneRuntime implements SceneRuntimeHandle {
   private overlay = new OverlayLayer()
   private hemi: THREE.HemisphereLight
   private sun: THREE.DirectionalLight
+  /** Plancher de lisibilité en ambiance sombre (night/torchlit) — jamais de noir total. */
+  private ambientFloor = new THREE.AmbientLight('#181410', 0)
   private clock = new THREE.Clock()
   private rafId: number | null = null
   private running = true
@@ -58,7 +60,7 @@ export class SceneRuntime implements SceneRuntimeHandle {
     this.sun.castShadow = true
     this.sun.shadow.mapSize.set(1024, 1024)
     this.sun.shadow.bias = -0.0015
-    this.scene.add(this.hemi, this.sun, this.sun.target)
+    this.scene.add(this.hemi, this.sun, this.sun.target, this.ambientFloor)
     this.scene.add(
       this.ground.group,
       this.elements.group,
@@ -85,14 +87,18 @@ export class SceneRuntime implements SceneRuntimeHandle {
 
     const biome = biomeFor(spec.ground.theme)
     const preset = ambiancePreset(spec.ground.ambiance.light)
+    // `?? {}` : tolère les specs mockées des tests composants sans le champ.
+    const elevationByCell = spec.elevationByCell ?? {}
+    const cellSizeM = spec.ground.cellSizeM
     const ctx: EngineCtx = {
       dims: this.dims,
-      cellSizeM: spec.ground.cellSizeM,
+      cellSizeM,
       tokens: this.themeTokens,
       biome,
       ambiance: preset,
       registry: this.registry,
       tweens: this.tweens,
+      elevationAt: (col, row) => metersToWorld(elevationByCell[`${col},${row}`] ?? 0, cellSizeM),
     }
     this.lastCtx = ctx
 
@@ -108,6 +114,8 @@ export class SceneRuntime implements SceneRuntimeHandle {
     this.hemi.intensity = preset.hemiIntensity
     this.sun.color = new THREE.Color(preset.sunColor)
     this.sun.intensity = preset.sunIntensity
+    this.renderer.toneMappingExposure = preset.exposure
+    this.ambientFloor.intensity = preset.pointLights ? 0.22 : 0
     this.sun.position.set(diag * 0.55, Math.sin(preset.sunElevation) * diag * 0.9, diag * 0.3)
     this.sun.target.position.set(0, 0, 0)
     const shadowSpan = Math.max(this.dims.cols, this.dims.rows) / 2 + 2
@@ -139,7 +147,8 @@ export class SceneRuntime implements SceneRuntimeHandle {
 
   projectCell(col: number, row: number): { x: number; y: number } | null {
     const world = cellCenterToWorld(col, row, this.dims)
-    return this.project(new THREE.Vector3(world.x, 0.4, world.z))
+    const elevation = this.lastCtx?.elevationAt(col, row) ?? 0
+    return this.project(new THREE.Vector3(world.x, elevation + 0.4, world.z))
   }
 
   projectToken(id: string): { x: number; y: number } | null {
