@@ -45,6 +45,10 @@ function pickOnMap(pick: PickResult): void {
   harness.callbacks?.onClick?.(pick, { x: 0, y: 0 })
 }
 
+function hoverOnMap(pick: PickResult | null): void {
+  harness.callbacks?.onHover?.(pick, { x: 0, y: 0 })
+}
+
 const scene: SceneLayout = {
   cols: 8,
   rows: 8,
@@ -257,7 +261,7 @@ describe('Battlemap', () => {
     })
     await flushEngineBoot()
 
-    pickOnMap({ type: 'token', id: 'toben', tokenKind: 'poi' })
+    pickOnMap({ type: 'token', id: 'toben', tokenKind: 'npc' })
     await wrapper.vm.$nextTick()
 
     expect(wrapper.emitted('scenePoi')).toBeUndefined()
@@ -297,7 +301,11 @@ describe('Battlemap', () => {
 
     const spec = latestSpec()
     const poiTokens = spec.tokens.filter((token) => token.kind === 'poi')
-    expect(poiTokens.find((token) => token.id === 'bandit_2')?.iconId).toBe('c-enemy')
+    // L'ennemi est rendu en personnage 3D (kind npc, accent blood), plus en marqueur.
+    expect(spec.tokens.find((token) => token.id === 'bandit_2')).toMatchObject({
+      kind: 'npc',
+      accent: '#e84545',
+    })
     expect(poiTokens.find((token) => token.id === 'barrels')?.iconId).toBe('c-half-cover')
     // Le POI doublon de sortie n'existe que comme token de sortie sur la carte.
     expect(poiTokens.map((token) => token.id)).not.toContain('dock_gate')
@@ -358,7 +366,7 @@ describe('Battlemap', () => {
     })
     gameStore.setReachableCells({
       hero: {
-        free: [{ col: 1, row: 0 }],
+        free: [{ col: 1, row: 0 }, { col: 1, row: 1 }],
         with_dash: [],
         paths: { '1,0': [{ col: 0, row: 0 }, { col: 1, row: 0 }] },
       },
@@ -378,7 +386,7 @@ describe('Battlemap', () => {
     expect(wrapper.text()).toContain('Obstacles')
     expect(wrapper.find('[data-testid="legend-icon-zone-fire"][data-icon-id="c-danger-zone"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="legend-icon-obstacles"][data-icon-id="c-obstacle"]').exists()).toBe(true)
-    expect(latestSpec().overlay.reachable).toEqual([{ col: 1, row: 0 }])
+    expect(latestSpec().overlay.reachable).toEqual([{ col: 1, row: 0 }, { col: 1, row: 1 }])
 
     // handleCellClick priorise obstacle puis zone avant les cases accessibles.
     pickOnMap({ type: 'cell', col: 2, row: 2 })
@@ -394,7 +402,16 @@ describe('Battlemap', () => {
 
     expect(wrapper.emitted('move')).toBeUndefined()
     expect(wrapper.text()).toContain('Déplacement préparé')
+    // Path preview : chemin A* backend consommé tel quel (départ inclus).
+    expect(latestSpec().overlay.path).toEqual([{ col: 0, row: 0 }, { col: 1, row: 0 }])
 
+    // Destination atteignable sans entrée paths → fallback ligne Chebyshev.
+    pickOnMap({ type: 'cell', col: 1, row: 1 })
+    await wrapper.vm.$nextTick()
+    expect(latestSpec().overlay.path).toEqual([{ col: 0, row: 0 }, { col: 1, row: 1 }])
+
+    pickOnMap({ type: 'cell', col: 1, row: 0 })
+    await wrapper.vm.$nextTick()
     await wrapper.find('[data-testid="map-confirm"]').trigger('click')
 
     expect(wrapper.emitted('move')).toEqual([[1, 0]])
@@ -440,5 +457,60 @@ describe('Battlemap', () => {
     await wrapper.find('[data-testid="map-confirm"]').trigger('click')
 
     expect(wrapper.emitted('target')).toEqual([['goblin', 'attack']])
+  })
+
+  it('aims an area spell: hover previews, out-of-range invalid, click+confirm emits castAt', async () => {
+    const gameStore = useGameStore()
+    gameStore.setGridConfig({ cols: 10, rows: 8, cell_size_m: 1.5 })
+    gameStore.setCombatants([
+      combatant({ id: 'hero', name: 'Thorvald', kind: 'pc', position: { col: 0, row: 0 } }),
+      combatant({
+        id: 'goblin',
+        name: 'Gobelin',
+        kind: 'monster',
+        hp_current: 7,
+        hp_max: 7,
+        is_active: false,
+        position: { col: 3, row: 0 },
+        ac: 13,
+      }),
+    ])
+
+    const wrapper = mount(Battlemap, {
+      props: {
+        variant: 'lean',
+        myCharacterId: 'hero',
+        isMyTurn: true,
+        speedM: 9,
+        interactionMode: 'spell',
+        pendingSpell: { rangeM: 4.5, shape: 'sphere', sizeM: 1.5, origin: 'point' as const },
+      },
+    })
+    await flushEngineBoot()
+
+    // Survol dans la portée (3 cellules × 1.5 m = 4.5 m) → gabarit valide.
+    hoverOnMap({ type: 'cell', col: 3, row: 0 })
+    await wrapper.vm.$nextTick()
+    let aoe = latestSpec().overlay.aoe
+    expect(aoe?.valid).toBe(true)
+    expect(aoe?.center).toEqual({ col: 3, row: 0 })
+    expect(aoe?.cells).toContainEqual({ col: 3, row: 0 })
+    expect(aoe?.cells).toContainEqual({ col: 2, row: 1 }) // rayon 1 cellule
+
+    // Hors de portée → invalide (teinte muted), pas de confirmation possible.
+    hoverOnMap({ type: 'cell', col: 6, row: 6 })
+    await wrapper.vm.$nextTick()
+    aoe = latestSpec().overlay.aoe
+    expect(aoe?.valid).toBe(false)
+    expect(wrapper.find('[data-testid="lean-confirm-cast"]').exists()).toBe(false)
+
+    // Clic d'ancrage sur une cellule valide → mini-panel arcane → castAt.
+    pickOnMap({ type: 'cell', col: 3, row: 0 })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('castAt')).toBeUndefined()
+
+    await wrapper.find('[data-testid="lean-confirm-cast"]').trigger('click')
+    // Le gobelin est sous le gabarit → désigné cible la plus proche du centre.
+    expect(wrapper.emitted('castAt')).toEqual([[3, 0, 'goblin']])
   })
 })

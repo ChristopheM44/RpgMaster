@@ -1292,9 +1292,7 @@ class ActionPipeline:
         return enriched
 
     @staticmethod
-    def _inject_fail_forward(
-        enriched: dict[str, Any], active: ActiveSession
-    ) -> dict[str, Any]:
+    def _inject_fail_forward(enriched: dict[str, Any], active: ActiveSession) -> dict[str, Any]:
         """N4 — fail-forward sur un ÉCHEC de jet investigatif contre un POI.
 
         Donne au MJ de quoi faire avancer la scène (bribe garantie sur le POI

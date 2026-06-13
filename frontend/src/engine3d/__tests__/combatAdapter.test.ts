@@ -35,6 +35,8 @@ function makeInput(overrides: Partial<CombatAdapterInput> = {}): CombatAdapterIn
     pois: [],
     exits: [],
     pendingMove: null,
+    pendingPath: [],
+    pendingAoe: null,
     selectedElementId: null,
     ...overrides,
   }
@@ -97,6 +99,7 @@ describe('combatAdapter.buildCombatSpec', () => {
     expect(spec.overlay.reachable).toHaveLength(2)
     expect(spec.overlay.reachableEmphasis).toBe('move')
     expect(spec.overlay.destination).toEqual({ col: 2, row: 1 })
+    expect(spec.overlay.path).toEqual([])
     expect(spec.overlay.zones[0]).toMatchObject({ id: 'fire', icon: 'c-danger-zone' })
     expect(spec.overlay.obstacles).toEqual([{ col: 9, row: 7 }])
     expect(spec.scatterBlockedCells).toContain('9,7')
@@ -133,5 +136,54 @@ describe('combatAdapter.buildCombatSpec', () => {
     const exit = spec.tokens.find((token) => token.id === 'porte')
     expect(poi).toMatchObject({ kind: 'poi', iconId: 'poi', accent: '#f0c764' })
     expect(exit).toMatchObject({ kind: 'exit', exitActive: true, iconId: 'door' })
+  })
+
+  it('elevationByCell : même carte que sceneAdapter depuis les éléments de scène', () => {
+    const spec = buildCombatSpec(makeInput({
+      scene: {
+        cols: 10, rows: 8, cell_size_m: 1.5, scene_theme: 'dungeon',
+        pois: [], exits: [], party_positions: {},
+        elements: [
+          { id: 's1', name: 'Escalier', kind: 'stairs', geometry: { type: 'rect', col: 4, row: 4, width: 1, height: 1 }, height_m: 0.8 },
+        ],
+      },
+    }))
+    expect(spec.elevationByCell['4,4']).toBe(0.8)
+  })
+
+  it('pendingAoe → overlay.aoe (gabarit pré-calculé passé tel quel)', () => {
+    const aoe = {
+      cells: [{ col: 4, row: 4 }, { col: 5, row: 4 }],
+      center: { col: 4, row: 4 },
+      valid: false,
+    }
+    const spec = buildCombatSpec(makeInput({ pendingAoe: aoe }))
+    expect(spec.overlay.aoe).toEqual(aoe)
+    expect(buildCombatSpec(makeInput()).overlay.aoe).toBeNull()
+  })
+
+  it('pendingPath → overlay.path (chemin prévisualisé)', () => {
+    const spec = buildCombatSpec(makeInput({
+      pendingMove: { col: 3, row: 1 },
+      pendingPath: [{ col: 1, row: 1 }, { col: 2, row: 1 }, { col: 3, row: 1 }],
+    }))
+    expect(spec.overlay.path).toEqual([
+      { col: 1, row: 1 },
+      { col: 2, row: 1 },
+      { col: 3, row: 1 },
+    ])
+  })
+
+  it('POI role npc/enemy → personnages 3D (teal/blood), parité sceneAdapter', () => {
+    const spec = buildCombatSpec(makeInput({
+      pois: [
+        { id: 'toben', name: 'Toben le tavernier', col: 2, row: 3, iconId: 'npc', tone: 'teal', role: 'npc' },
+        { id: 'gob', name: 'Gobelin embusqué', col: 6, row: 1, iconId: 'enemy', tone: 'blood', role: 'enemy' },
+      ],
+    }))
+    const toben = spec.tokens.find((token) => token.id === 'toben')
+    expect(toben).toMatchObject({ kind: 'npc', accent: '#4fd8c0', modelKey: 'char/rogue', hpRatio: null })
+    const gob = spec.tokens.find((token) => token.id === 'gob')
+    expect(gob).toMatchObject({ kind: 'npc', accent: '#e84545', modelKey: 'monster/skeleton_minion' })
   })
 })

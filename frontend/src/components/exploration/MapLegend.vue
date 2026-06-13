@@ -42,6 +42,7 @@ function onClick(id: string) {
 function poiSymbol(kind: string) {
   switch (kind) {
     case 'npc': return '◉'
+    case 'enemy': return '⚔'
     case 'clue': return '✦'
     case 'hazard': return '⚠'
     case 'cover': return '◆'

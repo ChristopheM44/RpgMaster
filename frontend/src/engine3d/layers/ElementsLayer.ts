@@ -75,9 +75,9 @@ export class ElementsLayer {
       if (spec.kind === 'light' && ctx.ambiance.pointLights && pointLights < MAX_POINT_LIGHTS) {
         const light = new THREE.PointLight(
           new THREE.Color(ctx.tokens.ember),
-          4.5,
-          metersToWorld(7, ctx.cellSizeM),
-          1.8,
+          5.5,
+          metersToWorld(9, ctx.cellSizeM),
+          1.6,
         )
         const center = elementCenterWorld(spec, ctx)
         light.position.set(center.x, metersToWorld(spec.heightM, ctx.cellSizeM) + 0.15, center.z)

@@ -42,6 +42,7 @@ const icon = computed(() => {
   if (poi.value?.iconSymbol) return poi.value.iconSymbol
   switch (poi.value?.kind) {
     case 'npc': return '◉'
+    case 'enemy': return '⚔'
     case 'clue': return '✦'
     case 'hazard': return '⚠'
     case 'cover': return '◆'

@@ -1,6 +1,6 @@
 // Surcouches tactiques : tuiles atteignables (InstancedMesh), ghost de
-// destination pulsant, zones (tuiles + icône), obstacles (rochers procéduraux).
-// API réservée pour plus tard : showPath / showAoe.
+// destination pulsant, chemin de déplacement prévisualisé (opacité dégressive),
+// zones (tuiles + icône), obstacles (rochers procéduraux).
 
 import * as THREE from 'three'
 import type { OverlaySpec } from '../types'
@@ -17,6 +17,11 @@ export class OverlayLayer {
   private reachableKey = ''
   private destinationRing: THREE.Mesh | null = null
   private destinationKey = ''
+  private pathGroup = new THREE.Group()
+  private pathKey = ''
+  private aoeGroup = new THREE.Group()
+  private aoeKey = ''
+  private aoeRing: THREE.Mesh | null = null
   private zonesGroup = new THREE.Group()
   private zonesKey = ''
   private obstaclesGroup = new THREE.Group()
@@ -26,11 +31,15 @@ export class OverlayLayer {
   constructor() {
     this.group.add(this.zonesGroup)
     this.group.add(this.obstaclesGroup)
+    this.group.add(this.pathGroup)
+    this.group.add(this.aoeGroup)
   }
 
   update(spec: OverlaySpec, ctx: EngineCtx): void {
     this.syncReachable(spec, ctx)
     this.syncDestination(spec, ctx)
+    this.syncPath(spec, ctx)
+    this.syncAoe(spec, ctx)
     this.syncZones(spec, ctx)
     this.syncObstacles(spec, ctx)
   }
@@ -43,6 +52,10 @@ export class OverlayLayer {
       ;(this.destinationRing.material as THREE.MeshBasicMaterial).opacity =
         0.55 + Math.sin(this.time * 4) * 0.2
     }
+    if (this.aoeRing) {
+      const pulse = 1 + Math.sin(this.time * 4) * 0.05
+      this.aoeRing.scale.setScalar(pulse)
+    }
   }
 
   dispose(): void {
@@ -50,10 +63,15 @@ export class OverlayLayer {
     this.group.clear()
     this.group.add(this.zonesGroup = new THREE.Group())
     this.group.add(this.obstaclesGroup = new THREE.Group())
+    this.group.add(this.pathGroup = new THREE.Group())
+    this.group.add(this.aoeGroup = new THREE.Group())
     this.reachableMesh = null
     this.destinationRing = null
+    this.aoeRing = null
     this.reachableKey = ''
     this.destinationKey = ''
+    this.pathKey = ''
+    this.aoeKey = ''
     this.zonesKey = ''
     this.obstaclesKey = ''
   }
@@ -86,12 +104,95 @@ export class OverlayLayer {
     const rotation = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0))
     spec.reachable.forEach((cell, index) => {
       const world = cellCenterToWorld(cell.col, cell.row, ctx.dims)
-      matrix.compose(new THREE.Vector3(world.x, 0.02, world.z), rotation, new THREE.Vector3(1, 1, 1))
+      const y = ctx.elevationAt(cell.col, cell.row) + 0.02
+      matrix.compose(new THREE.Vector3(world.x, y, world.z), rotation, new THREE.Vector3(1, 1, 1))
       mesh.setMatrixAt(index, matrix)
     })
     mesh.instanceMatrix.needsUpdate = true
     this.group.add(mesh)
     this.reachableMesh = mesh
+  }
+
+  /** Chemin prévisualisé : tuiles teal, opacité dégressive départ→arrivée.
+   *  La dernière cellule est exclue — le ring destination la marque déjà. */
+  private syncPath(spec: OverlaySpec, ctx: EngineCtx): void {
+    const key = spec.path.map((c) => `${c.col},${c.row}`).join(';')
+    if (key === this.pathKey) return
+    this.pathKey = key
+    disposeGroup(this.pathGroup)
+
+    const cells = spec.path.slice(0, -1)
+    if (cells.length === 0) return
+
+    const rotation = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0))
+    cells.forEach((cell, index) => {
+      const tile = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.5, 0.5),
+        new THREE.MeshBasicMaterial({
+          color: new THREE.Color(ctx.tokens.teal),
+          transparent: true,
+          opacity: 0.18 + (0.22 * index) / Math.max(1, cells.length - 1),
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        }),
+      )
+      tile.quaternion.copy(rotation)
+      const world = cellCenterToWorld(cell.col, cell.row, ctx.dims)
+      tile.position.set(world.x, ctx.elevationAt(cell.col, cell.row) + 0.025, world.z)
+      this.pathGroup.add(tile)
+    })
+  }
+
+  /** Gabarit AoE : tuiles arcane (muted si hors portée) + anneau central pulsant. */
+  private syncAoe(spec: OverlaySpec, ctx: EngineCtx): void {
+    const aoe = spec.aoe
+    const key = aoe
+      ? `${aoe.valid}|${aoe.center.col},${aoe.center.row}|${aoe.cells.map((c) => `${c.col},${c.row}`).join(';')}`
+      : ''
+    if (key === this.aoeKey) return
+    this.aoeKey = key
+    disposeGroup(this.aoeGroup)
+    this.aoeRing = null
+    if (!aoe || aoe.cells.length === 0) return
+
+    const color = new THREE.Color(aoe.valid ? ctx.tokens.arcane : ctx.tokens.dim)
+    const rotation = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0))
+    const tiles = new THREE.InstancedMesh(
+      new THREE.PlaneGeometry(0.86, 0.86),
+      new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: aoe.valid ? 0.2 : 0.1,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      }),
+      aoe.cells.length,
+    )
+    const matrix = new THREE.Matrix4()
+    aoe.cells.forEach((cell, index) => {
+      const world = cellCenterToWorld(cell.col, cell.row, ctx.dims)
+      const y = ctx.elevationAt(cell.col, cell.row) + 0.028
+      matrix.compose(new THREE.Vector3(world.x, y, world.z), rotation, new THREE.Vector3(1, 1, 1))
+      tiles.setMatrixAt(index, matrix)
+    })
+    tiles.instanceMatrix.needsUpdate = true
+    this.aoeGroup.add(tiles)
+
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.32, 0.42, 32),
+      new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: aoe.valid ? 0.85 : 0.4,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      }),
+    )
+    ring.rotation.x = -Math.PI / 2
+    const world = cellCenterToWorld(aoe.center.col, aoe.center.row, ctx.dims)
+    ring.position.set(world.x, ctx.elevationAt(aoe.center.col, aoe.center.row) + 0.032, world.z)
+    this.aoeGroup.add(ring)
+    this.aoeRing = ring
   }
 
   private syncDestination(spec: OverlaySpec, ctx: EngineCtx): void {
@@ -118,7 +219,7 @@ export class OverlayLayer {
     )
     ring.rotation.x = -Math.PI / 2
     const world = cellCenterToWorld(spec.destination.col, spec.destination.row, ctx.dims)
-    ring.position.set(world.x, 0.03, world.z)
+    ring.position.set(world.x, ctx.elevationAt(spec.destination.col, spec.destination.row) + 0.03, world.z)
     this.group.add(ring)
     this.destinationRing = ring
   }

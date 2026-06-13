@@ -137,11 +137,11 @@ export class ScatterLayer {
       if (ctx.ambiance.pointLights && lights < MAX_TORCH_LIGHTS) {
         const light = new THREE.PointLight(
           new THREE.Color(ctx.tokens.ember),
-          3.6,
-          metersToWorld(6, ground.cellSizeM),
-          1.9,
+          4.5,
+          metersToWorld(8, ground.cellSizeM),
+          1.7,
         )
-        light.position.set(center.x, 1.1, center.z)
+        light.position.set(center.x, 1.25, center.z)
         this.group.add(light)
         lights += 1
       }

@@ -61,9 +61,17 @@ export class TokenLayer {
     if (!visual || path.length === 0) return
     ctx.tweens.cancel(visual.moveTween)
 
-    const points = path.map((cell) => {
+    // L'offset anti-chevauchement ne s'applique qu'au point d'arrivée — le
+    // déplacement passe par les centres de cellules. Le y suit l'élévation
+    // de chaque cellule (le token monte les escaliers le long du chemin).
+    const points = path.map((cell, index) => {
       const world = cellCenterToWorld(cell.col, cell.row, ctx.dims)
-      return { x: world.x, y: 0, z: world.z }
+      const isLast = index === path.length - 1
+      return {
+        x: world.x + (isLast ? visual.spec.offsetX ?? 0 : 0),
+        y: ctx.elevationAt(cell.col, cell.row),
+        z: world.z + (isLast ? visual.spec.offsetZ ?? 0 : 0),
+      }
     })
     this.setWalking(visual, true)
     visual.moveTween = tweenPath(
@@ -129,7 +137,11 @@ export class TokenLayer {
     const generation = this.generation
     const container = new THREE.Group()
     const world = cellCenterToWorld(spec.col, spec.row, ctx.dims)
-    container.position.set(world.x, 0, world.z)
+    container.position.set(
+      world.x + (spec.offsetX ?? 0),
+      ctx.elevationAt(spec.col, spec.row),
+      world.z + (spec.offsetZ ?? 0),
+    )
     container.rotation.y = Math.PI / 4
     container.userData.pick = { type: 'token', id: spec.id, tokenKind: spec.kind }
 
@@ -151,7 +163,7 @@ export class TokenLayer {
       generation,
     }
 
-    if (spec.kind === 'hero' || spec.kind === 'combatant') {
+    if (spec.kind === 'hero' || spec.kind === 'combatant' || spec.kind === 'npc') {
       this.buildCharacter(visual, spec, generation, ctx)
     } else if (spec.kind === 'poi') {
       this.buildPoi(visual, spec, ctx)
@@ -249,10 +261,15 @@ export class TokenLayer {
 
   private updateVisual(visual: TokenVisual, spec: TokenSpec, ctx: EngineCtx): void {
     const moved = spec.col !== visual.spec.col || spec.row !== visual.spec.row
-    if (moved && !visual.moveTween) {
+    const offsetChanged =
+      (spec.offsetX ?? 0) !== (visual.spec.offsetX ?? 0)
+      || (spec.offsetZ ?? 0) !== (visual.spec.offsetZ ?? 0)
+    // Spec d'abord (moveAlong lit les offsets du spec courant), col/row préservés
+    // tant que le tween n'a pas rattrapé la cellule cible.
+    visual.spec = { ...spec, col: visual.spec.col, row: visual.spec.row }
+    if ((moved || offsetChanged) && !visual.moveTween) {
       this.moveAlong(spec.id, [{ col: spec.col, row: spec.row }], ctx)
     }
-    visual.spec = { ...spec, col: visual.spec.col, row: visual.spec.row }
     this.applyState(visual, spec, ctx)
   }
 
@@ -272,7 +289,7 @@ export class TokenLayer {
         )
       }
     }
-    if (spec.kind === 'hero' || spec.kind === 'combatant') {
+    if (spec.kind === 'hero' || spec.kind === 'combatant' || spec.kind === 'npc') {
       this.refreshPlate(visual, spec, ctx)
       this.applyDefeated(visual, spec)
     }

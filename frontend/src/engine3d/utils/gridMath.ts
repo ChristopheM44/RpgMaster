@@ -44,6 +44,25 @@ export function cellKey(point: GridPoint): string {
   return `${point.col},${point.row}`
 }
 
+/**
+ * Ligne de cellules façon Chebyshev (diagonale puis droite), départ inclus.
+ * Fallback de preview quand le backend n'a pas fourni de chemin A* — même
+ * esprit que `line_cells` de app/engine/aoe.py.
+ */
+export function chebyshevLine(from: GridPoint, to: GridPoint): GridPoint[] {
+  const cells: GridPoint[] = [{ col: from.col, row: from.row }]
+  let col = from.col
+  let row = from.row
+  let guard = 0
+  while ((col !== to.col || row !== to.row) && guard < 128) {
+    col += Math.sign(to.col - col)
+    row += Math.sign(to.row - row)
+    cells.push({ col, row })
+    guard += 1
+  }
+  return cells
+}
+
 /** Cellules entières couvertes par un rect de grille (coin + dimensions). */
 export function rectCells(col: number, row: number, width: number, height: number, dims: GridDims): GridPoint[] {
   const cells: GridPoint[] = []

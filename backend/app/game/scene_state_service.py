@@ -76,6 +76,7 @@ def apply_scene_update(active: ActiveSession, params: dict[str, Any]) -> dict[st
     _merge_scene_fields(updated, params)
     _apply_discoveries(updated, params)
     _merge_npc_updates(active, updated, params)
+    inject_resident_npc_pois(active, updated)
     reconcile_scene_npcs(active, updated)
 
     journal = active.state_data.get("adventure_journal")
@@ -232,21 +233,99 @@ def carry_accompanying_npcs(
         pois = new_layout.setdefault("pois", [])
         if not isinstance(pois, list):
             continue
-        carried_poi: dict[str, Any] = {
-            "id": npc_id,
-            "name": str(npc.get("name") or npc_id),
-            "kind": "npc",
-            "icon": "npc",
-            "position": _carry_position(new_layout),
-            "state": "present",
-            "visibility": "visible",
-            "discovered": True,
-        }
-        known = npc.get("known_to_party")
-        if isinstance(known, bool):
-            carried_poi["known_to_party"] = known
-        pois.append(carried_poi)
+        pois.append(_make_npc_poi(npc_id, npc, _carry_position(new_layout)))
         existing_poi_ids.add(npc_id)
+
+
+def inject_resident_npc_pois(active: ActiveSession, layout: dict[str, Any]) -> None:
+    """Guarantee a POI for every NPC whose ``npc_states`` says it lives here.
+
+    A resident NPC (``last_location == scene_id``, not departed) that the LLM
+    omits from a ``scene_layout`` used to become invisible on the map: nothing
+    re-listed it — ``carry_accompanying_npcs`` only covers NPCs travelling with
+    the party, and ``_merge_npc_updates`` only upserts a POI when the update
+    carries a position. Defensive mirror of the carry rule for stationary or
+    local NPCs (the merchant stays visible in his own shop).
+
+    Idempotent: NPCs already present as POIs are left untouched. No-op when the
+    layout has no ``scene_id`` (residency can't be attributed).
+    """
+    if not isinstance(layout, dict):
+        return
+    scene_id = str(layout.get("scene_id") or "").strip()
+    if not scene_id:
+        return
+    npc_states = active.state_data.get("npc_states")
+    if not isinstance(npc_states, dict):
+        return
+    pois = layout.setdefault("pois", [])
+    if not isinstance(pois, list):
+        return
+
+    cols = _clamp_int(layout.get("cols"), default=12, minimum=3, maximum=24)
+    rows = _clamp_int(layout.get("rows"), default=12, minimum=3, maximum=24)
+    existing_poi_ids: set[str] = set()
+    taken: set[tuple[int, int]] = set()
+    for poi in pois:
+        if not isinstance(poi, dict):
+            continue
+        existing_poi_ids.add(str(poi.get("id") or "").strip())
+        position = _normalize_position(poi.get("position"), cols, rows)
+        if position is not None:
+            taken.add((position["col"], position["row"]))
+
+    for npc_id, npc in sorted(npc_states.items()):
+        npc_id = str(npc_id).strip()
+        if not npc_id or npc_id in existing_poi_ids or not isinstance(npc, dict):
+            continue
+        if str(npc.get("status") or "present").lower() in _DEPARTED_STATUSES:
+            continue
+        if str(npc.get("last_location") or "").strip() != scene_id:
+            continue
+        position = _normalize_position(npc.get("position"), cols, rows)
+        if position is None or (position["col"], position["row"]) in taken:
+            position = _free_position_near(_carry_position(layout), taken, cols, rows)
+        taken.add((position["col"], position["row"]))
+        pois.append(_make_npc_poi(npc_id, npc, position))
+        existing_poi_ids.add(npc_id)
+        logger.info("scene_layout : PNJ résident réinjecté (id=%s, scene_id=%s)", npc_id, scene_id)
+
+
+def _make_npc_poi(npc_id: str, npc: dict[str, Any], position: dict[str, int]) -> dict[str, Any]:
+    """Visible NPC POI projected from its ``npc_states`` entry (carry/inject shape)."""
+    poi: dict[str, Any] = {
+        "id": npc_id,
+        "name": str(npc.get("name") or npc_id),
+        "kind": "npc",
+        "icon": "npc",
+        "position": position,
+        "state": "present",
+        "visibility": "visible",
+        "discovered": True,
+    }
+    known = npc.get("known_to_party")
+    if isinstance(known, bool):
+        poi["known_to_party"] = known
+    return poi
+
+
+def _free_position_near(
+    base: dict[str, int],
+    taken: set[tuple[int, int]],
+    cols: int,
+    rows: int,
+) -> dict[str, int]:
+    """First free cell at growing Chebyshev distance from ``base`` (deterministic scan)."""
+    for radius in range(0, max(cols, rows)):
+        for row in range(base["row"] - radius, base["row"] + radius + 1):
+            for col in range(base["col"] - radius, base["col"] + radius + 1):
+                if max(abs(col - base["col"]), abs(row - base["row"])) != radius:
+                    continue
+                if not (0 <= col < cols and 0 <= row < rows):
+                    continue
+                if (col, row) not in taken:
+                    return {"col": col, "row": row}
+    return dict(base)
 
 
 def _carry_position(layout: dict[str, Any]) -> dict[str, int]:

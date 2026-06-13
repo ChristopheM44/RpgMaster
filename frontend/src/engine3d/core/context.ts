@@ -14,4 +14,6 @@ export interface EngineCtx {
   ambiance: AmbiancePreset
   registry: AssetRegistry
   tweens: TweenGroup
+  /** Hauteur de sol (unités monde) à cette cellule — 0 hors élément porteur. */
+  elevationAt(col: number, row: number): number
 }

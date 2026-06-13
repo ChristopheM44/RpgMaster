@@ -1183,9 +1183,7 @@ def test_cap_forged_monsters_to_party_level_substitutes_overpowered_boss() -> No
             }
         ],
         "bestiary": [{"name": "Gardien", "monster_srd_id": "shambling_mound"}],
-        "chapters": [
-            {"id": "chapter_1", "possible_srd_encounters": ["shambling_mound", "aigle"]}
-        ],
+        "chapters": [{"id": "chapter_1", "possible_srd_encounters": ["shambling_mound", "aigle"]}],
     }
 
     campaign_dossier_service._cap_forged_monsters_to_party_level(gm_dossier, 1)
@@ -1209,9 +1207,7 @@ def test_cap_forged_monsters_to_party_level_substitutes_overpowered_boss() -> No
 def test_cap_forged_monsters_leaves_in_band_boss_untouched() -> None:
     """Un boss déjà adapté au niveau n'est pas modifié."""
     gm_dossier = {
-        "custom_monsters": [
-            {"id": "ogre_boss", "base_srd_id": "ogre", "stat_overrides": {}}
-        ],
+        "custom_monsters": [{"id": "ogre_boss", "base_srd_id": "ogre", "stat_overrides": {}}],
         "bestiary": [],
         "chapters": [],
     }

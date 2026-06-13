@@ -148,6 +148,57 @@ describe('sceneAdapter.buildSceneSpec', () => {
     expect(exit).toMatchObject({ kind: 'exit', exitActive: true })
   })
 
+  it('PNJ : POI kind npc → personnage 3D teal avec nameplate sans HP', () => {
+    const spec = buildSceneSpec({
+      scene: makeScene(),
+      heroes: [],
+      pois: [makePoi({ id: 'garde_pont', kind: 'npc', title: 'Garde du pont', desc: 'Un soldat en faction.', tone: 'teal' })],
+      selectedId: null,
+      highlightedIds: [],
+    })
+    const npc = spec.tokens.find((token) => token.id === 'garde_pont')
+    expect(npc).toMatchObject({
+      kind: 'npc',
+      modelKey: 'char/knight',
+      accent: '#4fd8c0',
+      hpRatio: null,
+      iconId: null,
+      initials: 'GA',
+    })
+  })
+
+  it('ennemi : POI kind enemy → personnage 3D blood, modèle monstre', () => {
+    const spec = buildSceneSpec({
+      scene: makeScene(),
+      heroes: [],
+      pois: [
+        makePoi({ id: 'gob_1', kind: 'enemy', title: 'Gobelin embusqué', tone: 'blood' }),
+        makePoi({ id: 'loup_1', kind: 'enemy', title: 'Loup affamé', tone: 'blood' }),
+      ],
+      selectedId: null,
+      highlightedIds: [],
+    })
+    const gobelin = spec.tokens.find((token) => token.id === 'gob_1')
+    expect(gobelin).toMatchObject({ kind: 'npc', accent: '#e84545', modelKey: 'monster/skeleton_minion' })
+    // Bête sans modèle crédible → pion procédural (modelKey null), mais bien un personnage.
+    const loup = spec.tokens.find((token) => token.id === 'loup_1')
+    expect(loup).toMatchObject({ kind: 'npc', accent: '#e84545', modelKey: null })
+  })
+
+  it('chevauchement : deux héros sur la même cellule → offsets distincts', () => {
+    const spec = buildSceneSpec({
+      scene: makeScene(),
+      heroes: [makeHero({ id: 'h1', x: 4, y: 4 }), makeHero({ id: 'h2', x: 4, y: 4 })],
+      pois: [],
+      selectedId: null,
+      highlightedIds: [],
+    })
+    const h1 = spec.tokens.find((token) => token.id === 'h1')
+    const h2 = spec.tokens.find((token) => token.id === 'h2')
+    expect(h1?.offsetX ?? 0).toBe(0) // premier par id → centre
+    expect(h2?.offsetX !== undefined || h2?.offsetZ !== undefined).toBe(true)
+  })
+
   it('scatterBlockedCells couvre éléments et tokens', () => {
     const scene = makeScene({
       elements: [
@@ -165,6 +216,23 @@ describe('sceneAdapter.buildSceneSpec', () => {
     expect(spec.scatterBlockedCells).toContain('5,5')
     expect(spec.scatterBlockedCells).toContain('6,2')
     expect(spec.scatterBlockedCells).toContain('7,2')
+  })
+
+  it('elevationByCell : stairs/terrain portent (elevation+height, max), wall ignoré', () => {
+    const scene = makeScene({
+      elements: [
+        { id: 's1', name: 'Escalier', kind: 'stairs', geometry: { type: 'rect', col: 2, row: 2, width: 2, height: 1 }, height_m: 1.2 },
+        { id: 't1', name: 'Plateforme', kind: 'terrain', geometry: { type: 'rect', col: 3, row: 2, width: 1, height: 1 }, elevation_m: 2, height_m: 0.02 },
+        { id: 'w1', name: 'Mur', kind: 'wall', geometry: { type: 'rect', col: 5, row: 5, width: 1, height: 1 } },
+        { id: 't2', name: 'Sol plat', kind: 'terrain', geometry: { type: 'rect', col: 7, row: 7, width: 1, height: 1 } },
+      ],
+    })
+    const spec = buildSceneSpec({ scene, heroes: [], pois: [], selectedId: null, highlightedIds: [] })
+    expect(spec.elevationByCell['2,2']).toBe(1.2)
+    // Conflit stairs (1.2) vs plateforme (2.02) sur la même cellule → max.
+    expect(spec.elevationByCell['3,2']).toBe(2.02)
+    expect(spec.elevationByCell['5,5']).toBeUndefined() // mur : on ne marche pas dessus
+    expect(spec.elevationByCell['7,7']).toBeUndefined() // terrain plat (0.02 m) : carte creuse
   })
 
   it('visual_asset : url seulement si status ready', () => {

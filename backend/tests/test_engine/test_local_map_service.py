@@ -263,7 +263,7 @@ def test_enrich_injects_3d_defaults_for_interior_scene() -> None:
         assert element["elevation_m"] == 0.0
     assert by_kind["wall"]["height_m"] == 2.5
     assert by_kind["door"]["height_m"] == 2.2
-    assert layout["ambiance"] == {"light": "torchlit", "fog_density": 0.35}
+    assert layout["ambiance"] == {"light": "torchlit", "fog_density": 0.25}
     assert layout["vegetation_density"] == 0.0
 
 
@@ -455,9 +455,7 @@ def test_enrich_only_adds_3d_keys_to_legacy_persisted_scene() -> None:
     assert {key: value for key, value in reenriched.items() if key not in scene_skip} == {
         key: value for key, value in legacy.items() if key != "elements"
     }
-    for legacy_element, new_element in zip(
-        legacy["elements"], reenriched["elements"], strict=True
-    ):
+    for legacy_element, new_element in zip(legacy["elements"], reenriched["elements"], strict=True):
         assert {
             key: value for key, value in new_element.items() if key not in new_element_keys
         } == legacy_element

@@ -45,7 +45,6 @@ export const MODEL_MANIFEST: Record<string, ModelDef> = {
   // Nature (Kenney Nature Kit).
   'nature/tree_pine_a': { file: 'nature/tree_pine_a.glb', fit: 'height' },
   'nature/tree_pine_b': { file: 'nature/tree_pine_b.glb', fit: 'height' },
-  'nature/tree_pine_c': { file: 'nature/tree_pine_c.glb', fit: 'height' },
   'nature/tree_dark': { file: 'nature/tree_dark.glb', fit: 'height' },
   'nature/tree_palm_tall': { file: 'nature/tree_palm_tall.glb', fit: 'height' },
   'nature/tree_palm_bend': { file: 'nature/tree_palm_bend.glb', fit: 'height' },
@@ -110,6 +109,24 @@ export function modelForClass(charClass: string | null | undefined): string | nu
   return raw ? CLASS_MODEL[raw] ?? null : null
 }
 
+// ─── PNJ : nom/description → modèle de personnage (défaut = pion) ────────────
+
+const NPC_KEYWORDS: [RegExp, string][] = [
+  [/garde|soldat|chevalier|capitaine|sentinelle|milicien|guard|knight|soldier/i, 'char/knight'],
+  [/mage|sorci[èe]r|magicien|érudit|erudit|prêtre|pretre|prêtresse|oracle|wizard|witch|priest/i, 'char/mage'],
+  [/encapuchonn|capuche|voleur|espion|mendiant|rôdeur|rodeur|hooded|thief|spy/i, 'char/rogue_hooded'],
+  [/brute|colosse|forgeron|bûcheron|bucheron|barbare|blacksmith|brawler/i, 'char/barbarian'],
+  [/marchand|aubergiste|tavernier|villageois|paysan|merchant|innkeep|villager/i, 'char/rogue'],
+]
+
+export function modelForNpc(corpus: string | null | undefined): string | null {
+  if (!corpus) return null
+  for (const [pattern, key] of NPC_KEYWORDS) {
+    if (pattern.test(corpus)) return key
+  }
+  return null
+}
+
 // ─── Monstres : espèce/nom → modèle (défaut = pion procédural) ───────────────
 
 export function modelForMonster(corpus: string | null | undefined): string | null {
@@ -118,6 +135,13 @@ export function modelForMonster(corpus: string | null | undefined): string | nul
   if (/lich|liche|necroman/.test(search)) return 'monster/skeleton_mage'
   if (/squelette.*(arc|mage)|skeleton.*(mage|arch)/.test(search)) return 'monster/skeleton_mage'
   if (/squelette|skelet|undead|mort-vivant|revenant|zombi/.test(search)) return 'monster/skeleton_warrior'
+  // Approximations humanoïdes — silhouette crédible faute de modèle dédié.
+  // Le rôle de lanceur (chamane…) prime sur l'espèce (gnoll…).
+  if (/chamane|shaman|cultiste|cultist|sorci[èe]r|warlock|n[ée]cromant/.test(search)) return 'monster/skeleton_mage'
+  if (/gobelin|goblin|kobold|diablotin|imp\b|gremlin/.test(search)) return 'monster/skeleton_minion'
+  if (/orc|ogre|troll|gnoll|hobgobelin|hobgoblin|bugbear/.test(search)) return 'monster/skeleton_warrior'
+  if (/assassin|éclaireur|eclaireur|scout|stalker|spectre|wraith|ombre|shadow/.test(search)) return 'monster/skeleton_rogue'
+  // Bêtes (loup, araignée, ours…) : pion procédural — un squelette serait pire.
   return null
 }
 
@@ -155,7 +179,8 @@ export function modelForElement(kind: string, name: string, footprint: { x: numb
 // ─── Scatter : kind → variantes de modèles ───────────────────────────────────
 
 export const SCATTER_MODELS: Record<ScatterKind, string[]> = {
-  tree_pine: ['nature/tree_pine_a', 'nature/tree_pine_b', 'nature/tree_pine_c'],
+  // tree_pine_c.glb n'a jamais été committé — variante retirée (fallback bruyant sinon).
+  tree_pine: ['nature/tree_pine_a', 'nature/tree_pine_b'],
   tree_palm: ['nature/tree_palm_tall', 'nature/tree_palm_bend'],
   tree_dark: ['nature/tree_dark'],
   bush: ['nature/bush', 'nature/bush_large'],

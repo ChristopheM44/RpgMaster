@@ -205,7 +205,7 @@ async def test_export_import_round_trip_preserves_chronicle(async_client, db_ses
 
     export_resp = await async_client.get(f"/api/campaigns/{campaign_id}/export")
     assert export_resp.status_code == 200
-    assert export_resp.headers["content-disposition"].endswith(".json\"")
+    assert export_resp.headers["content-disposition"].endswith('.json"')
     archive = export_resp.json()
 
     assert archive["format"] == "rpgmaster.chronicle"
@@ -262,8 +262,7 @@ async def test_import_preview_and_import_report_uuid_collisions(async_client, db
     import_resp = await async_client.post("/api/campaigns/import", json=archive)
     assert import_resp.status_code == 409
     assert any(
-        conflict["kind"] == "campaign"
-        for conflict in import_resp.json()["detail"]["conflicts"]
+        conflict["kind"] == "campaign" for conflict in import_resp.json()["detail"]["conflicts"]
     )
 
 

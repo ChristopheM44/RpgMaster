@@ -5,8 +5,9 @@
 
 import type { CombatantState, GridConfig, GridPosition, SceneLayout, SceneTheme } from '../../types'
 import type { GridPoint, SceneSpec, TokenSpec } from '../types'
-import { modelForClass, modelForMonster } from '../assets/manifest'
-import { buildElementSpecs, buildGroundSpec, TONE_HEX } from './sceneAdapter'
+import { modelForClass, modelForMonster, modelForNpc } from '../assets/manifest'
+import { buildElementSpecs, buildElevationByCell, buildGroundSpec, TONE_HEX } from './sceneAdapter'
+import { resolveTokenOverlaps } from './tokenCollision'
 
 export interface CombatPoiInput {
   id: string
@@ -16,6 +17,8 @@ export interface CombatPoiInput {
   iconId: string | null
   tone: string
   elementId?: string | null
+  /** Rôle sémantique pré-mâché (npc/enemy → personnage 3D au lieu d'un marqueur). */
+  role?: string | null
 }
 
 export interface CombatExitInput {
@@ -61,6 +64,10 @@ export interface CombatAdapterInput {
   exits: CombatExitInput[]
   /** Destination de déplacement en attente de confirmation. */
   pendingMove: GridPosition | null
+  /** Chemin prévisualisé vers pendingMove (A* backend, départ inclus). */
+  pendingPath: GridPosition[]
+  /** Gabarit AoE pré-calculé par Battlemap (aoeCells) — null hors visée. */
+  pendingAoe: { cells: GridPosition[]; center: GridPosition; valid: boolean } | null
   selectedElementId: string | null
 }
 
@@ -114,6 +121,22 @@ export function buildCombatSpec(input: CombatAdapterInput): SceneSpec {
 
   for (const poi of input.pois) {
     blockedCells.add(`${poi.col},${poi.row}`)
+    // PNJ/ennemis : personnages 3D animés (parité sceneAdapter).
+    if (poi.role === 'npc' || poi.role === 'enemy') {
+      const isEnemy = poi.role === 'enemy'
+      tokens.push(baseToken({
+        id: poi.id,
+        kind: 'npc',
+        name: poi.name,
+        col: poi.col,
+        row: poi.row,
+        accent: isEnemy ? TONE_HEX.blood ?? '#e84545' : TONE_HEX.teal ?? '#4fd8c0',
+        modelKey: isEnemy ? modelForMonster(poi.name) : modelForNpc(poi.name),
+        initials: poi.name.slice(0, 2).toUpperCase(),
+        selected: input.selectedCombatantId === poi.id,
+      }))
+      continue
+    }
     tokens.push(baseToken({
       id: poi.id,
       kind: 'poi',
@@ -145,11 +168,19 @@ export function buildCombatSpec(input: CombatAdapterInput): SceneSpec {
   return {
     ground,
     elements,
-    tokens,
+    tokens: resolveTokenOverlaps(tokens),
     overlay: {
       reachable: toGridPoints(input.reachableFree),
       reachableEmphasis: input.interactionMode === 'move' ? 'move' : 'idle',
       destination: input.pendingMove ? { col: input.pendingMove.col, row: input.pendingMove.row } : null,
+      path: toGridPoints(input.pendingPath),
+      aoe: input.pendingAoe
+        ? {
+            cells: toGridPoints(input.pendingAoe.cells),
+            center: { col: input.pendingAoe.center.col, row: input.pendingAoe.center.row },
+            valid: input.pendingAoe.valid,
+          }
+        : null,
       zones: input.gridDecoration.zones.map((zone) => ({
         id: zone.id,
         name: zone.name,
@@ -160,6 +191,7 @@ export function buildCombatSpec(input: CombatAdapterInput): SceneSpec {
       cellPicking: true,
     },
     scatterBlockedCells: [...blockedCells],
+    elevationByCell: buildElevationByCell(elements, dims),
   }
 }
 

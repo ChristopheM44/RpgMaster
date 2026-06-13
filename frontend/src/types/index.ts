@@ -255,6 +255,18 @@ export interface SrdSpell {
   upcast_breakpoints: number[] | null
   save: { ability: string; on_success: string } | null
   description: string
+  /** Zone d'effet (srd_data/spells.json) — présent pour les sorts à aire. */
+  area_shape?: 'sphere' | 'cube' | 'cone' | 'line' | 'cylinder' | 'emanation' | 'square' | null
+  area_size_m?: number | null
+  area_origin?: 'point' | 'self' | null
+}
+
+/** Visée d'un sort à aire sur la battlemap (pré-mâché depuis SrdSpell). */
+export interface PendingSpellAim {
+  rangeM: number
+  shape: string
+  sizeM: number
+  origin: 'point' | 'self'
 }
 
 export interface SrdMonsterAction {
