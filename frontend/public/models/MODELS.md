@@ -7,7 +7,8 @@
 > Un test (`engine3d/__tests__/manifest.test.ts`) garantit que **chaque entrée du
 > manifest a son fichier** sur le disque (anti-régression).
 
-**État : 58 modèles, ~4,3 Mo** — 5 aventuriers, 4 squelettes, 22 donjon, 27 nature.
+**État : 58 modèles, ~4,7 Mo** — 5 aventuriers, 4 squelettes, 22 donjon,
+27 nature (16 Kenney + 11 KayKit Forest).
 
 ## Comment un modèle est choisi (3 familles)
 
@@ -65,15 +66,20 @@ KayKit Dungeon Remastered. `modelForElement` (kind `furniture`/`cover`/`decor`/`
 | `stairs` | *(non utilisé : les escaliers sont procéduraux, intégrés à l'élévation)* |
 
 ## Nature & décor — `nature/`
-Kenney Nature Kit. Scatter (`SCATTER_MODELS`, semé par biome) + props de décor :
+**KayKit Forest** (`nature/forest/`, scatter tempéré) + **Kenney Nature Kit** (reste — pas
+d'équivalent KayKit Forest). Scatter (`SCATTER_MODELS`, semé par biome) + props de décor :
 
-- **Scatter** : arbres (`tree_pine_a/b`, `tree_dark`, `tree_palm_*`), `bush*`, `grass_large`,
-  `flower_purple/yellow`, `mushroom_red/tan`, `rock_*`, `stone_large_a`, `stump`, `log`, `cactus_*`, `lily`.
+- **Scatter KayKit Forest** (`nature/forest/`) : `tree_pine_a/b` (`Tree_4_A`/`Tree_4_B`),
+  `tree_dark` (`Tree_Bare_1_A`), `bush`/`bush_large` (`Bush_1_A`/`Bush_2_A`),
+  `grass_large`/`grass_small` (`Grass_1_A`/`Grass_2_A`), `rock_large_a/b`
+  (`Rock_1_A`/`Rock_3_A`), `rock_small_a/b` (`Rock_2_A`/`Rock_2_B`).
+- **Scatter Kenney** : `tree_palm_tall/bend`, `flower_purple/yellow`, `mushroom_red/tan`,
+  `stump`, `log`, `cactus_short/tall`, `lily`.
 - **Props de décor** (`modelForElement`) :
 
 | Modèle | Mots-clés |
 |---|---|
-| `rock_large_a` | rocher, caillou, boulder, stalagmite, **érodé** (avant le repli `cover`) |
+| `rock_large_a` (KayKit `Rock_1_A`) | rocher, caillou, boulder, stalagmite, **érodé** (avant le repli `cover`) |
 | `campfire` | feu de camp, foyer, bivouac, brasier (+ kind `light` → vraie lumière) |
 | `tent` | tente, pavillon, abri, campement |
 | `pot` | jarre, vase, amphore, poterie, cruche |
@@ -87,6 +93,10 @@ mettre à l'échelle les futures créatures (rat ↔ dragon).
 
 > `wall.glb`, `wall_corner.glb` sont présents mais **non mappés** : les murs sont rendus
 > de façon procédurale (creux pour la lisibilité, cf. moteur).
+>
+> `nature/forest/*.gltf` sont au format glTF + `.bin` + texture partagée `forest_texture.png`
+> (seul format livré par ce pack) au lieu du `.glb` unique habituel — `GLTFLoader` résout les
+> fichiers liés par URI relative, donc aucune conversion n'a été nécessaire (cf. `CREDITS.md`).
 
 ---
 
