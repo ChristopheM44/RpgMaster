@@ -9,6 +9,16 @@ from app.services.local_map_service import (
 )
 
 
+def _line_spans(elements: list[dict], *, axis: str = "col") -> list[tuple[float, float]]:
+    spans = []
+    for element in elements:
+        geometry = element["geometry"]
+        start = geometry["from"][axis]
+        end = geometry["to"][axis]
+        spans.append((float(min(start, end)), float(max(start, end))))
+    return sorted(spans)
+
+
 def test_scene_visual_prompt_uses_public_visible_fields_only() -> None:
     prompt = build_scene_visual_prompt(
         {
@@ -196,6 +206,121 @@ def test_embedded_exit_stays_internal_and_gets_element_link() -> None:
     assert linked["kind"] == "stairs"
     assert linked["interactive"] is True
     assert linked["asset_key"] == "prop/stairs"
+
+
+def test_interior_edge_door_replaces_one_wall_span() -> None:
+    layout = {
+        "cols": 12,
+        "rows": 12,
+        "terrain": "stone_chamber",
+        "scene_theme": "dungeon",
+        "pois": [],
+        "exits": [
+            {
+                "id": "north_door",
+                "label": "Porte nord",
+                "position": {"col": 5, "row": 0},
+                "leads_to": "couloir",
+            }
+        ],
+    }
+
+    enrich_scene_layout(layout)
+
+    door = next(
+        element for element in layout["elements"] if element["id"] == "element_north_door_door"
+    )
+    assert door["kind"] == "door"
+    assert door["facing"] == "north"
+    assert door["vertical_direction"] == "level"
+    assert door["geometry"] == {
+        "type": "rect",
+        "col": 5.0,
+        "row": 0.0,
+        "width": 1.0,
+        "height": 0.24,
+    }
+    north_walls = [
+        element
+        for element in layout["elements"]
+        if element["kind"] == "wall" and element["id"].startswith("wall_north")
+    ]
+    assert _line_spans(north_walls) == [(0.0, 5.0), (6.0, 12.0)]
+
+
+def test_east_edge_door_gets_vertical_wall_geometry_and_facing() -> None:
+    layout = {
+        "cols": 10,
+        "rows": 8,
+        "terrain": "stone_chamber",
+        "scene_theme": "dungeon",
+        "pois": [],
+        "exits": [
+            {
+                "id": "east_door",
+                "label": "Porte est",
+                "position": {"col": 9, "row": 4},
+                "leads_to": "couloir_est",
+            }
+        ],
+    }
+
+    enrich_scene_layout(layout)
+
+    door = next(
+        element for element in layout["elements"] if element["id"] == "element_east_door_door"
+    )
+    assert door["facing"] == "east"
+    assert door["geometry"] == {
+        "type": "rect",
+        "col": 9.76,
+        "row": 4.0,
+        "width": 0.24,
+        "height": 1.0,
+    }
+    east_walls = [
+        element
+        for element in layout["elements"]
+        if element["kind"] == "wall" and element["id"].startswith("wall_east")
+    ]
+    assert _line_spans(east_walls, axis="row") == [(0.0, 4.0), (5.0, 8.0)]
+
+
+def test_exterior_descending_stairs_exit_gets_access_without_boundary_walls() -> None:
+    layout = {
+        "cols": 12,
+        "rows": 12,
+        "terrain": "falaise",
+        "scene_theme": "rocky",
+        "pois": [],
+        "exits": [
+            {
+                "id": "stairs_down",
+                "label": "Escalier descendant",
+                "position": {"col": 4, "row": 11},
+                "leads_to": "crypte_basse",
+                "description": "Des marches descendent vers une crypte humide.",
+            }
+        ],
+    }
+
+    enrich_scene_layout(layout)
+
+    assert not any(element["kind"] == "wall" for element in layout["elements"])
+    stairs = next(
+        element for element in layout["elements"] if element["id"] == "element_stairs_down_stairs"
+    )
+    assert stairs["kind"] == "stairs"
+    assert stairs["facing"] == "south"
+    assert stairs["vertical_direction"] == "down"
+    assert stairs["asset_key"] == "prop/stairs"
+    assert stairs["geometry"] == {
+        "type": "rect",
+        "col": 4.0,
+        "row": 11.0,
+        "width": 1.0,
+        "height": 1.0,
+    }
 
 
 def test_explicit_terrain_path_is_preserved() -> None:
@@ -401,6 +526,8 @@ def test_normalize_scene_element_passes_through_clamped_3d_hints() -> None:
             "geometry": {"type": "rect", "col": 2, "row": 2, "width": 3, "height": 0.4},
             "height_m": 99,
             "elevation_m": -3,
+            "facing": "north",
+            "vertical_direction": "level",
         },
         12,
         12,
@@ -408,6 +535,8 @@ def test_normalize_scene_element_passes_through_clamped_3d_hints() -> None:
     assert hinted is not None
     assert hinted["height_m"] == 8.0
     assert hinted["elevation_m"] == 0.0
+    assert hinted["facing"] == "north"
+    assert hinted["vertical_direction"] == "level"
 
     bare = normalize_scene_element(
         {
@@ -422,6 +551,24 @@ def test_normalize_scene_element_passes_through_clamped_3d_hints() -> None:
     assert bare is not None
     assert "height_m" not in bare
     assert "elevation_m" not in bare
+    assert "facing" not in bare
+    assert "vertical_direction" not in bare
+
+    invalid_orientation = normalize_scene_element(
+        {
+            "id": "porte",
+            "name": "Porte étrange",
+            "kind": "door",
+            "geometry": {"type": "rect", "col": 2, "row": 0, "width": 1, "height": 0.24},
+            "facing": "diagonal",
+            "vertical_direction": "sideways",
+        },
+        12,
+        12,
+    )
+    assert invalid_orientation is not None
+    assert "facing" not in invalid_orientation
+    assert "vertical_direction" not in invalid_orientation
 
 
 def test_normalize_scene_element_preserves_only_safe_asset_keys() -> None:

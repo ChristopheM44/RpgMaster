@@ -685,6 +685,8 @@ export type SceneElementGeometry =
   | { type: 'ellipse'; col: number; row: number; radius_col: number; radius_row: number }
 
 export type SceneTerrainType = 'road' | 'street' | 'path' | 'plaza_paving' | 'water' | 'mud'
+export type SceneElementFacing = 'north' | 'east' | 'south' | 'west'
+export type SceneElementVerticalDirection = 'up' | 'down' | 'level'
 
 export interface SceneElement {
   id: string
@@ -705,6 +707,8 @@ export interface SceneElement {
   asset_key?: string
   height_m?: number
   elevation_m?: number
+  facing?: SceneElementFacing
+  vertical_direction?: SceneElementVerticalDirection
 }
 
 export interface SceneLayoutChangedPayload {

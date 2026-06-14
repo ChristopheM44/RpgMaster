@@ -12,6 +12,9 @@ import { disposeGroup, disposeObject } from './GroundLayer'
 import { gridPointToWorld, metersToWorld } from '../utils/gridMath'
 
 const MAX_POINT_LIGHTS = 6
+const WALL_SEGMENT_OVERLAP = 0.025
+const ACCESS_THICKNESS_WORLD = 0.3
+const WALL_ACCESS_KINDS = new Set(['door', 'window', 'stairs'])
 
 interface ElementEntry {
   container: THREE.Group
@@ -151,13 +154,13 @@ function elementFootprintWorld(spec: ElementSpec): { x: number; z: number } {
   return { x: Math.max(0.3, length), z: 0.2 }
 }
 
-interface ElementPlacement {
+export interface ElementPlacement {
   center: { x: number; z: number }
   footprint: { x: number; z: number }
   rotationY: number
 }
 
-function elementPlacementWorld(spec: ElementSpec, ctx: EngineCtx): ElementPlacement {
+export function elementPlacementWorld(spec: ElementSpec, ctx: EngineCtx): ElementPlacement {
   const geometry = spec.geometry
   if (geometry.type === 'line') {
     const a = gridPointToWorld(geometry.from.col, geometry.from.row, ctx.dims)
@@ -168,14 +171,15 @@ function elementPlacementWorld(spec: ElementSpec, ctx: EngineCtx): ElementPlacem
       rotationY: -Math.atan2(b.z - a.z, b.x - a.x),
     }
   }
+  const footprint = elementFootprintWorld(spec)
   return {
-    center: elementCenterWorld(spec, ctx),
-    footprint: elementFootprintWorld(spec),
-    rotationY: 0,
+    center: rectElementCenterWorld(spec, ctx),
+    footprint,
+    rotationY: rectElementRotationY(spec, footprint),
   }
 }
 
-function instantiateElementModel(
+export function instantiateElementModel(
   model: LoadedModel,
   modelKey: string,
   spec: ElementSpec,
@@ -185,12 +189,19 @@ function instantiateElementModel(
   const elevation = metersToWorld(spec.elevationM, ctx.cellSizeM)
   if (modelKey === 'prop/wall' && spec.geometry.type === 'line') {
     const group = new THREE.Group()
-    const count = Math.max(1, Math.round(placement.footprint.x))
+    const count = Math.max(1, Math.ceil(placement.footprint.x))
     const segmentX = Math.max(0.3, placement.footprint.x / count)
+    const targetHeight = metersToWorld(Math.max(spec.heightM, 0.4), ctx.cellSizeM)
+    const targetThickness = Math.max(
+      0.18,
+      Math.min(ACCESS_THICKNESS_WORLD, placement.footprint.z),
+    )
     for (let i = 0; i < count; i += 1) {
-      const segment = ctx.registry.instantiate(model, {
-        footprint: { x: segmentX, z: placement.footprint.z },
-        maxHeight: metersToWorld(Math.max(spec.heightM, 0.4) * 1.6, ctx.cellSizeM),
+      const visualLength = segmentX + (count > 1 ? WALL_SEGMENT_OVERLAP : 0)
+      const segment = instantiateModelNonUniform(model, {
+        x: visualLength / model.size.x,
+        y: targetHeight / model.size.y,
+        z: targetThickness / model.size.z,
       })
       segment.position.x = -placement.footprint.x / 2 + segmentX * (i + 0.5)
       group.add(segment)
@@ -198,6 +209,24 @@ function instantiateElementModel(
     group.position.set(placement.center.x, elevation, placement.center.z)
     group.rotation.y = placement.rotationY
     return group
+  }
+  if (modelKey === 'prop/door') {
+    const instance = instantiateWallAccessModel(model, spec, placement, ctx)
+    instance.position.set(placement.center.x, elevation, placement.center.z)
+    instance.rotation.y = placement.rotationY
+    return instance
+  }
+  if (modelKey === 'prop/stairs') {
+    const instance = instantiateStairsModel(model, placement)
+    instance.position.set(placement.center.x, elevation, placement.center.z)
+    instance.rotation.y = placement.rotationY
+    return instance
+  }
+  if (modelKey === 'prop/wall_corner') {
+    const instance = instantiateWallCornerModel(model, spec, placement, ctx)
+    instance.position.set(placement.center.x, elevation, placement.center.z)
+    instance.rotation.y = cornerRotationY(spec, ctx)
+    return instance
   }
 
   const intrinsicHeightM = PROP_TARGET_HEIGHT_M[modelKey]
@@ -215,6 +244,140 @@ function instantiateElementModel(
   return instance
 }
 
+function instantiateWallAccessModel(
+  model: LoadedModel,
+  spec: ElementSpec,
+  placement: ElementPlacement,
+  ctx: EngineCtx,
+): THREE.Group {
+  const targetHeight = metersToWorld(Math.max(spec.heightM, 0.4), ctx.cellSizeM)
+  const length = Math.max(0.6, Math.max(placement.footprint.x, placement.footprint.z))
+  const thickness = Math.max(
+    0.18,
+    Math.min(ACCESS_THICKNESS_WORLD, Math.min(placement.footprint.x, placement.footprint.z)),
+  )
+  return instantiateModelNonUniform(model, {
+    x: length / model.size.x,
+    y: targetHeight / model.size.y,
+    z: thickness / model.size.z,
+  })
+}
+
+function instantiateStairsModel(model: LoadedModel, placement: ElementPlacement): THREE.Group {
+  const scaleX = placement.footprint.x / model.size.x
+  const scaleZ = placement.footprint.z / model.size.z
+  const scaleY = Math.min(scaleX, scaleZ)
+  return instantiateModelNonUniform(model, {
+    x: scaleX,
+    y: scaleY,
+    z: scaleZ,
+  })
+}
+
+function instantiateWallCornerModel(
+  model: LoadedModel,
+  spec: ElementSpec,
+  placement: ElementPlacement,
+  ctx: EngineCtx,
+): THREE.Group {
+  const targetHeight = metersToWorld(Math.max(spec.heightM, 0.4), ctx.cellSizeM)
+  return instantiateModelNonUniform(model, {
+    x: placement.footprint.x / model.size.x,
+    y: targetHeight / model.size.y,
+    z: placement.footprint.z / model.size.z,
+  })
+}
+
+function instantiateModelNonUniform(
+  model: LoadedModel,
+  scale: { x: number; y: number; z: number },
+): THREE.Group {
+  const instance = model.prototype.clone(true) as THREE.Group
+  instance.scale.set(scale.x, scale.y, scale.z)
+  instance.position.set(
+    -model.center.x * scale.x,
+    -model.minY * scale.y,
+    -model.center.z * scale.z,
+  )
+  instance.traverse((node) => {
+    const mesh = node as THREE.Mesh
+    if (mesh.isMesh) {
+      mesh.castShadow = true
+      mesh.receiveShadow = true
+    }
+  })
+  const container = new THREE.Group()
+  container.add(instance)
+  return container
+}
+
+function rectElementRotationY(spec: ElementSpec, footprint: { x: number; z: number }): number {
+  if (spec.kind === 'stairs') return stairsRotationY(spec.facing, spec.verticalDirection, footprint)
+  if (spec.kind === 'door' || spec.kind === 'window') return wallAxisRotationY(spec.facing, footprint)
+  return 0
+}
+
+export function wallAxisRotationY(
+  facing: ElementSpec['facing'],
+  footprint: { x: number; z: number },
+): number {
+  if (facing === 'east' || facing === 'west') return -Math.PI / 2
+  if (facing === 'north' || facing === 'south') return 0
+  return footprint.z > footprint.x ? -Math.PI / 2 : 0
+}
+
+export function stairsRotationY(
+  facing: ElementSpec['facing'],
+  verticalDirection: ElementSpec['verticalDirection'],
+  footprint: { x: number; z: number },
+): number {
+  if (!facing) return footprint.z > footprint.x ? -Math.PI / 2 : 0
+  const visualFacing = verticalDirection === 'down' ? oppositeFacing(facing) : facing
+  return plusZRotationToFacing(visualFacing)
+}
+
+function plusZRotationToFacing(facing: NonNullable<ElementSpec['facing']>): number {
+  switch (facing) {
+    case 'north':
+      return Math.PI
+    case 'east':
+      return Math.PI / 2
+    case 'west':
+      return -Math.PI / 2
+    case 'south':
+    default:
+      return 0
+  }
+}
+
+function oppositeFacing(
+  facing: NonNullable<ElementSpec['facing']>,
+): NonNullable<ElementSpec['facing']> {
+  switch (facing) {
+    case 'north':
+      return 'south'
+    case 'south':
+      return 'north'
+    case 'east':
+      return 'west'
+    case 'west':
+      return 'east'
+  }
+}
+
+function cornerRotationY(spec: ElementSpec, ctx: EngineCtx): number {
+  const geometry = spec.geometry
+  if (geometry.type !== 'rect') return 0
+  const nearWest = geometry.col <= 0.1
+  const nearEast = geometry.col + geometry.width >= ctx.dims.cols - 0.1
+  const nearNorth = geometry.row <= 0.1
+  const nearSouth = geometry.row + geometry.height >= ctx.dims.rows - 0.1
+  if (nearNorth && nearEast) return -Math.PI / 2
+  if (nearSouth && nearEast) return Math.PI
+  if (nearSouth && nearWest) return Math.PI / 2
+  return 0
+}
+
 function elementCenterWorld(spec: ElementSpec, ctx: EngineCtx): { x: number; z: number } {
   const geometry = spec.geometry
   if (geometry.type === 'rect') {
@@ -226,6 +389,26 @@ function elementCenterWorld(spec: ElementSpec, ctx: EngineCtx): { x: number; z: 
     (geometry.from.row + geometry.to.row) / 2,
     ctx.dims,
   )
+}
+
+function rectElementCenterWorld(spec: ElementSpec, ctx: EngineCtx): { x: number; z: number } {
+  const center = elementCenterWorld(spec, ctx)
+  const geometry = spec.geometry
+  if (geometry.type !== 'rect' || !spec.facing || !WALL_ACCESS_KINDS.has(spec.kind)) {
+    return center
+  }
+
+  if (spec.facing === 'north' && geometry.row <= 0.05) {
+    center.z = gridPointToWorld(0, 0, ctx.dims).z
+  } else if (spec.facing === 'south' && geometry.row + geometry.height >= ctx.dims.rows - 0.05) {
+    center.z = gridPointToWorld(0, ctx.dims.rows, ctx.dims).z
+  } else if (spec.facing === 'west' && geometry.col <= 0.05) {
+    center.x = gridPointToWorld(0, 0, ctx.dims).x
+  } else if (spec.facing === 'east' && geometry.col + geometry.width >= ctx.dims.cols - 0.05) {
+    center.x = gridPointToWorld(ctx.dims.cols, 0, ctx.dims).x
+  }
+
+  return center
 }
 
 function applySubtle(root: THREE.Object3D): void {

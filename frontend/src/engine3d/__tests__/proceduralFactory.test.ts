@@ -22,6 +22,8 @@ function spec(kind: string, geometry: ElementSpec['geometry']): ElementSpec {
     inspectable: true,
     selected: false,
     modelKey: null,
+    facing: null,
+    verticalDirection: null,
   }
 }
 

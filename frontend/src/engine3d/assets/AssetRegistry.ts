@@ -12,6 +12,8 @@ export interface LoadedModel {
   prototype: THREE.Group
   animations: THREE.AnimationClip[]
   size: THREE.Vector3
+  min: THREE.Vector3
+  center: THREE.Vector3
   minY: number
   skinned: boolean
 }
@@ -57,11 +59,14 @@ export class AssetRegistry {
           })
           const box = new THREE.Box3().setFromObject(prototype)
           const size = box.getSize(new THREE.Vector3())
+          const center = box.getCenter(new THREE.Vector3())
           resolve({
             key,
             prototype,
             animations: gltf.animations ?? [],
             size: size.max(new THREE.Vector3(0.001, 0.001, 0.001)),
+            min: box.min.clone(),
+            center,
             minY: box.min.y,
             skinned,
           })

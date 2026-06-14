@@ -4,7 +4,13 @@
 // pour que la 3D fonctionne même sur un backend sans hints.
 
 import type { ExHero, ExPoi } from '../../fixtures/exploration'
-import type { SceneElement, SceneLayout, SceneTheme } from '../../types'
+import type {
+  SceneElement,
+  SceneElementFacing,
+  SceneElementVerticalDirection,
+  SceneLayout,
+  SceneTheme,
+} from '../../types'
 import type { AmbianceLight, ElementSpec, GroundSpec, SceneSpec, TokenSpec } from '../types'
 import { isModelKey, modelForClass, modelForMonster, modelForNpc } from '../assets/manifest'
 import { resolveTokenOverlaps } from './tokenCollision'
@@ -48,6 +54,8 @@ const FOG_BY_THEME: Partial<Record<SceneTheme, number>> = {
 }
 
 const AMBIANCE_LIGHTS: readonly AmbianceLight[] = ['day', 'dusk', 'night', 'torchlit', 'overcast']
+const ELEMENT_FACINGS: readonly SceneElementFacing[] = ['north', 'east', 'south', 'west']
+const ELEMENT_VERTICAL_DIRECTIONS: readonly SceneElementVerticalDirection[] = ['up', 'down', 'level']
 
 /** Tones V2 → hex (mêmes valeurs que les fallbacks du ThemeProvider). */
 export const TONE_HEX: Record<string, string> = {
@@ -163,6 +171,8 @@ export function buildElementSpecs(
       inspectable: isElementInspectable(element, interactive),
       selected: element.id === options.selectedElementId,
       modelKey: isModelKey(element.asset_key) ? element.asset_key : null,
+      facing: normalizeFacing(element.facing),
+      verticalDirection: normalizeVerticalDirection(element.vertical_direction),
     }
   })
 
@@ -305,4 +315,16 @@ function elementCells(geometry: SceneElement['geometry'], dims: { cols: number; 
 
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value))
+}
+
+function normalizeFacing(value: string | null | undefined): SceneElementFacing | null {
+  return ELEMENT_FACINGS.includes(value as SceneElementFacing) ? (value as SceneElementFacing) : null
+}
+
+function normalizeVerticalDirection(
+  value: string | null | undefined,
+): SceneElementVerticalDirection | null {
+  return ELEMENT_VERTICAL_DIRECTIONS.includes(value as SceneElementVerticalDirection)
+    ? (value as SceneElementVerticalDirection)
+    : null
 }

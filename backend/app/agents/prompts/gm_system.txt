@@ -73,6 +73,7 @@ TYPES D'ACTIONS :
                     "geometry":{"type":"line","from":{"col":0,"row":0},"to":{"col":12,"row":0}},
                     "description":"Court texte visible","blocks_movement":true,"opaque":true,"interactive":false}
                     Pour kind "terrain", ajoute terrain_type si utile : road | street | path | plaza_paving | water | mud.
+                    Pour portes/fenêtres/escaliers alignés à un bord, tu peux ajouter facing "north|east|south|west". Pour un escalier, ajoute vertical_direction "up|down|level" si le sens est clair.
                     Géométries : line(from/to), rect(col,row,width,height), ellipse(col,row,radius_col,radius_row), en coordonnées de grille.
                     En intérieur, représente clairement le contour de la pièce, les ouvertures et 2-4 éléments de décor utiles.
                     Les sorties de voyage/fuite ont placement "edge" et doivent être sur un bord. Les sorties internes ont placement "embedded" uniquement si elles correspondent à un élément concret (trappe, égout, échelle, escalier, porte, quai, ponton, ouverture) avec element_id.

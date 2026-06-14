@@ -682,6 +682,12 @@ def _normalize_element_patch(raw: dict[str, Any], cols: int, rows: int) -> dict[
         )
         if normalized:
             patch["geometry"] = normalized["geometry"]
+    facing = _clean_text(raw.get("facing"), max_len=16).lower()
+    if facing in local_map_service.SCENE_ELEMENT_FACINGS:
+        patch["facing"] = facing
+    vertical_direction = _clean_text(raw.get("vertical_direction"), max_len=16).lower()
+    if vertical_direction in local_map_service.SCENE_ELEMENT_VERTICAL_DIRECTIONS:
+        patch["vertical_direction"] = vertical_direction
     facts = _normalize_facts(raw.get("facts"))
     if facts:
         patch["facts"] = facts

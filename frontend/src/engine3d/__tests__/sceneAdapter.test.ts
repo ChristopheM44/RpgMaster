@@ -83,6 +83,8 @@ describe('sceneAdapter.buildSceneSpec', () => {
           name: 'Escalier',
           kind: 'stairs',
           asset_key: 'prop/stairs',
+          facing: 'south',
+          vertical_direction: 'down',
           geometry: { type: 'rect', col: 2, row: 2, width: 1, height: 1 },
         },
         {
@@ -90,13 +92,21 @@ describe('sceneAdapter.buildSceneSpec', () => {
           name: 'Table',
           kind: 'furniture',
           asset_key: 'prop/not_in_manifest',
+          facing: 'diagonal' as never,
+          vertical_direction: 'sideways' as never,
           geometry: { type: 'rect', col: 4, row: 2, width: 1, height: 1 },
         },
       ],
     })
     const spec = buildSceneSpec({ scene, heroes: [], pois: [], selectedId: null, highlightedIds: [] })
-    expect(spec.elements.find((element) => element.id === 'stairs1')?.modelKey).toBe('prop/stairs')
-    expect(spec.elements.find((element) => element.id === 'bad1')?.modelKey).toBeNull()
+    const stairs = spec.elements.find((element) => element.id === 'stairs1')
+    expect(stairs?.modelKey).toBe('prop/stairs')
+    expect(stairs?.facing).toBe('south')
+    expect(stairs?.verticalDirection).toBe('down')
+    const bad = spec.elements.find((element) => element.id === 'bad1')
+    expect(bad?.modelKey).toBeNull()
+    expect(bad?.facing).toBeNull()
+    expect(bad?.verticalDirection).toBeNull()
   })
 
   it('ambiance : dungeon/cave → torchlit par défaut, hint LLM respecté', () => {

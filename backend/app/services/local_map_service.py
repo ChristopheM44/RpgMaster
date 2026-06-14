@@ -25,6 +25,8 @@ VISUAL_ASSET_STATUSES = {"prompt_ready", "generating", "ready", "failed"}
 TERRAIN_TYPES = {"road", "street", "path", "plaza_paving", "water", "mud"}
 EXIT_PLACEMENTS = {"edge", "embedded"}
 SCENE_AMBIANCE_LIGHTS = {"day", "dusk", "night", "torchlit", "overcast"}
+SCENE_ELEMENT_FACINGS = {"north", "east", "south", "west"}
+SCENE_ELEMENT_VERTICAL_DIRECTIONS = {"up", "down", "level"}
 SCENE_ASSET_KEYS = {
     "prop/wall",
     "prop/wall_corner",
@@ -194,6 +196,58 @@ _EXPLICIT_SUBTERRANEAN_ACCESS_WORDS = {
     "entree souterraine",
     "sous-sol",
 }
+_STAIRS_ACCESS_WORDS = (
+    "trappe",
+    "égout",
+    "egout",
+    "échelle",
+    "echelle",
+    "escalier",
+    "stair",
+    "stairs",
+    "puits",
+    "cave",
+    "sous-sol",
+    "souterrain",
+)
+_DOOR_ACCESS_WORDS = (
+    "porte",
+    "portail",
+    "gate",
+    "door",
+    "grille",
+    "entrée",
+    "entree",
+    "ouverture",
+)
+_UP_ACCESS_WORDS = (
+    "monte",
+    "montée",
+    "montee",
+    "remonte",
+    "remontée",
+    "remontee",
+    "surface",
+    "ascend",
+    "upward",
+    "upstairs",
+)
+_DOWN_ACCESS_WORDS = (
+    "descend",
+    "descente",
+    "descendre",
+    "bas",
+    "down",
+    "downward",
+    "downstairs",
+    "égout",
+    "egout",
+    "cave",
+    "sous-sol",
+    "souterrain",
+    "puits",
+    "trappe",
+)
 
 
 def normalize_scene_element(raw: Any, cols: int, rows: int) -> dict[str, Any] | None:
@@ -243,6 +297,12 @@ def normalize_scene_element(raw: Any, cols: int, rows: int) -> dict[str, Any] | 
         element["visibility"] = visibility
     if isinstance(raw.get("discovered"), bool):
         element["discovered"] = raw["discovered"]
+    facing = _clean_text(raw.get("facing"), max_len=16).lower()
+    if facing in SCENE_ELEMENT_FACINGS:
+        element["facing"] = facing
+    vertical_direction = _clean_text(raw.get("vertical_direction"), max_len=16).lower()
+    if vertical_direction in SCENE_ELEMENT_VERTICAL_DIRECTIONS:
+        element["vertical_direction"] = vertical_direction
     asset_key = normalize_asset_key(raw.get("asset_key"))
     if asset_key:
         element["asset_key"] = asset_key
@@ -364,14 +424,17 @@ def enrich_scene_layout(
     interior = _is_interior_scene(layout)
     if interior:
         _add_boundary_walls(by_id, cols, rows)
-        _add_exit_doors(by_id, layout, cols, rows)
+        _add_exit_access_elements(by_id, layout, cols, rows, interior=True)
         _add_windows(by_id, layout, cols, rows)
         _add_default_furniture(by_id, layout, cols, rows)
-    elif _is_plaza_scene(layout):
-        _add_plaza_elements(by_id, layout, cols, rows)
+    else:
+        _add_exit_access_elements(by_id, layout, cols, rows, interior=False)
+        if _is_plaza_scene(layout):
+            _add_plaza_elements(by_id, layout, cols, rows)
 
     _add_poi_elements(by_id, layout, cols, rows)
     _strip_unrevealed_subterranean_access(by_id, layout)
+    _carve_wall_openings(by_id)
     for element in by_id.values():
         _apply_element_3d_defaults(element, interior=interior)
     _apply_scene_3d_defaults(layout, time_of_day=time_of_day)
@@ -585,11 +648,13 @@ def _add_boundary_walls(by_id: dict[str, dict[str, Any]], cols: int, rows: int) 
         )
 
 
-def _add_exit_doors(
+def _add_exit_access_elements(
     by_id: dict[str, dict[str, Any]],
     layout: dict[str, Any],
     cols: int,
     rows: int,
+    *,
+    interior: bool,
 ) -> None:
     for exit_ in layout.get("exits", []):
         if not isinstance(exit_, dict):
@@ -597,24 +662,83 @@ def _add_exit_doors(
         pos = exit_.get("position")
         if not isinstance(pos, dict):
             continue
+        corpus = _exit_corpus(exit_)
+        if not _exit_needs_access_element(exit_, corpus, interior=interior):
+            continue
+
+        kind = _exit_access_kind(corpus)
         element_id = _clean_text(exit_.get("element_id"), max_len=80)
-        if not element_id or element_id not in by_id:
-            element_id = f"element_{exit_.get('id')}_door"
+        if element_id and element_id in by_id:
+            _apply_exit_access_defaults(by_id[element_id], exit_, cols, rows)
+            continue
+        if not element_id:
+            element_id = f"element_{exit_.get('id')}_{kind}"
             exit_["element_id"] = element_id
         by_id.setdefault(
             element_id,
             {
                 "id": element_id,
-                "name": exit_.get("label") or "Porte",
-                "kind": "door",
-                "geometry": _door_geometry(pos, cols, rows),
+                "name": exit_.get("label") or ("Escalier" if kind == "stairs" else "Porte"),
+                "kind": kind,
+                "geometry": _access_geometry(exit_, kind, cols, rows),
                 "description": exit_.get("description") or exit_.get("leads_to") or "",
                 "blocks_movement": False,
                 "opaque": False,
                 "interactive": True,
-                "asset_key": "prop/door",
+                "asset_key": "prop/stairs" if kind == "stairs" else "prop/door",
+                **_access_orientation_fields(exit_, kind, cols, rows),
             },
         )
+
+
+def _exit_needs_access_element(exit_: dict[str, Any], corpus: str, *, interior: bool) -> bool:
+    placement = _clean_text(exit_.get("placement"), max_len=24).lower()
+    if placement == "embedded":
+        return True
+    if interior:
+        return True
+    return _exit_access_kind(corpus) == "stairs" or any(
+        word in corpus for word in _DOOR_ACCESS_WORDS
+    )
+
+
+def _apply_exit_access_defaults(
+    element: dict[str, Any],
+    exit_: dict[str, Any],
+    cols: int,
+    rows: int,
+) -> None:
+    kind = str(element.get("kind") or "").lower()
+    if kind not in {"door", "stairs"}:
+        return
+    element.setdefault("blocks_movement", False)
+    element.setdefault("opaque", False)
+    element.setdefault("interactive", True)
+    element.setdefault("asset_key", "prop/stairs" if kind == "stairs" else "prop/door")
+    for key, value in _access_orientation_fields(exit_, kind, cols, rows).items():
+        element.setdefault(key, value)
+
+
+def _access_orientation_fields(
+    exit_: dict[str, Any],
+    kind: str,
+    cols: int,
+    rows: int,
+) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    facing = _infer_exit_facing(exit_, cols, rows)
+    if facing:
+        fields["facing"] = facing
+    explicit_vertical = _clean_text(exit_.get("vertical_direction"), max_len=16).lower()
+    if kind == "stairs":
+        fields["vertical_direction"] = (
+            explicit_vertical
+            if explicit_vertical in SCENE_ELEMENT_VERTICAL_DIRECTIONS
+            else _infer_vertical_direction(_exit_corpus(exit_))
+        )
+    elif "vertical_direction" not in fields:
+        fields["vertical_direction"] = "level"
+    return fields
 
 
 def _add_windows(
@@ -864,17 +988,107 @@ def _ensure_embedded_exit_element(
             "opaque": False,
             "interactive": True,
             "asset_key": "prop/stairs" if kind == "stairs" else "prop/door",
+            **_access_orientation_fields(exit_, kind, cols, rows),
         },
     )
 
 
 def _exit_access_kind(corpus: str) -> str:
-    if any(
-        word in corpus
-        for word in ("trappe", "égout", "egout", "échelle", "echelle", "escalier", "puits", "cave")
-    ):
+    if any(word in corpus for word in _STAIRS_ACCESS_WORDS):
         return "stairs"
     return "door"
+
+
+def _infer_vertical_direction(corpus: str) -> str:
+    if any(word in corpus for word in _DOWN_ACCESS_WORDS):
+        return "down"
+    if any(word in corpus for word in _UP_ACCESS_WORDS):
+        return "up"
+    return "level"
+
+
+def _infer_exit_facing(exit_: dict[str, Any], cols: int, rows: int) -> str | None:
+    explicit = _clean_text(exit_.get("facing"), max_len=16).lower()
+    if explicit in SCENE_ELEMENT_FACINGS:
+        return explicit
+
+    corpus = _exit_corpus(exit_)
+    if any(word in corpus for word in ("ouest", "west", "gauche")):
+        return "west"
+    if any(word in corpus for word in ("est", "east", "droite")):
+        return "east"
+    if any(word in corpus for word in ("nord", "north", "haut")):
+        return "north"
+    if any(word in corpus for word in ("sud", "south", "bas")):
+        return "south"
+
+    pos = exit_.get("position")
+    if not isinstance(pos, dict):
+        return None
+    col = _clamp_float(pos.get("col"), 0.0, float(cols - 1), 0.0)
+    row = _clamp_float(pos.get("row"), 0.0, float(rows - 1), 0.0)
+    distances = [
+        (row, "north"),
+        (cols - 1 - col, "east"),
+        (rows - 1 - row, "south"),
+        (col, "west"),
+    ]
+    distance, facing = min(distances, key=lambda item: item[0])
+    return facing if distance <= 0.001 else None
+
+
+def _access_geometry(
+    exit_: dict[str, Any],
+    kind: str,
+    cols: int,
+    rows: int,
+) -> dict[str, Any]:
+    pos = exit_.get("position")
+    if not isinstance(pos, dict):
+        pos = {}
+    placement = _clean_text(exit_.get("placement"), max_len=24).lower()
+    if placement == "edge" and _is_border_position(pos, cols, rows):
+        return _edge_access_geometry(
+            pos,
+            kind,
+            cols,
+            rows,
+            facing=_infer_exit_facing(exit_, cols, rows),
+        )
+    return _embedded_exit_geometry(pos, cols, rows)
+
+
+def _edge_access_geometry(
+    pos: dict[str, Any],
+    kind: str,
+    cols: int,
+    rows: int,
+    *,
+    facing: str | None = None,
+) -> dict[str, Any]:
+    col = int(_clamp_float(pos.get("col"), 0.0, float(cols - 1), 0.0))
+    row = int(_clamp_float(pos.get("row"), 0.0, float(rows - 1), 0.0))
+    if kind == "stairs":
+        if facing == "west" or (facing is None and col <= 0):
+            return {"type": "rect", "col": 0.0, "row": float(row), "width": 1.0, "height": 1.0}
+        if facing == "east" or (facing is None and col >= cols - 1):
+            return {
+                "type": "rect",
+                "col": float(cols - 1),
+                "row": float(row),
+                "width": 1.0,
+                "height": 1.0,
+            }
+        if facing == "north" or (facing is None and row <= 0):
+            return {"type": "rect", "col": float(col), "row": 0.0, "width": 1.0, "height": 1.0}
+        return {
+            "type": "rect",
+            "col": float(col),
+            "row": float(rows - 1),
+            "width": 1.0,
+            "height": 1.0,
+        }
+    return _door_geometry(pos, cols, rows, facing=facing)
 
 
 def _embedded_exit_geometry(pos: dict[str, Any], cols: int, rows: int) -> dict[str, Any]:
@@ -1092,6 +1306,174 @@ def _strip_unrevealed_subterranean_access(
     by_id.pop("grille_egout", None)
 
 
+def _carve_wall_openings(by_id: dict[str, dict[str, Any]]) -> None:
+    openings = [
+        element
+        for element in by_id.values()
+        if element.get("kind") in {"door", "window", "stairs"}
+        and isinstance(element.get("geometry"), dict)
+        and element["geometry"].get("type") == "rect"
+    ]
+    if not openings:
+        return
+
+    replacements: dict[str, dict[str, Any]] = {}
+    removed: list[str] = []
+    for wall_id, wall in list(by_id.items()):
+        if wall.get("kind") != "wall":
+            continue
+        geometry = wall.get("geometry")
+        if not isinstance(geometry, dict) or geometry.get("type") != "line":
+            continue
+        segments = _wall_segments_after_openings(geometry, openings)
+        if segments is None:
+            continue
+
+        removed.append(wall_id)
+        for idx, segment_geometry in enumerate(segments):
+            segment_id = wall_id if idx == 0 else _unique_wall_segment_id(
+                by_id, replacements, wall_id, idx
+            )
+            segment = dict(wall)
+            segment["id"] = segment_id
+            if idx > 0:
+                segment["name"] = f"{wall.get('name') or 'Mur'} {idx + 1}"
+            segment["geometry"] = segment_geometry
+            replacements[segment_id] = segment
+
+    for wall_id in removed:
+        by_id.pop(wall_id, None)
+    by_id.update(replacements)
+
+
+def _unique_wall_segment_id(
+    by_id: dict[str, dict[str, Any]],
+    replacements: dict[str, dict[str, Any]],
+    base_id: str,
+    idx: int,
+) -> str:
+    candidate = f"{base_id}_seg_{idx + 1}"
+    suffix = idx + 1
+    while candidate in by_id or candidate in replacements:
+        suffix += 1
+        candidate = f"{base_id}_seg_{suffix}"
+    return candidate
+
+
+def _wall_segments_after_openings(
+    wall_geometry: dict[str, Any],
+    openings: list[dict[str, Any]],
+) -> list[dict[str, Any]] | None:
+    start = wall_geometry.get("from")
+    end = wall_geometry.get("to")
+    if not isinstance(start, dict) or not isinstance(end, dict):
+        return None
+
+    start_col = _parse_optional_float(start.get("col"))
+    start_row = _parse_optional_float(start.get("row"))
+    end_col = _parse_optional_float(end.get("col"))
+    end_row = _parse_optional_float(end.get("row"))
+    if start_col is None or start_row is None or end_col is None or end_row is None:
+        return None
+
+    epsilon = 0.001
+    horizontal = abs(start_row - end_row) <= epsilon
+    vertical = abs(start_col - end_col) <= epsilon
+    if not horizontal and not vertical:
+        return None
+
+    fixed = start_row if horizontal else start_col
+    wall_min = min(start_col, end_col) if horizontal else min(start_row, end_row)
+    wall_max = max(start_col, end_col) if horizontal else max(start_row, end_row)
+    spans: list[tuple[float, float]] = []
+    for opening in openings:
+        span = _opening_span_on_wall(opening, horizontal=horizontal, fixed=fixed)
+        if span is None:
+            continue
+        span_start = max(wall_min, span[0])
+        span_end = min(wall_max, span[1])
+        if span_end - span_start > 0.05:
+            spans.append((span_start, span_end))
+    if not spans:
+        return None
+
+    segments: list[tuple[float, float]] = []
+    cursor = wall_min
+    for span_start, span_end in _merge_opening_spans(spans):
+        if span_start - cursor > 0.05:
+            segments.append((cursor, span_start))
+        cursor = max(cursor, span_end)
+    if wall_max - cursor > 0.05:
+        segments.append((cursor, wall_max))
+
+    if horizontal:
+        forward = start_col <= end_col
+        return [
+            _line_geometry(
+                a if forward else b,
+                fixed,
+                b if forward else a,
+                fixed,
+            )
+            for a, b in segments
+        ]
+
+    forward = start_row <= end_row
+    return [
+        _line_geometry(
+            fixed,
+            a if forward else b,
+            fixed,
+            b if forward else a,
+        )
+        for a, b in segments
+    ]
+
+
+def _opening_span_on_wall(
+    opening: dict[str, Any],
+    *,
+    horizontal: bool,
+    fixed: float,
+) -> tuple[float, float] | None:
+    geometry = opening.get("geometry")
+    if not isinstance(geometry, dict) or geometry.get("type") != "rect":
+        return None
+    col = _parse_optional_float(geometry.get("col"))
+    row = _parse_optional_float(geometry.get("row"))
+    width = _parse_optional_float(geometry.get("width"))
+    height = _parse_optional_float(geometry.get("height"))
+    if col is None or row is None or width is None or height is None:
+        return None
+    if horizontal:
+        if not (row - 0.001 <= fixed <= row + height + 0.001):
+            return None
+        return (col, col + width)
+    if not (col - 0.001 <= fixed <= col + width + 0.001):
+        return None
+    return (row, row + height)
+
+
+def _merge_opening_spans(spans: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    merged: list[tuple[float, float]] = []
+    for start, end in sorted(spans):
+        if not merged or start > merged[-1][1] + 0.001:
+            merged.append((start, end))
+        else:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+    return merged
+
+
+def _line_geometry(
+    from_col: float, from_row: float, to_col: float, to_row: float
+) -> dict[str, Any]:
+    return {
+        "type": "line",
+        "from": {"col": round(from_col, 3), "row": round(from_row, 3)},
+        "to": {"col": round(to_col, 3), "row": round(to_row, 3)},
+    }
+
+
 def _is_element_linked(layout: dict[str, Any], element_id: str) -> bool:
     for collection_name in ("pois", "exits"):
         for item in layout.get(collection_name, []) or []:
@@ -1100,40 +1482,46 @@ def _is_element_linked(layout: dict[str, Any], element_id: str) -> bool:
     return False
 
 
-def _door_geometry(pos: dict[str, Any], cols: int, rows: int) -> dict[str, Any]:
-    col = int(pos.get("col", 0))
-    row = int(pos.get("row", 0))
-    if col <= 0:
+def _door_geometry(
+    pos: dict[str, Any],
+    cols: int,
+    rows: int,
+    *,
+    facing: str | None = None,
+) -> dict[str, Any]:
+    col = int(_clamp_float(pos.get("col"), 0.0, float(cols - 1), 0.0))
+    row = int(_clamp_float(pos.get("row"), 0.0, float(rows - 1), 0.0))
+    if facing == "west" or (facing is None and col <= 0):
         return {
             "type": "rect",
             "col": 0.0,
-            "row": max(0.0, row + 0.1),
-            "width": 0.22,
-            "height": 0.8,
+            "row": float(row),
+            "width": 0.24,
+            "height": 1.0,
         }
-    if col >= cols - 1:
+    if facing == "east" or (facing is None and col >= cols - 1):
         return {
             "type": "rect",
-            "col": cols - 0.22,
-            "row": max(0.0, row + 0.1),
-            "width": 0.22,
-            "height": 0.8,
+            "col": cols - 0.24,
+            "row": float(row),
+            "width": 0.24,
+            "height": 1.0,
         }
-    if row <= 0:
+    if facing == "north" or (facing is None and row <= 0):
         return {
             "type": "rect",
-            "col": max(0.0, col + 0.1),
+            "col": float(col),
             "row": 0.0,
-            "width": 0.8,
-            "height": 0.22,
+            "width": 1.0,
+            "height": 0.24,
         }
-    if row >= rows - 1:
+    if facing == "south" or (facing is None and row >= rows - 1):
         return {
             "type": "rect",
-            "col": max(0.0, col + 0.1),
-            "row": rows - 0.22,
-            "width": 0.8,
-            "height": 0.22,
+            "col": float(col),
+            "row": rows - 0.24,
+            "width": 1.0,
+            "height": 0.24,
         }
     return {"type": "rect", "col": col + 0.15, "row": row + 0.15, "width": 0.7, "height": 0.7}
 
@@ -1158,6 +1546,18 @@ def _is_interior_scene(layout: dict[str, Any]) -> bool:
 def _apply_element_3d_defaults(element: dict[str, Any], *, interior: bool) -> None:
     """Guarantee concrete ``height_m``/``elevation_m`` on one element (3D hints)."""
     kind = str(element.get("kind") or "")
+    facing = _clean_text(element.get("facing"), max_len=16).lower()
+    if facing in SCENE_ELEMENT_FACINGS:
+        element["facing"] = facing
+    else:
+        element.pop("facing", None)
+    vertical_direction = _clean_text(element.get("vertical_direction"), max_len=16).lower()
+    if vertical_direction in SCENE_ELEMENT_VERTICAL_DIRECTIONS:
+        element["vertical_direction"] = vertical_direction
+    elif kind == "stairs":
+        element["vertical_direction"] = _infer_vertical_direction(_element_corpus(element))
+    else:
+        element.pop("vertical_direction", None)
     height_m = _parse_optional_float(element.get("height_m"))
     if height_m is not None:
         element["height_m"] = round(
@@ -1174,6 +1574,13 @@ def _apply_element_3d_defaults(element: dict[str, Any], *, interior: bool) -> No
         )
     else:
         element["elevation_m"] = 0.0
+
+
+def _element_corpus(element: dict[str, Any]) -> str:
+    return " ".join(
+        str(element.get(key) or "")
+        for key in ("id", "name", "description", "kind", "state", "physical_state")
+    ).casefold()
 
 
 def _apply_scene_3d_defaults(layout: dict[str, Any], *, time_of_day: str | None) -> None:

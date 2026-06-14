@@ -2,7 +2,12 @@
 // consommée par SceneRuntime. Aucune dépendance à Vue/Pinia ni à three ici :
 // les adapters restent testables sans WebGL.
 
-import type { SceneElementGeometry, SceneTheme } from '../types'
+import type {
+  SceneElementFacing,
+  SceneElementGeometry,
+  SceneElementVerticalDirection,
+  SceneTheme,
+} from '../types'
 
 export interface GridDims {
   cols: number
@@ -47,6 +52,10 @@ export interface ElementSpec {
   selected: boolean
   /** Hint public validé côté manifest ; null → heuristique/fallback procédural. */
   modelKey: string | null
+  /** Direction cardinale vers laquelle l'accès ou élément mural s'ouvre. */
+  facing: SceneElementFacing | null
+  /** Sens vertical d'un escalier quand il est emprunté vers `facing`. */
+  verticalDirection: SceneElementVerticalDirection | null
 }
 
 export type TokenKind = 'hero' | 'poi' | 'exit' | 'combatant' | 'npc'
