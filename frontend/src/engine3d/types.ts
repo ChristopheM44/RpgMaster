@@ -45,6 +45,8 @@ export interface ElementSpec {
   interactive: boolean
   inspectable: boolean
   selected: boolean
+  /** Hint public validé côté manifest ; null → heuristique/fallback procédural. */
+  modelKey: string | null
 }
 
 export type TokenKind = 'hero' | 'poi' | 'exit' | 'combatant' | 'npc'

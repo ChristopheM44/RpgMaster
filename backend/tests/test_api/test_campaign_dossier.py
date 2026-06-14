@@ -575,6 +575,84 @@ async def test_forge_draft_dungeon_only_forces_dungeon_seed(async_client):
 
 
 @pytest.mark.asyncio
+async def test_private_runtime_context_hydrates_dungeon_configs_only_server_side(
+    async_client,
+    db_session,
+):
+    campaign = await _create_campaign(async_client)
+    draft = await async_client.post(
+        f"/api/campaigns/{campaign['id']}/forge-draft",
+        json={
+            "brief": {"title": "Sous la colline"},
+            "options": {"dungeon_only": True},
+        },
+    )
+    assert draft.status_code == 200
+    validated = await async_client.post(
+        f"/api/campaigns/{campaign['id']}/validate-contract",
+        json={"player_contract": draft.json()["player_contract"]},
+    )
+    assert validated.status_code == 200
+
+    session_id = campaign["session_ids"][0]
+    runtime = await campaign_dossier_service.private_runtime_context_for_session(
+        session_id,
+        db_session,
+    )
+    public_context = await campaign_dossier_service.map_context_for_session(session_id, db_session)
+
+    assert runtime["world_maps"]["region_map"] is not None
+    assert runtime["world_maps"]["active_dungeon_id"] is None
+    assert len(runtime["dungeons"]) == 1
+    config = next(iter(runtime["dungeons"].values()))
+    assert config["endpoint_node_id"]
+    assert config["params"]["size"] == "medium"
+    assert "dungeons" not in public_context
+
+
+@pytest.mark.asyncio
+async def test_start_game_hydrates_private_dungeon_configs(async_client, db_session):
+    campaign = await _create_campaign(async_client)
+    draft = await async_client.post(
+        f"/api/campaigns/{campaign['id']}/forge-draft",
+        json={
+            "brief": {"title": "Sous la colline"},
+            "options": {"dungeon_only": True},
+        },
+    )
+    assert draft.status_code == 200
+    validated = await async_client.post(
+        f"/api/campaigns/{campaign['id']}/validate-contract",
+        json={"player_contract": draft.json()["player_contract"]},
+    )
+    assert validated.status_code == 200
+
+    session_id = campaign["session_ids"][0]
+    char_resp = await async_client.post(
+        "/api/characters/",
+        json={**BASE_CHARACTER, "session_id": session_id},
+    )
+    assert char_resp.status_code == 201
+
+    start = await async_client.post(f"/api/game/{session_id}/start", json={})
+    assert start.status_code == 200
+
+    result = await db_session.execute(select(GameState).where(GameState.session_id == session_id))
+    game_state = result.scalar_one()
+    assert len(game_state.state_data["dungeons"]) == 1
+    config = next(iter(game_state.state_data["dungeons"].values()))
+    assert config["endpoint_node_id"]
+    assert game_state.state_data["world_maps"]["region_map"] is not None
+
+    state_response = await async_client.get(f"/api/game/{session_id}/state")
+    assert state_response.status_code == 200
+    payload = state_response.json()
+    assert "dungeons" not in payload
+    assert payload["region_map"] is not None
+    assert payload["active_dungeon_id"] is None
+
+
+@pytest.mark.asyncio
 async def test_forge_job_preserves_all_detected_chapters(async_client):
     campaign = await _create_campaign(async_client)
 

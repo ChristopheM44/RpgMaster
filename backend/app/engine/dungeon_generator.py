@@ -270,6 +270,7 @@ def room_scene_skeleton(bp: DungeonBlueprint, room_id: str) -> dict[str, Any]:
         "pois": pois,
         "exits": exits,
         "party_positions": {},
+        "elements": _room_elements(room),
         "ambiance": {"light": "torchlit", "fog_density": 0.25},
         "vegetation_density": 0.0,
     }
@@ -466,6 +467,7 @@ def _room_pois(room: DungeonRoom) -> list[dict[str, Any]]:
                 "position": {"col": 8, "row": 5},
                 "description": "Un coffre renforcé repose sous une couche de poussière.",
                 "action_hint": "Examiner ou forcer la serrure.",
+                "element_id": "element_loot_cache",
             }
         ]
     if room.kind == "snare":
@@ -478,6 +480,7 @@ def _room_pois(room: DungeonRoom) -> list[dict[str, Any]]:
                 "position": {"col": 5, "row": 5},
                 "description": "Des dalles plus claires dessinent une ligne presque invisible.",
                 "action_hint": "Repérer, désamorcer ou contourner le piège.",
+                "element_id": "element_floor_snare",
             }
         ]
     if room.kind == "lair":
@@ -490,6 +493,205 @@ def _room_pois(room: DungeonRoom) -> list[dict[str, Any]]:
                 "position": {"col": 6, "row": 3},
                 "description": "Une marque ancienne signale que ce lieu est revendiqué.",
                 "action_hint": "Identifier l'origine de la marque.",
+                "element_id": "element_boss_sign",
             }
         ]
     return []
+
+
+def _room_elements(room: DungeonRoom) -> list[dict[str, Any]]:
+    common_lights = [
+        _asset_element(
+            "torch_nw",
+            "Torche murale",
+            "light",
+            _rect(1.0, 1.0, 0.45, 0.45),
+            "prop/torch_mounted",
+            blocks_movement=False,
+            opaque=False,
+            interactive=True,
+        ),
+        _asset_element(
+            "torch_se",
+            "Torche murale",
+            "light",
+            _rect(10.55, 10.55, 0.45, 0.45),
+            "prop/torch_mounted",
+            blocks_movement=False,
+            opaque=False,
+            interactive=True,
+        ),
+    ]
+    by_kind: dict[DungeonRoomKind, list[dict[str, Any]]] = {
+        "gateway": [
+            _asset_element(
+                "entry_stairs",
+                "Escalier d'entrée",
+                "stairs",
+                _rect(5.2, 1.0, 1.6, 1.3),
+                "prop/stairs",
+                blocks_movement=False,
+                opaque=False,
+                interactive=True,
+            ),
+            _asset_element(
+                "entry_rubble",
+                "Débris du seuil",
+                "cover",
+                _rect(3.0, 7.0, 1.2, 1.0),
+                "prop/rubble_large",
+            ),
+        ],
+        "chamber": [
+            _asset_element(
+                "pillar_west", "Pilier de garde", "cover", _rect(3.0, 4.0, 0.8, 0.8), "prop/pillar"
+            ),
+            _asset_element(
+                "pillar_east", "Pilier de garde", "cover", _rect(8.2, 6.8, 0.8, 0.8), "prop/pillar"
+            ),
+            _asset_element(
+                "supply_crates",
+                "Caisses de garnison",
+                "cover",
+                _rect(6.0, 3.0, 1.2, 0.9),
+                "prop/crates_stacked",
+            ),
+        ],
+        "vault": [
+            _asset_element(
+                "element_loot_cache",
+                "Coffre au trésor scellé",
+                "furniture",
+                _rect(7.65, 4.65, 1.0, 1.0),
+                "prop/chest_gold",
+                interactive=True,
+            ),
+            _asset_element(
+                "vault_shelf",
+                "Étagère d'archives",
+                "furniture",
+                _rect(1.0, 4.2, 0.7, 2.2),
+                "prop/shelf_large",
+            ),
+            _asset_element(
+                "vault_barrels",
+                "Tonneaux poussiéreux",
+                "cover",
+                _rect(9.0, 8.0, 1.1, 1.1),
+                "prop/barrel_large",
+            ),
+        ],
+        "lair": [
+            _asset_element(
+                "element_boss_sign",
+                "Autel marqué",
+                "decor",
+                _rect(5.2, 2.4, 1.6, 1.0),
+                "prop/table_medium",
+                interactive=True,
+            ),
+            _asset_element(
+                "lair_pillar_west",
+                "Pilier rituel",
+                "cover",
+                _rect(2.5, 5.0, 0.9, 0.9),
+                "prop/pillar",
+            ),
+            _asset_element(
+                "lair_pillar_east",
+                "Pilier rituel",
+                "cover",
+                _rect(8.6, 5.0, 0.9, 0.9),
+                "prop/pillar",
+            ),
+            _asset_element(
+                "lair_rubble",
+                "Gravats rituels",
+                "cover",
+                _rect(6.0, 8.5, 1.4, 1.0),
+                "prop/rubble_large",
+            ),
+        ],
+        "snare": [
+            _asset_element(
+                "element_floor_snare",
+                "Dalles piégées",
+                "hazard",
+                _ellipse(5.5, 5.5, 1.2, 0.9),
+                "",
+                blocks_movement=False,
+                opaque=False,
+                interactive=True,
+            ),
+            _asset_element(
+                "snare_crates",
+                "Caisses renversées",
+                "cover",
+                _rect(2.5, 7.0, 1.2, 0.9),
+                "prop/crates_stacked",
+            ),
+            _asset_element(
+                "snare_rubble",
+                "Gravats instables",
+                "cover",
+                _rect(8.2, 3.0, 1.2, 1.0),
+                "prop/rubble_large",
+            ),
+        ],
+        "passage": [
+            _asset_element(
+                "passage_barrels",
+                "Tonneaux abandonnés",
+                "cover",
+                _rect(3.0, 4.8, 1.0, 1.0),
+                "prop/barrel_large",
+            ),
+            _asset_element(
+                "passage_crates",
+                "Caisses empilées",
+                "cover",
+                _rect(8.0, 6.3, 1.2, 0.9),
+                "prop/crates_stacked",
+            ),
+        ],
+    }
+    return [*common_lights, *by_kind.get(room.kind, [])]
+
+
+def _rect(col: float, row: float, width: float, height: float) -> dict[str, Any]:
+    return {"type": "rect", "col": col, "row": row, "width": width, "height": height}
+
+
+def _ellipse(col: float, row: float, radius_col: float, radius_row: float) -> dict[str, Any]:
+    return {
+        "type": "ellipse",
+        "col": col,
+        "row": row,
+        "radius_col": radius_col,
+        "radius_row": radius_row,
+    }
+
+
+def _asset_element(
+    element_id: str,
+    name: str,
+    kind: str,
+    geometry: dict[str, Any],
+    asset_key: str,
+    *,
+    blocks_movement: bool = True,
+    opaque: bool = True,
+    interactive: bool = False,
+) -> dict[str, Any]:
+    element = {
+        "id": element_id,
+        "name": name,
+        "kind": kind,
+        "geometry": geometry,
+        "blocks_movement": blocks_movement,
+        "opaque": opaque,
+        "interactive": interactive,
+    }
+    if asset_key:
+        element["asset_key"] = asset_key
+    return element

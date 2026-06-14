@@ -190,6 +190,77 @@ def test_opening_seed_merges_idempotently_with_n3_forge_seed() -> None:
     assert all("Localiser la source" not in str(n.get("name", "")) for n in nodes)
 
 
+def test_opening_response_reuses_existing_forged_endpoint_ids() -> None:
+    """L'ouverture doit viser les nœuds déjà forgés, pas recalculer un doublon."""
+    from app.api.routes_game import _opening_response
+
+    active = SimpleNamespace(
+        state_data={
+            "characters": {"mira": {"name": "Mira"}},
+            "world_maps": {
+                "region_map": {
+                    "id": "region",
+                    "name": "Région forgée",
+                    "current_node_id": "camp_forge",
+                    "nodes": [
+                        {
+                            "id": "camp_forge",
+                            "name": "Camp du Crépuscule",
+                            "kind": "camp",
+                            "position": {"x": 30, "y": 50},
+                            "status": "current",
+                        },
+                        {
+                            "id": "endpoint_forge",
+                            "name": "Le Cœur du Sanctuaire",
+                            "kind": "dungeon",
+                            "position": {"x": 70, "y": 40},
+                            "status": "rumored",
+                        },
+                    ],
+                    "edges": [],
+                }
+            },
+        }
+    )
+    campaign_context = {
+        "active_chapter": {
+            "objective_endpoint": {
+                "name": "Le Cœur du Sanctuaire",
+                "kind": "dungeon",
+                "hint": "Descendre sous les arches brisées.",
+            },
+            "opening_scene": {
+                "place": "Camp du Crépuscule",
+                "venue": None,
+                "description": "Le camp tremble sous la lumière froide du seuil.",
+            },
+        },
+        "player_contract": {
+            "known_objectives": ["Atteindre le sanctuaire et comprendre son cœur."]
+        },
+    }
+
+    response = _opening_response(active, campaign_context=campaign_context)
+    region = _action_by_type(response.actions, "region_map_update")
+    scene = _action_by_type(response.actions, "scene_layout")
+
+    assert region is not None
+    assert scene is not None
+    assert region.params["current_node_id"] == "camp_forge"
+    assert scene.params["scene_id"] == "scene_camp_forge"
+    assert any(
+        node["id"] == "endpoint_forge"
+        and node["name"] == "Le Cœur du Sanctuaire"
+        and node["kind"] == "dungeon"
+        for node in region.params["nodes_upsert"]
+    )
+    assert any(
+        edge["from"] == "camp_forge" and edge["to"] == "endpoint_forge"
+        for edge in region.params["edges_upsert"]
+    )
+
+
 def test_opening_response_does_not_add_route_exit_inside_square() -> None:
     from app.api.routes_game import _opening_response
 

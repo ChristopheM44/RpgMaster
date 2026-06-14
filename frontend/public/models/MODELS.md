@@ -7,7 +7,7 @@
 > Un test (`engine3d/__tests__/manifest.test.ts`) garantit que **chaque entrée du
 > manifest a son fichier** sur le disque (anti-régression).
 
-**État : 58 modèles, ~4,7 Mo** — 5 aventuriers, 4 squelettes, 22 donjon,
+**État : 60 modèles, ~4,7 Mo** — 5 aventuriers, 4 squelettes, 24 donjon,
 27 nature (16 Kenney + 11 KayKit Forest).
 
 ## Comment un modèle est choisi (3 familles)
@@ -15,7 +15,7 @@
 | Famille | Couche | Fonction de mapping | Repli |
 |---|---|---|---|
 | Personnages (héros / PNJ / ennemis) | `TokenLayer` | `modelForClass` / `modelForNpc` / `modelForMonster` | pion (`buildPawn`) |
-| Éléments (mur, porte, mobilier, décor…) | `ElementsLayer` | `modelForElement` (kind + mots-clés) | volume procédural |
+| Éléments (mur, porte, escalier, mobilier, décor…) | `ElementsLayer` | `asset_key` validé puis `modelForElement` | volume procédural |
 | POI (marqueurs) | `TokenLayer.buildPoi` | *(aucun modèle — icône flottante)* | — |
 
 ---
@@ -48,10 +48,12 @@ KayKit Skeletons (riggés). `modelForMonster` (le rôle de lanceur prime sur l'e
 > modèle de créature n'existe encore (voir « Ajouter des modèles » → Phase créatures).
 
 ## Props de donjon — `dungeon/`
-KayKit Dungeon Remastered. `modelForElement` (kind `furniture`/`cover`/`decor`/`light`/`door`) :
+KayKit Dungeon Remastered. `asset_key` explicite prioritaire, puis `modelForElement`
+(kind `wall`/`stairs`/`furniture`/`cover`/`decor`/`light`/`door`) :
 
 | Modèle | Mots-clés / règle |
 |---|---|
+| `wall` / `wall_corner` | kind `wall` ; les géométries `line` sont segmentées par le runtime |
 | `table_medium` / `table_long` / `table_small` | table, comptoir, autel, établi — **variante selon l'empreinte** |
 | `chair` / `stool` | chaise, banc, fauteuil, trône / tabouret |
 | `barrel_small` / `barrel_large` | tonneau, baril — variante selon l'empreinte |
@@ -63,7 +65,7 @@ KayKit Dungeon Remastered. `modelForElement` (kind `furniture`/`cover`/`decor`/`
 | `rubble_large` | gravats, débris, éboulis |
 | `door` (`wall_doorway`) | kind `door` |
 | `torch_lit` / `torch_mounted` | torche, brasero, flambeau / torche **murale**, applique |
-| `stairs` | *(non utilisé : les escaliers sont procéduraux, intégrés à l'élévation)* |
+| `stairs` | kind `stairs` ou `asset_key: "prop/stairs"` |
 
 ## Nature & décor — `nature/`
 **KayKit Forest** (`nature/forest/`, scatter tempéré) + **Kenney Nature Kit** (reste — pas
@@ -91,9 +93,6 @@ statue 2,2 m / obélisque 2,8 m) au lieu d'être ajustés à l'empreinte — sin
 par le plafond dérivé du défaut `decor` (0,6 m). C'est le mécanisme à réutiliser pour
 mettre à l'échelle les futures créatures (rat ↔ dragon).
 
-> `wall.glb`, `wall_corner.glb` sont présents mais **non mappés** : les murs sont rendus
-> de façon procédurale (creux pour la lisibilité, cf. moteur).
->
 > `nature/forest/*.gltf` sont au format glTF + `.bin` + texture partagée `forest_texture.png`
 > (seul format livré par ce pack) au lieu du `.glb` unique habituel — `GLTFLoader` résout les
 > fichiers liés par URI relative, donc aucune conversion n'a été nécessaire (cf. `CREDITS.md`).

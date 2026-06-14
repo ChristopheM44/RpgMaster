@@ -4,6 +4,7 @@
 
 import * as THREE from 'three'
 import type { ElementSpec } from '../types'
+import type { LoadedModel } from '../assets/AssetRegistry'
 import type { EngineCtx } from '../core/context'
 import { buildProceduralElement } from '../assets/ProceduralFactory'
 import { modelForElement, PROP_TARGET_HEIGHT_M } from '../assets/manifest'
@@ -89,7 +90,7 @@ export class ElementsLayer {
     }
   }
 
-  /** Tente le remplacement procédural → modèle (rect/ellipse uniquement). */
+  /** Tente le remplacement procédural → modèle (hint explicite puis heuristique). */
   private tryModelSwap(
     spec: ElementSpec,
     container: THREE.Group,
@@ -97,24 +98,13 @@ export class ElementsLayer {
     generation: number,
     ctx: EngineCtx,
   ): void {
-    if (spec.geometry.type === 'line') return
-    const footprint = elementFootprintWorld(spec)
-    const modelKey = modelForElement(spec.kind, spec.name, footprint)
+    const placement = elementPlacementWorld(spec, ctx)
+    const modelKey = spec.modelKey ?? modelForElement(spec.kind, spec.name, placement.footprint)
     if (!modelKey) return
 
     void ctx.registry.load(modelKey).then((model) => {
       if (!model || generation !== this.generation || !this.entries.has(spec.id)) return
-      // Props verticaux (statue, obélisque) : hauteur intrinsèque, sinon l'empreinte
-      // + le plafond maxHeight les écraseraient. Le reste suit l'empreinte de l'élément.
-      const intrinsicHeightM = PROP_TARGET_HEIGHT_M[modelKey]
-      const instance = ctx.registry.instantiate(
-        model,
-        intrinsicHeightM != null
-          ? { targetHeight: metersToWorld(intrinsicHeightM, ctx.cellSizeM) }
-          : { footprint, maxHeight: metersToWorld(Math.max(spec.heightM, 0.4) * 1.6, ctx.cellSizeM) },
-      )
-      const center = elementCenterWorld(spec, ctx)
-      instance.position.set(center.x, metersToWorld(spec.elevationM, ctx.cellSizeM), center.z)
+      const instance = instantiateElementModel(model, modelKey, spec, placement, ctx)
       if (spec.subtle) applySubtle(instance)
       container.remove(procedural)
       disposeObject(procedural)
@@ -159,6 +149,70 @@ function elementFootprintWorld(spec: ElementSpec): { x: number; z: number } {
   }
   const length = Math.hypot(geometry.to.col - geometry.from.col, geometry.to.row - geometry.from.row)
   return { x: Math.max(0.3, length), z: 0.2 }
+}
+
+interface ElementPlacement {
+  center: { x: number; z: number }
+  footprint: { x: number; z: number }
+  rotationY: number
+}
+
+function elementPlacementWorld(spec: ElementSpec, ctx: EngineCtx): ElementPlacement {
+  const geometry = spec.geometry
+  if (geometry.type === 'line') {
+    const a = gridPointToWorld(geometry.from.col, geometry.from.row, ctx.dims)
+    const b = gridPointToWorld(geometry.to.col, geometry.to.row, ctx.dims)
+    return {
+      center: { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 },
+      footprint: elementFootprintWorld(spec),
+      rotationY: -Math.atan2(b.z - a.z, b.x - a.x),
+    }
+  }
+  return {
+    center: elementCenterWorld(spec, ctx),
+    footprint: elementFootprintWorld(spec),
+    rotationY: 0,
+  }
+}
+
+function instantiateElementModel(
+  model: LoadedModel,
+  modelKey: string,
+  spec: ElementSpec,
+  placement: ElementPlacement,
+  ctx: EngineCtx,
+): THREE.Group {
+  const elevation = metersToWorld(spec.elevationM, ctx.cellSizeM)
+  if (modelKey === 'prop/wall' && spec.geometry.type === 'line') {
+    const group = new THREE.Group()
+    const count = Math.max(1, Math.round(placement.footprint.x))
+    const segmentX = Math.max(0.3, placement.footprint.x / count)
+    for (let i = 0; i < count; i += 1) {
+      const segment = ctx.registry.instantiate(model, {
+        footprint: { x: segmentX, z: placement.footprint.z },
+        maxHeight: metersToWorld(Math.max(spec.heightM, 0.4) * 1.6, ctx.cellSizeM),
+      })
+      segment.position.x = -placement.footprint.x / 2 + segmentX * (i + 0.5)
+      group.add(segment)
+    }
+    group.position.set(placement.center.x, elevation, placement.center.z)
+    group.rotation.y = placement.rotationY
+    return group
+  }
+
+  const intrinsicHeightM = PROP_TARGET_HEIGHT_M[modelKey]
+  const instance = ctx.registry.instantiate(
+    model,
+    intrinsicHeightM != null
+      ? { targetHeight: metersToWorld(intrinsicHeightM, ctx.cellSizeM) }
+      : {
+          footprint: placement.footprint,
+          maxHeight: metersToWorld(Math.max(spec.heightM, 0.4) * 1.6, ctx.cellSizeM),
+        },
+  )
+  instance.position.set(placement.center.x, elevation, placement.center.z)
+  instance.rotation.y = placement.rotationY
+  return instance
 }
 
 function elementCenterWorld(spec: ElementSpec, ctx: EngineCtx): { x: number; z: number } {

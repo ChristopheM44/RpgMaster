@@ -722,6 +722,35 @@ async def map_context_for_session(
     )
 
 
+async def private_runtime_context_for_session(
+    session_id: str,
+    db: AsyncSession,
+) -> dict[str, Any]:
+    """Return campaign runtime data that must stay server-side.
+
+    Public map payloads deliberately omit ``dungeons``. The active session still
+    needs those deterministic configs so travelling to a dungeon endpoint can
+    instantiate the procedural room graph.
+    """
+    campaign = await campaign_for_session(session_id, db)
+    if campaign is None:
+        return {"world_maps": empty_world_maps(), "dungeons": {}}
+    dossier = await get_dossier(campaign.id, db)
+    if dossier is None or dossier.generation_status != "validated":
+        return {"world_maps": empty_world_maps(), "dungeons": {}}
+    contract = sanitize_player_contract(dossier.player_contract or {}, campaign, brief={})
+    gm_dossier = sanitize_gm_dossier(dossier.gm_dossier or {}, campaign, contract)
+    return {
+        "world_maps": {
+            "region_map": gm_dossier.get("region_map"),
+            "city_maps": gm_dossier.get("city_maps") or {},
+            "active_city_id": gm_dossier.get("active_city_id"),
+            "active_dungeon_id": gm_dossier.get("active_dungeon_id"),
+        },
+        "dungeons": gm_dossier.get("dungeons") or {},
+    }
+
+
 def _world_maps_from_state_data(state_data: dict[str, Any] | None) -> dict[str, Any]:
     if not isinstance(state_data, dict):
         return empty_world_maps()

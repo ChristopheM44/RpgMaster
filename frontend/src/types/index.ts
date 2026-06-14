@@ -702,6 +702,7 @@ export interface SceneElement {
   physical_state?: string
   facts?: string[]
   /** Hints 3D optionnels (mètres) — défauts par kind si absents. */
+  asset_key?: string
   height_m?: number
   elevation_m?: number
 }

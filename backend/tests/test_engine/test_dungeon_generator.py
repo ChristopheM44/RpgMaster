@@ -67,7 +67,33 @@ def test_room_scene_skeleton_enriches_as_dungeon_room() -> None:
 
     wall_ids = {element["id"] for element in scene["elements"] if element.get("kind") == "wall"}
     door_count = sum(1 for element in scene["elements"] if element.get("kind") == "door")
+    asset_keys = {element.get("asset_key") for element in scene["elements"]}
     assert {"wall_north", "wall_east", "wall_south", "wall_west"} <= wall_ids
     assert door_count == len(scene["exits"])
+    assert {"prop/wall", "prop/wall_corner", "prop/stairs", "prop/torch_mounted"} <= asset_keys
+    assert all(
+        element.get("asset_key") == "prop/door"
+        for element in scene["elements"]
+        if element.get("kind") == "door"
+    )
     assert scene["ambiance"] == {"light": "torchlit", "fog_density": 0.25}
     assert scene["vegetation_density"] == 0.0
+
+
+def test_room_scene_skeleton_adds_kaykit_presets_by_room_kind() -> None:
+    bp = generate_dungeon("crypt-scene-assets", {"size": "large"})
+    assets_by_kind: dict[str, set[str]] = {}
+
+    for room in bp.rooms:
+        scene = room_scene_skeleton(bp, room.id)
+        assets = {
+            str(element["asset_key"])
+            for element in scene["elements"]
+            if isinstance(element.get("asset_key"), str)
+        }
+        assets_by_kind.setdefault(room.kind, set()).update(assets)
+
+    assert {"prop/stairs", "prop/rubble_large", "prop/torch_mounted"} <= assets_by_kind["gateway"]
+    assert {"prop/pillar", "prop/crates_stacked"} <= assets_by_kind["chamber"]
+    assert "prop/chest_gold" in assets_by_kind["vault"]
+    assert {"prop/table_medium", "prop/pillar", "prop/rubble_large"} <= assets_by_kind["lair"]

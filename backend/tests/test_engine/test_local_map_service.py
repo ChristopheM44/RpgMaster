@@ -195,6 +195,7 @@ def test_embedded_exit_stays_internal_and_gets_element_link() -> None:
     linked = next(element for element in layout["elements"] if element["id"] == exit_["element_id"])
     assert linked["kind"] == "stairs"
     assert linked["interactive"] is True
+    assert linked["asset_key"] == "prop/stairs"
 
 
 def test_explicit_terrain_path_is_preserved() -> None:
@@ -263,6 +264,13 @@ def test_enrich_injects_3d_defaults_for_interior_scene() -> None:
         assert element["elevation_m"] == 0.0
     assert by_kind["wall"]["height_m"] == 2.5
     assert by_kind["door"]["height_m"] == 2.2
+    assert by_kind["wall"]["asset_key"] == "prop/wall"
+    assert by_kind["door"]["asset_key"] == "prop/door"
+    assert any(
+        element.get("asset_key") == "prop/wall_corner"
+        for element in layout["elements"]
+        if element.get("kind") == "wall"
+    )
     assert layout["ambiance"] == {"light": "torchlit", "fog_density": 0.25}
     assert layout["vegetation_density"] == 0.0
 
@@ -414,6 +422,36 @@ def test_normalize_scene_element_passes_through_clamped_3d_hints() -> None:
     assert bare is not None
     assert "height_m" not in bare
     assert "elevation_m" not in bare
+
+
+def test_normalize_scene_element_preserves_only_safe_asset_keys() -> None:
+    safe = normalize_scene_element(
+        {
+            "id": "escalier",
+            "name": "Escalier de pierre",
+            "kind": "stairs",
+            "geometry": {"type": "rect", "col": 2, "row": 2, "width": 1, "height": 1},
+            "asset_key": "prop/stairs",
+        },
+        12,
+        12,
+    )
+    assert safe is not None
+    assert safe["asset_key"] == "prop/stairs"
+
+    unsafe = normalize_scene_element(
+        {
+            "id": "mur",
+            "name": "Mur",
+            "kind": "wall",
+            "geometry": {"type": "rect", "col": 2, "row": 2, "width": 1, "height": 1},
+            "asset_key": "../../secrets/model.glb",
+        },
+        12,
+        12,
+    )
+    assert unsafe is not None
+    assert "asset_key" not in unsafe
 
 
 def test_enrich_only_adds_3d_keys_to_legacy_persisted_scene() -> None:

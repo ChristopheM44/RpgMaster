@@ -26,6 +26,8 @@ export const MODEL_MANIFEST: Record<string, ModelDef> = {
   'monster/skeleton_rogue': { file: 'skeletons/skeleton_rogue.glb', fit: 'height', animated: true },
   'monster/skeleton_minion': { file: 'skeletons/skeleton_minion.glb', fit: 'height', animated: true },
   // Props (KayKit Dungeon Remastered).
+  'prop/wall': { file: 'dungeon/wall.glb', fit: 'footprint' },
+  'prop/wall_corner': { file: 'dungeon/wall_corner.glb', fit: 'footprint' },
   'prop/table_medium': { file: 'dungeon/table_medium.glb', fit: 'footprint' },
   'prop/table_long': { file: 'dungeon/table_long.glb', fit: 'footprint' },
   'prop/table_small': { file: 'dungeon/table_small.glb', fit: 'footprint' },
@@ -169,6 +171,10 @@ export function modelForMonster(corpus: string | null | undefined): string | nul
 
 // ─── Éléments : kind + nom → prop ────────────────────────────────────────────
 
+export function isModelKey(key: string | null | undefined): key is string {
+  return typeof key === 'string' && MODEL_MANIFEST[key] != null
+}
+
 const FURNITURE_KEYWORDS: [RegExp, string][] = [
   [/table|étal|etal|comptoir|bureau|autel|[ée]tabli/i, 'prop/table_medium'],
   [/banc|chaise|chair|fauteuil|tr[ôo]ne|si[èe]ge/i, 'prop/chair'],
@@ -193,6 +199,7 @@ const FURNITURE_KEYWORDS: [RegExp, string][] = [
 ]
 
 export function modelForElement(kind: string, name: string, footprint: { x: number; z: number }): string | null {
+  if (kind === 'wall') return /angle|corner|coin/i.test(name) ? 'prop/wall_corner' : 'prop/wall'
   if (kind === 'door') return 'prop/door'
   if (kind === 'furniture' || kind === 'cover' || kind === 'decor') {
     for (const [pattern, key] of FURNITURE_KEYWORDS) {
@@ -207,6 +214,7 @@ export function modelForElement(kind: string, name: string, footprint: { x: numb
     if (/torche|torch|brasero|brazier|flambeau|chandelier/i.test(name)) return 'prop/torch_lit'
     return null
   }
+  if (kind === 'stairs') return 'prop/stairs'
   return null
 }
 

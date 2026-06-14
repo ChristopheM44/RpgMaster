@@ -671,6 +671,9 @@ def _normalize_element_patch(raw: dict[str, Any], cols: int, rows: int) -> dict[
     for field in ("blocks_movement", "opaque", "interactive", "discovered"):
         if isinstance(raw.get(field), bool):
             patch[field] = raw[field]
+    asset_key = local_map_service.normalize_asset_key(raw.get("asset_key"))
+    if asset_key:
+        patch["asset_key"] = asset_key
     if isinstance(raw.get("geometry"), dict):
         normalized = local_map_service.normalize_scene_element(
             {**raw, "id": raw.get("id") or "patch_element"},

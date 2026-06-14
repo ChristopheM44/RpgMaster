@@ -6,7 +6,7 @@
 import type { ExHero, ExPoi } from '../../fixtures/exploration'
 import type { SceneElement, SceneLayout, SceneTheme } from '../../types'
 import type { AmbianceLight, ElementSpec, GroundSpec, SceneSpec, TokenSpec } from '../types'
-import { modelForClass, modelForMonster, modelForNpc } from '../assets/manifest'
+import { isModelKey, modelForClass, modelForMonster, modelForNpc } from '../assets/manifest'
 import { resolveTokenOverlaps } from './tokenCollision'
 import { rectCells } from '../utils/gridMath'
 
@@ -162,6 +162,7 @@ export function buildElementSpecs(
       interactive,
       inspectable: isElementInspectable(element, interactive),
       selected: element.id === options.selectedElementId,
+      modelKey: isModelKey(element.asset_key) ? element.asset_key : null,
     }
   })
 

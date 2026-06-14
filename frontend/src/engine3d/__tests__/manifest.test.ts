@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   MODEL_MANIFEST,
+  isModelKey,
   modelForClass,
   modelForElement,
   modelForMonster,
@@ -87,7 +88,10 @@ describe('manifest 3D', () => {
   })
 
   it('éléments : porte → modèle, variantes par empreinte, torche murale', () => {
+    expect(modelForElement('wall', 'Mur nord', { x: 6, z: 0.2 })).toBe('prop/wall')
+    expect(modelForElement('wall', 'Angle de mur', { x: 1, z: 1 })).toBe('prop/wall_corner')
     expect(modelForElement('door', 'Porte de fer', { x: 1, z: 1 })).toBe('prop/door')
+    expect(modelForElement('stairs', 'Escalier de remontée', { x: 1, z: 1 })).toBe('prop/stairs')
     expect(modelForElement('furniture', 'Petite table', { x: 1, z: 1 })).toBe('prop/table_small')
     expect(modelForElement('cover', 'Gros tonneau', { x: 1.6, z: 1.6 })).toBe('prop/barrel_large')
     expect(modelForElement('furniture', 'Petite étagère', { x: 1, z: 0.6 })).toBe('prop/shelf_small')
@@ -140,7 +144,15 @@ describe('manifest 3D', () => {
     expect(modelForElement('cover', 'Tonneaux renversés', { x: 1, z: 1 })).toBe('prop/barrel_small')
     expect(modelForElement('cover', 'Empilement bizarre', { x: 1, z: 1 })).toBe('prop/crates_stacked')
     expect(modelForElement('furniture', 'Machin inconnu', { x: 1, z: 1 })).toBeNull()
-    expect(modelForElement('wall', 'Mur', { x: 4, z: 0.2 })).toBeNull()
+    expect(modelForElement('wall', 'Mur', { x: 4, z: 0.2 })).toBe('prop/wall')
+  })
+
+  it('asset_key explicite : seules les clés manifest connues sont acceptées', () => {
+    expect(isModelKey('prop/wall')).toBe(true)
+    expect(isModelKey('prop/wall_corner')).toBe(true)
+    expect(isModelKey('prop/stairs')).toBe(true)
+    expect(isModelKey('prop/not_in_manifest')).toBe(false)
+    expect(isModelKey(null)).toBe(false)
   })
 
   it('chaque ScatterKind utilisé par un biome a modèles + hauteur cible', () => {

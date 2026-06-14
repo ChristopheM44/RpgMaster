@@ -21,6 +21,7 @@ function spec(kind: string, geometry: ElementSpec['geometry']): ElementSpec {
     interactive: false,
     inspectable: true,
     selected: false,
+    modelKey: null,
   }
 }
 

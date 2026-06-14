@@ -931,6 +931,35 @@ def _build_opening_brief(state_data: dict[str, Any]) -> str:
     return "\n".join(lines).strip()
 
 
+def _region_map_from_active(active: Any) -> dict[str, Any]:
+    state = getattr(active, "state_data", {}) if active is not None else {}
+    world_maps = state.get("world_maps") if isinstance(state, dict) else None
+    region_map = world_maps.get("region_map") if isinstance(world_maps, dict) else None
+    return region_map if isinstance(region_map, dict) else {}
+
+
+def _region_node_by_name(region_map: dict[str, Any], name: str) -> dict[str, Any] | None:
+    wanted = str(name or "").strip()
+    if not wanted:
+        return None
+    for node in region_map.get("nodes") or []:
+        if not isinstance(node, dict):
+            continue
+        if str(node.get("name") or "").strip() == wanted:
+            return node
+    return None
+
+
+def _region_node_by_id(region_map: dict[str, Any], node_id: str) -> dict[str, Any] | None:
+    wanted = str(node_id or "").strip()
+    if not wanted:
+        return None
+    for node in region_map.get("nodes") or []:
+        if isinstance(node, dict) and str(node.get("id") or "").strip() == wanted:
+            return node
+    return None
+
+
 def _opening_response(
     active: Any,
     *,
@@ -969,9 +998,23 @@ def _opening_response(
         else None
     )
     endpoint_node = map_service.seed_endpoint_node(chapter_endpoint)
+    region_map = _region_map_from_active(active)
+    existing_start_node = _region_node_by_name(region_map, start_label)
     if endpoint_node:
-        location_id = map_service.seed_node_id(start_label, "lieu_depart")
-        objective_id = endpoint_node["id"]
+        existing_endpoint_node = _region_node_by_name(
+            region_map,
+            str(endpoint_node.get("name") or ""),
+        ) or _region_node_by_id(region_map, str(endpoint_node.get("id") or ""))
+        location_id = (
+            str(existing_start_node.get("id") or "").strip()
+            if existing_start_node
+            else map_service.seed_node_id(start_label, "lieu_depart")
+        )
+        objective_id = (
+            str(existing_endpoint_node.get("id") or "").strip()
+            if existing_endpoint_node
+            else endpoint_node["id"]
+        )
         if objective_id == location_id:
             objective_id = f"{objective_id}_objectif"[:80]
     else:
@@ -982,7 +1025,9 @@ def _opening_response(
         objective_id = _safe_id(objective, "objectif_rumeur") if objective else ""
         if objective_id == location_id:
             objective_id = ""
-    region_kind = _region_kind_for_location(physical_place)
+    region_kind = str(existing_start_node.get("kind") or "").strip() if existing_start_node else ""
+    if not region_kind:
+        region_kind = _region_kind_for_location(physical_place)
     scene_brief = str(opening_scene.get("description") or "").strip()
     clues = list(opening_scene.get("visible_clues") or [])[:_OPENING_CLUES_MAX]
     present_npcs = list(opening_scene.get("present_npcs") or [])[:_OPENING_NPCS_MAX]
@@ -1599,8 +1644,25 @@ async def start_game(
         if campaign_context is not None:
             await _migrate_missing_opening_scene(session_id, campaign_context, db)
             active.state_data["campaign_context"] = campaign_context
+            runtime_context = await campaign_dossier_service.private_runtime_context_for_session(
+                session_id, db
+            )
+            world_maps = runtime_context.get("world_maps")
+            if isinstance(world_maps, dict):
+                active.state_data["world_maps"] = {
+                    "region_map": world_maps.get("region_map"),
+                    "city_maps": world_maps.get("city_maps") or {},
+                    "active_city_id": world_maps.get("active_city_id"),
+                    "active_dungeon_id": world_maps.get("active_dungeon_id"),
+                }
+            dungeons = runtime_context.get("dungeons")
+            if isinstance(dungeons, dict) and dungeons:
+                active.state_data["dungeons"] = dungeons
+            else:
+                active.state_data.pop("dungeons", None)
         else:
             active.state_data.pop("campaign_context", None)
+            active.state_data.pop("dungeons", None)
 
         # Store adventure context for the GM agent
         if body.adventure_script:

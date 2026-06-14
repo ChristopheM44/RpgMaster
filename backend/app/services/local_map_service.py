@@ -25,6 +25,39 @@ VISUAL_ASSET_STATUSES = {"prompt_ready", "generating", "ready", "failed"}
 TERRAIN_TYPES = {"road", "street", "path", "plaza_paving", "water", "mud"}
 EXIT_PLACEMENTS = {"edge", "embedded"}
 SCENE_AMBIANCE_LIGHTS = {"day", "dusk", "night", "torchlit", "overcast"}
+SCENE_ASSET_KEYS = {
+    "prop/wall",
+    "prop/wall_corner",
+    "prop/door",
+    "prop/table_medium",
+    "prop/table_long",
+    "prop/table_small",
+    "prop/chair",
+    "prop/stool",
+    "prop/keg",
+    "prop/barrel_small",
+    "prop/barrel_large",
+    "prop/crates_stacked",
+    "prop/chest",
+    "prop/chest_gold",
+    "prop/shelf_large",
+    "prop/shelf_small",
+    "prop/pillar",
+    "prop/rubble_large",
+    "prop/bed_frame",
+    "prop/stairs",
+    "prop/torch_lit",
+    "prop/torch_mounted",
+    "prop/campfire",
+    "prop/tent",
+    "prop/pot",
+    "prop/statue",
+    "prop/obelisk",
+    "nature/rock_large_a",
+    "nature/rock_large_b",
+    "nature/rock_small_a",
+    "nature/rock_small_b",
+}
 
 # Défauts 3D optionnels — mêmes valeurs que le fallback client
 # (frontend/src/engine3d/adapters/sceneAdapter.ts) pour rester cohérent.
@@ -210,6 +243,9 @@ def normalize_scene_element(raw: Any, cols: int, rows: int) -> dict[str, Any] | 
         element["visibility"] = visibility
     if isinstance(raw.get("discovered"), bool):
         element["discovered"] = raw["discovered"]
+    asset_key = normalize_asset_key(raw.get("asset_key"))
+    if asset_key:
+        element["asset_key"] = asset_key
     height_m = _parse_optional_float(raw.get("height_m"))
     if height_m is not None:
         element["height_m"] = round(
@@ -221,6 +257,11 @@ def normalize_scene_element(raw: Any, cols: int, rows: int) -> dict[str, Any] | 
             max(_ELEMENT_ELEVATION_MIN_M, min(elevation_m, _ELEMENT_ELEVATION_MAX_M)), 3
         )
     return element
+
+
+def normalize_asset_key(raw: Any) -> str | None:
+    key = _clean_text(raw, max_len=80)
+    return key if key in SCENE_ASSET_KEYS else None
 
 
 def normalize_scene_geometry(raw: Any, cols: int, rows: int) -> dict[str, Any] | None:
@@ -514,6 +555,32 @@ def _add_boundary_walls(by_id: dict[str, dict[str, Any]], cols: int, rows: int) 
                 "geometry": geometry,
                 "blocks_movement": True,
                 "opaque": True,
+                "asset_key": "prop/wall",
+            },
+        )
+    corners = {
+        "wall_corner_nw": (0.0, 0.0),
+        "wall_corner_ne": (cols - 0.6, 0.0),
+        "wall_corner_se": (cols - 0.6, rows - 0.6),
+        "wall_corner_sw": (0.0, rows - 0.6),
+    }
+    for element_id, (col, row) in corners.items():
+        by_id.setdefault(
+            element_id,
+            {
+                "id": element_id,
+                "name": "Angle de mur",
+                "kind": "wall",
+                "geometry": {
+                    "type": "rect",
+                    "col": round(max(0.0, col), 3),
+                    "row": round(max(0.0, row), 3),
+                    "width": 0.6,
+                    "height": 0.6,
+                },
+                "blocks_movement": True,
+                "opaque": True,
+                "asset_key": "prop/wall_corner",
             },
         )
 
@@ -545,6 +612,7 @@ def _add_exit_doors(
                 "blocks_movement": False,
                 "opaque": False,
                 "interactive": True,
+                "asset_key": "prop/door",
             },
         )
 
@@ -608,6 +676,7 @@ def _add_default_furniture(
             "description": "Un meuble massif structure l'espace et peut servir de couvert.",
             "blocks_movement": True,
             "opaque": False,
+            "asset_key": "prop/table_medium",
         },
     )
     if _clean_text(layout.get("scene_theme"), max_len=40) != "cave":
@@ -627,6 +696,7 @@ def _add_default_furniture(
                 "description": "Un élément de décor assez haut pour masquer une partie de la vue.",
                 "blocks_movement": True,
                 "opaque": True,
+                "asset_key": "prop/shelf_large",
             },
         )
 
@@ -685,8 +755,35 @@ def _add_poi_elements(
                 "blocks_movement": element_kind in {"cover", "furniture"},
                 "opaque": element_kind in {"cover", "furniture"},
                 "interactive": True,
+                **_default_asset_for_poi_element(poi, element_kind),
             },
         )
+
+
+def _default_asset_for_poi_element(poi: dict[str, Any], element_kind: str) -> dict[str, str]:
+    explicit = normalize_asset_key(poi.get("asset_key"))
+    if explicit:
+        return {"asset_key": explicit}
+    corpus = " ".join(
+        str(poi.get(key) or "") for key in ("name", "description", "action_hint", "icon")
+    ).casefold()
+    if element_kind == "light":
+        if any(word in corpus for word in ("murale", "applique", "wall", "mounted")):
+            return {"asset_key": "prop/torch_mounted"}
+        return {"asset_key": "prop/torch_lit"}
+    if element_kind == "furniture":
+        if any(word in corpus for word in ("or", "doré", "dore", "trésor", "tresor")):
+            return {"asset_key": "prop/chest_gold"}
+        return {"asset_key": "prop/chest"}
+    if element_kind == "cover":
+        if any(word in corpus for word in ("pilier", "colonne", "pillar")):
+            return {"asset_key": "prop/pillar"}
+        if any(word in corpus for word in ("gravat", "débris", "debris", "éboulis", "eboulis")):
+            return {"asset_key": "prop/rubble_large"}
+        if any(word in corpus for word in ("tonneau", "baril", "barrel")):
+            return {"asset_key": "prop/barrel_large"}
+        return {"asset_key": "prop/crates_stacked"}
+    return {}
 
 
 def _normalize_exits(
@@ -766,6 +863,7 @@ def _ensure_embedded_exit_element(
             "blocks_movement": False,
             "opaque": False,
             "interactive": True,
+            "asset_key": "prop/stairs" if kind == "stairs" else "prop/door",
         },
     )
 

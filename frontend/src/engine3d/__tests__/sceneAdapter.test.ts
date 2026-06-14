@@ -75,6 +75,30 @@ describe('sceneAdapter.buildSceneSpec', () => {
     expect(table?.heightM).toBe(1.4)
   })
 
+  it('asset_key : hint manifest prioritaire, valeur inconnue ignorée', () => {
+    const scene = makeScene({
+      elements: [
+        {
+          id: 'stairs1',
+          name: 'Escalier',
+          kind: 'stairs',
+          asset_key: 'prop/stairs',
+          geometry: { type: 'rect', col: 2, row: 2, width: 1, height: 1 },
+        },
+        {
+          id: 'bad1',
+          name: 'Table',
+          kind: 'furniture',
+          asset_key: 'prop/not_in_manifest',
+          geometry: { type: 'rect', col: 4, row: 2, width: 1, height: 1 },
+        },
+      ],
+    })
+    const spec = buildSceneSpec({ scene, heroes: [], pois: [], selectedId: null, highlightedIds: [] })
+    expect(spec.elements.find((element) => element.id === 'stairs1')?.modelKey).toBe('prop/stairs')
+    expect(spec.elements.find((element) => element.id === 'bad1')?.modelKey).toBeNull()
+  })
+
   it('ambiance : dungeon/cave → torchlit par défaut, hint LLM respecté', () => {
     const dungeon = buildSceneSpec({
       scene: makeScene({ scene_theme: 'dungeon' }),
