@@ -6,7 +6,7 @@ import * as THREE from 'three'
 import type { ElementSpec } from '../types'
 import type { EngineCtx } from '../core/context'
 import { buildProceduralElement } from '../assets/ProceduralFactory'
-import { modelForElement } from '../assets/manifest'
+import { modelForElement, PROP_TARGET_HEIGHT_M } from '../assets/manifest'
 import { disposeGroup, disposeObject } from './GroundLayer'
 import { gridPointToWorld, metersToWorld } from '../utils/gridMath'
 
@@ -104,10 +104,15 @@ export class ElementsLayer {
 
     void ctx.registry.load(modelKey).then((model) => {
       if (!model || generation !== this.generation || !this.entries.has(spec.id)) return
-      const instance = ctx.registry.instantiate(model, {
-        footprint,
-        maxHeight: metersToWorld(Math.max(spec.heightM, 0.4) * 1.6, ctx.cellSizeM),
-      })
+      // Props verticaux (statue, obélisque) : hauteur intrinsèque, sinon l'empreinte
+      // + le plafond maxHeight les écraseraient. Le reste suit l'empreinte de l'élément.
+      const intrinsicHeightM = PROP_TARGET_HEIGHT_M[modelKey]
+      const instance = ctx.registry.instantiate(
+        model,
+        intrinsicHeightM != null
+          ? { targetHeight: metersToWorld(intrinsicHeightM, ctx.cellSizeM) }
+          : { footprint, maxHeight: metersToWorld(Math.max(spec.heightM, 0.4) * 1.6, ctx.cellSizeM) },
+      )
       const center = elementCenterWorld(spec, ctx)
       instance.position.set(center.x, metersToWorld(spec.elevationM, ctx.cellSizeM), center.z)
       if (spec.subtle) applySubtle(instance)

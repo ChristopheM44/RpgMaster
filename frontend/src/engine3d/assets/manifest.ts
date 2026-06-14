@@ -3,6 +3,7 @@
 // le fallback procédural prend le relais (invariant testé).
 
 import type { ScatterKind } from '../core/ThemeProvider'
+import { hashSeed } from '../utils/seededRandom'
 
 export interface ModelDef {
   /** Chemin relatif sous public/models/. */
@@ -35,13 +36,22 @@ export const MODEL_MANIFEST: Record<string, ModelDef> = {
   'prop/barrel_large': { file: 'dungeon/barrel_large.glb', fit: 'footprint' },
   'prop/crates_stacked': { file: 'dungeon/crates_stacked.glb', fit: 'footprint' },
   'prop/chest': { file: 'dungeon/chest.glb', fit: 'footprint' },
+  'prop/chest_gold': { file: 'dungeon/chest_gold.glb', fit: 'footprint' },
   'prop/shelf_large': { file: 'dungeon/shelf_large.glb', fit: 'footprint' },
   'prop/shelf_small': { file: 'dungeon/shelf_small.glb', fit: 'footprint' },
   'prop/pillar': { file: 'dungeon/pillar.glb', fit: 'footprint' },
   'prop/rubble_large': { file: 'dungeon/rubble_large.glb', fit: 'footprint' },
   'prop/bed_frame': { file: 'dungeon/bed_frame.glb', fit: 'footprint' },
   'prop/stairs': { file: 'dungeon/stairs.glb', fit: 'footprint' },
+  'prop/door': { file: 'dungeon/wall_doorway.glb', fit: 'footprint' },
   'prop/torch_lit': { file: 'dungeon/torch_lit.glb', fit: 'height' },
+  'prop/torch_mounted': { file: 'dungeon/torch_mounted.glb', fit: 'height' },
+  // Décor d'extérieur / campement (Kenney Nature Kit).
+  'prop/campfire': { file: 'nature/campfire.glb', fit: 'footprint' },
+  'prop/tent': { file: 'nature/tent.glb', fit: 'footprint' },
+  'prop/pot': { file: 'nature/pot.glb', fit: 'footprint' },
+  'prop/statue': { file: 'nature/statue.glb', fit: 'height' },
+  'prop/obelisk': { file: 'nature/obelisk.glb', fit: 'height' },
   // Nature (Kenney Nature Kit).
   'nature/tree_pine_a': { file: 'nature/tree_pine_a.glb', fit: 'height' },
   'nature/tree_pine_b': { file: 'nature/tree_pine_b.glb', fit: 'height' },
@@ -109,22 +119,32 @@ export function modelForClass(charClass: string | null | undefined): string | nu
   return raw ? CLASS_MODEL[raw] ?? null : null
 }
 
-// ─── PNJ : nom/description → modèle de personnage (défaut = pion) ────────────
+// ─── PNJ : nom/description → modèle de personnage ───────────────────────────
+// Buckets distinctifs d'abord (silhouette nette) ; tout le reste tombe sur le
+// défaut « quidam » plutôt que sur un pion abstrait.
 
 const NPC_KEYWORDS: [RegExp, string][] = [
-  [/garde|soldat|chevalier|capitaine|sentinelle|milicien|guard|knight|soldier/i, 'char/knight'],
-  [/mage|sorci[èe]r|magicien|érudit|erudit|prêtre|pretre|prêtresse|oracle|wizard|witch|priest/i, 'char/mage'],
-  [/encapuchonn|capuche|voleur|espion|mendiant|rôdeur|rodeur|hooded|thief|spy/i, 'char/rogue_hooded'],
-  [/brute|colosse|forgeron|bûcheron|bucheron|barbare|blacksmith|brawler/i, 'char/barbarian'],
-  [/marchand|aubergiste|tavernier|villageois|paysan|merchant|innkeep|villager/i, 'char/rogue'],
+  [/garde|soldat|chevalier|capitaine|sentinelle|milicien|paladin|templier|v[ée]t[ée]ran|officier|lieutenant|gardien|l[ée]gionnaire|guerrier|guard|knight|soldier|warrior|guardian/i, 'char/knight'],
+  [/mage|sorci[èe]r|magicien|[ée]rudit|pr[êe]tre|oracle|enchanteur|alchimiste|astrologue|gu[ée]risseur|archimage|occultiste|apothicaire|mystique|devineresse|wizard|witch|priest|sorcerer|warlock|cleric/i, 'char/mage'],
+  [/encapuchonn|capuche|voleur|espion|mendiant|r[ôo]deur|assassin|chasseur|pisteur|traqueur|contrebandier|vagabond|p[èe]lerin|ermite|cultiste|moine|nomade|[ée]claireur|hooded|thief|spy|ranger|scout|hunter/i, 'char/rogue_hooded'],
+  [/brute|colosse|forgeron|b[ûu]cheron|barbare|gladiateur|lutteur|docker|charpentier|costaud|blacksmith|brawler|smith/i, 'char/barbarian'],
+  [/marchand|aubergiste|tavernier|villageois|paysan|noble|dame|seigneur|femme|vieil|vieux|enfant|fermi[èe]r|p[êe]cheur|artisan|boulanger|m[ée]nestrel|barde|conteur|matelot|scribe|bourgeois|citadin|habitant|herboriste|merchant|innkeep|villager|peasant|farmer|bard/i, 'char/rogue'],
 ]
+
+// Apparences « tout-venant » pour un PNJ sans rôle reconnaissable : un humanoïde
+// crédible (le backend n'envoie souvent qu'un nom, cf. _make_npc_poi) au lieu du pion.
+// Volontairement des silhouettes « gens ordinaires » (pas le barbare torse nu, qui
+// jurerait pour un·e villageois·e ou un ancien).
+const COMMONER_MODELS = ['char/rogue', 'char/rogue_hooded'] as const
 
 export function modelForNpc(corpus: string | null | undefined): string | null {
   if (!corpus) return null
   for (const [pattern, key] of NPC_KEYWORDS) {
     if (pattern.test(corpus)) return key
   }
-  return null
+  // Défaut déterministe par hash du corpus : même PNJ = même apparence stable,
+  // tout en variant entre PNJ anonymes. Plus jamais de pion pour un PNJ.
+  return COMMONER_MODELS[hashSeed(corpus) % COMMONER_MODELS.length] ?? 'char/rogue'
 }
 
 // ─── Monstres : espèce/nom → modèle (défaut = pion procédural) ───────────────
@@ -148,32 +168,68 @@ export function modelForMonster(corpus: string | null | undefined): string | nul
 // ─── Éléments : kind + nom → prop ────────────────────────────────────────────
 
 const FURNITURE_KEYWORDS: [RegExp, string][] = [
-  [/table|étal|etal|comptoir|bureau|autel/i, 'prop/table_medium'],
-  [/banc|chaise|chair/i, 'prop/chair'],
+  [/table|étal|etal|comptoir|bureau|autel|[ée]tabli/i, 'prop/table_medium'],
+  [/banc|chaise|chair|fauteuil|tr[ôo]ne|si[èe]ge/i, 'prop/chair'],
   [/tabouret|stool/i, 'prop/stool'],
-  [/tonneau|baril|barrel|fût|fut/i, 'prop/barrel_small'],
+  [/tonneau|baril|barrel|f[ûu]t|baquet/i, 'prop/barrel_small'],
   [/keg|tonnelet/i, 'prop/keg'],
-  [/caisse|crate|cageot/i, 'prop/crates_stacked'],
-  [/coffre|chest|malle/i, 'prop/chest'],
-  [/étag|etag|biblioth|shelf|rayonnage|armoire/i, 'prop/shelf_large'],
-  [/lit|bed|couchette|paillasse/i, 'prop/bed_frame'],
-  [/pilier|colonne|pillar|column/i, 'prop/pillar'],
+  [/caisse|crate|cageot|caisson/i, 'prop/crates_stacked'],
+  [/coffre.*(or\b|dor[ée]|tr[ée]sor|royal|pr[ée]cieux)|coffre.fort|chest.*(gold|treasure)/i, 'prop/chest_gold'],
+  [/coffre|chest|malle|coffret/i, 'prop/chest'],
+  [/étag|etag|biblioth|shelf|rayonnage|armoire|pr[ée]sentoir|vaisselier|buffet|placard/i, 'prop/shelf_large'],
+  [/lit|bed|couchette|paillasse|grabat|matelas/i, 'prop/bed_frame'],
+  [/pilier|colonne|pillar|column|poteau/i, 'prop/pillar'],
+  [/feu de camp|foyer|bivouac|brasier/i, 'prop/campfire'],
+  [/tente|pavillon|abri|chapiteau|campement/i, 'prop/tent'],
+  [/jarre|vase|amphore|urne|poterie|cruche|\bpot\b/i, 'prop/pot'],
+  [/statue|idole|effigie|buste|gisant|monument/i, 'prop/statue'],
+  [/ob[ée]lisque|st[èe]le|menhir|monolithe/i, 'prop/obelisk'],
+  // Rocher/pierre AVANT le repli `cover → caisses` : sinon un rocher en couvert
+  // tombait sur l'empilement de caisses en bois (bug constaté en jeu).
+  [/rocher|rocaille|caillou|boulder|stalagmite|stalactite|[ée]rod|formation rocheuse/i, 'nature/rock_large_a'],
   [/gravat|débris|debris|rubble|éboulis|eboulis/i, 'prop/rubble_large'],
 ]
 
 export function modelForElement(kind: string, name: string, footprint: { x: number; z: number }): string | null {
+  if (kind === 'door') return 'prop/door'
   if (kind === 'furniture' || kind === 'cover' || kind === 'decor') {
     for (const [pattern, key] of FURNITURE_KEYWORDS) {
-      if (pattern.test(name)) {
-        if (key === 'prop/table_medium' && Math.max(footprint.x, footprint.z) >= 2.2) return 'prop/table_long'
-        return key
-      }
+      if (pattern.test(name)) return refineByFootprint(key, footprint)
     }
     if (kind === 'cover') return 'prop/crates_stacked'
     return null
   }
-  if (kind === 'light' && /torche|torch|brasero|brazier/i.test(name)) return 'prop/torch_lit'
+  if (kind === 'light') {
+    if (/feu de camp|foyer|bivouac|brasier/i.test(name)) return 'prop/campfire'
+    if (/murale|applique|wall|mounted/i.test(name)) return 'prop/torch_mounted'
+    if (/torche|torch|brasero|brazier|flambeau|chandelier/i.test(name)) return 'prop/torch_lit'
+    return null
+  }
   return null
+}
+
+/** Variante de prop selon l'empreinte — active table_small / barrel_large / shelf_small. */
+function refineByFootprint(key: string, footprint: { x: number; z: number }): string {
+  const span = Math.max(footprint.x, footprint.z)
+  if (key === 'prop/table_medium') {
+    if (span >= 2.2) return 'prop/table_long'
+    if (span <= 1.1) return 'prop/table_small'
+  } else if (key === 'prop/barrel_small' && span >= 1.4) {
+    return 'prop/barrel_large'
+  } else if (key === 'prop/shelf_large' && span <= 1.1) {
+    return 'prop/shelf_small'
+  }
+  return key
+}
+
+/**
+ * Props verticaux instanciés à une hauteur INTRINSÈQUE (mètres) plutôt qu'ajustés
+ * à l'empreinte : une statue dans une empreinte 1×1 serait sinon écrasée par le
+ * plafond `maxHeight` (dérivé du défaut `decor` = 0.6 m). Consommé par ElementsLayer.
+ */
+export const PROP_TARGET_HEIGHT_M: Record<string, number> = {
+  'prop/statue': 2.2,
+  'prop/obelisk': 2.8,
 }
 
 // ─── Scatter : kind → variantes de modèles ───────────────────────────────────
