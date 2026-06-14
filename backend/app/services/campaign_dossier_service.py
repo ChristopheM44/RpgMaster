@@ -79,6 +79,7 @@ def empty_world_maps() -> dict[str, Any]:
         "region_map": None,
         "city_maps": {},
         "active_city_id": None,
+        "active_dungeon_id": None,
     }
 
 
@@ -205,11 +206,13 @@ async def forge_draft(
         campaign,
         contract,
     )
+    _apply_dungeon_only_option(gm_dossier, contract, campaign, options)
     played_canon = sanitize_played_canon(generated.get("played_canon", {}))
     active_chapter_id = str(generated.get("active_chapter_id") or "").strip()
     if not active_chapter_id:
         active_chapter_id = _first_chapter_id(contract, gm_dossier)
     seed_region_map_from_dossier(gm_dossier, contract, active_chapter_id)
+    seed_dungeon_params_from_dossier(gm_dossier, contract, active_chapter_id)
 
     dossier.player_contract = contract
     dossier.gm_dossier = gm_dossier
@@ -338,6 +341,7 @@ async def reset_played_state(campaign: Campaign, db: AsyncSession) -> CampaignDo
     gm_dossier["active_city_id"] = None
     active_chapter_id = _first_chapter_id(contract, gm_dossier)
     seed_region_map_from_dossier(gm_dossier, contract, active_chapter_id)
+    seed_dungeon_params_from_dossier(gm_dossier, contract, active_chapter_id)
 
     dossier.player_contract = contract
     dossier.gm_dossier = gm_dossier
@@ -690,6 +694,7 @@ def public_campaign_maps(gm_dossier: dict[str, Any]) -> dict[str, Any]:
         "region_map": map_service.public_region_map(gm_dossier.get("region_map")),
         "city_maps": map_service.public_city_maps(gm_dossier.get("city_maps")),
         "active_city_id": gm_dossier.get("active_city_id"),
+        "active_dungeon_id": gm_dossier.get("active_dungeon_id"),
     }
 
 
@@ -737,6 +742,7 @@ async def update_campaign_maps(
     region_map: Any = _MISSING,
     city_maps: Any = _MISSING,
     active_city_id: Any = _MISSING,
+    active_dungeon_id: Any = _MISSING,
 ) -> CampaignDossier:
     dossier = await get_or_create_dossier(campaign_id, db)
     current = dossier.gm_dossier if isinstance(dossier.gm_dossier, dict) else {}
@@ -748,6 +754,8 @@ async def update_campaign_maps(
         next_gm_dossier["city_maps"] = city_maps or {}
     if active_city_id is not _MISSING:
         next_gm_dossier["active_city_id"] = active_city_id
+    if active_dungeon_id is not _MISSING:
+        next_gm_dossier["active_dungeon_id"] = active_dungeon_id
 
     dossier.gm_dossier = next_gm_dossier
     await db.commit()
@@ -762,6 +770,7 @@ async def update_campaign_maps_for_session(
     region_map: Any = _MISSING,
     city_maps: Any = _MISSING,
     active_city_id: Any = _MISSING,
+    active_dungeon_id: Any = _MISSING,
 ) -> CampaignDossier | None:
     campaign = await campaign_for_session(session_id, db)
     if campaign is None:
@@ -772,6 +781,7 @@ async def update_campaign_maps_for_session(
         region_map=region_map,
         city_maps=city_maps,
         active_city_id=active_city_id,
+        active_dungeon_id=active_dungeon_id,
     )
 
 
@@ -781,6 +791,9 @@ def sanitize_gm_dossier_map_defaults(data: dict[str, Any]) -> dict[str, Any]:
     city_maps = sanitized.get("city_maps")
     sanitized["city_maps"] = city_maps if isinstance(city_maps, dict) else {}
     sanitized.setdefault("active_city_id", None)
+    sanitized.setdefault("active_dungeon_id", None)
+    dungeons = sanitized.get("dungeons")
+    sanitized["dungeons"] = _sanitize_dungeon_configs(dungeons)
     return sanitized
 
 
@@ -1122,11 +1135,13 @@ async def _run_forge_job(
         gm_dossier,
         int(getattr(campaign, "starting_level", 1) or 1),
     )
+    _apply_dungeon_only_option(gm_dossier, contract, campaign, options)
     _validate_chapter_alignment(contract, gm_dossier)
     active_chapter_id = str(outline.get("active_chapter_id") or "").strip()
     if not active_chapter_id:
         active_chapter_id = _first_chapter_id(contract, gm_dossier)
     seed_region_map_from_dossier(gm_dossier, contract, active_chapter_id)
+    seed_dungeon_params_from_dossier(gm_dossier, contract, active_chapter_id)
 
     dossier.player_contract = contract
     dossier.gm_dossier = gm_dossier
@@ -1527,9 +1542,54 @@ def sanitize_gm_dossier(
         "region_map": data.get("region_map"),
         "city_maps": data.get("city_maps"),
         "active_city_id": data.get("active_city_id"),
+        "active_dungeon_id": data.get("active_dungeon_id"),
+        "dungeons": data.get("dungeons"),
     }
     _repair_one_shot_table_spine(dossier, contract, campaign)
     return sanitize_gm_dossier_map_defaults(dossier)
+
+
+def _apply_dungeon_only_option(
+    gm_dossier: dict[str, Any],
+    contract: dict[str, Any],
+    campaign: Campaign,
+    options: dict[str, Any] | None,
+) -> None:
+    if not _truthy_option((options or {}).get("dungeon_only")):
+        return
+    chapters = gm_dossier.get("chapters")
+    if not isinstance(chapters, list) or not chapters:
+        return
+    active_chapter_id = _first_chapter_id(contract, gm_dossier)
+    chapter = next(
+        (ch for ch in chapters if isinstance(ch, dict) and ch.get("id") == active_chapter_id),
+        None,
+    )
+    if not isinstance(chapter, dict):
+        chapter = next((ch for ch in chapters if isinstance(ch, dict)), None)
+    if not isinstance(chapter, dict):
+        return
+
+    endpoint = chapter.get("objective_endpoint")
+    endpoint = dict(endpoint) if isinstance(endpoint, dict) else {}
+    fallback_name = f"Donjon de {contract.get('title') or campaign.name or 'la chronique'}"
+    endpoint["name"] = _text(endpoint.get("name") or fallback_name, 120)
+    endpoint["kind"] = "dungeon"
+    endpoint["hint"] = _text(
+        endpoint.get("hint") or "Une entrée souterraine marque le cœur de l'objectif.",
+        280,
+    )
+    chapter["objective_endpoint"] = endpoint
+    if not isinstance(chapter.get("dungeon"), dict):
+        chapter["dungeon"] = {"size": "medium", "theme": "crypt", "branchiness": 0.35}
+
+
+def _truthy_option(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return value != 0
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on", "oui"}
 
 
 def _repair_one_shot_table_spine(
@@ -1683,9 +1743,7 @@ def _ensure_one_shot_npc_depth(
     additions = _fallback_one_shot_npcs(chapters, campaign)
     merged = _append_unique_items(existing, additions, min_count=2, max_count=4)
     has_opposition = any(
-        _npc_identity_hints_at_opposition(npc)
-        for npc in merged
-        if isinstance(npc, dict)
+        _npc_identity_hints_at_opposition(npc) for npc in merged if isinstance(npc, dict)
     )
     if not has_opposition and len(merged) < 4:
         _append_unique_items(
@@ -2005,6 +2063,69 @@ def seed_region_map_from_dossier(
     seed = map_service.build_seed_region_map(start_name, endpoint)
     if seed:
         gm_dossier["region_map"] = seed
+
+
+def seed_dungeon_params_from_dossier(
+    gm_dossier: dict[str, Any],
+    contract: dict[str, Any],
+    active_chapter_id: str,
+) -> None:
+    """Store seed + params for an active chapter dungeon endpoint.
+
+    The dungeon graph is intentionally not persisted here. It is regenerated
+    deterministically when the party reaches the endpoint node.
+    """
+    if not isinstance(gm_dossier, dict):
+        return
+    chapter = _private_active_chapter_for_context(gm_dossier, contract, active_chapter_id)
+    endpoint = chapter.get("objective_endpoint")
+    if not isinstance(endpoint, dict) or endpoint.get("kind") != "dungeon":
+        return
+    endpoint_node_id = _endpoint_node_id_for_dungeon(gm_dossier, endpoint)
+    dungeons = _sanitize_dungeon_configs(gm_dossier.get("dungeons"))
+    chapter_id = _text(chapter.get("id") or active_chapter_id or "chapter_1", 80)
+    for existing in dungeons.values():
+        if (
+            existing.get("chapter_id") == chapter_id
+            and existing.get("endpoint_node_id") == endpoint_node_id
+        ):
+            gm_dossier["dungeons"] = dungeons
+            return
+
+    params = _sanitize_dungeon_params(chapter.get("dungeon"))
+    title = _text(contract.get("title") or "chronique", 120)
+    seed = f"{title}:{chapter_id}"
+    from app.engine.dungeon_generator import generate_dungeon
+
+    bp = generate_dungeon(seed, params)
+    dungeons[bp.id] = {
+        "id": bp.id,
+        "seed": seed,
+        "params": params,
+        "endpoint_node_id": endpoint_node_id,
+        "chapter_id": chapter_id,
+        "name": _text(endpoint.get("name") or "Donjon", 120),
+    }
+    gm_dossier["dungeons"] = dungeons
+
+
+def _endpoint_node_id_for_dungeon(
+    gm_dossier: dict[str, Any],
+    endpoint: dict[str, Any],
+) -> str:
+    endpoint_name = _text(endpoint.get("name") or "", 120)
+    region_map = gm_dossier.get("region_map")
+    if isinstance(region_map, dict):
+        for node in region_map.get("nodes") or []:
+            if not isinstance(node, dict):
+                continue
+            if (
+                _text(node.get("name") or "", 120) == endpoint_name
+                and str(node.get("kind") or "") == "dungeon"
+            ):
+                return _text(node.get("id") or "", 80)
+    seeded = map_service.seed_endpoint_node(endpoint)
+    return str((seeded or {}).get("id") or "objectif")
 
 
 def sanitize_played_canon(data: dict[str, Any]) -> dict[str, Any]:
@@ -2390,6 +2511,7 @@ def _private_active_chapter_for_context(
         "state",
         "objective",
         "objective_endpoint",
+        "dungeon",
         "stakes",
         "initial_state",
         "opening_scene",
@@ -2616,6 +2738,65 @@ _OBJECTIVE_ENDPOINT_KINDS = {
     "ruin",
 }
 
+_DUNGEON_SIZES = {"small", "medium", "large"}
+_DUNGEON_THEMES = {"crypt", "ruin", "cave", "fortress", "temple", "sewer", "mine"}
+
+
+def _sanitize_dungeon_params(value: Any) -> dict[str, Any]:
+    data = value if isinstance(value, dict) else {}
+    size = str(data.get("size") or "medium").strip().lower()
+    if size not in _DUNGEON_SIZES:
+        size = "medium"
+    theme = str(data.get("theme") or "crypt").strip().lower()
+    if theme not in _DUNGEON_THEMES:
+        theme = _text(theme or "crypt", 40) or "crypt"
+    try:
+        branchiness = float(data.get("branchiness", 0.35))
+    except (TypeError, ValueError):
+        branchiness = 0.35
+    branchiness = max(0.0, min(branchiness, 1.0))
+    cr_target = data.get("cr_target")
+    try:
+        cr_target = max(0, min(int(cr_target), 30)) if cr_target is not None else None
+    except (TypeError, ValueError):
+        cr_target = None
+    payload: dict[str, Any] = {
+        "size": size,
+        "theme": theme,
+        "branchiness": branchiness,
+    }
+    if cr_target is not None:
+        payload["cr_target"] = cr_target
+    return payload
+
+
+def _sanitize_chapter_dungeon(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    return _sanitize_dungeon_params(value)
+
+
+def _sanitize_dungeon_configs(value: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(value, dict):
+        return {}
+    sanitized: dict[str, dict[str, Any]] = {}
+    for raw_id, raw_config in value.items():
+        if not isinstance(raw_config, dict):
+            continue
+        dungeon_id = _text(raw_config.get("id") or raw_id, 80)
+        seed = _text(raw_config.get("seed") or "", 160)
+        if not dungeon_id or not seed:
+            continue
+        sanitized[dungeon_id] = {
+            "id": dungeon_id,
+            "seed": seed,
+            "params": _sanitize_dungeon_params(raw_config.get("params")),
+            "endpoint_node_id": _text(raw_config.get("endpoint_node_id") or "", 80),
+            "chapter_id": _text(raw_config.get("chapter_id") or "", 80),
+            "name": _text(raw_config.get("name") or "Donjon", 120),
+        }
+    return sanitized
+
 
 def _sanitize_objective_endpoint(value: Any) -> dict[str, str] | None:
     """Destination structurée de l'objectif du chapitre (N3) : ``{name, kind, hint}``.
@@ -2651,6 +2832,7 @@ def _sanitize_private_chapter(chapter: Any, index: int) -> dict[str, Any]:
         "state": state,
         "objective": _text(data.get("objective") or "", 700),
         "objective_endpoint": _sanitize_objective_endpoint(data.get("objective_endpoint")),
+        "dungeon": _sanitize_chapter_dungeon(data.get("dungeon")),
         "stakes": _text(data.get("stakes") or "", 700),
         "initial_state": _text(data.get("initial_state") or "", 900),
         "opening_scene": _sanitize_opening_scene(data),

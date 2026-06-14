@@ -115,6 +115,7 @@ async def build_session_state_payload_enriched(
         payload.setdefault("region_map", None)
         payload.setdefault("city_maps", {})
         payload.setdefault("active_city_id", None)
+        payload.setdefault("active_dungeon_id", None)
     return payload
 
 

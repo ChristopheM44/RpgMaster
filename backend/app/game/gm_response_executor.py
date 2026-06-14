@@ -993,10 +993,7 @@ class GMResponseExecutor:
                     or ""
                 ).strip()
                 prompt = str(
-                    raw.get("prompt")
-                    or raw.get("action_prompt")
-                    or raw.get("text")
-                    or label
+                    raw.get("prompt") or raw.get("action_prompt") or raw.get("text") or label
                 ).strip()
             else:
                 label = str(raw or "").strip()
@@ -1042,12 +1039,15 @@ class GMResponseExecutor:
         current_scene = active.state_data.get("current_scene")
         if not isinstance(current_scene, dict):
             current_scene = {}
-        scene_id = str(
-            params.get("scene_id")
-            or current_scene.get("scene_id")
-            or current_scene.get("id")
+        scene_id = (
+            str(
+                params.get("scene_id")
+                or current_scene.get("scene_id")
+                or current_scene.get("id")
+                or "current"
+            ).strip()
             or "current"
-        ).strip() or "current"
+        )
         options = self._sanitize_scene_options(params.get("options") or [], scene_id)
         active.state_data["scene_options"] = options
         active.mark_dirty()
@@ -1341,10 +1341,19 @@ class GMResponseExecutor:
             {
                 "region_map": public_maps["region_map"],
                 "active_city_id": public_maps["active_city_id"],
+                "active_dungeon_id": public_maps.get("active_dungeon_id"),
             },
             source=self._source,
         )
         self._trigger_visual_asset_generation(session_id, region_map, scope="region")
+        entered_node_id = str(region_map.get("current_node_id") or "").strip()
+        if entered_node_id:
+            await self._maybe_enter_dungeon_from_region_node(
+                session_id,
+                entered_node_id,
+                active,
+                db,
+            )
 
     async def _apply_city_map_update(
         self,
@@ -1402,10 +1411,91 @@ class GMResponseExecutor:
             {
                 "city_map": public_maps["city_maps"].get(city_id),
                 "active_city_id": public_maps["active_city_id"],
+                "active_dungeon_id": public_maps.get("active_dungeon_id"),
             },
             source=self._source,
         )
         self._trigger_visual_asset_generation(session_id, city_maps.get(city_id, {}), scope="city")
+
+    async def _maybe_enter_dungeon_from_region_node(
+        self,
+        session_id: str,
+        node_id: str,
+        active: ActiveSession,
+        db: Any | None,
+    ) -> None:
+        node_id = str(node_id or "").strip()
+        if not node_id:
+            return
+        campaign = (
+            await campaign_dossier_service.campaign_for_session(session_id, db)
+            if db is not None
+            else None
+        )
+        if campaign is not None:
+            dossier = await campaign_dossier_service.get_or_create_dossier(campaign.id, db)
+            gm_dossier = campaign_dossier_service.sanitize_gm_dossier_map_defaults(
+                dossier.gm_dossier or {}
+            )
+        else:
+            gm_dossier = self._state_world_maps(active)
+            gm_dossier["dungeons"] = active.state_data.get("dungeons") or {}
+
+        dungeon_config = self._dungeon_config_for_endpoint(gm_dossier, node_id)
+        if not dungeon_config:
+            return
+
+        from app.services import dungeon_service
+
+        active.state_data["world_maps"] = {
+            "region_map": gm_dossier.get("region_map"),
+            "city_maps": dict(gm_dossier.get("city_maps") or {}),
+            "active_city_id": gm_dossier.get("active_city_id"),
+            "active_dungeon_id": gm_dossier.get("active_dungeon_id"),
+        }
+        city_map, scene, bp = dungeon_service.enter_dungeon(active, dungeon_config)
+        world_maps = active.state_data["world_maps"]
+
+        if campaign is not None:
+            dossier = await campaign_dossier_service.update_campaign_maps(
+                campaign.id,
+                db,
+                city_maps=world_maps.get("city_maps") or {},
+                active_city_id=world_maps.get("active_city_id"),
+                active_dungeon_id=world_maps.get("active_dungeon_id"),
+            )
+            public_maps = campaign_dossier_service.public_campaign_maps(dossier.gm_dossier or {})
+        else:
+            public_maps = campaign_dossier_service.public_campaign_maps(
+                {**world_maps, "dungeons": gm_dossier.get("dungeons") or {}}
+            )
+
+        await self._event_bus.publish_to_session(
+            session_id,
+            EventType.CITY_MAP_UPDATED,
+            {
+                "city_map": public_maps["city_maps"].get(bp.id) or city_map,
+                "active_city_id": public_maps["active_city_id"],
+                "active_dungeon_id": public_maps.get("active_dungeon_id"),
+            },
+            source=self._source,
+        )
+        await self._apply_scene_layout(session_id, scene, active)
+
+    @staticmethod
+    def _dungeon_config_for_endpoint(
+        gm_dossier: dict[str, Any],
+        node_id: str,
+    ) -> dict[str, Any] | None:
+        dungeons = gm_dossier.get("dungeons")
+        if not isinstance(dungeons, dict):
+            return None
+        for config in dungeons.values():
+            if not isinstance(config, dict):
+                continue
+            if str(config.get("endpoint_node_id") or "").strip() == node_id:
+                return dict(config)
+        return None
 
     async def _apply_node_status_update(
         self,
@@ -1455,9 +1545,17 @@ class GMResponseExecutor:
                     {
                         "region_map": public_maps["region_map"],
                         "active_city_id": public_maps["active_city_id"],
+                        "active_dungeon_id": public_maps.get("active_dungeon_id"),
                     },
                     source=self._source,
                 )
+                if str(params.get("status") or "").strip().lower() == "current":
+                    await self._maybe_enter_dungeon_from_region_node(
+                        session_id,
+                        str(params.get("node_id") or ""),
+                        active,
+                        db,
+                    )
                 return
 
             if scope == "city":
@@ -1492,6 +1590,7 @@ class GMResponseExecutor:
                     {
                         "city_map": public_maps["city_maps"].get(city_id),
                         "active_city_id": public_maps["active_city_id"],
+                        "active_dungeon_id": public_maps.get("active_dungeon_id"),
                     },
                     source=self._source,
                 )

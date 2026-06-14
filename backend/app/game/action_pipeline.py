@@ -373,6 +373,7 @@ class ActionPipeline:
                 roll_results,
             )
         if gm_response and phase_value == "EXPLORATION":
+            gm_response = self._with_dungeon_room_transition(gm_response, request, active)
             gm_response = self._with_travel_scene_fallback(gm_response, request, active)
             gm_response = self._with_journal_scene_fallback(gm_response, active)
 
@@ -1181,6 +1182,53 @@ class ActionPipeline:
         return response
 
     @staticmethod
+    def _with_dungeon_room_transition(
+        response: AgentResponse,
+        request: ActionRequest,
+        active: ActiveSession,
+    ) -> AgentResponse:
+        """Deterministic room-to-room travel inside procedural dungeons."""
+        if any(action.type == "scene_layout" for action in response.actions):
+            return response
+        intent = request.travel_intent
+        if not isinstance(intent, dict) or not intent.get("is_travel"):
+            return response
+        room_id = str(intent.get("destination_node_id") or "").strip()
+        if not room_id:
+            return response
+
+        from app.services import dungeon_service
+
+        dungeon_id = dungeon_service.is_room_transition(active, room_id)
+        if not dungeon_id:
+            return response
+        try:
+            scene = dungeon_service.transition_to_room(active, dungeon_id, room_id)
+        except Exception as exc:
+            logger.warning(
+                "ActionPipeline : transition de salle donjon ignoree (%s -> %s): %s",
+                dungeon_id,
+                room_id,
+                exc,
+            )
+            return response
+
+        response.actions.append(GMAction(type="scene_layout", params=scene))
+        if not any(action.type == "journal_update" for action in response.actions):
+            response.actions.append(
+                GMAction(
+                    type="journal_update",
+                    params={"location_venue": scene.get("description") or "Salle du donjon"},
+                )
+            )
+        logger.info(
+            "ActionPipeline : transition donjon injectee vers salle '%s' (%s)",
+            room_id,
+            dungeon_id,
+        )
+        return response
+
+    @staticmethod
     def _with_journal_scene_fallback(
         response: AgentResponse,
         active: ActiveSession,
@@ -1276,9 +1324,11 @@ class ActionPipeline:
 
     @staticmethod
     def _fallback_scene_id_for_label(label: str) -> str:
-        ascii_label = unicodedata.normalize("NFKD", label.strip().lower()).encode(
-            "ascii", "ignore"
-        ).decode("ascii")
+        ascii_label = (
+            unicodedata.normalize("NFKD", label.strip().lower())
+            .encode("ascii", "ignore")
+            .decode("ascii")
+        )
         normalized = re.sub(r"[^a-zA-Z0-9]+", "_", ascii_label).strip("_")
         if not normalized:
             return ""

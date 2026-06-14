@@ -342,7 +342,22 @@ export interface SrdEquipmentItem {
 
 export type NodeStatus = 'visited' | 'known' | 'current' | 'rumored'
 export type RegionNodeKind = 'settlement' | 'landmark' | 'wilderness' | 'dungeon' | 'crossroads' | 'ruin'
-export type CityNodeKind = 'district' | 'building' | 'square' | 'gate' | 'docks' | 'temple' | 'tavern' | 'shop' | 'palace'
+export type CityNodeKind =
+  | 'district'
+  | 'building'
+  | 'square'
+  | 'gate'
+  | 'docks'
+  | 'temple'
+  | 'tavern'
+  | 'shop'
+  | 'palace'
+  | 'gateway'
+  | 'chamber'
+  | 'vault'
+  | 'lair'
+  | 'snare'
+  | 'passage'
 export type EdgeKind = 'road' | 'path' | 'river' | 'sea_route' | 'secret' | 'street' | 'alley'
 
 export interface MapNodePosition {
@@ -448,11 +463,13 @@ export interface CityMap {
 export interface RegionMapUpdatedPayload {
   region_map: RegionMap | null
   active_city_id?: string | null
+  active_dungeon_id?: string | null
 }
 
 export interface CityMapUpdatedPayload {
   city_map: CityMap | null
   active_city_id?: string | null
+  active_dungeon_id?: string | null
 }
 
 // ─── WebSocket Protocol ───────────────────────────────────────────────────────
@@ -753,6 +770,7 @@ export interface SessionStatePayload {
   region_map?: RegionMap | null
   city_maps?: Record<string, CityMap>
   active_city_id?: string | null
+  active_dungeon_id?: string | null
 }
 
 export interface GameStateResponse extends SessionStatePayload {}

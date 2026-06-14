@@ -23,6 +23,12 @@ CityNodeKind = Literal[
     "tavern",
     "shop",
     "palace",
+    "gateway",
+    "chamber",
+    "vault",
+    "lair",
+    "snare",
+    "passage",
 ]
 MapNodeKind = Literal[
     "settlement",
@@ -40,6 +46,12 @@ MapNodeKind = Literal[
     "tavern",
     "shop",
     "palace",
+    "gateway",
+    "chamber",
+    "vault",
+    "lair",
+    "snare",
+    "passage",
 ]
 EdgeKind = Literal[
     "road",

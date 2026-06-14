@@ -35,6 +35,8 @@ Contraintes importantes :
 - "known_objectives" contient au moins un objectif public jouable, formulé comme une tâche claire que les PJ peuvent poursuivre dès l'ouverture.
 - "initial_state" résume le contexte narratif du chapitre.
 - "objective_endpoint" (par chapitre) décrit le LIEU d'ABOUTISSEMENT de l'objectif comme une destination ATTEIGNABLE, jamais un cul-de-sac : `name` = nom évocateur et NON-SPOILER du lieu (jamais le secret qu'il abrite), `kind` parmi settlement|landmark|wilderness|dungeon|ruin|crossroads, `hint` = courte indication de voyage non-spoiler (direction, distance, repère). Ce lieu devient une destination connue du MJ, posée comme une piste VISIBLE sur la carte, vers laquelle router le groupe quand l'objectif progresse.
+- Si `options.dungeon_only == true`, la campagne doit être centrée sur un donjon jouable : au moins le chapitre actif doit avoir `objective_endpoint.kind == "dungeon"`, et les objectifs publics doivent pousser à l'explorer salle par salle.
+- Si un chapitre a `objective_endpoint.kind == "dungeon"`, ajoute un bloc `dungeon` optionnel avec uniquement les PARAMÈTRES du générateur : `size` parmi small|medium|large, `theme` parmi crypt|ruin|cave|fortress|temple|sewer|mine, `branchiness` entre 0 et 1, `cr_target` optionnel. Ne persiste pas de liste de salles ni de couloirs : le moteur génère la géométrie.
 - "opening_scene" décrit uniquement ce que les PJ voient physiquement au début : lieu précis, PNJ réellement présents, indices visibles et sorties immédiates.
 - Écris de la prose de table concrète, pas des rôles fonctionnels. Interdits : "présent pour accueillir le groupe", "hôte du lieu", "se tient face au groupe pour exposer l'urgence", "présent pour soutenir la scène".
 - "opening_scene.description" doit être un paragraphe de 2-3 phrases avec au moins deux registres sensoriels et un moment dramatique précis. Ne résume pas la mission.
@@ -81,6 +83,7 @@ Réponds avec ce JSON exact :
         "state": "active",
         "objective": "Objectif ouvert",
         "objective_endpoint": {"name": "Nom évocateur et non-spoiler du lieu d'aboutissement", "kind": "dungeon", "hint": "Courte indication de voyage non-spoiler vers ce lieu"},
+        "dungeon": {"size": "medium", "theme": "crypt", "branchiness": 0.35, "cr_target": 1},
         "stakes": "Enjeux",
         "initial_state": "Contexte narratif du chapitre, pas forcément visible dans la première scène",
         "opening_scene": {

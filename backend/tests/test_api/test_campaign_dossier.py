@@ -554,6 +554,27 @@ async def test_forge_draft_persists_campaign_starting_level(async_client):
 
 
 @pytest.mark.asyncio
+async def test_forge_draft_dungeon_only_forces_dungeon_seed(async_client):
+    campaign = await _create_campaign(async_client)
+    response = await async_client.post(
+        f"/api/campaigns/{campaign['id']}/forge-draft",
+        json={
+            "brief": {"title": "Sous la colline"},
+            "options": {"dungeon_only": True},
+        },
+    )
+    assert response.status_code == 200
+
+    gm_response = await async_client.get(f"/api/campaigns/{campaign['id']}/gm-dossier")
+    assert gm_response.status_code == 200
+    gm_dossier = gm_response.json()["gm_dossier"]
+    chapter = gm_dossier["chapters"][0]
+    assert chapter["objective_endpoint"]["kind"] == "dungeon"
+    assert chapter["dungeon"]["size"] == "medium"
+    assert len(gm_dossier["dungeons"]) == 1
+
+
+@pytest.mark.asyncio
 async def test_forge_job_preserves_all_detected_chapters(async_client):
     campaign = await _create_campaign(async_client)
 
@@ -1128,12 +1149,28 @@ class TestObjectiveEndpointSeeding:
 
     def test_sanitize_private_chapter_carries_endpoint(self):
         ch = campaign_dossier_service._sanitize_private_chapter(
-            {"id": "chapter_1", "objective_endpoint": {"name": "X", "kind": "ruin", "hint": "h"}},
+            {
+                "id": "chapter_1",
+                "objective_endpoint": {"name": "X", "kind": "ruin", "hint": "h"},
+                "dungeon": {
+                    "size": "large",
+                    "theme": "temple",
+                    "branchiness": 0.9,
+                    "cr_target": 3,
+                },
+            },
             0,
         )
         assert ch["objective_endpoint"] == {"name": "X", "kind": "ruin", "hint": "h"}
+        assert ch["dungeon"] == {
+            "size": "large",
+            "theme": "temple",
+            "branchiness": 0.9,
+            "cr_target": 3,
+        }
         bare = campaign_dossier_service._sanitize_private_chapter({"id": "chapter_1"}, 0)
         assert bare["objective_endpoint"] is None
+        assert bare["dungeon"] is None
 
     def test_seed_region_map_from_dossier_seeds_from_active_chapter(self):
         gm_dossier = {
@@ -1181,6 +1218,40 @@ class TestObjectiveEndpointSeeding:
         campaign_dossier_service.seed_region_map_from_dossier(gm_dossier, contract, "chapter_1")
         assert gm_dossier["region_map"] == {"id": "already"}
 
+    def test_seed_dungeon_params_from_dossier_stores_seed_and_params_only(self):
+        gm_dossier = {
+            "chapters": [
+                {
+                    "id": "chapter_1",
+                    "state": "active",
+                    "objective_endpoint": {
+                        "name": "La Crypte",
+                        "kind": "dungeon",
+                        "hint": "sous la route",
+                    },
+                    "dungeon": {"size": "small", "theme": "crypt", "branchiness": 0.2},
+                    "opening_scene": {"venue": "Parvis"},
+                }
+            ],
+        }
+        contract = {"title": "Test", "visible_chapters": [{"id": "chapter_1", "state": "active"}]}
+
+        campaign_dossier_service.seed_region_map_from_dossier(gm_dossier, contract, "chapter_1")
+        campaign_dossier_service.seed_dungeon_params_from_dossier(
+            gm_dossier,
+            contract,
+            "chapter_1",
+        )
+
+        dungeons = gm_dossier["dungeons"]
+        assert len(dungeons) == 1
+        config = next(iter(dungeons.values()))
+        assert config["seed"] == "Test:chapter_1"
+        assert config["params"] == {"size": "small", "theme": "crypt", "branchiness": 0.2}
+        assert config["endpoint_node_id"] == "la_crypte"
+        assert "rooms" not in config
+        assert "corridors" not in config
+
 
 @pytest.mark.asyncio
 async def test_forge_dossier_seeds_region_map_from_objective_endpoint(async_client, monkeypatch):
@@ -1213,6 +1284,12 @@ async def test_forge_dossier_seeds_region_map_from_objective_endpoint(async_clie
         node["name"] == "La Crypte du Cœur" and node["status"] == "rumored"
         for node in region_map["nodes"]
     )
+    dungeons = gm.json()["gm_dossier"]["dungeons"]
+    assert len(dungeons) == 1
+    config = next(iter(dungeons.values()))
+    assert config["endpoint_node_id"] == "la_crypte_du_c_ur"
+    assert "rooms" not in config
+    assert "corridors" not in config
 
 
 def test_cap_forged_monsters_to_party_level_substitutes_overpowered_boss() -> None:

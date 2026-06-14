@@ -25,6 +25,8 @@ Contraintes absolues :
 - Si ce chapitre est le SEUL de la campagne (`chapter_total == 1`, cas one-shot), il doit porter l'arc dramatique COMPLET : `secrets`, `complications`, `stakes` et `objective` doivent couvrir la montée en tension, le climax et une résolution possible — pas seulement une scène d'introduction.
 - "initial_state" résume le contexte narratif privé du chapitre.
 - "objective_endpoint" décrit le LIEU d'ABOUTISSEMENT de l'objectif comme une destination ATTEIGNABLE, jamais un cul-de-sac : `name` = nom évocateur et NON-SPOILER du lieu (jamais le secret qu'il abrite), `kind` parmi settlement|landmark|wilderness|dungeon|ruin|crossroads, `hint` = courte indication de voyage non-spoiler (direction, distance, repère). Ce lieu devient une destination connue du MJ, posée comme une piste VISIBLE sur la carte, vers laquelle router le groupe quand l'objectif progresse.
+- Si `options.dungeon_only == true`, ce chapitre doit aboutir à un `objective_endpoint.kind == "dungeon"` et la chronique doit se jouer principalement salle par salle dans ce donjon.
+- Si `objective_endpoint.kind == "dungeon"`, ajoute un bloc `dungeon` optionnel qui décrit uniquement les PARAMÈTRES du générateur procédural : `size` parmi small|medium|large, `theme` parmi crypt|ruin|cave|fortress|temple|sewer|mine, `branchiness` entre 0 et 1, `cr_target` optionnel. Ne décris jamais les salles/couloirs sous forme de graphe : le moteur les générera depuis seed+params.
 - "opening_scene" décrit seulement ce que les PJ voient physiquement au début du chapitre.
 - L'ouverture doit pouvoir servir un prologue public clair avec le contrat joueur : si un PNJ commanditaire/guide est présent ou attendu, indique-le dans `present_npcs` uniquement s'il est physiquement là, sinon garde-le dans le contexte (`initial_state`, `involved_npcs`) sans l'ajouter à la scène.
 - "opening_scene.description" doit être un paragraphe concret de 2-3 phrases avec au moins deux registres sensoriels.
@@ -41,6 +43,7 @@ Réponds avec un seul objet JSON valide, sans markdown :
   "state": "active",
   "objective": "Objectif ouvert",
   "objective_endpoint": {"name": "Nom évocateur et non-spoiler du lieu d'aboutissement", "kind": "dungeon", "hint": "Courte indication de voyage non-spoiler vers ce lieu"},
+  "dungeon": {"size": "medium", "theme": "crypt", "branchiness": 0.35, "cr_target": 1},
   "stakes": "Enjeux",
   "initial_state": "Contexte narratif privé du chapitre",
   "opening_scene": {

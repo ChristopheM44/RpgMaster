@@ -122,6 +122,67 @@ def test_city_map_patch_preserves_existing_nodes() -> None:
     assert {node["id"] for node in merged["nodes"]} == {"docks", "temple"}
 
 
+def test_city_map_patch_accepts_dungeon_room_kinds() -> None:
+    merged = merge_city_map_patch(
+        None,
+        {
+            "city_id": "crypt",
+            "region_node_id": "crypt",
+            "name": "Crypte",
+            "current_node_id": "room_00_gateway",
+            "nodes_upsert": [
+                {
+                    **node("room_00_gateway", "gateway", "current"),
+                    "name": "Entrée",
+                },
+                {
+                    **node("room_01_chamber", "chamber"),
+                    "name": "Salle de garde",
+                    "position": {"x": 30, "y": 30},
+                },
+                {
+                    **node("room_02_vault", "vault"),
+                    "name": "Salle du trésor",
+                    "position": {"x": 45, "y": 30},
+                },
+                {
+                    **node("room_03_snare", "snare"),
+                    "name": "Piège",
+                    "position": {"x": 60, "y": 30},
+                },
+                {
+                    **node("room_04_passage", "passage"),
+                    "name": "Jonction",
+                    "position": {"x": 75, "y": 30},
+                },
+                {
+                    **node("room_05_lair", "lair"),
+                    "name": "Antre",
+                    "position": {"x": 90, "y": 30},
+                },
+            ],
+            "edges_upsert": [
+                {
+                    "id": "corr",
+                    "from": "room_00_gateway",
+                    "to": "room_01_chamber",
+                    "kind": "alley",
+                }
+            ],
+        },
+    )
+
+    assert merged["current_node_id"] == "room_00_gateway"
+    assert {item["kind"] for item in merged["nodes"]} >= {
+        "gateway",
+        "chamber",
+        "vault",
+        "snare",
+        "passage",
+        "lair",
+    }
+
+
 def _decor_payload() -> dict:
     """Fixture : un décor complet pour les tests."""
     return {

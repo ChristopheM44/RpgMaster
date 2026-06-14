@@ -939,6 +939,13 @@ async def handle_combat_end(
     combat_summary = _build_combat_summary(active, removed_npcs)
     if combat_summary.get("enemies_unresolved") and reason == "victory":
         reason = "resolved"
+    if not combat_summary.get("enemies_unresolved"):
+        try:
+            from app.services import dungeon_service
+
+            dungeon_service.mark_room_cleared(active)
+        except Exception as exc:  # pragma: no cover - defensive, combat end must continue
+            logger.warning("Marquage salle de donjon ignore : %s", exc)
 
     active.turn_manager.reset()
     active.state_data.pop("combatants", None)

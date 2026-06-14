@@ -63,6 +63,7 @@ const commonBrief = reactive({
   startingLevel: 1,
   scope: 'mini-chronique',
   combat: 'hybride léger',
+  dungeonOnly: false,
 })
 const scratchInputs = reactive({
   pitch: '',
@@ -292,6 +293,7 @@ async function runForge() {
       starting_level: commonBrief.startingLevel,
       combat: commonBrief.combat,
       narrative_structure: narrativeStructure.value,
+      dungeon_only: commonBrief.dungeonOnly,
     }
     if (mode.value === 'scratch') {
       optionsPayload.options_5_acts = { ...scratchInputs.options5Acts }
@@ -766,6 +768,13 @@ function handleFooterBack() {
                   <option>combat tactique</option>
                 </select>
               </label>
+              <label class="flex items-center justify-between gap-4 rounded-lg border border-border bg-surface px-3 py-2">
+                <span>
+                  <span class="block font-display text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">Donjon uniquement</span>
+                  <span class="mt-1 block font-serif text-xs italic text-parchment-dark">Chronique centrée sur une exploration salle par salle.</span>
+                </span>
+                <input v-model="commonBrief.dungeonOnly" type="checkbox" class="h-4 w-4 accent-gold" />
+              </label>
             </div>
 
             <div v-if="mode === 'import'" class="rounded-lg border border-gold/20 bg-gold/5 p-3 text-xs leading-relaxed text-text-muted">
@@ -787,6 +796,7 @@ function handleFooterBack() {
                 <div v-if="mode === 'scratch'"><dt class="inline text-text-muted">Format :</dt> <dd class="inline">{{ commonBrief.scope }}<span v-if="scopePreset" class="text-text-muted"> — {{ scopePreset.chapters }}</span></dd></div>
                 <div v-else><dt class="inline text-text-muted">Structure :</dt> <dd class="inline">adaptée aux sources</dd></div>
                 <div><dt class="inline text-text-muted">Dominance :</dt> <dd class="inline">{{ commonBrief.combat }}</dd></div>
+                <div><dt class="inline text-text-muted">Donjon :</dt> <dd class="inline">{{ commonBrief.dungeonOnly ? 'uniquement' : 'selon la chronique' }}</dd></div>
                 <div v-if="mode === 'scratch'"><dt class="inline text-text-muted">Durée :</dt> <dd class="inline">{{ durationDisplay || '—' }}</dd></div>
                 <div v-if="mode === 'import'"><dt class="inline text-text-muted">Sources :</dt> <dd class="inline">{{ sourceCount }}</dd></div>
                 <div v-if="commonBrief.tones.length" class="md:col-span-2"><dt class="inline text-text-muted">Tonalités :</dt> <dd class="inline">{{ commonBrief.tones.join(', ') }}</dd></div>
