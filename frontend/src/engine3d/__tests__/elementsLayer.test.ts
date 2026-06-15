@@ -120,6 +120,8 @@ describe('ElementsLayer KayKit placement helpers', () => {
 
     expect(instance).toBeDefined()
     expect(instance!.scale.y).toBeCloseTo(0.2)
-    expect(object.rotation.y).toBe(0)
+    // stairs.glb monte vers -Z (rotationOffsetY=π) : facing=north + down → visualFacing=south
+    // (rotation géométrique 0) + offset π.
+    expect(object.rotation.y).toBeCloseTo(Math.PI)
   })
 })

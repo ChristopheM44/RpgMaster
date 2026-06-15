@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "Backend (FastAPI)",
-      "runtimeExecutable": "python",
+      "runtimeExecutable": ".venv/bin/python",
       "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--reload"],
       "cwd": "backend",
       "port": 8000

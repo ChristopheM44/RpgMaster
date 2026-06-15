@@ -533,6 +533,8 @@ def _room_elements(room: DungeonRoom) -> list[dict[str, Any]]:
                 blocks_movement=False,
                 opaque=False,
                 interactive=True,
+                facing="north",
+                vertical_direction="up",
             ),
             _asset_element(
                 "entry_rubble",
@@ -682,6 +684,8 @@ def _asset_element(
     blocks_movement: bool = True,
     opaque: bool = True,
     interactive: bool = False,
+    facing: str | None = None,
+    vertical_direction: str | None = None,
 ) -> dict[str, Any]:
     element = {
         "id": element_id,
@@ -694,4 +698,8 @@ def _asset_element(
     }
     if asset_key:
         element["asset_key"] = asset_key
+    if facing:
+        element["facing"] = facing
+    if vertical_direction:
+        element["vertical_direction"] = vertical_direction
     return element

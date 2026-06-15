@@ -7,7 +7,7 @@ import type { ElementSpec } from '../types'
 import type { LoadedModel } from '../assets/AssetRegistry'
 import type { EngineCtx } from '../core/context'
 import { buildProceduralElement } from '../assets/ProceduralFactory'
-import { modelForElement, PROP_TARGET_HEIGHT_M } from '../assets/manifest'
+import { modelForElement, MODEL_MANIFEST, PROP_TARGET_HEIGHT_M } from '../assets/manifest'
 import { disposeGroup, disposeObject } from './GroundLayer'
 import { gridPointToWorld, metersToWorld } from '../utils/gridMath'
 
@@ -207,19 +207,19 @@ export function instantiateElementModel(
       group.add(segment)
     }
     group.position.set(placement.center.x, elevation, placement.center.z)
-    group.rotation.y = placement.rotationY
+    group.rotation.y = placement.rotationY + rotationOffsetFor(modelKey)
     return group
   }
   if (modelKey === 'prop/door') {
     const instance = instantiateWallAccessModel(model, spec, placement, ctx)
     instance.position.set(placement.center.x, elevation, placement.center.z)
-    instance.rotation.y = placement.rotationY
+    instance.rotation.y = placement.rotationY + rotationOffsetFor(modelKey)
     return instance
   }
   if (modelKey === 'prop/stairs') {
     const instance = instantiateStairsModel(model, placement)
     instance.position.set(placement.center.x, elevation, placement.center.z)
-    instance.rotation.y = placement.rotationY
+    instance.rotation.y = placement.rotationY + rotationOffsetFor(modelKey)
     return instance
   }
   if (modelKey === 'prop/wall_corner') {
@@ -240,8 +240,13 @@ export function instantiateElementModel(
         },
   )
   instance.position.set(placement.center.x, elevation, placement.center.z)
-  instance.rotation.y = placement.rotationY
+  instance.rotation.y = placement.rotationY + rotationOffsetFor(modelKey)
   return instance
+}
+
+/** Offset de rotation déclaré dans le manifeste pour corriger un axe avant de modèle non conforme. */
+function rotationOffsetFor(modelKey: string): number {
+  return MODEL_MANIFEST[modelKey]?.rotationOffsetY ?? 0
 }
 
 function instantiateWallAccessModel(

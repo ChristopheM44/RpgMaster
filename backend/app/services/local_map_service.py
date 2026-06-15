@@ -65,7 +65,7 @@ SCENE_ASSET_KEYS = {
 # (frontend/src/engine3d/adapters/sceneAdapter.ts) pour rester cohérent.
 ELEMENT_DEFAULT_HEIGHTS_M: dict[str, float] = {
     "wall": 2.5,
-    "door": 2.2,
+    "door": 2.5,  # wall_doorway.glb = panneau de mur complet (découpe de porte interne)
     "window": 1.0,
     "furniture": 0.8,
     "cover": 1.0,

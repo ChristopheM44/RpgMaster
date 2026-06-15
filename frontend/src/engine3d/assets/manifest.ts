@@ -11,6 +11,8 @@ export interface ModelDef {
   /** 'height' = mise à l'échelle sur la hauteur cible ; 'footprint' = sur l'empreinte XZ. */
   fit: 'height' | 'footprint'
   animated?: boolean
+  /** Rotation Y (rad) additionnelle si l'axe avant du modèle ne suit pas la convention +Z du moteur. */
+  rotationOffsetY?: number
 }
 
 export const MODEL_MANIFEST: Record<string, ModelDef> = {
@@ -44,7 +46,9 @@ export const MODEL_MANIFEST: Record<string, ModelDef> = {
   'prop/pillar': { file: 'dungeon/pillar.glb', fit: 'footprint' },
   'prop/rubble_large': { file: 'dungeon/rubble_large.glb', fit: 'footprint' },
   'prop/bed_frame': { file: 'dungeon/bed_frame.glb', fit: 'footprint' },
-  'prop/stairs': { file: 'dungeon/stairs.glb', fit: 'footprint' },
+  // stairs.glb monte vers -Z (l'extrémité haute est en Z=0) : inverse de la
+  // convention +Z attendue par plusZRotationToFacing, d'où l'offset de 180°.
+  'prop/stairs': { file: 'dungeon/stairs.glb', fit: 'footprint', rotationOffsetY: Math.PI },
   'prop/door': { file: 'dungeon/wall_doorway.glb', fit: 'footprint' },
   'prop/torch_lit': { file: 'dungeon/torch_lit.glb', fit: 'height' },
   'prop/torch_mounted': { file: 'dungeon/torch_mounted.glb', fit: 'height' },

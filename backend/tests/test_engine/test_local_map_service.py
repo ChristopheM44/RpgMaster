@@ -388,7 +388,7 @@ def test_enrich_injects_3d_defaults_for_interior_scene() -> None:
         by_kind.setdefault(element["kind"], element)
         assert element["elevation_m"] == 0.0
     assert by_kind["wall"]["height_m"] == 2.5
-    assert by_kind["door"]["height_m"] == 2.2
+    assert by_kind["door"]["height_m"] == 2.5
     assert by_kind["wall"]["asset_key"] == "prop/wall"
     assert by_kind["door"]["asset_key"] == "prop/door"
     assert any(
