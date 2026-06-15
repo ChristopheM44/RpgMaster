@@ -68,6 +68,36 @@ async def test_chat_returns_content_and_passes_options(
     assert call_kwargs["messages"] == [{"role": "user", "content": "Bonjour"}]
 
 
+async def test_chat_with_format_json_sets_response_format(
+    client: OpenAICompatibleClient,
+    sdk_client,
+) -> None:
+    """chat(format="json") active le mode JSON natif OpenAI (Piste D.1)."""
+    mock_create = AsyncMock(return_value=_chat_response('{"ok": true}'))
+    sdk_client.chat.completions.create = mock_create
+
+    await client.chat(
+        messages=[{"role": "user", "content": "Bonjour"}],
+        format="json",
+    )
+
+    call_kwargs = mock_create.call_args.kwargs
+    assert call_kwargs["response_format"] == {"type": "json_object"}
+
+
+async def test_chat_without_format_omits_response_format(
+    client: OpenAICompatibleClient,
+    sdk_client,
+) -> None:
+    """Sans format, response_format n'est pas transmis (rétro-compat, Piste D.1)."""
+    mock_create = AsyncMock(return_value=_chat_response("Bienvenue."))
+    sdk_client.chat.completions.create = mock_create
+
+    await client.chat(messages=[{"role": "user", "content": "Bonjour"}])
+
+    assert "response_format" not in mock_create.call_args.kwargs
+
+
 async def test_generate_builds_chat_messages(client: OpenAICompatibleClient) -> None:
     mock_chat = AsyncMock(return_value="ok")
 

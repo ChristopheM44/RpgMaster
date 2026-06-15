@@ -308,6 +308,7 @@ class PersonaFactory:
                 messages=messages,
                 temperature=0.7 if attempt == 1 else 0.3,
                 max_tokens=2048,
+                format="json",
             )
         except (OllamaError, OpenAICompatibleError) as exc:
             logger.warning(

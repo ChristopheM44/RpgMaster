@@ -4,16 +4,21 @@ import json
 import logging
 from typing import Any
 
+from pydantic import ValidationError
+
 from app.agents.base_agent import BaseAgent
 from app.agents.context_manager import ContextManager
 from app.agents.persona import MonsterPersona, NPCPersona, stub_npc_persona_from_legacy
 from app.agents.prompt_safety import delimit_user_input
 from app.agents.schemas import AgentContext, AgentResponse, GMAction, GMResponse
+from app.engine.theme_packs import resolve_theme_pack
+from app.game.scene_theme import coerce_scene_theme
 from app.llm.base_client import LLMClient
 from app.llm.budget import record_llm_call
 from app.llm.model_router import router
 from app.llm.ollama_client import OllamaError
 from app.llm.openai_compatible_client import OpenAICompatibleError
+from app.schemas.scene_spec import SceneEnclosure, SceneExitSpec, SceneFeatureSpec, SceneSpec
 
 logger = logging.getLogger(__name__)
 
@@ -312,6 +317,54 @@ def _extract_scene_anchor(game_state: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+_FALLBACK_EXIT_DIRECTIONS = ("south", "north", "east", "west")
+
+
+def _fallback_scene_spec(scene_anchor: dict[str, Any]) -> SceneSpec:
+    """SceneSpec déterministe minimal si ``compose_scene`` échoue côté LLM.
+
+    Conserve le thème inféré du contexte et reconduit les sorties connues de
+    la scène courante, pour que ``scene_builder`` produise une carte cohérente
+    et navigable même sans réponse LLM exploitable.
+    """
+    theme = coerce_scene_theme(
+        None,
+        scene_anchor.get("terrain"),
+        scene_anchor.get("location_place"),
+        scene_anchor.get("location_venue"),
+        scene_anchor.get("scene_brief"),
+    )
+    enclosure: SceneEnclosure = "interior" if theme in {"dungeon", "cave"} else "exterior"
+    pack = resolve_theme_pack(theme, enclosure)
+
+    exits: list[SceneExitSpec] = []
+    for exit_info, direction in zip(
+        scene_anchor.get("available_exits") or [], _FALLBACK_EXIT_DIRECTIONS, strict=False
+    ):
+        leads_to = str(exit_info.get("leads_to") or "").strip()
+        if not leads_to:
+            continue
+        exits.append(
+            SceneExitSpec(
+                label=str(exit_info.get("label") or "Sortie").strip() or "Sortie",
+                direction=direction,
+                leads_to=leads_to,
+                description=str(exit_info.get("description") or "").strip() or None,
+            )
+        )
+
+    return SceneSpec(
+        theme=theme,
+        size="medium",
+        enclosure=enclosure,
+        features=[
+            SceneFeatureSpec(kind="cover", name=pack.cover_label, zone="nw"),
+            SceneFeatureSpec(kind="hazard", name=pack.hazard_label, zone="se"),
+        ],
+        exits=exits,
+    )
+
+
 class GMAgent(BaseAgent):
     """Agent Maître du Jeu : narration, gestion des scènes et des PNJ.
 
@@ -447,6 +500,65 @@ class GMAgent(BaseAgent):
             },
         )
         return await self._call_and_parse(user_prompt, context_manager)
+
+    async def compose_scene(
+        self,
+        game_state: dict[str, Any],
+        *,
+        intent: str | None = None,
+    ) -> SceneSpec:
+        """Décrit l'intention d'une nouvelle scène — la géométrie est déléguée à ``scene_builder``.
+
+        Retry une fois en cas d'échec LLM/JSON/validation, puis retombe sur
+        ``_fallback_scene_spec`` (thème inféré + sorties connues conservées).
+        """
+        scene_anchor = _extract_scene_anchor(game_state)
+        prompt = self._render_prompt(
+            "gm_scene_compose.txt",
+            {
+                "scene_anchor": scene_anchor,
+                "intent": delimit_user_input(intent) if intent else None,
+            },
+        )
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "Tu es un Maître du Jeu D&D rigoureux. "
+                    "Tu réponds UNIQUEMENT en JSON valide selon le schéma fourni, "
+                    "sans markdown ni texte explicatif."
+                ),
+            },
+            {"role": "user", "content": prompt},
+        ]
+
+        for attempt in (1, 2):
+            try:
+                record_llm_call("gm")
+                raw = await self._client.chat(
+                    messages=messages,
+                    temperature=0.7 if attempt == 1 else 0.3,
+                    max_tokens=1024,
+                    format="json",
+                )
+            except (OllamaError, OpenAICompatibleError, ConnectionError, TimeoutError) as exc:
+                logger.warning(
+                    "GMAgent.compose_scene : appel LLM (tentative %d) échoué : %s", attempt, exc
+                )
+                continue
+
+            data = self._extract_json(raw, log_failure=False)
+            if data is None:
+                continue
+            try:
+                return SceneSpec(**data)
+            except ValidationError as exc:
+                logger.warning(
+                    "GMAgent.compose_scene : SceneSpec invalide (tentative %d) : %s", attempt, exc
+                )
+
+        logger.warning("GMAgent.compose_scene : échec LLM, repli sur SceneSpec déterministe.")
+        return _fallback_scene_spec(scene_anchor)
 
     async def run_encounter_end(
         self,

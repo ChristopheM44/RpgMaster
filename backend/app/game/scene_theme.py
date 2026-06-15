@@ -75,9 +75,15 @@ _CITY = (
     "town",
     "marche",
     "market",
+    "marchand",
     "auberge",
     "taverne",
     "quartier",
+    "temple",
+    "sanctuaire",
+    "boutique",
+    "echoppe",
+    "forge",
 )
 _DUNGEON = ("dungeon", "donjon", "chamber", "chambre", "salle", "crypt", "crypte")
 _CAVE = ("cave", "grotte", "cavern", "caverne")

@@ -73,9 +73,16 @@ class OpenAICompatibleClient:
         messages: list[dict],
         temperature: float = 0.7,
         max_tokens: int = 1024,
+        format: str | None = None,
+        num_ctx: int | None = None,
     ) -> str:
+        """``format="json"`` active le mode JSON natif OpenAI (Piste D.1).
+
+        ``num_ctx`` n'a pas d'équivalent dans l'API OpenAI (fenêtre de contexte
+        fixée par le modèle) — accepté pour parité avec ``LLMClient`` mais ignoré.
+        """
         try:
-            return await self._chat_with_retry(messages, temperature, max_tokens)
+            return await self._chat_with_retry(messages, temperature, max_tokens, format)
         except APIStatusError as exc:
             raise OpenAICompatibleError(f"Erreur API {exc.status_code} : {exc.message}") from exc
 
@@ -138,11 +145,16 @@ class OpenAICompatibleClient:
         messages: list[dict],
         temperature: float,
         max_tokens: int,
+        format: str | None = None,
     ) -> str:
+        kwargs: dict[str, object] = {}
+        if format == "json":
+            kwargs["response_format"] = {"type": "json_object"}
         response = await self._get_client().chat.completions.create(
             model=self._model,
             messages=messages,  # type: ignore[arg-type]
             temperature=temperature,
             max_tokens=max_tokens,
+            **kwargs,
         )
         return response.choices[0].message.content or ""

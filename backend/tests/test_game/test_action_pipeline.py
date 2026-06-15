@@ -1782,6 +1782,191 @@ class TestPipelineExecutorUnits:
         assert EventType.REGION_MAP_UPDATED in event_types
         assert EventType.CITY_MAP_UPDATED in event_types
 
+    async def test_executor_region_map_update_without_position_gets_layout_and_decor(
+        self,
+    ) -> None:
+        """Piste C.3/C.4 : region_map_update sans position/decor -> carte placée + décorée."""
+        active = ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.EXPLORATION,
+            state_data={},
+        )
+        bus = _FakeBus()
+        executor = GMResponseExecutor(bus)
+
+        await executor.execute_gm_response(
+            GMResponse(
+                narration="La carte de la Côte des Brumes se dessine.",
+                actions=[
+                    GMAction(
+                        type="region_map_update",
+                        params={
+                            "name": "Côte des Brumes",
+                            "current_node_id": "port_neuf",
+                            "nodes_upsert": [
+                                {
+                                    "id": "port_neuf",
+                                    "name": "Port-Neuf",
+                                    "kind": "settlement",
+                                    "status": "current",
+                                },
+                                {
+                                    "id": "phare",
+                                    "name": "Phare du large",
+                                    "kind": "landmark",
+                                    "status": "known",
+                                },
+                            ],
+                            "edges_upsert": [],
+                        },
+                    ),
+                ],
+            ),
+            active,
+            db=None,
+            session_id=SESSION_ID,
+        )
+
+        region_map = active.state_data["world_maps"]["region_map"]
+        nodes_by_id = {node["id"]: node for node in region_map["nodes"]}
+
+        for node in nodes_by_id.values():
+            assert 0.0 <= node["position"]["x"] <= 100.0
+            assert 0.0 <= node["position"]["y"] <= 100.0
+        assert nodes_by_id["port_neuf"]["position"] != nodes_by_id["phare"]["position"]
+
+        decor = region_map["decor"]
+        assert decor is not None
+        # "Port-Neuf"/"Côte des Brumes" -> mots-clés côtiers -> coastline générée.
+        assert decor.get("coastline") is not None
+
+    async def test_executor_city_map_update_without_position_gets_layout_and_decor(self) -> None:
+        """Piste C.3/C.4 : city_map_update sans position/decor -> carte placée + décor de ville."""
+        active = ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.EXPLORATION,
+            state_data={},
+        )
+        bus = _FakeBus()
+        executor = GMResponseExecutor(bus)
+
+        await executor.execute_gm_response(
+            GMResponse(
+                narration="Le plan de Port-Neuf se précise.",
+                actions=[
+                    GMAction(
+                        type="city_map_update",
+                        params={
+                            "city_id": "port_neuf",
+                            "region_node_id": "port_neuf",
+                            "name": "Port-Neuf",
+                            "current_node_id": "quai_nord",
+                            "nodes_upsert": [
+                                {
+                                    "id": "quai_nord",
+                                    "name": "Quai nord",
+                                    "kind": "docks",
+                                    "status": "current",
+                                },
+                                {
+                                    "id": "taverne",
+                                    "name": "Taverne du Heron",
+                                    "kind": "tavern",
+                                    "status": "known",
+                                },
+                            ],
+                            "edges_upsert": [],
+                        },
+                    ),
+                ],
+            ),
+            active,
+            db=None,
+            session_id=SESSION_ID,
+        )
+
+        city_map = active.state_data["world_maps"]["city_maps"]["port_neuf"]
+        nodes_by_id = {node["id"]: node for node in city_map["nodes"]}
+
+        for node in nodes_by_id.values():
+            assert 0.0 <= node["position"]["x"] <= 100.0
+            assert 0.0 <= node["position"]["y"] <= 100.0
+        assert nodes_by_id["quai_nord"]["position"] != nodes_by_id["taverne"]["position"]
+
+        decor = city_map["decor"]
+        assert decor is not None
+        # Décor de ville : périphérique, jamais de montagnes/côte (cf. generateCityDecor).
+        assert decor["mountains"] == []
+        assert decor.get("coastline") is None
+        assert decor["forests"]
+
+    async def test_executor_region_map_update_preserves_decor_on_later_patch(self) -> None:
+        """Un region_map_update ultérieur sans decor ne régénère pas le décor existant."""
+        active = ActiveSession(
+            session_id=SESSION_ID,
+            phase=SessionStatus.EXPLORATION,
+            state_data={},
+        )
+        bus = _FakeBus()
+        executor = GMResponseExecutor(bus)
+
+        await executor.execute_gm_response(
+            GMResponse(
+                narration="Premier patch.",
+                actions=[
+                    GMAction(
+                        type="region_map_update",
+                        params={
+                            "name": "Vallée de l'Épine",
+                            "current_node_id": "auberge_du_pont",
+                            "nodes_upsert": [
+                                {
+                                    "id": "auberge_du_pont",
+                                    "name": "Auberge du Pont",
+                                    "kind": "settlement",
+                                    "status": "current",
+                                },
+                            ],
+                            "edges_upsert": [],
+                        },
+                    ),
+                ],
+            ),
+            active,
+            db=None,
+            session_id=SESSION_ID,
+        )
+        decor_after_first = active.state_data["world_maps"]["region_map"]["decor"]
+        assert decor_after_first is not None
+
+        await executor.execute_gm_response(
+            GMResponse(
+                narration="Second patch, sans decor.",
+                actions=[
+                    GMAction(
+                        type="region_map_update",
+                        params={
+                            "nodes_upsert": [
+                                {
+                                    "id": "bois_creux",
+                                    "name": "Bois Creux",
+                                    "kind": "wilderness",
+                                    "status": "known",
+                                },
+                            ],
+                            "edges_upsert": [],
+                        },
+                    ),
+                ],
+            ),
+            active,
+            db=None,
+            session_id=SESSION_ID,
+        )
+
+        decor_after_second = active.state_data["world_maps"]["region_map"]["decor"]
+        assert decor_after_second == decor_after_first
+
     async def test_pipeline_ignores_gm_damage_apply_in_combat(self) -> None:
         active = _make_combat_active()
         bus = _FakeBus()

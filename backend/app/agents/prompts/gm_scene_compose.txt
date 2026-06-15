@@ -1,0 +1,60 @@
+Tu es le Maître du Jeu. Tu dois décrire l'INTENTION d'une nouvelle scène tactique (grille 12x12) — PAS sa géométrie. Le placement précis (cases, sorties, assets 3D) est calculé ensuite par un moteur déterministe à partir de ton intention.
+
+=== CONTEXTE DE LA SCÈNE ===
+Lieu : {{ scene_anchor.location_place }}
+{% if scene_anchor.location_venue %}Lieu précis : {{ scene_anchor.location_venue }}
+{% endif %}Région : {{ scene_anchor.location_region | default("(non précisée)") }}
+Moment : {{ scene_anchor.time_of_day }}{% if scene_anchor.weather %}, {{ scene_anchor.weather }}{% endif %}
+
+{% if scene_anchor.terrain %}Terrain actuel : {{ scene_anchor.terrain }}
+{% endif %}Résumé narratif : {{ scene_anchor.scene_brief | default("(aucun)") }}
+{% if scene_anchor.available_exits %}
+=== SORTIES CONNUES DEPUIS CE LIEU ===
+{% for exit in scene_anchor.available_exits %}- {{ exit.label }} → {{ exit.leads_to }}{% if exit.description %} ({{ exit.description }}){% endif %}
+{% endfor %}{% endif %}
+{% if intent %}
+=== INTENTION DEMANDÉE ===
+{{ intent }}
+{% endif %}
+=== TON TRAVAIL ===
+Décris cette scène en JSON STRICT selon ce schéma :
+
+{
+  "theme": "forest|beach|coastal|rocky|mountain|dungeon|cave|city|plains|swamp|desert",
+  "size": "small|medium|large",
+  "enclosure": "interior|exterior",
+  "description": "1-2 phrases d'ambiance (max 600 car.)",
+  "features": [
+    {"kind": "cover|hazard|clue|loot|enemy|npc|decor", "name": "string", "zone": "center|north|south|east|west|ne|nw|se|sw", "note": "détail optionnel"}
+  ],
+  "exits": [
+    {"label": "string", "direction": "north|south|east|west", "leads_to": "id de destination", "description": "optionnel", "embedded_element": "id d'élément optionnel si la sortie est dissimulée (trappe, passage secret)"}
+  ],
+  "tactical_intent": "1 phrase sur l'usage tactique de la scène (optionnel)"
+}
+
+=== RÈGLES ABSOLUES ===
+1. Réponds UNIQUEMENT en JSON valide. Aucun texte avant ou après, aucune coordonnée col/row.
+2. Inclus 2 à 4 "features" avec au moins un "cover" et un "hazard" pour une scène jouable en tactique.
+3. Pour chaque sortie listée dans SORTIES CONNUES que cette scène doit conserver, ajoute une entrée correspondante dans "exits" avec le même "leads_to".
+4. "zone" situe approximativement la feature dans la scène — le moteur affine le placement exact.
+5. "theme" doit rester cohérent avec le terrain/lieu fournis ; "enclosure":"interior" pour l'intérieur d'un bâtiment, d'une grotte ou d'un donjon.
+
+=== EXEMPLE ===
+{
+  "theme": "forest",
+  "size": "medium",
+  "enclosure": "exterior",
+  "description": "Une clairière humide bordée de fougères, où la lumière filtre à peine.",
+  "features": [
+    {"kind": "cover", "name": "Tronc renversé", "zone": "nw"},
+    {"kind": "hazard", "name": "Fondrière camouflée", "zone": "center"},
+    {"kind": "clue", "name": "Empreintes fraîches", "zone": "east", "note": "Pistes de bottes dirigées vers le nord"}
+  ],
+  "exits": [
+    {"label": "Sentier vers le campement", "direction": "south", "leads_to": "campement_1"}
+  ],
+  "tactical_intent": "Embuscade possible depuis les fourrés au nord-ouest"
+}
+
+Maintenant décris la scène demandée.

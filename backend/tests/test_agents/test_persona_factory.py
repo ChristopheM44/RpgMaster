@@ -182,6 +182,17 @@ async def test_enrich_npc_persona_returns_rich_persona_on_success(
     factory._client.chat.assert_called_once()
 
 
+async def test_enrich_npc_persona_calls_llm_with_format_json(
+    factory: PersonaFactory,
+) -> None:
+    """_call_llm_json force une sortie JSON contrainte via format="json" (Piste D.1)."""
+    factory._client.chat = AsyncMock(return_value=VALID_NPC_JSON)  # type: ignore[assignment]
+    stub = factory.stub_npc_persona("Mère Éline")
+    await factory.enrich_npc_persona(stub, target_importance="rich")
+
+    assert factory._client.chat.call_args.kwargs["format"] == "json"
+
+
 async def test_enrich_npc_persona_retries_then_falls_back_on_invalid_json(
     factory: PersonaFactory,
 ) -> None:

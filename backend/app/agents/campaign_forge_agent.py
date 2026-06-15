@@ -217,6 +217,7 @@ class CampaignForgeAgent(BaseAgent):
             ],
             temperature=0.55,
             max_tokens=max_tokens,
+            format="json",
         )
         data = self._extract_json(raw)
         if not isinstance(data, dict):

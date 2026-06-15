@@ -125,14 +125,26 @@ class OllamaClient:
         model: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 1024,
+        format: str | None = None,
+        num_ctx: int | None = None,
     ) -> str:
-        """Envoie une requête chat et retourne le contenu de la réponse."""
+        """Envoie une requête chat et retourne le contenu de la réponse.
+
+        ``format="json"`` force une sortie JSON contrainte côté Ollama (Piste D.1) :
+        à réserver aux appels structurés (compose_scene, persona factory, worldmap),
+        jamais à la narration libre. ``num_ctx`` ajuste la fenêtre de contexte du
+        modèle (passé dans ``options``). ``None`` conserve le comportement par défaut.
+        """
 
         async def _call() -> str:
+            options: dict[str, object] = {"temperature": temperature, "num_predict": max_tokens}
+            if num_ctx is not None:
+                options["num_ctx"] = num_ctx
             response = await self._get_client().chat(
                 model=model or self.model,
                 messages=messages,
-                options={"temperature": temperature, "num_predict": max_tokens},
+                options=options,
+                format=format,
             )
             return response.message.content  # type: ignore[union-attr]
 

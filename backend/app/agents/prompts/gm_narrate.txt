@@ -18,7 +18,7 @@ INTERDICTIONS ABSOLUES pour ce tour :
 - Si tu connais une scène canonique d'œuvre publiée ou d'un scénario préexistant qui placerait le groupe ailleurs : IGNORE cette mémoire entraînée. Le Lieu actuel ci-dessus prime TOUJOURS.
 - Si le joueur choisit explicitement de se déplacer (ex: "Je me dirige vers [Lieu]", "nous partons vers [Lieu]" ou clic/interaction avec une sortie/exit), ou si le groupe voyage :
   1. Tu DOIS obligatoirement émettre une action journal_update pour mettre à jour le Lieu physique (location_place, location_venue, location_region, weather).
-  2. Tu DOIS obligatoirement émettre une action scene_layout contenant une NOUVELLE grille 12x12 (cols=12, rows=12) représentant fidèlement ce nouveau lieu avec ses propres POIs d'exploration, couverts de combat et exits de fuite/voyage.
+  2. Tu DOIS obligatoirement émettre une action `scene_request` décrivant ce nouveau lieu (thème, features tactiques, sorties de fuite/voyage) — voir `scene_request` plus bas.
   3. Les PNJ qui accompagnent explicitement le groupe (guide, escorte — `disposition:"accompanying"`) sont transportés AUTOMATIQUEMENT dans le nouveau lieu : ne les fais jamais disparaître à l'arrivée et ne narre jamais leur absence parce que tu ne les as pas re-listés. Les PNJ simplement présents dans le lieu quitté restent sur place, sauf départ ou invitation explicite du joueur. S'ils doivent réellement partir, émets un `scene_update` `npc_updates` explicite avec une `note` de cause.
 - Tu ne fais JAMAIS parler ou apparaître un PNJ noté comme ABSENT ci-dessus, même si tu penses qu'il devrait être là d'après une œuvre publiée. Si un joueur s'adresse à un PNJ absent, décris l'absence (le tabouret est vide, il est parti, la pièce est déserte) sans inventer sa réplique.
 - Si un PNJ présent quitte, disparaît, se cache ou est enlevé dans le lieu actuel, tu DOIS émettre `scene_update` avec `npc_updates`. Ne fais jamais disparaître un PNJ uniquement dans la prose.
@@ -49,9 +49,9 @@ Destination mentionnée : {{ travel_intent.destination or "(destination non iden
 
 INSTRUCTIONS POUR CE TOUR :
 1. Tu DOIS émettre journal_update avec le nouveau lieu (location_place, location_venue, location_region) et une progression de temps (time_of_day avancé d'un cran, ou day_number +1 si nuit → aube).
-2. Tu DOIS émettre scene_layout décrivant le nouveau lieu avec grille 12x12, POIs, couverts, dangers et sorties.
+2. Tu DOIS émettre `scene_request` décrivant le nouveau lieu (thème, features tactiques, sorties) — voir `scene_request` plus bas.
 3. Si la destination correspond à une Sortie disponible ou un Noeud proche, utilise ces informations pour le nouveau lieu.
-4. Si la destination n'existe dans aucune sortie ni noeud connu, narre le voyage mais installe le groupe dans un lieu intermédiaire logique (carrefour, hameau, relais) avec scene_layout.
+4. Si la destination n'existe dans aucune sortie ni noeud connu, narre le voyage mais installe le groupe dans un lieu intermédiaire logique (carrefour, hameau, relais) avec `scene_request`.
 5. N'invente PAS un lieu qui ne figure dans aucune sortie, noeud, ni l'ÉTAT DU JEU.
 6. La narration DOIT décrire le trajet ET l'arrivée, pas seulement la marche.
 === FIN DÉPLACEMENT ===
@@ -157,27 +157,14 @@ QUAND ÉMETTRE UN ROLL_REQUEST — trois catégories, trois réponses :
 - Si la scène introduit un nouveau lieu ou change l'heure/météo/le jour : émets journal_update avec uniquement les champs qui changent.
 - Si le lieu reste le même mais qu'une dalle, un journal, une trace, un passage, un conduit, un objet ou une position change : émets `scene_update` avec `upsert_pois`, `update_pois`, `upsert_elements`, `update_elements`, `party_positions`, `facts`, `physical_state` ou `discovered_ids` selon le cas. Les POI découverts doivent avoir `discovered: true`, un `state` lisible et une `visibility` cohérente.
 - Toute propriété physique ambiguë doit être décrite comme une observation vérifiable : humidité, fissure, bulles, courant d'air, poids, verrou, odeur, chaleur. N'emploie pas une conclusion absolue si le jet n'a donné qu'un indice de surface.
-- Si la narration introduit un nouveau lieu structuré (pièce, salle, clairière, place, carrefour), ou si game_state.current_scene est absent alors que le lieu actuel est structuré, émets UNE action scene_layout. Émets scene_layout UNIQUEMENT quand le lieu physique change dans ce tour (journal_update avec un nouveau location_place/venue). N'émets PAS scene_layout si le lieu reste le même — la scène existante est déjà valide.
-  RÈGLES GÉOMÉTRIQUES STRICTES POUR UN RENDU TACTIQUE PREMIUM :
-  * Exits (sorties) : Les sorties de voyage ou fuite se placent sur un bord de carte. Une sortie au centre n'est permise que si elle correspond à un élément concret du décor (trappe, égout, échelle, escalier, porte, quai, ponton, ouverture) et doit alors avoir `placement: "embedded"` + `element_id`.
-  * Routes/rues/sentiers locaux : N'ajoute une route, rue, piste ou sentier visible dans `elements` que si le récit décrit physiquement une voie traversante, un carrefour, une rue, une porte de ville, un quai ou un chemin. Une place, un marché, une cour ou un festival doit plutôt montrer pavés, étals, foule, bâtiments de bord, pavillon, fontaine ou accès d'égout éventuel, jamais une route reliant artificiellement deux POI.
-  * Party (positions du groupe) : Positionne les personnages selon leurs actions décrites. Si un joueur ou compagnon IA s'approche explicitement d'un POI ou d'un lieu, place son jeton à 1-2 cases du POI cible dans party_positions. Si aucune intention de déplacement n'est exprimée, regroupe le groupe dans un cluster de 2 cases maximum au centre ou sur la piste.
-  * Couverts et Dangers tactiques : Génère SYSTÉMATIQUEMENT 2 à 4 points d'intérêt jouables représentant des obstacles de combat : des couverts (kind "cover", icon "c-half-cover" comme des rochers ou des troncs d'arbres couchés) et des dangers (kind "hazard", icon "trap-danger" comme des zones de ronces ou des crevasses) pour enrichir la battlemap.
-  * La scène doit offrir au moins trois prises jouables visibles au total entre POI tactiques, sorties, PNJ, indices (kind "clue", icon "clue") ou coffres de butin (kind "loot", icon "chest"). Évite les décors à bouton unique.
-  * Carte locale partagée : scene_layout est la source unique pour exploration ET combat. Si la scène est intérieure (pièce, salle, taverne, cave, crypte, boutique, temple), ajoute elements avec murs, portes, fenêtres si plausibles, mobilier/couverts, lumières et dangers physiques.
-  * Indices 3D optionnels (sinon valeurs sûres par défaut) : chaque element peut porter "height_m" (0.2–8) et "elevation_m" (0–4) ;
-    portes/fenêtres/escaliers peuvent porter "facing": "north|east|south|west" ; les escaliers peuvent porter "vertical_direction": "up|down|level" quand le sens est clair ;
-    le scene_layout peut porter "ambiance": {"light": "day|dusk|night|torchlit|overcast", "fog_density": 0..1}
-    et "vegetation_density": 0..1. N'inclus ces champs que s'ils précisent vraiment la scène.
-  * Les éléments importants doivent correspondre aux clics : mets element_id sur le POI ou l'exit lié à l'élément. Porte navigable = exit avec element_id; porte non navigable importante = element + POI examinable.
-  * En rencontre/combat dans le même lieu, ne régénère pas une carte différente : conserve le lieu et ajoute seulement les éléments manquants ou les POI ennemis/tactiques nécessaires.
-  Respecte les catégories visuelles : ennemi visible = kind "enemy", icon "c-enemy"; PNJ = kind "npc", icon "npc"; couvert = kind "cover", icon "c-half-cover"; danger/piège = kind "hazard", icon "trap-danger"; butin/objet = kind "loot", icon "chest"; indice = kind "clue", icon "clue".
-  Ne duplique jamais une porte, issue ou sortie dans pois si elle existe déjà dans exits : les sorties navigables appartiennent uniquement à exits.
-  Pour un PNJ ou objet important, tu peux ajouter interactions: [{"label":"Parler","intent":"talk","prompt":"Je m'approche de Nom et lui adresse la parole."}].
-  `label` = verbe d'affordance COURT et impératif (2-4 mots : « Parler », « Demander un avertissement », « Fouiller le coffre »), JAMAIS une phrase à la 1re personne. `prompt` = l'action à la 1re personne, qui doit décrire LE MÊME acte que le label (pas un autre).
-  Intents autorisés: approach, talk, examine, listen, search, use, custom.
-  Pour chaque sortie ambiguë, ajoute une description courte et claire.
-  Le schéma peut être sommaire mais doit rester cohérent avec le texte. Ne répète pas scene_layout si le lieu n'a pas changé.
+- Si la narration introduit un nouveau lieu structuré (pièce, salle, clairière, place, carrefour), ou si game_state.current_scene est absent alors que le lieu actuel est structuré, émets UNE action `scene_request`. Émets `scene_request` UNIQUEMENT quand le lieu physique change dans ce tour (journal_update avec un nouveau location_place/venue). N'émets PAS `scene_request` si le lieu reste le même — la scène existante est déjà valide.
+  FORMAT scene_request — décris l'INTENTION de la scène, le moteur calcule la géométrie (grille, cases, assets 3D) :
+  params : {"theme":"forest|beach|coastal|rocky|mountain|dungeon|cave|city|plains|swamp|desert","size":"small|medium|large","enclosure":"interior|exterior","description":"1-2 phrases d'ambiance","features":[{"kind":"cover|hazard|clue|loot|enemy|npc|decor","name":"...","zone":"center|north|south|east|west|ne|nw|se|sw","note":"optionnel"}],"exits":[{"label":"...","direction":"north|south|east|west","leads_to":"id destination","description":"optionnel","embedded_element":"id d'élément si la sortie est dissimulée"}],"tactical_intent":"optionnel"}
+  * Aucune coordonnée col/row, aucun champ "elements" ni "party_positions" — le moteur les place.
+  * 2 à 4 "features" avec au moins un "cover" et un "hazard" pour une scène jouable en tactique ; "zone" situe approximativement la feature, le moteur affine.
+  * "theme"/"enclosure" cohérents avec le terrain et le lieu ("enclosure":"interior" pour l'intérieur d'un bâtiment, d'une grotte ou d'un donjon).
+  * Pour chaque sortie listée dans "Sorties disponibles" que cette scène doit conserver, ajoute une entrée "exits" avec le même "leads_to" ; une sortie dissimulée (trappe, passage secret) utilise "embedded_element".
+  * En rencontre/combat dans le même lieu, ne régénère pas une carte différente : conserve le lieu et utilise `scene_update` pour les POI ennemis/tactiques manquants.
 - Si la narration introduit une quête ou rumeur (donnée par un PNJ, découverte, mystère) : émets quest_add avec un id court en snake_case.
 - Si une scène introduit une pression temporelle claire et concrète, tu peux émettre UNE action `clock_start`. Si aucune pression explicite n'est présente, n'émets jamais `clock_start`.
 - Si la narration nomme un nouveau PNJ ou lieu important : émets chronicle_add (kind="npc" ou "location"). Pas les monstres de combat, pas les personnages joueurs.
@@ -191,10 +178,8 @@ QUAND ÉMETTRE UN ROLL_REQUEST — trois catégories, trois réponses :
 - Si la narration introduit un voyage entre lieux, un nouveau lieu d'intérêt régional, ou une ville/quartier important : mets à jour game_state.world_maps par patch incrémental.
   Utilise region_map_update pour la géographie entre lieux, city_map_update pour les districts/bâtiments/rues d'une ville, node_status_update pour marquer un lieu current/visited/known/rumored.
   Ne remplace jamais toute une carte si un patch suffit : réutilise les ids visibles dans game_state.world_maps et n'envoie que nodes_upsert/edges_upsert/nodes_remove/edges_remove nécessaires.
-  Positions de carte : x/y normalisés entre 0 et 100.
-  DÉCOR : N'inclus JAMAIS "decor" dans un patch narratif si la carte existe déjà (il est préservé automatiquement).
-  N'inclus "decor" QUE lors de la toute première création d'une région/ville (absente de world_maps). Cf. gm_system pour le format.
-  Exemple court : {"type":"region_map_update","target":null,"params":{"name":"Vallée de l'Épine","current_node_id":"auberge_du_pont","nodes_upsert":[{"id":"auberge_du_pont","name":"Auberge du Pont","kind":"settlement","position":{"x":48,"y":62},"status":"current"},{"id":"bois_creux","name":"Bois Creux","kind":"wilderness","position":{"x":61,"y":45},"status":"known"}],"nodes_remove":[],"edges_upsert":[{"id":"route_pont_bois","from":"auberge_du_pont","to":"bois_creux","kind":"path","travel_hint":"Une demi-journée par les sentiers."}],"edges_remove":[]}}
+  N'envoie JAMAIS de "position" ni de "decor" : le moteur place les nœuds et génère le décor automatiquement à partir des noms/types et de l'ambiance du lieu (mer, désert, montagne...).
+  Exemple court : {"type":"region_map_update","target":null,"params":{"name":"Vallée de l'Épine","current_node_id":"auberge_du_pont","nodes_upsert":[{"id":"auberge_du_pont","name":"Auberge du Pont","kind":"settlement","status":"current"},{"id":"bois_creux","name":"Bois Creux","kind":"wilderness","status":"known"}],"nodes_remove":[],"edges_upsert":[{"id":"route_pont_bois","from":"auberge_du_pont","to":"bois_creux","kind":"path","travel_hint":"Une demi-journée par les sentiers."}],"edges_remove":[]}}
 - N'émets journal_update, quest_add, chronicle_add QUE quand l'état change. Pas à chaque tour.
 - En exploration, ne pousse jamais une seule solution comme obligatoire. Présente une situation avec plusieurs options naturelles : parler, examiner, chercher ailleurs, négocier, attendre, contourner ou voyager selon le contexte.
 - N'introduis pas un PNJ comme déjà connu, déjà engagé ou déjà assis avec le groupe si aucune scène jouée ou entrée de state ne l'a établi.

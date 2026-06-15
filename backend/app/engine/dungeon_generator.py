@@ -13,8 +13,21 @@ from dataclasses import asdict, dataclass
 from math import ceil
 from typing import Any, Literal
 
+from app.engine.scene_primitives import asset_element as _asset_element
+from app.engine.scene_primitives import ellipse as _ellipse
+from app.engine.scene_primitives import rect as _rect
+from app.engine.scene_primitives import seed_int as _seed_int
+from app.engine.theme_packs import THEME_PACKS
+
 DungeonRoomKind = Literal["gateway", "chamber", "vault", "lair", "snare", "passage"]
 DungeonSize = Literal["small", "medium", "large"]
+
+# Dressing générique (pilier, gravats, caisses, tonneaux) délégué au pack "dungeon" —
+# les pièces narratives propres à chaque DungeonRoomKind (escalier, coffre, autel...)
+# restent définies localement dans _room_elements().
+_DUNGEON_PACK = THEME_PACKS["dungeon"]
+_COVER_PILLAR, _COVER_RUBBLE, _COVER_CRATES = _DUNGEON_PACK.cover_assets
+_DECOR_BARREL = _DUNGEON_PACK.decor_assets[0]
 
 _ROOM_COUNTS: dict[str, int] = {"small": 5, "medium": 8, "large": 12}
 _ROOM_LABELS: dict[str, str] = {
@@ -293,10 +306,6 @@ def room_kind(bp: DungeonBlueprint, room_id: str) -> DungeonRoomKind | None:
     return None
 
 
-def _seed_int(seed: str) -> int:
-    return int(hashlib.sha256(seed.encode("utf-8")).hexdigest()[:8], 16)
-
-
 def _dungeon_id(seed: str) -> str:
     digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:10]
     return f"dungeon_{digest}"
@@ -541,22 +550,22 @@ def _room_elements(room: DungeonRoom) -> list[dict[str, Any]]:
                 "Débris du seuil",
                 "cover",
                 _rect(3.0, 7.0, 1.2, 1.0),
-                "prop/rubble_large",
+                _COVER_RUBBLE,
             ),
         ],
         "chamber": [
             _asset_element(
-                "pillar_west", "Pilier de garde", "cover", _rect(3.0, 4.0, 0.8, 0.8), "prop/pillar"
+                "pillar_west", "Pilier de garde", "cover", _rect(3.0, 4.0, 0.8, 0.8), _COVER_PILLAR
             ),
             _asset_element(
-                "pillar_east", "Pilier de garde", "cover", _rect(8.2, 6.8, 0.8, 0.8), "prop/pillar"
+                "pillar_east", "Pilier de garde", "cover", _rect(8.2, 6.8, 0.8, 0.8), _COVER_PILLAR
             ),
             _asset_element(
                 "supply_crates",
                 "Caisses de garnison",
                 "cover",
                 _rect(6.0, 3.0, 1.2, 0.9),
-                "prop/crates_stacked",
+                _COVER_CRATES,
             ),
         ],
         "vault": [
@@ -580,7 +589,7 @@ def _room_elements(room: DungeonRoom) -> list[dict[str, Any]]:
                 "Tonneaux poussiéreux",
                 "cover",
                 _rect(9.0, 8.0, 1.1, 1.1),
-                "prop/barrel_large",
+                _DECOR_BARREL,
             ),
         ],
         "lair": [
@@ -597,21 +606,21 @@ def _room_elements(room: DungeonRoom) -> list[dict[str, Any]]:
                 "Pilier rituel",
                 "cover",
                 _rect(2.5, 5.0, 0.9, 0.9),
-                "prop/pillar",
+                _COVER_PILLAR,
             ),
             _asset_element(
                 "lair_pillar_east",
                 "Pilier rituel",
                 "cover",
                 _rect(8.6, 5.0, 0.9, 0.9),
-                "prop/pillar",
+                _COVER_PILLAR,
             ),
             _asset_element(
                 "lair_rubble",
                 "Gravats rituels",
                 "cover",
                 _rect(6.0, 8.5, 1.4, 1.0),
-                "prop/rubble_large",
+                _COVER_RUBBLE,
             ),
         ],
         "snare": [
@@ -630,14 +639,14 @@ def _room_elements(room: DungeonRoom) -> list[dict[str, Any]]:
                 "Caisses renversées",
                 "cover",
                 _rect(2.5, 7.0, 1.2, 0.9),
-                "prop/crates_stacked",
+                _COVER_CRATES,
             ),
             _asset_element(
                 "snare_rubble",
                 "Gravats instables",
                 "cover",
                 _rect(8.2, 3.0, 1.2, 1.0),
-                "prop/rubble_large",
+                _COVER_RUBBLE,
             ),
         ],
         "passage": [
@@ -646,60 +655,15 @@ def _room_elements(room: DungeonRoom) -> list[dict[str, Any]]:
                 "Tonneaux abandonnés",
                 "cover",
                 _rect(3.0, 4.8, 1.0, 1.0),
-                "prop/barrel_large",
+                _DECOR_BARREL,
             ),
             _asset_element(
                 "passage_crates",
                 "Caisses empilées",
                 "cover",
                 _rect(8.0, 6.3, 1.2, 0.9),
-                "prop/crates_stacked",
+                _COVER_CRATES,
             ),
         ],
     }
     return [*common_lights, *by_kind.get(room.kind, [])]
-
-
-def _rect(col: float, row: float, width: float, height: float) -> dict[str, Any]:
-    return {"type": "rect", "col": col, "row": row, "width": width, "height": height}
-
-
-def _ellipse(col: float, row: float, radius_col: float, radius_row: float) -> dict[str, Any]:
-    return {
-        "type": "ellipse",
-        "col": col,
-        "row": row,
-        "radius_col": radius_col,
-        "radius_row": radius_row,
-    }
-
-
-def _asset_element(
-    element_id: str,
-    name: str,
-    kind: str,
-    geometry: dict[str, Any],
-    asset_key: str,
-    *,
-    blocks_movement: bool = True,
-    opaque: bool = True,
-    interactive: bool = False,
-    facing: str | None = None,
-    vertical_direction: str | None = None,
-) -> dict[str, Any]:
-    element = {
-        "id": element_id,
-        "name": name,
-        "kind": kind,
-        "geometry": geometry,
-        "blocks_movement": blocks_movement,
-        "opaque": opaque,
-        "interactive": interactive,
-    }
-    if asset_key:
-        element["asset_key"] = asset_key
-    if facing:
-        element["facing"] = facing
-    if vertical_direction:
-        element["vertical_direction"] = vertical_direction
-    return element

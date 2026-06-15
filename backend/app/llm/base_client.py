@@ -17,6 +17,8 @@ class LLMClient(Protocol):
         messages: list[dict],
         temperature: float = 0.7,
         max_tokens: int = 1024,
+        format: str | None = None,
+        num_ctx: int | None = None,
     ) -> str: ...
 
     async def generate(

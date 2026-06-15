@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 from app.agents.base_agent import _PROMPTS_DIR
 from app.agents.campaign_forge_agent import CampaignForgeAgent, compact_srd_monster_index
@@ -29,3 +30,15 @@ def test_campaign_forge_system_prompt_renders_srd_index() -> None:
 
     assert "INDEX SRD MONSTRES COMPACT" in agent._system_prompt
     assert "dragon_rouge_venerable" in agent._system_prompt
+
+
+async def test_call_json_passes_format_json() -> None:
+    """_call_json force une sortie JSON contrainte via format="json" (Piste D.1)."""
+    mock_client = AsyncMock()
+    mock_client.chat = AsyncMock(return_value='{"ok": true}')
+    agent = CampaignForgeAgent(client=mock_client)
+
+    result = await agent._call_json("prompt", max_tokens=100)
+
+    assert result == {"ok": True}
+    assert mock_client.chat.call_args.kwargs["format"] == "json"

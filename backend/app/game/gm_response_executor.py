@@ -14,7 +14,7 @@ import uuid
 from decimal import Decimal
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import select
 
 from app.agents.schemas import AgentResponse, GMResponse
@@ -23,7 +23,9 @@ from app.config import (
     get_image_model,
     get_image_provider,
 )
+from app.engine.scene_builder import build_scene
 from app.engine.srd_data import find_equipment
+from app.engine.worldmap_builder import build_region_decor, layout_region_nodes
 from app.game import companion_refs
 from app.game.event_bus import EventType, event_bus
 from app.game.scene_theme import coerce_scene_theme
@@ -35,7 +37,9 @@ from app.logging_utils import log_degraded
 from app.models.character import Character
 from app.schemas.campaign_content import normalize_content_id
 from app.schemas.equipment import validate_equipment_item
+from app.schemas.scene_spec import SceneSpec
 from app.services import campaign_dossier_service, local_map_service, map_service
+from app.services.biome import infer_region_biome
 from app.services.currency_service import currency_service
 from app.services.equipment_service import EquipmentService
 from app.services.xp_service import xp_service
@@ -101,6 +105,23 @@ REWARD_AUTHORITY_MARKERS = (
     "vous gagnez",
     "vous recevez",
 )
+
+
+def _map_biome_corpus(params: dict[str, Any], existing_map: dict[str, Any] | None) -> str:
+    """Texte libre (noms/ids/descriptions) utilisé pour inférer le biome (Piste C)."""
+    parts: list[str] = []
+    for source in (params, existing_map or {}):
+        name = source.get("name")
+        if isinstance(name, str):
+            parts.append(name)
+    for node in params.get("nodes_upsert") or []:
+        if not isinstance(node, dict):
+            continue
+        for key in ("id", "name", "description"):
+            value = node.get(key)
+            if isinstance(value, str):
+                parts.append(value)
+    return " ".join(parts)
 
 
 class GMExecutionResult(BaseModel):
@@ -443,6 +464,8 @@ class GMResponseExecutor:
             await self._apply_chronicle_add(session_id, params, active)
         elif action_type == "scene_layout":
             await self._apply_scene_layout(session_id, params, active)
+        elif action_type == "scene_request":
+            await self._apply_scene_request(session_id, params, active)
         elif action_type == "scene_update":
             await self._apply_scene_update(session_id, params, active)
         elif action_type == "scene_progress_update":
@@ -1124,6 +1147,37 @@ class GMResponseExecutor:
         )
         self._trigger_visual_asset_generation(session_id, layout, scope="scene")
 
+    async def _apply_scene_request(
+        self,
+        session_id: str,
+        params: dict[str, Any],
+        active: ActiveSession,
+    ) -> None:
+        """Construit une scène déterministe à partir d'un ``SceneSpec`` (action LLM).
+
+        Le MJ décrit l'intention (thème, features, sorties) ; ``scene_builder``
+        calcule la géométrie 12x12. En cas de ``SceneSpec`` invalide, repli sur
+        un spec déterministe dérivé du contexte de scène courant.
+        """
+        from app.agents.gm_agent import _extract_scene_anchor, _fallback_scene_spec
+
+        scene_anchor = _extract_scene_anchor(active.state_data)
+        try:
+            spec = SceneSpec(**params)
+        except ValidationError as exc:
+            logger.warning("scene_request : SceneSpec invalide, repli deterministe - %s", exc)
+            spec = _fallback_scene_spec(scene_anchor)
+
+        location_seed = "|".join(
+            part
+            for part in (scene_anchor.get("location_place"), scene_anchor.get("location_venue"))
+            if part
+        )
+        seed = str(params.get("scene_id") or location_seed or session_id)
+
+        layout = build_scene(spec, seed=seed)
+        await self._apply_scene_layout(session_id, {"scene": layout}, active)
+
     async def _apply_scene_update(
         self,
         session_id: str,
@@ -1292,6 +1346,46 @@ class GMResponseExecutor:
         )
         return True
 
+    @staticmethod
+    def _complete_map_patch(
+        params: dict[str, Any],
+        *,
+        existing_map: dict[str, Any] | None,
+        layout_seed: str,
+        decor_seed: str,
+        decor_biome: str | None,
+    ) -> dict[str, Any]:
+        """Complète un patch region/city_map_update sans position/decor du MJ (Piste C).
+
+        - Les ``nodes_upsert`` sans ``position`` reçoivent une position calculée
+          par ``worldmap_builder.layout_region_nodes`` (en évitant les nœuds
+          déjà placés).
+        - Si la carte n'a pas encore de ``decor`` et que le patch n'en fournit
+          pas, un décor est généré par ``worldmap_builder.build_region_decor``.
+          ``decor_biome=None`` => biome inféré via ``infer_region_biome`` sur
+          les noms/descriptions des nœuds (régions) ; ``"city"`` => décor de
+          ville, indépendant du biome (cf. ``generateCityDecor`` côté frontend).
+        """
+        existing_nodes = [
+            node for node in (existing_map or {}).get("nodes", []) if isinstance(node, dict)
+        ]
+        nodes_upsert = params.get("nodes_upsert")
+        if isinstance(nodes_upsert, list) and nodes_upsert:
+            laid_out = layout_region_nodes(existing_nodes + nodes_upsert, seed=layout_seed)
+            params = dict(params)
+            params["nodes_upsert"] = laid_out[len(existing_nodes) :]
+            all_nodes = laid_out
+        else:
+            all_nodes = existing_nodes
+
+        existing_decor = (existing_map or {}).get("decor")
+        if existing_decor is None and not params.get("decor"):
+            biome = decor_biome or infer_region_biome(_map_biome_corpus(params, existing_map))
+            params = dict(params)
+            params["decor"] = build_region_decor(all_nodes, biome, seed=decor_seed)
+
+        return params
+
     async def _apply_region_map_update(
         self,
         session_id: str,
@@ -1311,6 +1405,14 @@ class GMResponseExecutor:
             )
         else:
             gm_dossier = self._state_world_maps(active)
+
+        params = self._complete_map_patch(
+            params,
+            existing_map=gm_dossier.get("region_map"),
+            layout_seed=f"{session_id}:region",
+            decor_seed=f"{session_id}:region",
+            decor_biome=None,
+        )
 
         try:
             region_map = map_service.merge_region_map_patch(
@@ -1380,6 +1482,14 @@ class GMResponseExecutor:
             logger.warning("city_map_update ignore : city_id manquant - params=%s", params)
             return
         city_maps = dict(gm_dossier.get("city_maps") or {})
+        params = self._complete_map_patch(
+            params,
+            existing_map=city_maps.get(city_id),
+            layout_seed=f"{session_id}:city:{city_id}",
+            decor_seed=f"{session_id}:city:{city_id}",
+            decor_biome="city",
+        )
+
         try:
             city_maps[city_id] = map_service.merge_city_map_patch(
                 city_maps.get(city_id),

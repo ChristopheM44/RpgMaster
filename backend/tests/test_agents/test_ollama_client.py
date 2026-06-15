@@ -57,6 +57,40 @@ async def test_chat_passes_options(client: OllamaClient, sdk_client) -> None:
     assert call_kwargs["options"]["num_predict"] == 512
 
 
+async def test_chat_passes_format_json_and_num_ctx(client: OllamaClient, sdk_client) -> None:
+    """chat() transmet format="json" et num_ctx à Ollama (Piste D.1)."""
+    mock_response = MagicMock()
+    mock_response.message.content = '{"ok": true}'
+    mock_chat = AsyncMock(return_value=mock_response)
+    sdk_client.chat = mock_chat
+
+    await client.chat(
+        messages=[{"role": "user", "content": "test"}],
+        format="json",
+        num_ctx=8192,
+    )
+
+    call_kwargs = mock_chat.call_args.kwargs
+    assert call_kwargs["format"] == "json"
+    assert call_kwargs["options"]["num_ctx"] == 8192
+
+
+async def test_chat_without_format_or_num_ctx_preserves_default_payload(
+    client: OllamaClient, sdk_client
+) -> None:
+    """Sans format/num_ctx, le payload reste inchangé (rétro-compat, Piste D.1)."""
+    mock_response = MagicMock()
+    mock_response.message.content = "ok"
+    mock_chat = AsyncMock(return_value=mock_response)
+    sdk_client.chat = mock_chat
+
+    await client.chat(messages=[{"role": "user", "content": "test"}])
+
+    call_kwargs = mock_chat.call_args.kwargs
+    assert call_kwargs["format"] is None
+    assert "num_ctx" not in call_kwargs["options"]
+
+
 async def test_chat_uses_custom_model(client: OllamaClient, sdk_client) -> None:
     """chat() utilise le modèle passé en paramètre si fourni."""
     mock_response = MagicMock()

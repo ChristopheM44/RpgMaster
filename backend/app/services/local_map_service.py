@@ -1331,8 +1331,8 @@ def _carve_wall_openings(by_id: dict[str, dict[str, Any]]) -> None:
 
         removed.append(wall_id)
         for idx, segment_geometry in enumerate(segments):
-            segment_id = wall_id if idx == 0 else _unique_wall_segment_id(
-                by_id, replacements, wall_id, idx
+            segment_id = (
+                wall_id if idx == 0 else _unique_wall_segment_id(by_id, replacements, wall_id, idx)
             )
             segment = dict(wall)
             segment["id"] = segment_id

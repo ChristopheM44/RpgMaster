@@ -165,3 +165,83 @@ def test_to_ollama_messages_empty_context() -> None:
     messages = cm.to_ollama_messages("Tu es le MJ.")
     assert len(messages) == 1
     assert messages[0]["role"] == "system"
+
+
+# ---------------------------------------------------------------------------
+# summarize_old_messages (Piste D.2)
+# ---------------------------------------------------------------------------
+
+
+def test_summarize_old_messages_empty_when_no_eviction() -> None:
+    """summarize_old_messages() est vide tant qu'aucun message n'a été évincé."""
+    cm = ContextManager(max_messages=3)
+    cm.add_message("gm", "MJ", "Message 1")
+    cm.add_message("gm", "MJ", "Message 2")
+
+    assert cm.summarize_old_messages() == ""
+
+
+def test_summarize_old_messages_retains_evicted_message() -> None:
+    """Le message évincé est condensé dans le résumé (faits clés conservés)."""
+    cm = ContextManager(max_messages=2)
+    cm.add_message("gm", "MJ", "Vous trouvez une clé en argent sous le tapis.")
+    cm.add_message("player", "Aria", "Je prends la clé.")
+    cm.add_message("gm", "MJ", "La porte du nord s'ouvre.")  # évince "Message 1"
+
+    summary = cm.summarize_old_messages()
+    assert "[MJ]" in summary
+    assert "clé en argent" in summary
+    # Le message évincé ne fait plus partie de la fenêtre récente
+    assert "clé en argent" not in [m.content for m in cm.get_messages()][0]
+
+
+def test_summarize_old_messages_truncates_long_content() -> None:
+    """Un message évincé trop long est tronqué avec une ellipse."""
+    cm = ContextManager(max_messages=1)
+    long_content = "Mot " * 100  # bien au-delà de la limite de ligne du résumé
+    cm.add_message("gm", "MJ", long_content)
+    cm.add_message("gm", "MJ", "Message suivant")  # évince le message long
+
+    summary = cm.summarize_old_messages()
+    assert summary.endswith("…")
+    assert len(summary) < len(long_content)
+
+
+def test_summarize_old_messages_caps_number_of_lines() -> None:
+    """Le résumé ne garde qu'un nombre borné des évictions les plus récentes."""
+    cm = ContextManager(max_messages=1)
+    for i in range(20):
+        cm.add_message("gm", "MJ", f"Message {i}")
+
+    summary_lines = cm.summarize_old_messages().splitlines()
+    assert len(summary_lines) <= 12
+    # Les évictions les plus récentes sont conservées
+    assert "Message 18" in summary_lines[-1]
+
+
+def test_to_ollama_messages_includes_summary_after_eviction() -> None:
+    """to_ollama_messages() insère le résumé condensé après le system prompt."""
+    cm = ContextManager(max_messages=1)
+    cm.add_message("gm", "MJ", "Vous entrez dans la crypte.")
+    cm.add_message("player", "Aria", "J'allume une torche.")  # évince le 1er message
+
+    messages = cm.to_ollama_messages("Tu es le MJ.")
+
+    assert messages[0] == {"role": "system", "content": "Tu es le MJ."}
+    assert messages[1]["role"] == "system"
+    assert "Résumé" in messages[1]["content"]
+    assert "crypte" in messages[1]["content"]
+    assert messages[2]["role"] == "user"
+    assert "torche" in messages[2]["content"]
+
+
+def test_clear_resets_summary() -> None:
+    """clear() vide aussi le résumé des messages évincés."""
+    cm = ContextManager(max_messages=1)
+    cm.add_message("gm", "MJ", "Message 1")
+    cm.add_message("gm", "MJ", "Message 2")  # évince "Message 1"
+    assert cm.summarize_old_messages() != ""
+
+    cm.clear()
+
+    assert cm.summarize_old_messages() == ""

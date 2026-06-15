@@ -869,6 +869,23 @@ async def test_narrate_actions_with_missing_fields(gm_agent: GMAgent) -> None:
 
 
 # ---------------------------------------------------------------------------
+# compose_scene() — Piste D.1 (format="json")
+# ---------------------------------------------------------------------------
+
+
+async def test_compose_scene_passes_format_json(gm_agent: GMAgent) -> None:
+    """compose_scene() force une sortie JSON contrainte via format="json" (Piste D.1)."""
+    payload = json.dumps({"theme": "forest", "size": "medium", "enclosure": "exterior"})
+    mock_chat = AsyncMock(return_value=payload)
+    with patch.object(gm_agent._client, "chat", new=mock_chat):
+        spec = await gm_agent.compose_scene(game_state={"phase": "EXPLORATION"})
+
+    assert spec.theme == "forest"
+    mock_chat.assert_awaited_once()
+    assert mock_chat.call_args.kwargs["format"] == "json"
+
+
+# ---------------------------------------------------------------------------
 # think() — interface BaseAgent
 # ---------------------------------------------------------------------------
 

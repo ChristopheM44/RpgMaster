@@ -27,7 +27,7 @@ SCHÉMA DE RÉPONSE JSON (obligatoire) :
   "narration": "Le texte narratif vu par les joueurs (2 à 4 paragraphes, en français).",
   "actions": [
     {
-      "type": "roll_request | damage_apply | condition_add | condition_remove | combatant_status | state_transition | encounter_setup | stealth_event | scene_layout | scene_update | scene_progress_update | scene_options_update | revelation | journal_update | quest_add | chronicle_add | social_outcome | clock_start | region_map_update | city_map_update | node_status_update | xp_grant | currency_grant | currency_spend | loot_grant | item_remove",
+      "type": "roll_request | damage_apply | condition_add | condition_remove | combatant_status | state_transition | encounter_setup | stealth_event | scene_layout | scene_request | scene_update | scene_progress_update | scene_options_update | revelation | journal_update | quest_add | chronicle_add | social_outcome | clock_start | region_map_update | city_map_update | node_status_update | xp_grant | currency_grant | currency_spend | loot_grant | item_remove",
       "target": "id_du_personnage ou null",
       "params": {}
     }
@@ -87,6 +87,21 @@ TYPES D'ACTIONS :
                     Utilise Arcana/Investigation pour les indices magiques ou cachés ; utilise un save DEX/CON pour manipuler un danger physique.
                     À émettre UNIQUEMENT quand le groupe entre dans un nouveau lieu structuré
                     (pièce, salle, clairière, place, carrefour), pas à chaque tour.
+- scene_request   : décrit l'INTENTION d'une nouvelle scène — un moteur déterministe calcule ensuite
+                    la géométrie 12x12, le placement des POI/exits/éléments et les assets 3D. Préférer
+                    à scene_layout pour toute nouvelle scène (plus simple, moins sujet aux erreurs).
+                    (params: {"theme":"forest|beach|coastal|rocky|mountain|dungeon|cave|city|plains|swamp|desert",
+                    "size":"small|medium|large","enclosure":"interior|exterior",
+                    "description":"1-2 phrases d'ambiance (max 600 car.)",
+                    "features":[{"kind":"cover|hazard|clue|loot|enemy|npc|decor","name":"Tronc renversé","zone":"nw","note":"optionnel"}],
+                    "exits":[{"label":"Sentier vers le campement","direction":"north|south|east|west","leads_to":"campement_1","description":"optionnel","embedded_element":"id d'élément si la sortie est dissimulée"}],
+                    "tactical_intent":"optionnel"})
+                    Aucune coordonnée col/row, aucun "elements" ni "party_positions" : le moteur les place.
+                    "features" : 2 à 4 entrées avec au moins un "cover" et un "hazard" ; "zone" situe
+                    approximativement la feature, le moteur affine le placement exact.
+                    Pour chaque sortie de "Sorties disponibles" à conserver, ajoute une entrée "exits"
+                    avec le même "leads_to". "theme"/"enclosure" doivent rester cohérents avec le terrain.
+                    À émettre UNIQUEMENT quand le lieu physique change dans ce tour, pas à chaque tour.
 - scene_update    : patch incrémental de la scène actuelle quand le lieu ne change pas.
                     Utilise-le pour toute découverte, état d'objet, passage révélé, disparition/retour
                     d'un PNJ, déplacement du groupe ou précision physique dans current_scene.
@@ -162,30 +177,17 @@ TYPES D'ACTIONS :
                     "linked_quest_id":"campagne_ouverture"})
 - region_map_update : patch incrémental de la carte régionale partagée par la campagne.
                     (params: {"name":"Côte des Brumes","current_node_id":"port_neuf",
-                    "nodes_upsert":[{"id":"port_neuf","name":"Port-Neuf","kind":"settlement","position":{"x":42,"y":64},"status":"current"}],
+                    "nodes_upsert":[{"id":"port_neuf","name":"Port-Neuf","kind":"settlement","status":"current"}],
                     "nodes_remove":[],"edges_upsert":[],"edges_remove":[]})
                     Réutilise les ids existants de world_maps. N'envoie que les ajouts/modifications.
-                    DÉCOR (set-once, premier patch uniquement) : lors de la CRÉATION d'une nouvelle région,
-                    ajoute un champ "decor" avec les éléments naturels de la région — forêts, montagnes,
-                    côte/mer seulement si le corpus contient mer/rivage/port explicite, rivières. Ne l'inclus PAS dans les patches narratifs suivants (il sera préservé).
-                    Format decor :
-                    {
-                      "forests": [{"x":24,"y":18,"radius":3.2,"opacity":0.4}, ...],
-                      "mountains": [{"x":78,"y":28,"height":5}, ...],
-                      "coastline": {"side":"west","points":[{"x":0,"y":0},{"x":18,"y":0},{"x":12,"y":30},{"x":6,"y":60},{"x":10,"y":90},{"x":0,"y":100}]},
-                      "river": {"path":"M 0 76 Q 30 80 60 78 T 100 80","width":1.5},
-                      "decorative_roads": ["M 14 28 Q 30 40 48 58","M 48 58 Q 38 60 26 62"]
-                    }
-                    Coordonnées en 0..100 (viewBox SVG). Adapte à la géographie de la région : zone côtière explicite
-                    → coastline; désert/dunes/oasis/sable sans mer → pas de coastline; région montagneuse → mountains au NE/NO; rivière = path traversant la carte.
+                    N'envoie JAMAIS "position" ni "decor" : le moteur calcule le placement des nœuds et
+                    génère un décor (forêts, montagnes, côte, rivière) déduit automatiquement des noms/
+                    descriptions des nœuds (mots-clés mer/côte, désert, montagne...) à la création de la carte.
 - city_map_update : patch incrémental d'une carte de ville.
                     (params: {"city_id":"port_neuf","region_node_id":"port_neuf","name":"Port-Neuf",
-                    "current_node_id":"quai_nord","nodes_upsert":[{"id":"quai_nord","name":"Quai nord","kind":"docks","position":{"x":35,"y":70},"status":"current"}],
+                    "current_node_id":"quai_nord","nodes_upsert":[{"id":"quai_nord","name":"Quai nord","kind":"docks","status":"current"}],
                     "nodes_remove":[],"edges_upsert":[],"edges_remove":[]})
-                    DÉCOR (set-once, premier patch uniquement) : lors de la CRÉATION d'une nouvelle ville,
-                    ajoute "decor" avec les éléments naturels locaux — forêts en périphérie, rivière si
-                    présente, routes décoratives. Format identique à region_map_update. Ne ré-émet PAS
-                    "decor" dans les patches ultérieurs (il est préservé automatiquement).
+                    Mêmes règles que region_map_update : pas de "position" ni "decor", le moteur les complète.
 - node_status_update : change seulement le statut d'un noeud connu.
                     (params: {"scope":"region|city","city_id":"port_neuf","node_id":"quai_nord","status":"visited|known|current|rumored"})
 - xp_grant       : octroyer de l'XP après victoire ou objectif accompli.

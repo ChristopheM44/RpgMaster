@@ -1,8 +1,14 @@
 # Step 2 — Génération image IA pour cartes majeures
 
+> **Statut (2026-06)** : implémenté de bout en bout (backend + frontend),
+> mais **désactivé par défaut** (`image_generation_enabled=False`, aucun
+> provider configuré). Voir `docs/decision-couche-visuelle-piste-e-2026-06.md`
+> pour l'analyse et la recommandation. Le contenu ci-dessous décrit le design
+> tel qu'implémenté.
+
 La V1 des cartes reste procédurale, déterministe et entièrement rendue en SVG/Vue.
-Une future V2 pourra ajouter un rendu bitmap IA pour les lieux importants sans
-remplacer les données structurées.
+La V2 ajoute un rendu bitmap IA optionnel pour les lieux importants, en
+complément des données structurées (jamais en remplacement).
 
 ## Principe
 
