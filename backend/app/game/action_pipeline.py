@@ -27,6 +27,7 @@ from app.game.combat_triggers import prime_combat_from_hostile_narration
 from app.game.constants import INACTIVE_STATUSES
 from app.game.event_bus import EventType, event_bus
 from app.game.gm_response_executor import GMResponseExecutor
+from app.game.scene_theme import infer_scene_theme
 from app.game.session_manager import ActiveSession
 from app.game.social_resolution import (
     _ability_short_key,
@@ -69,6 +70,12 @@ ResolvedActionResult = tuple[
 ]
 
 spellcasting_service = SpellcastingService()
+
+# Le MJ peut déplacer la scène via l'ancien scene_layout ou le nouveau
+# scene_request (sous-prompt introduit dans le commit 1019abd). Les garde-fous
+# de secours doivent reconnaître les deux, sinon ils réinjectent une scène vide
+# qui écrase la bonne.
+SCENE_MOVE_ACTION_TYPES = frozenset({"scene_layout", "scene_request"})
 
 
 class ActionRequest(BaseModel):
@@ -1115,7 +1122,7 @@ class ActionPipeline:
         active: ActiveSession,
     ) -> AgentResponse:
         """Deterministic transition when the player clearly travels but the GM
-        forgot to emit a ``scene_layout``.
+        forgot to emit a ``scene_layout`` or ``scene_request``.
 
         Builds a sober-but-real layout for the destination so the move always
         happens (free text behaves like a POI click). The next GM turn enriches
@@ -1135,9 +1142,6 @@ class ActionPipeline:
         scene_id = node_id or ActionPipeline._fallback_scene_id_for_label(destination)
         if not scene_id:
             return response
-        if any(action.type == "scene_layout" for action in response.actions):
-            return response  # the GM already moved the scene itself
-
         state = active.state_data if isinstance(active.state_data, dict) else {}
         scene = state.get("current_scene") or {}
         current_scene_id = (
@@ -1153,32 +1157,47 @@ class ActionPipeline:
                 if isinstance(exit_, dict) and str(exit_.get("leads_to") or "") == node_id:
                     label = str(exit_.get("label") or "").strip()
                     break
+        destination_kind = ""
         if not label:
             world_maps = state.get("world_maps") or {}
             region = world_maps.get("region_map") or {} if isinstance(world_maps, dict) else {}
             for node in (region.get("nodes") or []) if isinstance(region, dict) else []:
                 if isinstance(node, dict) and str(node.get("id") or "") == node_id:
                     label = str(node.get("name") or "").strip()
+                    destination_kind = str(node.get("kind") or "").strip()
+                    break
+        elif node_id:
+            world_maps = state.get("world_maps") or {}
+            region = world_maps.get("region_map") or {} if isinstance(world_maps, dict) else {}
+            for node in (region.get("nodes") or []) if isinstance(region, dict) else []:
+                if isinstance(node, dict) and str(node.get("id") or "") == node_id:
+                    destination_kind = str(node.get("kind") or "").strip()
                     break
         if not label:
             label = destination
 
-        response.actions.append(
-            ActionPipeline._minimal_scene_layout_action(scene_id, label, active)
-        )
+        gm_moved_scene = any(action.type in SCENE_MOVE_ACTION_TYPES for action in response.actions)
+        if not gm_moved_scene:
+            response.actions.append(
+                ActionPipeline._minimal_scene_layout_action(
+                    scene_id,
+                    label,
+                    active,
+                    destination_kind=destination_kind,
+                )
+            )
+            logger.info(
+                "ActionPipeline : scene_layout de secours injecté pour un voyage vers '%s'",
+                scene_id,
+            )
         # Keep the journal's location in sync with the new scene: the next turn's
         # anti-hallucination anchor (gm_narrate VERROU) reads location_place, so a
-        # scene_layout without a journal_update would tell the GM it is still in the
-        # old place — defeating the "enrich next turn" plan. Don't clobber a journal
-        # the LLM already emitted.
+        # scene move without a journal_update would tell the GM it is still in the
+        # old place. Don't clobber a journal the LLM already emitted.
         if label and not any(action.type == "journal_update" for action in response.actions):
             response.actions.append(
                 GMAction(type="journal_update", params={"location_place": label})
             )
-        logger.info(
-            "ActionPipeline : scene_layout de secours injecté pour un voyage vers '%s'",
-            scene_id,
-        )
         return response
 
     @staticmethod
@@ -1188,7 +1207,7 @@ class ActionPipeline:
         active: ActiveSession,
     ) -> AgentResponse:
         """Deterministic room-to-room travel inside procedural dungeons."""
-        if any(action.type == "scene_layout" for action in response.actions):
+        if any(action.type in SCENE_MOVE_ACTION_TYPES for action in response.actions):
             return response
         intent = request.travel_intent
         if not isinstance(intent, dict) or not intent.get("is_travel"):
@@ -1240,7 +1259,7 @@ class ActionPipeline:
         We inject a minimal destination scene so the map and journal cannot
         diverge.
         """
-        if any(action.type == "scene_layout" for action in response.actions):
+        if any(action.type in SCENE_MOVE_ACTION_TYPES for action in response.actions):
             return response
 
         state = active.state_data if isinstance(active.state_data, dict) else {}
@@ -1293,8 +1312,34 @@ class ActionPipeline:
         return response
 
     @staticmethod
-    def _minimal_scene_layout_action(scene_id: str, label: str, active: ActiveSession) -> GMAction:
+    def _minimal_scene_layout_action(
+        scene_id: str,
+        label: str,
+        active: ActiveSession,
+        *,
+        destination_kind: str = "",
+    ) -> GMAction:
         place = f"à {label}" if label else "sur les lieux"
+        state = active.state_data if isinstance(active.state_data, dict) else {}
+        current_scene = state.get("current_scene") or {}
+        current_scene_id = (
+            str(current_scene.get("scene_id") or "").strip()
+            if isinstance(current_scene, dict)
+            else ""
+        )
+        scene_theme = infer_scene_theme(destination_kind, label)
+        exits: list[dict[str, Any]] = []
+        if current_scene_id:
+            exits.append(
+                {
+                    "id": "exit_retour",
+                    "label": "Retour",
+                    "position": {"col": 6, "row": 11},
+                    "leads_to": current_scene_id,
+                    "description": "Revenir vers le lieu précédent.",
+                    "placement": "edge",
+                }
+            )
         return GMAction(
             type="scene_layout",
             params={
@@ -1303,9 +1348,10 @@ class ActionPipeline:
                 "rows": 12,
                 "cell_size_m": 1.5,
                 "terrain": "unknown",
+                "scene_theme": scene_theme,
                 "description": f"Le groupe arrive {place}. Les lieux se précisent peu à peu.",
                 "pois": [],
-                "exits": [],
+                "exits": exits,
                 "party_positions": ActionPipeline._fallback_party_positions(active),
             },
         )

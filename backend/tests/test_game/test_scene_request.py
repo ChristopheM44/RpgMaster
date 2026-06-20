@@ -10,6 +10,7 @@ vérifient le câblage complet : validation `SceneSpec`, repli déterministe sur
 from __future__ import annotations
 
 from app.agents.schemas import AgentResponse, GMAction
+from app.game.action_pipeline import ActionPipeline, ActionRequest
 from app.game.event_bus import EventType
 from app.game.gm_response_executor import GMResponseExecutor
 from app.game.session_manager import ActiveSession
@@ -160,3 +161,174 @@ async def test_executor_scene_request_seed_is_stable_for_same_location() -> None
 
     assert scenes[0]["pois"] == scenes[1]["pois"]
     assert scenes[0]["exits"] == scenes[1]["exits"]
+
+
+async def test_pipeline_travel_scene_request_prevents_empty_layout_fallback() -> None:
+    active = _active_for_depths_travel()
+    request = _travel_request_to_depths()
+    response = AgentResponse(
+        content="Vous descendez sous les dalles froides.",
+        actions=[
+            GMAction(
+                type="scene_request",
+                params={
+                    "theme": "dungeon",
+                    "size": "medium",
+                    "enclosure": "interior",
+                    "description": "Un sanctuaire souterrain de pierre noire.",
+                    "features": [
+                        {"kind": "cover", "name": "Pilier fissuré", "zone": "west"},
+                        {"kind": "clue", "name": "Autel gravé", "zone": "center"},
+                    ],
+                    "exits": [
+                        {
+                            "label": "Escalier vers la nef",
+                            "direction": "south",
+                            "leads_to": "nef_ancienne",
+                        }
+                    ],
+                },
+            )
+        ],
+    )
+
+    guarded = ActionPipeline._with_travel_scene_fallback(response, request, active)
+
+    assert sum(1 for action in guarded.actions if action.type == "scene_request") == 1
+    assert not any(action.type == "scene_layout" for action in guarded.actions)
+    journals = [action for action in guarded.actions if action.type == "journal_update"]
+    assert len(journals) == 1
+    assert journals[0].params["location_place"] == "Descente vers les profondeurs"
+
+    bus = _FakeBus()
+    await GMResponseExecutor(bus).execute_gm_response(
+        guarded,
+        active,
+        session_id=SESSION_ID,
+        fallback_actor_id="hero_1",
+    )
+
+    scene = active.state_data["current_scene"]
+    assert scene["scene_theme"] == "dungeon"
+    assert scene["exits"]
+    assert any(exit_data["leads_to"] == "nef_ancienne" for exit_data in scene["exits"])
+    assert active.state_data["adventure_journal"]["location_place"] == (
+        "Descente vers les profondeurs"
+    )
+
+
+async def test_pipeline_minimal_travel_fallback_has_theme_and_return_exit() -> None:
+    active = _active_for_depths_travel()
+    request = _travel_request_to_depths()
+    guarded = ActionPipeline._with_travel_scene_fallback(
+        AgentResponse(content="Vous progressez.", actions=[]),
+        request,
+        active,
+    )
+
+    layouts = [action for action in guarded.actions if action.type == "scene_layout"]
+    assert len(layouts) == 1
+    assert layouts[0].params["scene_theme"] == "dungeon"
+    assert layouts[0].params["exits"][0]["leads_to"] == "clairiere_depart"
+
+    bus = _FakeBus()
+    await GMResponseExecutor(bus).execute_gm_response(
+        guarded,
+        active,
+        session_id=SESSION_ID,
+        fallback_actor_id="hero_1",
+    )
+
+    scene = active.state_data["current_scene"]
+    assert scene["scene_theme"] == "dungeon"
+    assert scene["exits"]
+    assert scene["exits"][0]["leads_to"] == "clairiere_depart"
+
+
+def test_pipeline_journal_fallback_treats_scene_request_as_scene_move() -> None:
+    active = _active_for_depths_travel()
+    active.state_data["adventure_journal"] = {"location_place": "Clairière de départ"}
+    response = AgentResponse(
+        content="Vous descendez.",
+        actions=[
+            GMAction(type="scene_request", params={"theme": "dungeon"}),
+            GMAction(
+                type="journal_update",
+                params={"location_place": "Descente vers les profondeurs"},
+            ),
+        ],
+    )
+
+    guarded = ActionPipeline._with_journal_scene_fallback(response, active)
+
+    assert not any(action.type == "scene_layout" for action in guarded.actions)
+
+
+def test_pipeline_dungeon_transition_treats_scene_request_as_scene_move(monkeypatch) -> None:
+    from app.services import dungeon_service
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("dungeon fallback must not run after a scene_request")
+
+    monkeypatch.setattr(dungeon_service, "is_room_transition", fail_if_called)
+    response = AgentResponse(
+        content="Vous franchissez le seuil.",
+        actions=[GMAction(type="scene_request", params={"theme": "dungeon"})],
+    )
+
+    guarded = ActionPipeline._with_dungeon_room_transition(
+        response,
+        _travel_request_to_depths(),
+        _active_for_depths_travel(),
+    )
+
+    assert guarded.actions == response.actions
+
+
+def _travel_request_to_depths() -> ActionRequest:
+    return ActionRequest(
+        session_id=SESSION_ID,
+        actor_id="hero_1",
+        actor_kind="player",
+        action_type="free_text",
+        content="Descente vers les profondeurs",
+        travel_intent={
+            "is_travel": True,
+            "destination": "Descente vers les profondeurs",
+            "destination_node_id": "sanctuaire_profond",
+            "confidence": "explicit",
+        },
+    )
+
+
+def _active_for_depths_travel() -> ActiveSession:
+    return ActiveSession(
+        session_id=SESSION_ID,
+        phase=SessionStatus.EXPLORATION,
+        state_data={
+            "adventure_journal": {"location_place": "Clairière de départ"},
+            "characters": {"hero_1": {"name": "Thorvald"}},
+            "current_scene": {
+                "scene_id": "clairiere_depart",
+                "scene_theme": "forest",
+                "exits": [
+                    {
+                        "id": "vers_sanctuaire",
+                        "label": "Descente vers les profondeurs",
+                        "leads_to": "sanctuaire_profond",
+                    }
+                ],
+            },
+            "world_maps": {
+                "region_map": {
+                    "nodes": [
+                        {
+                            "id": "sanctuaire_profond",
+                            "name": "Sanctuaire souterrain",
+                            "kind": "dungeon",
+                        }
+                    ]
+                }
+            },
+        },
+    )
