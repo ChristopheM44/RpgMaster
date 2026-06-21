@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -51,3 +52,21 @@ async def async_client(db_engine):
         yield client
 
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def _disable_live_persona_enrichment():
+    """Désactive l'enrichissement LLM live des PNJ dans toute la suite de tests.
+
+    L'enrichissement « stub-then-enrich » (ActionResolver) spawne une tâche de fond
+    DB fire-and-forget : inoffensif en prod, mais dans les tests WS une telle tâche
+    peut survivre à la boucle du test et corrompre le teardown d'un test ultérieur
+    (connexion DB orpheline). Les tests qui vérifient l'enrichissement le réactivent
+    explicitement (cf. tests/test_game/test_persona_enrich_wiring.py).
+    """
+    from app.config import settings
+
+    original = settings.live_persona_enrichment
+    settings.live_persona_enrichment = False
+    yield
+    settings.live_persona_enrichment = original

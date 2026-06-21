@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import logging
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -30,7 +32,11 @@ from app.security import (
     validate_access_token_configuration,
 )
 from app.services import campaign_dossier_service
+from app.voice.base import AudioBlob
 from app.voice.local_provider import kokoro_speed_for, kokoro_voice_for
+from app.voice.router import voice_router
+
+logger = logging.getLogger(__name__)
 
 
 def _is_gm_narration_payload(payload: dict) -> bool:
@@ -91,6 +97,41 @@ def _queue_tts_for_visible_event(
         )
 
 
+async def _broadcast_audio_blob(
+    session_id: str,
+    narration_id: str,
+    blob: AudioBlob,
+    *,
+    speaker: str,
+    speaker_kind: str,
+) -> None:
+    """Diffuse un ``AudioBlob`` déjà synthétisé via l'event ``AUDIO``.
+
+    Reproduit le contrat de ``TtsRouter.synthesize_and_broadcast`` (séquence
+    ``generating`` → ``ready`` avec ``audio_b64``) pour l'audio produit par le
+    ``VoiceRouter`` côté narration PNJ (modes hybrid/realtime).
+    """
+    status_payload: dict[str, Any] = {"narration_id": narration_id, "status": "generating"}
+    if speaker:
+        status_payload["speaker"] = speaker
+    if speaker_kind:
+        status_payload["speaker_kind"] = speaker_kind
+
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.AUDIO,
+        dict(status_payload),
+        source="voice_router",
+    )
+    audio_b64 = base64.b64encode(blob.wav_bytes).decode("ascii")
+    await event_bus.publish_to_session(
+        session_id,
+        EventType.AUDIO,
+        {**status_payload, "status": "ready", "audio_b64": audio_b64},
+        source="voice_router",
+    )
+
+
 async def _synthesize_npc_dialogue(
     event: GameEvent,
     text: str,
@@ -124,6 +165,26 @@ async def _synthesize_npc_dialogue(
             persona = None
 
         if persona is not None:
+            # Modes hybrid/realtime : router via VoiceRouter pour que les personas
+            # "rich" atteignent la voix Realtime (fallback Local automatique géré par
+            # le router). En mode local (défaut), on conserve le chemin Kokoro direct
+            # ci-dessous — comportement strictement identique.
+            if voice_router.mode != "local":
+                try:
+                    blob = await voice_router.speak_for_persona(persona, text)
+                    await _broadcast_audio_blob(
+                        event.session_id,
+                        narration_id,
+                        blob,
+                        speaker=str(event.payload.get("speaker") or ""),
+                        speaker_kind="npc",
+                    )
+                    return
+                except Exception as exc:  # défensif : jamais d'erreur visible joueur
+                    logger.warning(
+                        "VoiceRouter narration PNJ échec (%s) — fallback synthèse locale.",
+                        exc,
+                    )
             voice = persona.voice
             voice_id = voice.voice_id_local or kokoro_voice_for(voice, prefer_french=False)
             speed = kokoro_speed_for(voice)

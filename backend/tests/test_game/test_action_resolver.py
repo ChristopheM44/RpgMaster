@@ -931,6 +931,91 @@ class TestNpcDialogueRouting:
         assert isinstance(call_kwargs["npc_personality"], NPCPersona)
         assert call_kwargs["npc_personality"].importance == "rich"
 
+    async def test_resolve_npc_dialogue_enriches_new_npc_via_active_factory(
+        self,
+        db_session,
+        session_row,
+        monkeypatch,
+    ) -> None:
+        """Câblage prod : la factory posée sur ``active.db_session_factory`` traverse
+        ``_resolve_npc_dialogue_impl`` → ``_resolve_npc_persona_or_hint`` → hook, et
+        déclenche l'enrichissement de fond pour un PNJ inédit.
+
+        Couvre le chemin à échec SILENCIEUX (factory ``None`` ⇒ skip sans erreur) qui,
+        mal câblé, ferait que l'enrichissement ne se déclencherait JAMAIS en prod.
+        """
+        from app.config import settings
+
+        monkeypatch.setattr(settings, "live_persona_enrichment", True)
+
+        active = ActiveSession(
+            session_id=session_row,
+            phase=SessionStatus.EXPLORATION,
+            state_data={
+                "characters": {"hero-1": {"name": "Thorvald"}},
+                "npc_states": {"brann": {"name": "Brann", "personality_hint": "bourru"}},
+            },
+            # Posée par le handler WS (_dispatch_action) en conditions réelles :
+            db_session_factory=object(),
+        )
+
+        mock_gm = MagicMock()
+        mock_gm.run_npc_dialogue = AsyncMock(
+            return_value=GMResponse(narration="Brann grogne un salut.", actions=[])
+        )
+        resolver = ActionResolver(gm_agent=mock_gm)
+
+        async def fake_campaign_for_session(session_id, db):
+            return MagicMock(id="cmp1")
+
+        async def fake_get_npc_persona(campaign_id, persona_id, db):
+            return None  # aucun PNJ persisté → branche stub-then-enrich
+
+        spawned: list[str] = []
+
+        def fake_create_logged_task(coro, name):
+            spawned.append(name)
+            coro.close()  # on prouve le câblage, on ne lance pas l'enrichissement
+
+        with (
+            patch(
+                "app.game.action_resolver.campaign_dossier_service.campaign_for_session",
+                new=fake_campaign_for_session,
+            ),
+            patch(
+                "app.game.action_resolver.campaign_dossier_service.get_npc_persona",
+                new=fake_get_npc_persona,
+            ),
+            patch(
+                "app.game.action_resolver.campaign_dossier_service.upsert_npc_persona",
+                new=AsyncMock(),
+            ),
+            patch(
+                "app.services.campaign_dossier_service.synthesize_canon_for_session",
+                new=AsyncMock(),
+            ),
+            patch(
+                "app.game.action_resolver.event_bus.publish_to_session",
+                new=AsyncMock(),
+            ),
+            patch(
+                "app.game.action_resolver.create_logged_task",
+                new=fake_create_logged_task,
+            ),
+        ):
+            await resolver.resolve_npc_dialogue(
+                session_id=session_row,
+                content="Brann, un mot ?",
+                character_id="hero-1",
+                target_id="brann",
+                active=active,
+                db=db_session,
+            )
+
+        # L'enrichissement de fond a bien été lancé → la factory de ``active`` a
+        # traversé tout le chemin jusqu'au hook.
+        assert spawned == ["persona.enrich_npc"]
+
     async def test_resolve_npc_dialogue_falls_back_to_legacy_hint_without_persona(
         self,
         db_session,

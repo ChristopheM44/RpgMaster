@@ -135,6 +135,7 @@ async def _dispatch_action(
     session_id: str,
     action: PlayerActionMessage,
     db: AsyncSession,
+    session_factory: Any = None,
 ) -> None:
     """Process a player action through the full pipeline and broadcast results."""
     active = session_manager.get_session(session_id)
@@ -146,6 +147,10 @@ async def _dispatch_action(
             source="ws_game",
         )
         return
+
+    # Factory de session DB de la session courante, pour les tâches de fond
+    # (ex. enrichissement « stub-then-enrich » de persona PNJ qui survit à la requête).
+    active.db_session_factory = session_factory
 
     if active.phase in (
         SessionStatus.EXPLORATION,
@@ -338,7 +343,7 @@ async def _run_action_bg(session_id: str, action: PlayerActionMessage, factory: 
     try:
         async with factory() as db:
             async with session_manager.session_lock(session_id):
-                await _dispatch_action(session_id, action, db)
+                await _dispatch_action(session_id, action, db, session_factory=factory)
     except Exception as exc:
         logger.error("Unhandled error in _dispatch_action (bg): %s", exc, exc_info=True)
         await event_bus.publish_to_session(

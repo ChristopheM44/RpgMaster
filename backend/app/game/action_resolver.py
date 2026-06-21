@@ -16,8 +16,10 @@ from typing import Any, Literal
 
 from app.agents.combat_gm_agent import CombatGMAgent
 from app.agents.gm_agent import GMAgent
+from app.config import settings
 from app.game.action_mechanics import ActionMechanics
 from app.game.action_orchestrator import ActionOrchestrator
+from app.game.async_tasks import create_logged_task
 from app.game.event_bus import EventType, event_bus
 from app.game.session_manager import ActiveSession
 from app.game.social_scene_state import finalize_npc_dialogue_state, prepare_npc_dialogue_state
@@ -303,6 +305,7 @@ class ActionResolver:
             npc_id=npc_id,
             npc=npc,
             db=db,
+            session_factory=getattr(active, "db_session_factory", None),
         )
         recent_messages: list[Any] = []
         if db is not None:
@@ -543,13 +546,16 @@ class ActionResolver:
         npc_id: str,
         npc: dict[str, Any],
         db: Any | None,
+        session_factory: Any = None,
     ) -> Any:
-        """Cherche une NPCPersona riche dans le dossier, sinon retourne le hint legacy.
+        """Cherche une NPCPersona riche dans le dossier, sinon stub-then-enrich.
 
         Priorité de lookup :
         1. ``played_canon.npc_personas[npc_id]`` (personas générées en cours de jeu)
         2. ``gm_dossier.important_npcs[]`` (personas pré-écrites lors de la forge)
-        3. Fallback : string ``personality_hint`` (l'ancien format)
+        3. PNJ léger introduit live : on crée+persiste un stub ``NPCPersona`` et on
+           lance son enrichissement LLM en tâche de fond (« stub-then-enrich », C2).
+        4. Fallback ultime : string ``personality_hint`` (l'ancien format).
 
         Le caller passe le résultat tel quel à ``GMAgent.run_npc_dialogue`` qui sait
         gérer les deux types (NPCPersona structurée OU string legacy).
@@ -568,6 +574,16 @@ class ActionResolver:
                             persona.importance,
                         )
                         return persona
+                    # Aucune persona persistée → PNJ léger introduit live (C2).
+                    stub = await self._introduce_npc_stub(
+                        campaign_id=campaign.id,
+                        npc_id=npc_id,
+                        npc=npc,
+                        db=db,
+                        session_factory=session_factory,
+                    )
+                    if stub is not None:
+                        return stub
             except Exception as exc:
                 log_degraded(
                     logger,
@@ -576,6 +592,88 @@ class ActionResolver:
                     npc_id=npc_id,
                 )
         return str(npc.get("personality_hint", "indifferent"))
+
+    async def _introduce_npc_stub(
+        self,
+        *,
+        campaign_id: str,
+        npc_id: str,
+        npc: dict[str, Any],
+        db: Any,
+        session_factory: Any,
+    ) -> Any | None:
+        """Crée+persiste un stub ``NPCPersona`` pour un PNJ introduit live, puis lance
+        son enrichissement LLM en tâche de fond (stub-then-enrich, C2).
+
+        - Le stub est persisté **synchroniquement** (sans LLM, peu coûteux) → les
+          répliques suivantes le trouvent via ``get_npc_persona`` et ne re-déclenchent
+          jamais cette branche (idempotence sans set de dédup).
+        - L'enrichissement (appel LLM) n'est lancé en tâche de fond que si une factory
+          de session est disponible (sinon dégradation gracieuse : on garde le stub).
+
+        Retourne le stub (``NPCPersona`` light) pour la réplique courante, ou ``None``
+        si la création/persistance échoue (le caller retombe sur le hint legacy).
+        """
+        from app.game.persona_factory import PersonaFactory
+
+        try:
+            factory = PersonaFactory()
+            name = str(npc.get("name") or npc_id)
+            hint = str(npc.get("personality_hint") or "")
+            stub = factory.stub_npc_persona(name=name, archetype_hint=hint, importance="light")
+            # Garde d'ID : le lookup se fait par ``npc_id``, or ``stub_npc_persona`` pose
+            # ``id = slugify(name)`` qui peut différer → sinon cette branche se
+            # re-déclenche à l'infini.
+            stub = stub.model_copy(update={"id": npc_id})
+            await campaign_dossier_service.upsert_npc_persona(campaign_id, stub, db)
+        except Exception as exc:
+            log_degraded(logger, "introduce NPC stub", exc, npc_id=npc_id)
+            return None
+
+        if session_factory is not None and settings.live_persona_enrichment:
+            create_logged_task(
+                self._enrich_npc_persona_bg(
+                    campaign_id=campaign_id,
+                    npc_id=npc_id,
+                    stub=stub,
+                    session_factory=session_factory,
+                ),
+                "persona.enrich_npc",
+            )
+        return stub
+
+    async def _enrich_npc_persona_bg(
+        self,
+        *,
+        campaign_id: str,
+        npc_id: str,
+        stub: Any,
+        session_factory: Any,
+    ) -> None:
+        """Tâche de fond : enrichit le stub via LLM puis re-persiste (C2).
+
+        Ouvre sa **propre** session DB via la factory injectée (celle de la requête
+        est fermée à ce stade). Tout échec est avalé : le PNJ reste jouable avec son
+        stub light (``enrich_npc_persona`` retente déjà 2× + fallback interne).
+        """
+        from app.game.persona_factory import PersonaFactory
+
+        try:
+            factory = PersonaFactory()
+            enriched = await factory.enrich_npc_persona(stub, target_importance="standard")
+            # Garde d'ID : ``enrich_npc_persona`` fait ``data.setdefault("id", stub.id)``
+            # → si le LLM renvoie son propre id, l'enrichi atterrirait sous la mauvaise
+            # clé et le lookup échouerait à jamais. On force l'id côté appelant.
+            enriched = enriched.model_copy(update={"id": npc_id})
+            async with session_factory() as bg_db:
+                await campaign_dossier_service.upsert_npc_persona(campaign_id, enriched, bg_db)
+            logger.debug("enrich_npc_persona_bg: %s enrichi → standard, re-persisté", npc_id)
+        except Exception as exc:
+            logger.warning(
+                "enrich_npc_persona_bg: échec pour %s — stub light conservé : %s",
+                npc_id,
+                exc,
+            )
 
     # ------------------------------------------------------------------
     # Conclusion sociale (compagnons ont déjà parlé)

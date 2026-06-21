@@ -77,6 +77,11 @@ class ActiveSession:
     # (garde anti-concurrence étroit : un 2ᵉ déclencheur du MÊME PNJ pendant
     # qu'une réplique est en vol est coalescé — N1). Transitoire, jamais persisté.
     npc_dialogue_in_flight: set[str] = field(default_factory=set)
+    # Factory de session DB de la session WS courante (app.state.db_session_factory),
+    # posée par le handler WS. Permet aux tâches de fond (ex. enrichissement de
+    # persona « stub-then-enrich ») d'ouvrir leur PROPRE session — la session de la
+    # requête étant fermée à ce moment-là. Test-safe : suit la factory injectée.
+    db_session_factory: Any = None
 
     def mark_dirty(self) -> None:
         self.is_dirty = True

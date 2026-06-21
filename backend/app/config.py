@@ -52,6 +52,11 @@ class Settings(BaseSettings):
     max_player_action_chars: int = 4000
     ws_event_queue_size: int = 256
     tts_async: bool = True
+    # Active l'enrichissement LLM « stub-then-enrich » des PNJ introduits en jeu
+    # (tâche de fond async, cf. ActionResolver._introduce_npc_stub). Désactivable pour
+    # les déploiements sans LLM ou les suites de tests ne voulant pas d'une tâche de
+    # fond DB incidente.
+    live_persona_enrichment: bool = True
     llm_budget_mode: str = "full"
     ollama_max_concurrent_requests: int = 1
     source_max_chars: int = 120_000
