@@ -65,6 +65,14 @@ def line_cells(
             row += sy
 
 
+def _sign(value: int) -> int:
+    if value > 0:
+        return 1
+    if value < 0:
+        return -1
+    return 0
+
+
 def cone_cells(
     origin: GridPosition,
     target: GridPosition,
@@ -72,15 +80,35 @@ def cone_cells(
     grid_cols: int,
     grid_rows: int,
 ) -> list[GridPosition]:
+    """Cells covered by a cone from ``origin`` pointed at ``target``.
+
+    The cone advances along its dominant axis (the discretized direction from
+    ``origin`` to ``target``, one of the 4 cardinals or 4 diagonals) and widens
+    perpendicular to that axis as it gets farther from the origin. The
+    perpendicular axis is the 90°-rotation of the direction vector, which stays
+    correct for cardinals (perpendicular = the other cardinal axis) and for
+    diagonals (perpendicular = the other diagonal axis).
+    """
     length_cells = max(1, int(length_m / CELL_SIZE_M))
-    direction_col = 1 if target.col >= origin.col else -1
-    direction_row = 1 if target.row >= origin.row else -1
+    direction_col = _sign(target.col - origin.col)
+    direction_row = _sign(target.row - origin.row)
+    if direction_col == 0 and direction_row == 0:
+        # Target on top of origin: no facing to extend the cone along.
+        return []
+    # 90° rotation of (direction_col, direction_row) gives the perpendicular axis
+    # along which the cone widens.
+    perp_col = -direction_row
+    perp_row = direction_col
+
     cells: list[GridPosition] = []
     for step in range(1, length_cells + 1):
         center_col = origin.col + direction_col * step
         center_row = origin.row + direction_row * step
         for spread in range(-step, step + 1):
-            candidate = GridPosition(col=center_col + spread, row=center_row)
+            candidate = GridPosition(
+                col=center_col + perp_col * spread,
+                row=center_row + perp_row * spread,
+            )
             if 0 <= candidate.col < grid_cols and 0 <= candidate.row < grid_rows:
                 cells.append(candidate)
     return cells

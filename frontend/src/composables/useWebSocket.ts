@@ -1,4 +1,4 @@
-import { ref, computed, onUnmounted } from 'vue'
+import { ref, computed } from 'vue'
 import { useGameStore } from '../stores/game'
 import { useCharacterStore } from '../stores/character'
 import { useAudio } from './useAudio'
@@ -45,17 +45,22 @@ const MAX_RECONNECT_DELAY_MS = 30_000
 const MAX_RECONNECTS = 10
 const WS_EVENT_TYPES = new Set<string>(WS_EVENT_TYPES_LIST)
 
+// Singleton state, hoisted to module scope: every call to useWebSocket() must
+// observe/control the SAME socket. A secondary consumer (e.g. PartySection)
+// that never calls connect() needs `send()` to reach the live socket opened
+// by GameSessionView — see frontend/CLAUDE.md singleton requirement.
+const ws = ref<WebSocket | null>(null)
+const reconnectCount = ref(0)
+let pingTimer: ReturnType<typeof setInterval> | null = null
+let pongTimer: ReturnType<typeof setTimeout> | null = null
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+let intentionalClose = false
+let pendingCharacterId: string | undefined
+
 export function useWebSocket(sessionId: string) {
   const gameStore = useGameStore()
   const charStore = useCharacterStore()
   const audio = useAudio()
-  const ws = ref<WebSocket | null>(null)
-  const reconnectCount = ref(0)
-  let pingTimer: ReturnType<typeof setInterval> | null = null
-  let pongTimer: ReturnType<typeof setTimeout> | null = null
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-  let intentionalClose = false
-  let pendingCharacterId: string | undefined
   const characterStorageKey = `rpgmaster.ws.${sessionId}.character_id`
 
   const isReconnecting = computed(
@@ -428,7 +433,10 @@ export function useWebSocket(sessionId: string) {
     if (pongTimer) { clearTimeout(pongTimer); pongTimer = null }
   }
 
-  onUnmounted(disconnect)
+  // No onUnmounted(disconnect) here: this is a singleton. The socket's
+  // lifecycle belongs to whichever component calls connect()/disconnect()
+  // explicitly (GameSessionView). A secondary consumer (PartySection) that
+  // unmounts must NOT tear down the connection other views still use.
 
   return { connect, disconnect, reconnect, send, sendAction, toggleAiControl, triggerAiReactions, reconnectCount, isReconnecting, isDisconnected }
 }

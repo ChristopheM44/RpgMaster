@@ -599,7 +599,7 @@ async def game_websocket(
 
         if connection_manager.connection_count(session_id) == 0:
             try:
-                async with async_session() as db:
+                async with db_session_factory() as db:
                     async with session_manager.session_lock(session_id):
                         await session_manager.close_session(session_id, db)
             except Exception as exc:

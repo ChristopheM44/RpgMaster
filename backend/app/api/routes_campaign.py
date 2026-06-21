@@ -238,10 +238,27 @@ async def get_campaign_scenario(campaign_id: str, db: AsyncSession = Depends(get
 
 @router.get("/{campaign_id}/gm-dossier")
 async def get_campaign_gm_dossier(campaign_id: str, db: AsyncSession = Depends(get_db)):
+    # GM/author-facing — exposes GM-only secrets by design
     try:
         return await campaign_dossier_service.gm_dossier_view(campaign_id, db)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+
+
+def _persona_player_safe(persona) -> dict:
+    """Dump une persona en retirant les champs GM-only (secrets, hidden, quest_hooks).
+
+    ``secrets``/``quest_hooks`` n'existent que sur ``NPCPersona`` ;
+    ``motivations.hidden`` est commun à toutes les personas (``BasePersona``).
+    Les ``.pop`` sont des no-op pour les types qui n'ont pas ces champs.
+    """
+    dumped = persona.model_dump(mode="json")
+    dumped.pop("secrets", None)
+    dumped.pop("quest_hooks", None)
+    motivations = dumped.get("motivations")
+    if isinstance(motivations, dict):
+        motivations.pop("hidden", None)
+    return dumped
 
 
 @router.get("/{campaign_id}/personas")
@@ -249,17 +266,17 @@ async def get_campaign_personas(campaign_id: str, db: AsyncSession = Depends(get
     """Liste les personas connues d'une campagne (PNJ, monstres, compagnons).
 
     Retourne un dict ``{npcs, monsters, companions}`` où chaque entrée est une
-    persona Pydantic dumpée en JSON. Utile pour debug / admin / inspection MJ.
-
-    NB : les secrets et motivations cachées sont inclus (GM-only). Ne pas
-    exposer cet endpoint au-delà du contexte MJ.
+    persona Pydantic dumpée en JSON, **filtrée player-safe** : les champs
+    GM-only (``secrets``, ``motivations.hidden``, ``quest_hooks``) sont retirés
+    avant sérialisation. Pour le dossier complet avec secrets, voir l'endpoint
+    MJ ``/gm-dossier``.
     """
     personas = await campaign_dossier_service.list_personas(campaign_id, db)
     return {
         "campaign_id": campaign_id,
-        "npcs": [p.model_dump(mode="json") for p in personas["npcs"]],
-        "monsters": [p.model_dump(mode="json") for p in personas["monsters"]],
-        "companions": [p.model_dump(mode="json") for p in personas["companions"]],
+        "npcs": [_persona_player_safe(p) for p in personas["npcs"]],
+        "monsters": [_persona_player_safe(p) for p in personas["monsters"]],
+        "companions": [_persona_player_safe(p) for p in personas["companions"]],
         "counts": {
             "npcs": len(personas["npcs"]),
             "monsters": len(personas["monsters"]),

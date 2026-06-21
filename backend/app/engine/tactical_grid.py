@@ -108,41 +108,6 @@ def validate_move(
     return True, ""
 
 
-def cells_reachable_with_pathfinding(
-    from_pos: GridPosition,
-    movement_m: float,
-    dash_m: float,
-    grid_cols: int,
-    grid_rows: int,
-    occupied: list[GridPosition] | None = None,
-    obstacles: list[GridPosition] | None = None,
-    difficult: list[GridPosition] | None = None,
-) -> dict[str, list[dict]]:
-    """Return cells reachable by A* with regular movement and with dash."""
-    from app.engine.pathfinding import astar_path
-
-    blocked = list(occupied or []) + list(obstacles or [])
-    free: list[dict] = []
-    with_dash: list[dict] = []
-    paths: dict[str, list[dict]] = {}
-    for row in range(grid_rows):
-        for col in range(grid_cols):
-            target = GridPosition(col=col, row=row)
-            if target == from_pos:
-                continue
-            path = astar_path(from_pos, target, grid_cols, grid_rows, blocked, difficult)
-            if not path:
-                continue
-            cost_m = max(0, len(path) - 1) * CELL_SIZE_M
-            if cost_m <= movement_m:
-                free.append(target.to_dict())
-                paths[f"{col},{row}"] = [step.to_dict() for step in path]
-            elif cost_m <= dash_m:
-                with_dash.append(target.to_dict())
-                paths[f"{col},{row}"] = [step.to_dict() for step in path]
-    return {"free": free, "with_dash": with_dash, "paths": paths}
-
-
 def nearest_free_cell(
     start: GridPosition,
     occupied: set[tuple[int, int]],

@@ -627,7 +627,13 @@ async def get_npc_persona(
         return None
     try:
         persona = persona_from_dict({**raw, "persona_type": "npc"})
-    except Exception:
+    except Exception as exc:
+        logger.warning(
+            "get_npc_persona: persona corrompue persona_id=%s campaign_id=%s: %s",
+            persona_id,
+            campaign_id,
+            exc,
+        )
         return None
     return persona if isinstance(persona, NPCPersona) else None
 

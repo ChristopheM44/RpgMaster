@@ -63,8 +63,18 @@ function spellSlotsSummary(spellSlots: Record<string, unknown>): { left: number;
 const characters = computed(() => charStore.sessionCharacters)
 const myId = computed(() => charStore.myCharacter?.id)
 
-async function handleToggleAi(charId: string, currentIsAi: boolean) {
-  await charStore.toggleAiControl(charId)
+function handleToggleAi(charId: string, currentIsAi: boolean) {
+  // Single source of truth: the backend WS handler already persists `is_ai`
+  // (DB) and drives the live session (register/unregister AI player, turn
+  // manager, SESSION_STATE rebroadcast). The previous REST call here was a
+  // redundant write that raced with — and never reached — the live session.
+  //
+  // Optimistic local flip: SESSION_STATE only updates gameStore.combatants
+  // (combat), not charStore.sessionCharacters (read by this list), so without
+  // this the 🤖/👤 button would not visually flip until reload. Mutating the
+  // reactive array entry directly avoids adding a 4th file / new store method.
+  const char = charStore.sessionCharacters.find((c) => c.id === charId)
+  if (char) char.is_ai = !currentIsAi
   toggleAiControl(charId, !currentIsAi)
 }
 </script>
