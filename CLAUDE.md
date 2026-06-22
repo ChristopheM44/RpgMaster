@@ -51,7 +51,8 @@ Copier `.env.example` vers `backend/.env`.
 | `VOICE_PROVIDER` | `local` | `local` \| `hybrid` \| `realtime` — cf. section Personas |
 | `OPENAI_REALTIME_API_KEY` | `` | Requise pour `hybrid`/`realtime` et endpoint `/ws/dialogue/*` |
 | `OPENAI_REALTIME_MODEL` | `gpt-4o-realtime-preview` | Modèle Realtime API |
-| `MAX_CONTEXT_MESSAGES` | `20` | |
+| `MAX_CONTEXT_MESSAGES` | `50` | Fenêtre glissante de contexte LLM (valeur délibérée, cf. `config.py`) |
+| `LIVE_PERSONA_ENRICHMENT` | `true` | Enrichissement LLM « stub-then-enrich » des PNJ introduits en jeu (tâche de fond) ; `false` pour déploiements sans LLM |
 | `TTS_ASYNC` | `true` | |
 
 ## Commandes
@@ -186,7 +187,7 @@ Les tests `engine/` sont purement unitaires. Les tests `game/` utilisent `pytest
 1. **Moteur de regles souverain** : `engine/` = logique pure sans I/O. Le LLM ne resout jamais les mecaniques.
 2. **Sorties JSON structurees** : Agents retournent du JSON valide par Pydantic, pas du texte libre.
 3. **TTS non-bloquant** : texte immédiat, audio asynchrone et optionnel.
-4. **Game state = JSON blob** : Pydantic valide a l'entree/sortie. Pas de nouvelles tables SQLAlchemy.
+4. **Game state = JSON blob** : Pydantic valide a l'entree/sortie. Pas de nouvelles tables SQLAlchemy *pour le game_state*. (La table `CampaignDossier`, en relation 1-to-1 via `Campaign.dossier`, est **intentionnelle** : l'anti-pattern vise le game_state, pas le dossier de campagne.)
 5. **Event bus in-process** : `asyncio.Queue` → Redis si multijoueur reseau.
 
 ## Machine a etats
@@ -283,7 +284,7 @@ Messages serveur → client :
 - **WebSocket** : ne jamais creer une session SQLAlchemy dans un handler — reutiliser le `db` injecte.
 - **WebSocket** : ne jamais appeler un LLM de facon bloquante — `asyncio.create_task()` obligatoire.
 - **Mecaniques** : jets de des, degats, initiative → `engine/` uniquement. Le LLM = narration seulement.
-- **Game state** : pas de champs relationnels complexes, pas de nouvelles tables SQLAlchemy.
+- **Game state** : pas de champs relationnels complexes, pas de nouvelles tables SQLAlchemy (l'anti-pattern vise le **game_state** ; la table `CampaignDossier` 1-to-1 est intentionnelle).
 - **`engine/`** : zero I/O — reste testable sans DB ni reseau.
 - **TTS** : ne pas utiliser `tts_backend="vllm"` sans vLLM-Omni actif.
 - **Persona** : ne jamais exposer `motivations.hidden`, `secrets` ou `quest_hooks` au joueur — `include_hidden=False` côté joueur IA, `True` côté MJ uniquement.

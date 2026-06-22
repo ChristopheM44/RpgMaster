@@ -21,7 +21,7 @@ app/
 │   ├── routes_character.py  # CRUD personnages
 │   ├── routes_srd.py        # Donnees de reference SRD (classes, especes, sorts...)
 │   ├── routes_encounters.py # Construction et gestion des rencontres
-│   ├── routes_campaign.py   # Campagnes (enchainement de sessions)
+│   ├── routes_campaign.py   # Campagnes ; /personas (player-safe) + /gm-dossier = MJ/auteur uniquement
 │   ├── routes_admin.py      # Parametres TTS, health backends
 │   ├── ws_game.py           # WebSocket /ws/game/{session_id}
 │   └── ws_dialogue.py       # WebSocket /ws/dialogue/{session_id}/{persona_id} (Realtime bidi)
