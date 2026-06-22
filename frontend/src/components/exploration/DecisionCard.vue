@@ -99,8 +99,8 @@ function isHighlighted(id: string) {
 .decision-card-option.tone-blood  { background: rgba(232, 69, 69, 0.18); color: var(--color-blood); border-color: rgba(232, 69, 69, 0.5); }
 .decision-card-option.tone-arcane { background: rgba(192, 144, 255, 0.18); color: var(--color-arcane); border-color: rgba(192, 144, 255, 0.5); }
 
-.decision-card-option.is-highlighted.tone-gold   { background: linear-gradient(135deg, var(--color-gold), #f0c764aa);  color: var(--color-bg); }
-.decision-card-option.is-highlighted.tone-teal   { background: linear-gradient(135deg, var(--color-teal), #4fd8c0aa);   color: var(--color-bg); }
-.decision-card-option.is-highlighted.tone-blood  { background: linear-gradient(135deg, var(--color-blood), #e84545aa);  color: var(--color-bg); }
-.decision-card-option.is-highlighted.tone-arcane { background: linear-gradient(135deg, var(--color-arcane), #c090ffaa); color: var(--color-bg); }
+.decision-card-option.is-highlighted.tone-gold   { background: linear-gradient(135deg, var(--color-gold), color-mix(in srgb, var(--color-gold) 67%, transparent));  color: var(--color-bg); }
+.decision-card-option.is-highlighted.tone-teal   { background: linear-gradient(135deg, var(--color-teal), color-mix(in srgb, var(--color-teal) 67%, transparent));   color: var(--color-bg); }
+.decision-card-option.is-highlighted.tone-blood  { background: linear-gradient(135deg, var(--color-blood), color-mix(in srgb, var(--color-blood) 67%, transparent));  color: var(--color-bg); }
+.decision-card-option.is-highlighted.tone-arcane { background: linear-gradient(135deg, var(--color-arcane), color-mix(in srgb, var(--color-arcane) 67%, transparent)); color: var(--color-bg); }
 </style>

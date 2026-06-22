@@ -1,8 +1,13 @@
-import { describe, expect, it, vi } from 'vitest'
-
-import { useAudio } from '../useAudio'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 describe('useAudio', () => {
+  // La file d'attente et l'état de lecture sont partagés au niveau module ; on
+  // réinitialise le module entre chaque test pour éviter toute fuite d'état
+  // (_queue / _playing / _currentSource) d'un cas à l'autre.
+  beforeEach(() => {
+    vi.resetModules()
+  })
+
   it('decodes base64 audio and starts playback', async () => {
     const source = {
       buffer: null as AudioBuffer | null,
@@ -28,6 +33,7 @@ describe('useAudio', () => {
     vi.stubGlobal('AudioContext', AudioContextMock)
     vi.stubGlobal('atob', vi.fn(() => String.fromCharCode(1, 2, 3)))
 
+    const { useAudio } = await import('../useAudio')
     const audio = useAudio()
     await audio.playAudioB64('AQID')
 
@@ -66,6 +72,7 @@ describe('useAudio', () => {
     vi.stubGlobal('AudioContext', AudioContextMock)
     vi.stubGlobal('atob', vi.fn(() => String.fromCharCode(1, 2, 3)))
 
+    const { useAudio } = await import('../useAudio')
     const audio = useAudio()
     await audio.playAudioB64('AQID')
     audio.cancelAll()
@@ -102,6 +109,7 @@ describe('useAudio', () => {
     }
     vi.stubGlobal('AudioContext', AudioContextMock)
 
+    const { useAudio } = await import('../useAudio')
     const audio = useAudio()
     await audio.unlockAudio()
 
@@ -142,6 +150,7 @@ describe('useAudio', () => {
     vi.stubGlobal('atob', vi.fn(() => String.fromCharCode(1, 2, 3)))
     vi.spyOn(document, 'hidden', 'get').mockReturnValue(false)
 
+    const { useAudio } = await import('../useAudio')
     const audio = useAudio()
     await audio.playAudioB64('AQID')
     ctx.state = 'suspended'

@@ -6,6 +6,7 @@ import { useCharacterStore } from '../stores/character'
 import { useGameStore } from '../stores/game'
 import type { ExHero } from '../fixtures/exploration'
 import type { Character, GridPosition } from '../types'
+import { tokens } from '../types/tokens'
 
 const CLASS_FR: Record<string, string> = {
   fighter: 'Guerrier',
@@ -22,9 +23,9 @@ const CLASS_FR: Record<string, string> = {
   warlock: 'Occultiste',
 }
 
-const COLOR_ME = '#f0c764'   // gold — joueur humain (cf. design system : ember = MJ)
-const COLOR_AI = '#c090ff'   // arcane
-const COLOR_ALLY = '#4fd8c0' // teal — autre joueur humain
+const COLOR_ME = tokens.gold // joueur humain (cf. design system)
+const COLOR_AI = tokens.arcane // compagnon IA
+const COLOR_ALLY = tokens.teal // autre joueur humain / allié
 
 /** "F7" depuis { col: 5, row: 6 } (col 0 → A, row 0 → 1). */
 function gridPosLabel(p: GridPosition | undefined): string {

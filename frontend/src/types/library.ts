@@ -1,5 +1,7 @@
 // ─── Types pour la bibliothèque : Sorts & Monstres ───
 
+import { tokens } from './tokens'
+
 /** Composantes d'un sort */
 export interface SpellComponents {
   /** Verbale */
@@ -188,31 +190,31 @@ export const MONSTER_SIZES: MonsterSize[] = [
 ];
 
 export const SCHOOL_COLORS: Record<SpellSchool, string> = {
-  Abjuration: '#4fd8c0',
-  Conjuration: '#6fd96f',
-  Divination: '#f0c764',
-  Enchantement: '#c090ff',
-  Évocation: '#ff8247',
-  Illusion: '#7eb8ff',
-  Nécromancie: '#e84545',
-  Transmutation: '#b88a2a',
+  Abjuration: tokens.teal,
+  Conjuration: tokens.green,
+  Divination: tokens.gold,
+  Enchantement: tokens.arcane,
+  Évocation: tokens.ember,
+  Illusion: tokens.frost,
+  Nécromancie: tokens.blood,
+  Transmutation: tokens.goldDeep,
 };
 
 export const TYPE_COLORS: Record<MonsterType, string> = {
-  Aberration: '#c090ff',
-  Bête: '#6fd96f',
-  Céleste: '#f0c764',
-  Constructe: '#6b6580',
-  Dragon: '#ff8247',
-  Élémentaire: '#4fd8c0',
-  Fée: '#c090ff',
-  Fiélon: '#e84545',
-  Géant: '#b88a2a',
-  Humanoïde: '#f7ecd0',
-  Monstruosité: '#ff8247',
-  'Mort-vivant': '#e84545',
-  Plante: '#6fd96f',
-  Vase: '#4fd8c0',
+  Aberration: tokens.arcane,
+  Bête: tokens.green,
+  Céleste: tokens.gold,
+  Constructe: tokens.construct,
+  Dragon: tokens.ember,
+  Élémentaire: tokens.teal,
+  Fée: tokens.arcane,
+  Fiélon: tokens.blood,
+  Géant: tokens.goldDeep,
+  Humanoïde: tokens.parchment,
+  Monstruosité: tokens.ember,
+  'Mort-vivant': tokens.blood,
+  Plante: tokens.green,
+  Vase: tokens.teal,
 };
 
 export const LEVEL_LABELS: Record<number, string> = {

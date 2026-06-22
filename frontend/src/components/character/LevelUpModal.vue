@@ -232,7 +232,7 @@ function resetAsiSelection() {
 
 <style scoped>
 .level-up-card {
-  background: linear-gradient(180deg, #181623, #0e0d14);
+  background: linear-gradient(180deg, var(--color-bg-elev), var(--color-bg));
   border-color: var(--color-border-strong);
   animation: rpg-dialog-in 200ms ease both;
   position: relative;

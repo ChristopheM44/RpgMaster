@@ -3,6 +3,7 @@ import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useCharacterStore } from '../../stores/character'
 import { useGameStore } from '../../stores/game'
 import type { SceneOption } from '../../types'
+import { tokens } from '../../types/tokens'
 
 const emit = defineEmits<{
   action: [actionType: string, content?: string, targetId?: string, extra?: Record<string, unknown>]
@@ -68,7 +69,7 @@ function chooseSceneOption(option: SceneOption) {
 }
 
 function avatarStyle(color: string | undefined) {
-  const c = color ?? '#c090ff'
+  const c = color ?? tokens.arcane
   return { background: `radial-gradient(circle at 30% 30%, ${c}, ${c}aa)` }
 }
 
@@ -146,7 +147,7 @@ onUnmounted(() => {
           >
             <span
               class="bb-mention-avatar"
-              :style="avatarStyle('#c090ff')"
+              :style="avatarStyle(tokens.arcane)"
             >{{ c.name.charAt(0).toUpperCase() }}</span>
             {{ c.name }}
             <span style="flex: 1" />

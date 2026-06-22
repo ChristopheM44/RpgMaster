@@ -8,6 +8,7 @@ import {
   useMapInspectables,
   type MapInspectableEntity,
 } from '../../composables/useMapInspectables'
+import { tokens } from '../../types/tokens'
 
 const sessionStore = useSessionStore()
 const { findHero } = useExplorationParty()
@@ -52,11 +53,11 @@ const tone = computed<'gold' | 'arcane' | 'blood' | 'teal' | 'text'>(() => {
 const toneVar = computed(() => `var(--color-${tone.value === 'text' ? 'parchment' : tone.value})`)
 const toneHex = computed(() => {
   switch (tone.value) {
-    case 'gold':   return '#f0c764'
-    case 'arcane': return '#c090ff'
-    case 'blood':  return '#e84545'
-    case 'teal':   return '#4fd8c0'
-    default:        return '#f7ecd0'
+    case 'gold':   return tokens.gold
+    case 'arcane': return tokens.arcane
+    case 'blood':  return tokens.blood
+    case 'teal':   return tokens.teal
+    default:        return tokens.parchment
   }
 })
 
@@ -238,7 +239,7 @@ function act() {
       <template v-if="hero?.isMe">
         <button
           class="inspector-btn-primary"
-          :style="{ background: `linear-gradient(135deg, var(--color-gold), #f0c764aa)` }"
+          :style="{ background: `linear-gradient(135deg, var(--color-gold), color-mix(in srgb, var(--color-gold) 67%, transparent))` }"
           @click="emit('openSheet', hero.id)"
         >
           👤 Fiche

@@ -4,6 +4,7 @@ import { useSessionStore } from '../../stores/session'
 import { useGameStore } from '../../stores/game'
 import { resolveMapDecor } from '../../composables/useMapDecor'
 import type { MapNode, NodeStatus, MapDecor, Coastline } from '../../types'
+import { tokens } from '../../types/tokens'
 
 withDefaults(defineProps<{
   width?: number
@@ -52,9 +53,9 @@ function coastPolygon(coast: Coastline): string {
 
 function toneByStatus(status: NodeStatus): string {
   switch (status) {
-    case 'visited':  return '#6fd96f'
-    case 'current':  return '#f0c764'
-    case 'rumored':  return '#c090ff'
+    case 'visited':  return tokens.green
+    case 'current':  return tokens.gold
+    case 'rumored':  return tokens.arcane
     case 'known':    return 'rgba(247,236,208,0.55)'
     default:          return 'rgba(247,236,208,0.55)'
   }

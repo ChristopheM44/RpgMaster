@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import type { Monster } from '@/types/library';
 import { TYPE_COLORS } from '@/types/library';
+import { tokens } from '@/types/tokens';
 import AbilityBlock from './AbilityBlock.vue';
 
 const props = defineProps<{
@@ -10,7 +11,7 @@ const props = defineProps<{
 }>();
 
 const typeColor = computed(() => (
-  props.monster ? (TYPE_COLORS[props.monster.type] ?? '#f7ecd0') : ''
+  props.monster ? (TYPE_COLORS[props.monster.type] ?? tokens.parchment) : ''
 ));
 
 function formatSpeed(speed: Monster['speed']): string {

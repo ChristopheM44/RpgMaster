@@ -536,17 +536,17 @@ onUnmounted(() => { disconnect() })
     </header>
 
     <!-- ─── Cinematic Loader ─── -->
-    <div v-if="showLoader" class="flex-1 flex flex-col justify-center items-center p-8 text-center bg-[#0e0d14] relative z-20">
+    <div v-if="showLoader" class="flex-1 flex flex-col justify-center items-center p-8 text-center bg-bg relative z-20">
       <div class="loader-wrap flex flex-col items-center">
         <!-- Animated visual spinner -->
         <div class="relative w-24 h-24 mb-8 flex items-center justify-center">
-          <div class="absolute inset-0 rounded-full border border-[#f0c764]/10 animate-[spin_6s_linear_infinite]" />
-          <div class="absolute inset-2 rounded-full border-t-2 border-r-2 border-[#ff8247] animate-[spin_1.5s_linear_infinite]" />
-          <div class="absolute inset-4 rounded-full border-b-2 border-l-2 border-[#c090ff] animate-[spin_2s_linear_infinite] opacity-60" />
-          <span class="text-2xl animate-[pulse_1.5s_ease-in-out_infinite] text-[#f0c764]">✦</span>
+          <div class="absolute inset-0 rounded-full border border-gold/10 animate-[spin_6s_linear_infinite]" />
+          <div class="absolute inset-2 rounded-full border-t-2 border-r-2 border-ember animate-[spin_1.5s_linear_infinite]" />
+          <div class="absolute inset-4 rounded-full border-b-2 border-l-2 border-arcane animate-[spin_2s_linear_infinite] opacity-60" />
+          <span class="text-2xl animate-[pulse_1.5s_ease-in-out_infinite] text-gold">✦</span>
         </div>
 
-        <h2 class="font-display text-xl md:text-2xl font-bold text-[#f0c764] tracking-widest uppercase mb-4 animate-[pulse_2s_ease-in-out_infinite]">
+        <h2 class="font-display text-xl md:text-2xl font-bold text-gold tracking-widest uppercase mb-4 animate-[pulse_2s_ease-in-out_infinite]">
           Le Maître du Jeu IA prépare la scène...
         </h2>
         <p class="font-serif text-sm md:text-base italic text-[rgba(247,236,208,0.75)] max-w-md leading-relaxed">

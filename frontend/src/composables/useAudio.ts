@@ -10,6 +10,13 @@ let _audioCtx: AudioContext | null = null
 const MAX_QUEUE_SIZE = 20
 let _visibilityListenerInstalled = false
 
+// File d'attente + état de lecture PARTAGÉS au niveau module : sérialise la lecture
+// entre toutes les instances de useAudio() (sinon des composants montant chacun leur
+// instance pourraient déclencher des lectures simultanées qui se chevauchent).
+const _queue: AudioBuffer[] = []
+let _playing = false
+let _currentSource: AudioBufferSourceNode | null = null
+
 function getAudioContext(): AudioContext {
   if (!_audioCtx || _audioCtx.state === 'closed') {
     _audioCtx = new AudioContext()
@@ -21,11 +28,6 @@ export function useAudio() {
   const isPlaying = ref(false)
   const error = ref<string | null>(null)
   installVisibilityResume()
-
-  // File d'attente des buffers à jouer
-  const _queue: AudioBuffer[] = []
-  let _playing = false
-  let _currentSource: AudioBufferSourceNode | null = null
 
   async function _playNext() {
     if (_playing || _queue.length === 0) return

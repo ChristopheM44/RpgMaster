@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Monster } from '@/types/library';
 import { TYPE_COLORS } from '@/types/library';
+import { tokens } from '@/types/tokens';
 
 const props = defineProps<{
   monster: Monster;
@@ -11,7 +12,7 @@ defineEmits<{
   select: [];
 }>();
 
-const typeColor = TYPE_COLORS[props.monster.type] ?? '#f7ecd0';
+const typeColor = TYPE_COLORS[props.monster.type] ?? tokens.parchment;
 </script>
 
 <template>

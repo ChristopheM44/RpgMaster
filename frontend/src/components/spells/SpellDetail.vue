@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import type { Spell } from '@/types/library';
 import { SCHOOL_COLORS, LEVEL_LABELS } from '@/types/library';
+import { tokens } from '@/types/tokens';
 
 const props = defineProps<{
   /** Sort sélectionné, ou null pour l'état vide */
@@ -9,7 +10,7 @@ const props = defineProps<{
 }>();
 
 const schoolColor = computed(() => (
-  props.spell ? (SCHOOL_COLORS[props.spell.school] ?? '#f7ecd0') : ''
+  props.spell ? (SCHOOL_COLORS[props.spell.school] ?? tokens.parchment) : ''
 ));
 const comps = computed(() => (
   props.spell

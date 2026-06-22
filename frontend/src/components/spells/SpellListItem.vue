@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Spell } from '@/types/library';
 import { SCHOOL_COLORS } from '@/types/library';
+import { tokens } from '@/types/tokens';
 
 const props = defineProps<{
   spell: Spell;
@@ -11,7 +12,7 @@ defineEmits<{
   select: [];
 }>();
 
-const schoolColor = SCHOOL_COLORS[props.spell.school] ?? '#f7ecd0';
+const schoolColor = SCHOOL_COLORS[props.spell.school] ?? tokens.parchment;
 </script>
 
 <template>

@@ -81,7 +81,7 @@ const accessibleLabel = computed(() => props.label || icon.value.name)
 
 .rpg-map-icon.is-active {
   background: rgba(240, 199, 100, 0.12);
-  box-shadow: 0 0 0 2px #f0c764;
+  box-shadow: 0 0 0 2px var(--color-gold);
   filter: drop-shadow(0 0 4px currentColor);
 }
 
