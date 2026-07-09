@@ -22,7 +22,7 @@ Application de jeu de role avec un Maitre de Jeu IA, utilisant les regles D&D SR
 
 Le projet supporte officiellement l'API **Ollama Cloud** directe (hébergée sur `https://ollama.com`) :
 - **Modèle de référence Cloud** : `gemma4:31b` (frontier-level, 31B paramètres, tag `cloud`).
-- **Authentification** : Passe par la clé d'API via la variable d'environnement `OLLAMA_API_KEY` transmise au format `Authorization: Bearer <key>`.
+- **Authentification** : Passe par une clé d'API transmise au format `Authorization: Bearer <key>`. **Piège** : cette clé n'est jamais lue depuis `.env`/`OLLAMA_API_KEY` — elle vit uniquement dans le coffre runtime `backend/.runtime/llm_runtime.json` (perms 0600), configuré via l'UI admin ou `update_llm_settings` (cf. `backend/CLAUDE.md`).
 - **Délai de traitement (Timeout)** : La configuration applique un connect timeout rapide de `3.0s` (détection immédiate de panne réseau) et un read timeout généreux de `240.0s` (4 minutes) pour laisser tout le temps nécessaire à Gemma 4 de générer des pavés narratifs complets.
 
 ## Lancer le stack
@@ -43,7 +43,7 @@ Copier `.env.example` vers `backend/.env`.
 | Variable | Defaut | Note |
 |----------|--------|------|
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Renseigner `https://ollama.com` pour Ollama Cloud |
-| `OLLAMA_API_KEY` | `` | Clé d'API requise si `https://ollama.com` est utilisé |
+| `OLLAMA_API_KEY` | `` | **Ignorée par l'app** — non lue depuis `.env` (aucun champ `Settings`). Configurer la clé via l'UI admin / `update_llm_settings`, qui l'écrit dans `backend/.runtime/llm_runtime.json` |
 | `GM_MODEL` / `PLAYER_MODEL` | `mistral:7b` | Modèle texte (ex. `gemma4:31b` sur Ollama Cloud) |
 | `DATABASE_URL` | `sqlite+aiosqlite:///./rpgmaster.db` | |
 | `VOXTRAL_ENABLED` | `false` | Garder `false` si vLLM-Omni non démarré |

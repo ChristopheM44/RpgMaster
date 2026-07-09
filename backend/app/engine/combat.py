@@ -112,6 +112,8 @@ class ActionEconomy:
 
     def spend_movement(self, meters: float) -> bool:
         """Spend movement. Returns False if insufficient movement remains."""
+        if meters < 0:
+            raise ValueError("meters must be non-negative")
         if meters > self.movement:
             return False
         self.movement -= meters

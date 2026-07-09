@@ -238,7 +238,9 @@ async def get_campaign_scenario(campaign_id: str, db: AsyncSession = Depends(get
 
 @router.get("/{campaign_id}/gm-dossier")
 async def get_campaign_gm_dossier(campaign_id: str, db: AsyncSession = Depends(get_db)):
-    # GM/author-facing — exposes GM-only secrets by design
+    # GM/author-facing — exposes GM-only secrets by design. Gated behind the
+    # admin access token when ADMIN_ACCESS_TOKEN is configured — see the
+    # `is_admin_route` exemption in main.py's require_local_access_token.
     try:
         return await campaign_dossier_service.gm_dossier_view(campaign_id, db)
     except KeyError as exc:

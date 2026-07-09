@@ -247,8 +247,15 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def require_local_access_token(request: Request, call_next):
+        # GM/author-only routes outside /api/admin/* (e.g. the campaign gm-dossier,
+        # which exposes GM-only secrets by design) are gated the same way admin
+        # routes are: when a distinct ADMIN_ACCESS_TOKEN is configured, it alone
+        # gates the route and the general access token is not also required.
+        is_admin_route = request.url.path.startswith("/api/admin/") or request.url.path.endswith(
+            "/gm-dossier"
+        )
         if (
-            request.url.path.startswith("/api/admin/")
+            is_admin_route
             and request.method != "OPTIONS"
             and admin_access_token_required()
             and not request_has_valid_admin_access_token(request)
@@ -261,7 +268,7 @@ def create_app() -> FastAPI:
             access_token_required()
             and request.url.path.startswith("/api/")
             and request.method != "OPTIONS"
-            and not (request.url.path.startswith("/api/admin/") and admin_access_token_required())
+            and not (is_admin_route and admin_access_token_required())
             and not request_has_valid_access_token(request)
         ):
             return JSONResponse(

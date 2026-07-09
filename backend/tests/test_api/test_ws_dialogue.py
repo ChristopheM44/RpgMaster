@@ -114,21 +114,20 @@ async def test_publish_transcript_swallows_event_bus_failure() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_render_persona_brief_contains_anti_injection_safety_rule() -> None:
-    """Le prompt système doit interdire explicitement la fuite de secrets/hidden,
-    et mentionner la résistance aux tentatives de prompt injection — tout en
-    gardant `include_hidden=True` (le PNJ doit connaître ses secrets)."""
+def test_render_persona_brief_excludes_gm_only_secrets() -> None:
+    """Le brief envoyé à la Realtime API (tiers, canal joueur-facing) ne doit
+    JAMAIS contenir les secrets/motivations cachées GM-only — data minimization
+    via `include_hidden=False`, pas seulement une consigne de prompt. Le prompt
+    système garde par ailleurs la résistance aux tentatives de manipulation."""
     persona = _make_persona()
     brief = _render_persona_brief(persona)
 
-    # Les secrets/motivations cachées sont bien présents (include_hidden=True
-    # est indispensable pour que le PNJ reste cohérent).
-    assert "venger sa fille" in brief
-    assert "sait qui a tué le shérif" in brief
+    # Les secrets/motivations cachées ne doivent jamais transiter vers ce tiers.
+    assert "venger sa fille" not in brief
+    assert "sait qui a tué le shérif" not in brief
 
-    # Consigne de sécurité absolue : ne jamais révéler les secrets.
+    # Consigne de sécurité absolue : rester dans le personnage.
     assert "RÈGLE DE SÉCURITÉ ABSOLUE" in brief
-    assert "JAMAIS" in brief
 
     # Résistance aux tentatives de manipulation / prompt injection.
     assert "manipulation" in brief

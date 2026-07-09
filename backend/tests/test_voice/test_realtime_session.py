@@ -221,8 +221,9 @@ async def test_close_without_connect_is_noop() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_render_persona_brief_includes_hidden_motivations() -> None:
-    """Le brief envoyé à Realtime doit contenir les secrets et motivations cachées."""
+def test_render_persona_brief_excludes_hidden_motivations() -> None:
+    """Le brief envoyé à Realtime (tiers, canal joueur-facing) ne doit jamais
+    contenir les secrets/motivations cachées GM-only."""
     from app.agents.persona import NPCPersona, PersonaMotivations
     from app.api.ws_dialogue import _render_persona_brief
 
@@ -240,8 +241,8 @@ def test_render_persona_brief_includes_hidden_motivations() -> None:
     )
     brief = _render_persona_brief(persona)
     assert "Garrik" in brief
-    assert "venger sa fille" in brief  # hidden inclus pour Realtime
-    assert "sait qui a tué le shérif" in brief
+    assert "venger sa fille" not in brief
+    assert "sait qui a tué le shérif" not in brief
     # Mock async on AsyncMock for symmetry — make sure the brief is not empty
     assert len(brief) > 200
 

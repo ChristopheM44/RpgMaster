@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pytest
 
+from app.config import settings
 from app.models.campaign_dossier import CampaignDossier
 
 NPC_WITH_SECRETS = {
@@ -103,3 +104,52 @@ async def test_get_campaign_gm_dossier_still_exposes_secrets(async_client, db_se
     npc = body["gm_dossier"]["important_npcs"][0]
     assert npc["secrets"] == ["Vael a tué son frère il y a 30 ans"]
     assert npc["motivations"]["hidden"] == ["Protège un artefact maudit caché sous le temple"]
+
+
+@pytest.mark.asyncio
+async def test_get_campaign_gm_dossier_requires_admin_token_when_configured(
+    async_client,
+    db_session,
+    monkeypatch,
+):
+    """Quand ADMIN_ACCESS_TOKEN est configuré, /gm-dossier doit l'exiger
+
+    (même modèle que /api/admin/*) pour qu'un déploiement multi-joueurs
+    distants puisse réserver les secrets MJ au seul hôte.
+    """
+    campaign_resp = await async_client.post(
+        "/api/campaigns",
+        json={"name": "Campagne admin-only", "description": ""},
+    )
+    assert campaign_resp.status_code == 201
+    campaign_id = campaign_resp.json()["id"]
+
+    db_session.add(
+        CampaignDossier(
+            id="dossier-gm-dossier-admin-token-test",
+            campaign_id=campaign_id,
+            gm_dossier={
+                "narrative_arc": "Arc secret.",
+                "chapters": [],
+                "important_npcs": [NPC_WITH_SECRETS],
+            },
+        )
+    )
+    await db_session.commit()
+
+    monkeypatch.setattr(settings, "app_access_token", "app-token")
+    monkeypatch.setattr(settings, "admin_access_token", "admin-token")
+
+    denied_without_token = await async_client.get(f"/api/campaigns/{campaign_id}/gm-dossier")
+    denied_with_app_token = await async_client.get(
+        f"/api/campaigns/{campaign_id}/gm-dossier",
+        headers={"Authorization": "Bearer app-token"},
+    )
+    allowed = await async_client.get(
+        f"/api/campaigns/{campaign_id}/gm-dossier",
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert denied_without_token.status_code == 401
+    assert denied_with_app_token.status_code == 401
+    assert allowed.status_code == 200

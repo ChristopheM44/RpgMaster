@@ -35,6 +35,8 @@ def normalize_wealth(gp: int = 0, sp: int = 0, cp: int = 0) -> Wealth:
 def cost_gp_to_cp(cost_gp: int | float | str | Decimal) -> int:
     """Convert a GP-denominated cost to copper pieces without binary floats."""
     value = Decimal(str(cost_gp)) * Decimal(100)
+    if value < 0:
+        raise ValueError("cost_gp must be non-negative")
     return int(value.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 

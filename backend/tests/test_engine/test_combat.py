@@ -273,6 +273,12 @@ class TestActionEconomy:
         assert eco.spend_movement(4.5) is False
         assert eco.movement == 3  # unchanged
 
+    def test_spend_movement_negative_raises(self):
+        eco = new_turn_economy(speed=9)
+        with pytest.raises(ValueError):
+            eco.spend_movement(-3)
+        assert eco.movement == 9  # unchanged
+
     def test_default_speed_9m(self):
         eco = new_turn_economy()
         assert eco.movement == 9.0

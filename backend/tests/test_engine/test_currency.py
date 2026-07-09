@@ -25,3 +25,14 @@ def test_subtract_cost():
     assert subtract_cost(Wealth(gp=1, sp=0, cp=0), 0.35) == Wealth(gp=0, sp=6, cp=5)
     with pytest.raises(InsufficientFundsError):
         subtract_cost(Wealth(gp=0, sp=0, cp=5), 0.1)
+
+
+def test_subtract_cost_negative_cost_raises():
+    """A negative cost must never be usable to mint free money."""
+    with pytest.raises(ValueError):
+        subtract_cost(Wealth(gp=1, sp=0, cp=0), -50)
+
+
+def test_can_afford_negative_cost_raises():
+    with pytest.raises(ValueError):
+        can_afford(Wealth(gp=1, sp=0, cp=0), -50)
