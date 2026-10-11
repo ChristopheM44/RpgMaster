@@ -92,7 +92,26 @@ export interface TokenSpec {
   /** Offsets monde sub-cellule (anti-chevauchement) — voir tokenCollision.ts. */
   offsetX?: number
   offsetZ?: number
+  /**
+   * Rôle visuel (vocabulaire d'indicateurs, lot 3) : couleur du socle et de
+   * l'étiquette. you = or, ai = arcane, ally/npc = teal, enemy = sang.
+   */
+  role?: TokenRole
+  /** POI : nature du repère (un danger se lit au sol, sans losange). */
+  poiRole?: PoiRole
+  /** POI danger : un élément de décor porte déjà le décalque au sol. */
+  hasElement?: boolean
+  /** Sortie : voyager, monter ou descendre (bannière + chevrons). */
+  exitDirection?: ExitDirection
+  /** Sortie : direction monde des chevrons (bord vers lequel on sort). */
+  exitFacing?: SceneElementFacing | null
+  /** Sortie : accès par lequel le groupe vient d'arriver (teinte teal). */
+  arrival?: boolean
 }
+
+export type TokenRole = 'you' | 'ai' | 'ally' | 'npc' | 'enemy'
+export type PoiRole = 'clue' | 'loot' | 'hazard' | 'cover' | 'point'
+export type ExitDirection = 'travel' | 'up' | 'down'
 
 export interface ZoneSpec {
   id: string
@@ -169,6 +188,8 @@ export interface SceneRuntimeHandle {
   setRunning(running: boolean): void
   /** Multiplicateur de luminosité piloté par l'UI (exposition + plancher ambiant). */
   setBrightness(value: number): void
+  /** Conteneur DOM des étiquettes projetées (noms, repères, bannières de sortie). */
+  attachLabels?(root: HTMLElement | null): void
   resize(): void
   dispose(): void
 }

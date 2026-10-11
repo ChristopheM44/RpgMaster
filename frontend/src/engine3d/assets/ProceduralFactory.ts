@@ -19,6 +19,7 @@ import {
   STAIRWELL_STEPS,
 } from '../adapters/stairs'
 import type { SceneElementFacing } from '../../types'
+import { hazardTextures } from './groundTextures'
 
 export interface ElementBuildCtx {
   dims: GridDims
@@ -220,11 +221,12 @@ export function buildProceduralElement(spec: ElementSpec, ctx: ElementBuildCtx):
       break
     }
     case 'hazard': {
-      addFlat(makeMaterial(tokens.blood, subtle, {
-        emissive: tokens.blood,
-        emissiveIntensity: 0.25,
-        opacity: 0.38,
-      }), 0.02)
+      // Décalque au sol (fissures + bord sang en pointillés animé) : se lit comme
+      // « terrain dangereux » sans légende ; le nom apparaît au survol.
+      const decal = new THREE.Group()
+      addHazardDecal(decal, Math.max(0.6, foot.sizeX), Math.max(0.6, foot.sizeZ), spec.id, tokens)
+      decal.position.y = elevation
+      group.add(decal)
       break
     }
     case 'light': {
@@ -265,6 +267,43 @@ export function buildProceduralElement(spec: ElementSpec, ctx: ElementBuildCtx):
   group.position.set(foot.x, 0, foot.z)
   group.rotation.y = foot.rotationY
   return group
+}
+
+// ─── Danger ──────────────────────────────────────────────────────────────────
+
+/** Décalque de danger au sol (fissures + bord en pointillés) ; sans canvas → voile sang. */
+export function addHazardDecal(
+  parent: THREE.Object3D,
+  sizeX: number,
+  sizeZ: number,
+  seed: string,
+  tokens: Pick<ThemeTokens, 'blood'>,
+): void {
+  const textures = hazardTextures(seed)
+  const base = new THREE.Mesh(
+    new THREE.PlaneGeometry(sizeX, sizeZ),
+    new THREE.MeshStandardMaterial({
+      color: textures ? '#ffffff' : tokens.blood,
+      map: textures?.cracks ?? null,
+      transparent: true,
+      opacity: textures ? 0.95 : 0.35,
+      depthWrite: false,
+      roughness: 1,
+    }),
+  )
+  base.rotation.x = -Math.PI / 2
+  base.position.y = 0.014
+  base.receiveShadow = true
+  parent.add(base)
+  if (!textures) return
+  const ring = new THREE.Mesh(
+    new THREE.PlaneGeometry(sizeX * 1.04, sizeZ * 1.04),
+    new THREE.MeshBasicMaterial({ map: textures.ring, transparent: true, opacity: 0.85, depthWrite: false }),
+  )
+  ring.rotation.x = -Math.PI / 2
+  ring.position.y = 0.017
+  ring.userData.hazardRing = true
+  parent.add(ring)
 }
 
 // ─── Escaliers ───────────────────────────────────────────────────────────────

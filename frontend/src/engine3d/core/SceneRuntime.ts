@@ -12,6 +12,7 @@ import { ambiancePreset, biomeFor, resolveThemeTokens, type ThemeTokens } from '
 import { easeInOut, TweenGroup, type Tween } from './tween'
 import { ElementsLayer } from '../layers/ElementsLayer'
 import { GroundLayer } from '../layers/GroundLayer'
+import { LabelLayer } from '../layers/LabelLayer'
 import { OverlayLayer } from '../layers/OverlayLayer'
 import { ScatterLayer } from '../layers/ScatterLayer'
 import { TokenLayer } from '../layers/TokenLayer'
@@ -30,6 +31,7 @@ export class SceneRuntime implements SceneRuntimeHandle {
   private scatter = new ScatterLayer()
   private tokens = new TokenLayer()
   private overlay = new OverlayLayer()
+  private labels: LabelLayer
   private hemi: THREE.HemisphereLight
   private sun: THREE.DirectionalLight
   /** Plancher de lisibilité en ambiance sombre (night/torchlit) — jamais de noir total.
@@ -51,6 +53,10 @@ export class SceneRuntime implements SceneRuntimeHandle {
   private cameraTween: Tween | null = null
 
   constructor(private canvas: HTMLCanvasElement, callbacks: RuntimeCallbacks = {}) {
+    // Bannière de sortie cliquée = même chemin qu'un clic 3D sur la sortie.
+    this.labels = new LabelLayer({
+      onExitClick: (id, screen) => callbacks.onClick?.({ type: 'token', id, tokenKind: 'exit' }, screen),
+    })
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
@@ -162,6 +168,7 @@ export class SceneRuntime implements SceneRuntimeHandle {
     this.elements.update(spec.elements, selectedElementId, ctx)
     this.scatter.update(spec.ground, new Set(spec.scatterBlockedCells), ctx)
     this.tokens.sync(spec.tokens, ctx)
+    this.labels.sync(spec.tokens)
     this.overlay.update(spec.overlay, ctx)
   }
 
@@ -178,6 +185,10 @@ export class SceneRuntime implements SceneRuntimeHandle {
   projectToken(id: string): { x: number; y: number } | null {
     const anchor = this.tokens.anchorWorld(id)
     return anchor ? this.project(anchor) : null
+  }
+
+  attachLabels(root: HTMLElement | null): void {
+    this.labels.attach(root)
   }
 
   setZoomPreset(preset: ZoomPreset): void {
@@ -277,6 +288,7 @@ export class SceneRuntime implements SceneRuntimeHandle {
     this.scatter.dispose()
     this.tokens.dispose()
     this.overlay.dispose()
+    this.labels.dispose()
     this.scene.clear()
     this.renderer.dispose()
   }
@@ -301,6 +313,12 @@ export class SceneRuntime implements SceneRuntimeHandle {
     this.overlay.tick(dt)
     this.rig.update()
     this.elements.tick(dt, this.rig.camera.position, this.rig.controls.target)
+    this.labels.tick(
+      this.rig.camera,
+      this.canvas.clientWidth,
+      this.canvas.clientHeight,
+      (id) => this.tokens.anchorWorld(id),
+    )
     this.picking.tick()
     this.renderer.render(this.scene, this.rig.camera)
   }

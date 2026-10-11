@@ -40,6 +40,8 @@ function mix(a: Rgb, b: Rgb, t: number): Rgb {
 
 function makeCanvas(width: number, height: number): CanvasRenderingContext2D | null {
   if (typeof document === 'undefined') return null
+  // jsdom (tests) n'implémente pas le canvas 2D et le signale bruyamment.
+  if (typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent)) return null
   const canvas = document.createElement('canvas')
   canvas.width = width
   canvas.height = height
@@ -305,4 +307,45 @@ function drawCobbles(g: CanvasRenderingContext2D, rand: Prng, size: number, base
     }
   }
   speckle(g, rand, { w: size, h: size }, base, 3000)
+}
+
+// ─── Danger ──────────────────────────────────────────────────────────────────
+
+/** Fissures sombres teintées sang + bord en pointillés (tourne via userData.hazardRing). */
+export function hazardTextures(seed: string): { cracks: THREE.CanvasTexture; ring: THREE.CanvasTexture } | null {
+  const size = 256
+  const cracksCtx = makeCanvas(size, size)
+  const ringCtx = makeCanvas(size, size)
+  if (!cracksCtx || !ringCtx) return null
+  const rand = makePrng(`hazard|${seed}`)
+  const center = size / 2
+  const gradient = cracksCtx.createRadialGradient(center, center, 0, center, center, center)
+  gradient.addColorStop(0, 'rgba(90,24,24,0.55)')
+  gradient.addColorStop(0.7, 'rgba(150,40,40,0.32)')
+  gradient.addColorStop(1, 'rgba(150,40,40,0)')
+  cracksCtx.fillStyle = gradient
+  cracksCtx.fillRect(0, 0, size, size)
+  for (let i = 0; i < 16; i++) {
+    let angle = rand() * Math.PI * 2
+    let x = center + range(rand, -20, 20)
+    let y = center + range(rand, -20, 20)
+    cracksCtx.strokeStyle = `rgba(30,8,8,${range(rand, 0.5, 0.85)})`
+    cracksCtx.lineWidth = range(rand, 1.5, 3)
+    cracksCtx.beginPath()
+    cracksCtx.moveTo(x, y)
+    for (let j = 0; j < 7; j++) {
+      angle += range(rand, -0.7, 0.7)
+      x += Math.cos(angle) * 14
+      y += Math.sin(angle) * 14
+      cracksCtx.lineTo(x, y)
+    }
+    cracksCtx.stroke()
+  }
+  ringCtx.strokeStyle = 'rgba(232,69,69,1)'
+  ringCtx.lineWidth = 10
+  ringCtx.setLineDash([22, 14])
+  ringCtx.beginPath()
+  ringCtx.arc(center, center, center - 8, 0, Math.PI * 2)
+  ringCtx.stroke()
+  return { cracks: toTexture(cracksCtx, false), ring: toTexture(ringCtx, false) }
 }

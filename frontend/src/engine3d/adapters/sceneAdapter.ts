@@ -14,6 +14,7 @@ import type {
 import type { AmbianceLight, ArrivalSpec, ElementSpec, GroundSpec, SceneSpec, TokenSpec } from '../types'
 import { isModelKey, modelForClass, modelForMonster, modelForNpc } from '../assets/manifest'
 import { resolveTokenOverlaps } from './tokenCollision'
+import { exitIndicator, poiRoleFor } from './indicators'
 import { isStairwell, resolveStairsFacing, stairwellCells, stairwellHoleKeys, stairwellSurfaceM } from './stairs'
 import { rectCells } from '../utils/gridMath'
 
@@ -94,7 +95,7 @@ export function buildSceneSpec(input: SceneAdapterInput): SceneSpec {
     linkedElementIds,
     selectedElementId: resolveSelectedElementId(input, scene?.elements ?? []),
   })
-  const tokens = buildTokens(input, blockedCells)
+  const tokens = buildTokens(input, blockedCells, elements, dims)
   ground.holes = stairwellHoleKeys(elements, dims)
   ground.enclosed = isEnclosedScene(scene, elements, dims)
 
@@ -270,8 +271,15 @@ function resolveSelectedElementId(input: SceneAdapterInput, elements: SceneEleme
   return elements.some((element) => element.id === input.selectedId) ? input.selectedId : null
 }
 
-function buildTokens(input: SceneAdapterInput, blockedCells: Set<string>): TokenSpec[] {
+function buildTokens(
+  input: SceneAdapterInput,
+  blockedCells: Set<string>,
+  elements: ElementSpec[],
+  dims: { cols: number; rows: number },
+): TokenSpec[] {
   const tokens: TokenSpec[] = []
+  const elementsById = new Map(elements.map((element) => [element.id, element]))
+  const arrivalExitId = input.scene?.arrival?.exit_id ?? null
 
   for (const hero of input.heroes) {
     blockedCells.add(`${hero.x},${hero.y}`)
@@ -292,6 +300,7 @@ function buildTokens(input: SceneAdapterInput, blockedCells: Set<string>): Token
       defeated: false,
       iconId: null,
       exitActive: false,
+      role: hero.isMe ? 'you' : hero.ai ? 'ai' : 'ally',
     })
   }
 
@@ -319,6 +328,7 @@ function buildTokens(input: SceneAdapterInput, blockedCells: Set<string>): Token
         defeated: false,
         iconId: null,
         exitActive: false,
+        role: isEnemy ? 'enemy' : 'npc',
       })
       continue
     }
@@ -340,6 +350,12 @@ function buildTokens(input: SceneAdapterInput, blockedCells: Set<string>): Token
       defeated: false,
       iconId: poi.iconId ?? null,
       exitActive: isExit ? poi.active !== false : false,
+      ...(isExit
+        ? (() => {
+          const indicator = exitIndicator(poi.x, poi.y, poi.elementId ? elementsById.get(poi.elementId) : undefined, dims)
+          return { exitDirection: indicator.direction, exitFacing: indicator.facing, arrival: poi.id === arrivalExitId }
+        })()
+        : { poiRole: poiRoleFor(poi.kind), hasElement: Boolean(poi.elementId && elementsById.has(poi.elementId)) }),
     })
   }
 

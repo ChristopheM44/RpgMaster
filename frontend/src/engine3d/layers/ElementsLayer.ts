@@ -29,6 +29,8 @@ interface ElementEntry {
   cutaway: { x: number; z: number; hide: boolean } | null
   /** Facteur de hauteur courant (1 = plein, CUTAWAY_SCALE = coupé). */
   cutK: number
+  /** Bords de décalque de danger animés. */
+  spinners: THREE.Object3D[]
   generation: number
 }
 
@@ -38,6 +40,7 @@ export class ElementsLayer {
   private buildKey = ''
   private generation = 0
   private selectionRing: THREE.Mesh | null = null
+  private time = 0
 
   update(specs: ElementSpec[], selectedId: string | null, ctx: EngineCtx): void {
     const key = JSON.stringify(specs.map((spec) => ({ ...spec, selected: undefined })))
@@ -60,7 +63,9 @@ export class ElementsLayer {
     dx /= length
     dz /= length
     const blend = Math.min(1, dt * 7)
+    this.time += dt
     for (const entry of this.entries.values()) {
+      for (const spinner of entry.spinners) spinner.rotation.z = this.time * 0.25
       const cut = entry.cutaway
       if (!cut) continue
       const goal = cut.x * dx + cut.z * dz > CUTAWAY_FACING ? CUTAWAY_SCALE : 1
@@ -106,7 +111,11 @@ export class ElementsLayer {
         container.userData.pick = { type: 'element', id: spec.id }
       }
       this.group.add(container)
-      this.entries.set(spec.id, { container, spec, generation, cutaway: cutawayNormal(spec, ctx.dims), cutK: 1 })
+      const spinners: THREE.Object3D[] = []
+      procedural.traverse((node) => {
+        if (node.userData.hazardRing) spinners.push(node)
+      })
+      this.entries.set(spec.id, { container, spec, generation, cutaway: cutawayNormal(spec, ctx.dims), cutK: 1, spinners })
 
       // Torches/lanternes : vraie lumière en ambiance torchlit/night.
       if (spec.kind === 'light' && (ctx.ambiance.pointLights || ctx.biome.enclosed) && pointLights < MAX_POINT_LIGHTS) {

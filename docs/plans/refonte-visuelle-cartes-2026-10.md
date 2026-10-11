@@ -238,3 +238,22 @@ panneau navigateur est masqué) — à vérifier sur la machine de dev.
 Reste visible pour les lots suivants : rochers gris Kenney dans le désert (teintes = lot 4),
 bibliothèque vide (lot 4), anneaux de sortie et disque rouge de danger (lot 3). Mineur : la
 lumière d'une torche murale masquée par la coupe continue d'éclairer.
+
+### Lot 3 — LIVRÉ (même branche, non commité)
+- Étiquettes DOM projetées (`engine3d/layers/LabelLayer.ts`, styles `.e3d-*` non scopés
+  dans `Scene3DCanvas.vue`) : remplacent les nameplates canvas. Noms colorés par rôle
+  (or vous, arcane IA, teal PNJ/allié, sang ennemi) + PV ; repères `✦/▣/◆ titre` ;
+  bannières de sortie cliquables (« Sortie / Monter / Descendre » + destination, teal pour
+  l'accès d'arrivée) qui empruntent le même chemin qu'un clic 3D. Anti-chevauchement.
+- Jetons 3D (`TokenLayer`) : losange flottant relié au sol pour les repères ; chevrons
+  animés (avec ombre, lisibles sur sol clair) vers le bord de sortie ; un danger n'a plus
+  de pin : décalque au sol (fissures + bord sang en pointillés tournant), porté par
+  l'élément `hazard` (`ProceduralFactory.addHazardDecal`) ou posé par le jeton s'il est seul.
+- Rôles et sens calculés par les adapters (`adapters/indicators.ts`, pur) :
+  `TokenSpec.role/poiRole/hasElement/exitDirection/exitFacing/arrival`.
+- Légende en clair (titres au lieu des codes E1/L12, coordonnée en infobulle) ; chips de
+  coordonnées A1/L12 retirées du canvas.
+
+Vérifié : frontend 188 ✓, type-check ✓, build ✓, rendu live banc (Jardin, Désert, Caveau),
+clic sur bannière → sélection de la sortie. Non fait : test « 3 joueurs sans légende »
+(critère humain) et revue à l'œil d'un vrai combat.

@@ -24,6 +24,7 @@ const emit = defineEmits<{
 
 const host = ref<HTMLDivElement | null>(null)
 const canvas = ref<HTMLCanvasElement | null>(null)
+const labels = ref<HTMLDivElement | null>(null)
 const runtime = shallowRef<SceneRuntimeHandle | null>(null)
 const loading = ref(true)
 
@@ -53,6 +54,7 @@ async function boot(): Promise<void> {
       onHover: (pick, screen) => emit('hover', pick, screen),
     })
     loading.value = false
+    runtime.value.attachLabels?.(labels.value)
     runtime.value.setBrightness(brightness.value)
     if (props.spec) applySpec(props.spec)
     runtime.value.resize()
@@ -225,14 +227,10 @@ defineExpose({ moveToken, projectToken, projectCell, setZoomPreset })
       <span class="scene3d-loading-spinner" />Préparation de la scène…
     </div>
 
-    <!-- Chips de coordonnées — parité local-map-coord. -->
-    <template v-if="spec">
-      <div class="scene3d-coord top-left">A1</div>
-      <div class="scene3d-coord bottom-right">
-        {{ String.fromCharCode(64 + spec.ground.cols) }}{{ spec.ground.rows }}
-        · {{ spec.ground.cols }}×{{ spec.ground.rows }}
-      </div>
+    <!-- Étiquettes DOM projetées par le moteur (noms, repères, bannières de sortie). -->
+    <div ref="labels" class="scene3d-labels" aria-live="off" />
 
+    <template v-if="spec">
       <!-- Réglage de luminosité de la scène (exposition). -->
       <label class="scene3d-brightness" title="Luminosité de la scène">
         <span class="scene3d-brightness-icon" aria-hidden="true">☀</span>
@@ -318,27 +316,12 @@ defineExpose({ moveToken, projectToken, projectCell, setZoomPreset })
   to { transform: rotate(360deg); }
 }
 
-.scene3d-coord {
+.scene3d-labels {
   position: absolute;
-  z-index: 5;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  color: var(--color-text-muted);
-  background: rgba(14, 13, 20, 0.72);
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  padding: 2px 5px;
+  inset: 0;
+  z-index: 3;
+  overflow: hidden;
   pointer-events: none;
-}
-
-.scene3d-coord.top-left {
-  top: 6px;
-  left: 6px;
-}
-
-.scene3d-coord.bottom-right {
-  right: 6px;
-  bottom: 6px;
 }
 
 .scene3d-brightness {
@@ -452,4 +435,131 @@ defineExpose({ moveToken, projectToken, projectCell, setZoomPreset })
   accent-color: var(--color-ember);
   cursor: pointer;
 }
+</style>
+
+<!--
+  Vocabulaire d'indicateurs (lot 3) — styles NON scopés : les étiquettes sont
+  créées par le moteur (engine3d/layers/LabelLayer.ts), hors du rendu Vue.
+  or = vous / décisions · arcane = compagnon IA · teal = PNJ, allié, arrivée ·
+  sang = ennemi · ember = repère à examiner.
+-->
+<style>
+.e3d-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  will-change: transform;
+  pointer-events: none;
+}
+
+.e3d-plate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px 3px;
+  border-radius: 5px;
+  background: rgba(14, 13, 20, 0.66);
+  border: 1px solid var(--color-border);
+  font: 700 10px/1.2 var(--font-display);
+  letter-spacing: 0.08em;
+  color: var(--color-parchment);
+}
+
+.e3d-plate.e3d-role-you { color: var(--color-gold); border-color: rgba(240, 199, 100, 0.45); }
+.e3d-plate.e3d-role-ai { color: var(--color-arcane); }
+.e3d-plate.e3d-role-ally,
+.e3d-plate.e3d-role-npc { color: var(--color-teal); }
+.e3d-plate.e3d-role-enemy { color: var(--color-blood); border-color: rgba(232, 69, 69, 0.4); }
+.e3d-plate.is-active { box-shadow: 0 0 0 1px var(--color-gold), 0 0 12px rgba(240, 199, 100, 0.35); }
+.e3d-plate.is-defeated { opacity: 0.5; text-decoration: line-through; }
+
+.e3d-plate-hp {
+  width: 40px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.65);
+  overflow: hidden;
+}
+
+.e3d-plate-hp i { display: block; height: 100%; }
+.e3d-plate-hp i.is-ok { background: var(--color-green); }
+.e3d-plate-hp i.is-hurt { background: var(--color-gold); }
+.e3d-plate-hp i.is-critical { background: var(--color-blood); }
+
+.e3d-pin {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: rgba(14, 13, 20, 0.66);
+  border: 1px solid rgba(255, 130, 71, 0.4);
+  font: 600 11px/1.3 var(--font-body);
+  color: var(--color-parchment);
+}
+
+.e3d-pin-glyph { color: var(--color-ember); }
+.e3d-poi-loot .e3d-pin-glyph { color: var(--color-gold); }
+.e3d-poi-cover .e3d-pin-glyph { color: var(--color-teal); }
+
+.e3d-banner {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px 4px 5px;
+  border-radius: 7px;
+  background: rgba(14, 13, 20, 0.86);
+  border: 1px solid rgba(240, 199, 100, 0.55);
+  box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.8);
+  color: var(--color-parchment);
+  font: 400 12px/1.15 var(--font-serif);
+  text-align: left;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.e3d-banner:hover,
+.e3d-banner:focus-visible,
+.e3d-banner.is-selected,
+.e3d-banner.is-highlighted {
+  border-color: var(--color-gold);
+  background: rgba(42, 38, 64, 0.95);
+  outline: none;
+}
+
+.e3d-banner-dir {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  background: linear-gradient(135deg, var(--color-ember), var(--color-gold));
+  color: var(--color-bg);
+  font: 700 14px/1 var(--font-body);
+}
+
+.e3d-banner-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.e3d-banner-text b {
+  font: 700 9px/1.3 var(--font-display);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-gold);
+}
+
+.e3d-banner.is-arrival { border-color: rgba(79, 216, 192, 0.55); }
+.e3d-banner.is-arrival .e3d-banner-dir { background: var(--color-teal); }
+.e3d-banner.is-arrival .e3d-banner-text b { color: var(--color-teal); }
+.e3d-banner.is-inactive { opacity: 0.6; }
+
+.e3d-plate.is-selected,
+.e3d-pin.is-selected { border-color: var(--color-gold); }
+.e3d-plate.is-highlighted,
+.e3d-pin.is-highlighted { border-color: var(--color-ember); }
 </style>
