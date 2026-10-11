@@ -6,7 +6,7 @@
 import type { CombatantState, GridConfig, GridPosition, SceneLayout, SceneTheme } from '../../types'
 import type { GridPoint, SceneSpec, TokenSpec } from '../types'
 import { modelForClass, modelForMonster, modelForNpc } from '../assets/manifest'
-import { buildElementSpecs, buildElevationByCell, buildGroundSpec, TONE_HEX } from './sceneAdapter'
+import { buildElementSpecs, buildElevationByCell, buildGroundSpec, isEnclosedScene, TONE_HEX } from './sceneAdapter'
 import { stairwellHoleKeys } from './stairs'
 import { resolveTokenOverlaps } from './tokenCollision'
 
@@ -97,6 +97,8 @@ export function buildCombatSpec(input: CombatAdapterInput): SceneSpec {
     selectedElementId: input.selectedElementId,
   })
   ground.holes = stairwellHoleKeys(elements, dims)
+  ground.showGrid = true
+  ground.enclosed = isEnclosedScene(scene ?? null, elements, dims)
 
   const tokens: TokenSpec[] = []
   if (input.isExploration) {

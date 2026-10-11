@@ -162,6 +162,43 @@ def _stairs_test() -> dict:
     )
 
 
+def _tavern() -> dict:
+    """Intérieur en thème « city » : doit être rendu clos (plancher, torches), pas en plein air."""
+    return _apply(
+        None,
+        {
+            "scene_id": "taverne_lys_pale",
+            "scene_theme": "city",
+            "terrain": "taverne",
+            "description": "La salle commune enfumée de l'Auberge du Lys pâle.",
+            "exits": [
+                {
+                    "id": "porte_rue",
+                    "label": "Sortir dans la rue",
+                    "position": {"col": 6, "row": 11},
+                    "leads_to": "place_du_marche",
+                },
+                {
+                    "id": "escalier_chambres",
+                    "label": "Monter aux chambres",
+                    "position": {"col": 0, "row": 3},
+                    "leads_to": "chambres",
+                    "description": "Un escalier de bois monte à l'étage.",
+                },
+            ],
+            "pois": [
+                {
+                    "id": "aubergiste",
+                    "name": "Maître Odran, l'aubergiste",
+                    "kind": "npc",
+                    "position": {"col": 8, "row": 4},
+                }
+            ],
+            "party_positions": {"heros": {"col": 6, "row": 8}},
+        },
+    )
+
+
 def main() -> None:
     conn = sqlite3.connect(DB)
     fixtures = []
@@ -196,6 +233,25 @@ def main() -> None:
             "title": "Banc escaliers (4 bords)",
             "source": "synthétique — pipeline enrich_scene_layout",
             "scene": _stairs_test(),
+            "characters": [
+                {
+                    "id": "heros",
+                    "name": "Thorvald",
+                    "char_class": "fighter",
+                    "species": "human",
+                    "is_ai": False,
+                    "hp_current": 12,
+                    "hp_max": 12,
+                }
+            ],
+        }
+    )
+    fixtures.append(
+        {
+            "id": "taverne",
+            "title": "Taverne (thème ville)",
+            "source": "synthétique — intérieur en thème city",
+            "scene": _tavern(),
             "characters": [
                 {
                     "id": "heros",

@@ -107,13 +107,27 @@ export type ScatterKind =
   | 'crate'
   | 'torch'
 
+/** Rendu du sol : dalles alignées sur la grille (intérieur), pavés, ou matière naturelle. */
+export type GroundStyle = 'flagstone' | 'planks' | 'cobble' | 'cave' | 'grass' | 'forest' | 'sand' | 'rock' | 'mud'
+
 export interface Biome3D {
-  /** Couleur de sol de base (transposée du gradient SVG). */
+  /**
+   * Albédo NATUREL du sol (sable clair, herbe, dalles). Avant 2026-10 ces valeurs
+   * reprenaient la palette sombre de l'interface (#1e1810 pour le sable !) : le sol
+   * restait noir même en plein jour. L'atmosphère sombre passe par la lumière et
+   * la brume, pas par l'albédo.
+   */
   ground: string
-  /** Variation appliquée en damier très léger. */
+  /** Seconde teinte (variations, joints, taches). */
   groundAccent: string
+  groundStyle: GroundStyle
+  /** Lieu clos (donjon, caverne) : roche sombre autour, brume sombre ; sinon terrain prolongé. */
+  enclosed: boolean
+  /** Amplitude du relief au-delà du plateau (unités monde). */
+  relief: number
   grid: string
   gridOpacity: number
+  /** Teinte de brume propre au biome (mêlée à celle de l'ambiance en extérieur). */
   fog: string
   scatter: ScatterKind[]
   /** Torches d'angle façon battlemap SVG (dungeon/cave). */
@@ -122,53 +136,78 @@ export interface Biome3D {
 
 export const BIOME_3D: Record<SceneTheme, Biome3D> = {
   forest: {
-    ground: '#16201a', groundAccent: '#1b2820', grid: '#ffebb4', gridOpacity: 0.05,
-    fog: '#101a12', scatter: ['tree_pine', 'bush', 'mushroom', 'log', 'grass'], cornerTorches: false,
+    ground: '#5a6a3c', groundAccent: '#4a4630', groundStyle: 'forest', enclosed: false, relief: 1.2,
+    grid: '#ffebb4', gridOpacity: 0.22, fog: '#7d8a6a',
+    scatter: ['tree_pine', 'bush', 'mushroom', 'log', 'grass'], cornerTorches: false,
   },
   beach: {
-    ground: '#262017', groundAccent: '#2d2719', grid: '#ffebb4', gridOpacity: 0.06,
-    fog: '#15202b', scatter: ['tree_palm', 'rock', 'grass'], cornerTorches: false,
+    ground: '#d9c493', groundAccent: '#c2a774', groundStyle: 'sand', enclosed: false, relief: 0.6,
+    grid: '#5a4a30', gridOpacity: 0.18, fog: '#b8c8cc',
+    scatter: ['tree_palm', 'rock', 'grass'], cornerTorches: false,
   },
   coastal: {
-    ground: '#1d2126', groundAccent: '#23282d', grid: '#ffebb4', gridOpacity: 0.05,
-    fog: '#142028', scatter: ['rock', 'grass', 'tree_palm'], cornerTorches: false,
+    ground: '#9a9483', groundAccent: '#7f7a6b', groundStyle: 'rock', enclosed: false, relief: 1.2,
+    grid: '#ffebb4', gridOpacity: 0.2, fog: '#a3b2b8',
+    scatter: ['rock', 'grass', 'tree_palm'], cornerTorches: false,
   },
   rocky: {
-    ground: '#1c1814', groundAccent: '#231e18', grid: '#ffebb4', gridOpacity: 0.05,
-    fog: '#171310', scatter: ['rock', 'stone', 'stump'], cornerTorches: false,
+    ground: '#8f8371', groundAccent: '#74695a', groundStyle: 'rock', enclosed: false, relief: 2.2,
+    grid: '#ffebb4', gridOpacity: 0.2, fog: '#a69a88',
+    scatter: ['rock', 'stone', 'stump'], cornerTorches: false,
   },
   mountain: {
-    ground: '#181820', groundAccent: '#1e1e28', grid: '#ffebb4', gridOpacity: 0.05,
-    fog: '#1a1a26', scatter: ['rock', 'stone', 'tree_pine'], cornerTorches: false,
+    ground: '#85837f', groundAccent: '#6c6b69', groundStyle: 'rock', enclosed: false, relief: 3,
+    grid: '#ffebb4', gridOpacity: 0.2, fog: '#9ea3ad',
+    scatter: ['rock', 'stone', 'tree_pine'], cornerTorches: false,
   },
   dungeon: {
-    ground: '#3e3e48', groundAccent: '#4a4a55', grid: '#ffebb4', gridOpacity: 0.08,
-    fog: '#131017', scatter: [], cornerTorches: true,
+    ground: '#8a8278', groundAccent: '#2a2520', groundStyle: 'flagstone', enclosed: true, relief: 0,
+    grid: '#ffebb4', gridOpacity: 0.16, fog: '#120f16',
+    scatter: [], cornerTorches: true,
   },
   cave: {
-    ground: '#383844', groundAccent: '#44444f', grid: '#ffebb4', gridOpacity: 0.07,
-    fog: '#0e0e13', scatter: ['rock', 'mushroom'], cornerTorches: true,
+    ground: '#6f6862', groundAccent: '#4a443f', groundStyle: 'cave', enclosed: true, relief: 0,
+    grid: '#ffebb4', gridOpacity: 0.16, fog: '#0e0d12',
+    scatter: ['rock', 'mushroom'], cornerTorches: true,
   },
   city: {
-    ground: '#181623', groundAccent: '#1d1b29', grid: '#ffebb4', gridOpacity: 0.07,
-    fog: '#12101a', scatter: ['crate'], cornerTorches: false,
+    ground: '#8d8576', groundAccent: '#5e574c', groundStyle: 'cobble', enclosed: false, relief: 0,
+    grid: '#ffebb4', gridOpacity: 0.18, fog: '#8f8a84',
+    scatter: ['crate'], cornerTorches: false,
   },
   plains: {
-    ground: '#181c14', groundAccent: '#1e2318', grid: '#ffebb4', gridOpacity: 0.05,
-    fog: '#141810', scatter: ['grass', 'bush', 'flower', 'tree_pine'], cornerTorches: false,
+    ground: '#7a8a48', groundAccent: '#93864f', groundStyle: 'grass', enclosed: false, relief: 0.8,
+    grid: '#ffebb4', gridOpacity: 0.2, fog: '#a9b394',
+    scatter: ['grass', 'bush', 'flower', 'tree_pine'], cornerTorches: false,
   },
   swamp: {
-    ground: '#172019', groundAccent: '#1d271b', grid: '#ffebb4', gridOpacity: 0.05,
-    fog: '#0c140e', scatter: ['tree_dark', 'lily', 'mushroom', 'grass'], cornerTorches: false,
+    ground: '#55593a', groundAccent: '#3e4230', groundStyle: 'mud', enclosed: false, relief: 0.5,
+    grid: '#ffebb4', gridOpacity: 0.2, fog: '#5d6656',
+    scatter: ['tree_dark', 'lily', 'mushroom', 'grass'], cornerTorches: false,
   },
   desert: {
-    ground: '#1e1810', groundAccent: '#241d12', grid: '#ffebb4', gridOpacity: 0.06,
-    fog: '#1c1408', scatter: ['cactus', 'rock', 'stone'], cornerTorches: false,
+    ground: '#dcc396', groundAccent: '#c4a57a', groundStyle: 'sand', enclosed: false, relief: 1.8,
+    grid: '#5a4024', gridOpacity: 0.18, fog: '#e2cfa8',
+    scatter: ['cactus', 'rock', 'stone'], cornerTorches: false,
   },
 }
 
-export function biomeFor(theme: string | null | undefined): Biome3D {
-  return BIOME_3D[(theme ?? 'forest') as SceneTheme] ?? BIOME_3D.forest
+export function biomeFor(theme: string | null | undefined, enclosed = false): Biome3D {
+  const base = BIOME_3D[(theme ?? 'forest') as SceneTheme] ?? BIOME_3D.forest
+  if (!enclosed || base.enclosed) return base
+  // Intérieur d'un thème d'extérieur (taverne, temple, échoppe en « city ») : plancher,
+  // pas de terrain ni de végétation, brume sombre, torches allumées.
+  return {
+    ...base,
+    ground: '#9a7650',
+    groundAccent: '#3a2a1c',
+    groundStyle: 'planks',
+    enclosed: true,
+    relief: 0,
+    fog: '#141016',
+    scatter: [],
+    cornerTorches: true,
+  }
 }
 
 // ─── Ambiances lumineuses ────────────────────────────────────────────────────
@@ -183,35 +222,38 @@ export interface AmbiancePreset {
   sunElevation: number
   /** PointLights sur les éléments `light` actives uniquement en torchlit. */
   pointLights: boolean
-  /** Tone mapping exposure — relevé en ambiance sombre pour rester lisible. */
+  /** Tone mapping exposure. */
   exposure: number
+  /** Ciel/brume en extérieur (les lieux clos gardent la brume sombre du biome). */
+  sky: string
 }
 
+// Calibré pour des albédos naturels (BIOME_3D) : plus besoin de surexposer.
 export const AMBIANCE_PRESETS: Record<AmbianceLight, AmbiancePreset> = {
   day: {
-    hemiSky: '#bfd4e8', hemiGround: '#2a2640', hemiIntensity: 0.95,
-    sunColor: '#fff1d6', sunIntensity: 1.55, sunElevation: 0.95, pointLights: false,
-    exposure: 1.05,
+    hemiSky: '#eef3f8', hemiGround: '#a08a68', hemiIntensity: 1.35,
+    sunColor: '#fff4e0', sunIntensity: 2.5, sunElevation: 0.95, pointLights: false,
+    exposure: 1.0, sky: '#d6d0c2',
   },
   dusk: {
-    hemiSky: '#8a6a5a', hemiGround: '#1a1420', hemiIntensity: 0.7,
-    sunColor: '#ff9a5a', sunIntensity: 1.1, sunElevation: 0.4, pointLights: false,
-    exposure: 1.05,
+    hemiSky: '#c49a82', hemiGround: '#3a2a2c', hemiIntensity: 0.85,
+    sunColor: '#ff9a5a', sunIntensity: 1.8, sunElevation: 0.35, pointLights: false,
+    exposure: 1.0, sky: '#8c6a66',
   },
   night: {
-    hemiSky: '#3a4a6a', hemiGround: '#0a0a12', hemiIntensity: 0.9,
-    sunColor: '#7a8fc0', sunIntensity: 0.88, sunElevation: 0.8, pointLights: true,
-    exposure: 1.22,
+    hemiSky: '#5a6a92', hemiGround: '#121420', hemiIntensity: 0.7,
+    sunColor: '#9fb2e0', sunIntensity: 0.75, sunElevation: 0.8, pointLights: true,
+    exposure: 1.05, sky: '#1b2234',
   },
   torchlit: {
-    hemiSky: '#5a463a', hemiGround: '#14100c', hemiIntensity: 1.1,
-    sunColor: '#ffb070', sunIntensity: 1.0, sunElevation: 0.9, pointLights: true,
-    exposure: 1.32,
+    hemiSky: '#9a8270', hemiGround: '#2a201a', hemiIntensity: 1.3,
+    sunColor: '#ffd2a8', sunIntensity: 1.05, sunElevation: 0.9, pointLights: true,
+    exposure: 1.15, sky: '#16121a',
   },
   overcast: {
-    hemiSky: '#9aa0aa', hemiGround: '#20202a', hemiIntensity: 0.8,
-    sunColor: '#cfd4da', sunIntensity: 0.85, sunElevation: 0.85, pointLights: false,
-    exposure: 1.05,
+    hemiSky: '#c4c8ce', hemiGround: '#5a5650', hemiIntensity: 1.25,
+    sunColor: '#dfe3e8', sunIntensity: 1.1, sunElevation: 0.85, pointLights: false,
+    exposure: 1.0, sky: '#a7a9ad',
   },
 }
 

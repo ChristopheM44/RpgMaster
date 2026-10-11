@@ -16,9 +16,19 @@ const WALL_SEGMENT_OVERLAP = 0.025
 const ACCESS_THICKNESS_WORLD = 0.3
 const WALL_ACCESS_KINDS = new Set(['door', 'window'])
 
+/** Hauteur résiduelle (fraction) d'un mur abaissé en coupe. */
+const CUTAWAY_SCALE = 0.14
+/** Seuil cos(angle) normale/caméra au-delà duquel un mur de bord est coupé. */
+const CUTAWAY_FACING = 0.3
+const CUTAWAY_KINDS = new Set(['wall', 'door', 'window'])
+
 interface ElementEntry {
   container: THREE.Group
   spec: ElementSpec
+  /** Normale sortante (monde XZ) d'un élément de bord coupable ; null sinon. */
+  cutaway: { x: number; z: number; hide: boolean } | null
+  /** Facteur de hauteur courant (1 = plein, CUTAWAY_SCALE = coupé). */
+  cutK: number
   generation: number
 }
 
@@ -36,6 +46,29 @@ export class ElementsLayer {
       this.buildKey = key
     }
     this.applySelection(selectedId, ctx)
+  }
+
+  /**
+   * Murs en coupe : les murs/portes/fenêtres de BORD tournés vers la caméra
+   * s'abaissent (les torches murales s'éteignent visuellement) pour qu'on voie
+   * toujours l'intérieur ; ils remontent quand la caméra tourne.
+   */
+  tick(dt: number, camera: THREE.Vector3, target: THREE.Vector3): void {
+    let dx = camera.x - target.x
+    let dz = camera.z - target.z
+    const length = Math.hypot(dx, dz) || 1
+    dx /= length
+    dz /= length
+    const blend = Math.min(1, dt * 7)
+    for (const entry of this.entries.values()) {
+      const cut = entry.cutaway
+      if (!cut) continue
+      const goal = cut.x * dx + cut.z * dz > CUTAWAY_FACING ? CUTAWAY_SCALE : 1
+      if (Math.abs(entry.cutK - goal) < 0.002) continue
+      entry.cutK += (goal - entry.cutK) * blend
+      if (cut.hide) entry.container.visible = entry.cutK > 0.6
+      else entry.container.scale.y = entry.cutK
+    }
   }
 
   pickables(): THREE.Object3D[] {
@@ -73,10 +106,10 @@ export class ElementsLayer {
         container.userData.pick = { type: 'element', id: spec.id }
       }
       this.group.add(container)
-      this.entries.set(spec.id, { container, spec, generation })
+      this.entries.set(spec.id, { container, spec, generation, cutaway: cutawayNormal(spec, ctx.dims), cutK: 1 })
 
       // Torches/lanternes : vraie lumière en ambiance torchlit/night.
-      if (spec.kind === 'light' && ctx.ambiance.pointLights && pointLights < MAX_POINT_LIGHTS) {
+      if (spec.kind === 'light' && (ctx.ambiance.pointLights || ctx.biome.enclosed) && pointLights < MAX_POINT_LIGHTS) {
         const light = new THREE.PointLight(
           new THREE.Color(ctx.tokens.ember),
           5.5,
@@ -146,6 +179,49 @@ export class ElementsLayer {
     this.group.add(ring)
     this.selectionRing = ring
   }
+}
+
+/**
+ * Normale sortante d'un élément situé sur le pourtour du plateau (≤ 1,2 case du
+ * bord) : murs, portes, fenêtres (abaissés) et torches murales (masquées).
+ * Les éléments intérieurs ne sont jamais coupés. Pur : testé sans WebGL.
+ */
+export function cutawayNormal(
+  spec: Pick<ElementSpec, 'kind' | 'geometry'>,
+  dims: { cols: number; rows: number },
+): { x: number; z: number; hide: boolean } | null {
+  const hide = spec.kind === 'light'
+  if (!CUTAWAY_KINDS.has(spec.kind) && !hide) return null
+  const geometry = spec.geometry
+  let cx: number
+  let cz: number
+  if (geometry.type === 'line') {
+    cx = (geometry.from.col + geometry.to.col) / 2
+    cz = (geometry.from.row + geometry.to.row) / 2
+  } else if (geometry.type === 'rect') {
+    cx = geometry.col + geometry.width / 2
+    cz = geometry.row + geometry.height / 2
+  } else {
+    return null // enceinte ellipse : déjà rendue creuse (BackSide)
+  }
+  const reach = hide ? 0.6 : 1.2
+  const near = {
+    west: cx <= reach,
+    east: cx >= dims.cols - reach,
+    north: cz <= reach,
+    south: cz >= dims.rows - reach,
+  }
+  // Un mur en ligne longe UN bord : on ignore les bords perpendiculaires à son tracé.
+  if (geometry.type === 'line') {
+    const alongX = Math.abs(geometry.to.col - geometry.from.col) >= Math.abs(geometry.to.row - geometry.from.row)
+    if (alongX) near.west = near.east = false
+    else near.north = near.south = false
+  }
+  const x = (near.east ? 1 : 0) - (near.west ? 1 : 0)
+  const z = (near.south ? 1 : 0) - (near.north ? 1 : 0)
+  if (x === 0 && z === 0) return null
+  const length = Math.hypot(x, z)
+  return { x: x / length, z: z / length, hide }
 }
 
 function elementFootprintWorld(spec: ElementSpec): { x: number; z: number } {

@@ -405,6 +405,9 @@ def enrich_scene_layout(
     _normalize_exits(layout, by_id, cols, rows)
 
     interior = _is_interior_scene(layout)
+    # Indice de rendu (ajout seul) : le frontend traite le lieu comme clos (sol
+    # intérieur, brume sombre, torches) même si le thème est « city » (taverne…).
+    layout["interior"] = interior
     if interior:
         _add_boundary_walls(by_id, cols, rows)
         _add_exit_access_elements(by_id, layout, cols, rows, interior=True)

@@ -208,3 +208,33 @@ rendu live (banc + écran de jeu réel « Jardin pétrifié »).
 Limites connues : l'ouverture du mur au-dessus d'une trémie reste pleine hauteur (porte) ;
 l'anneau doré de sortie recouvre encore la trémie (traité au Lot 3) ; les scènes déjà en
 base ne gagnent la continuité qu'au prochain déplacement.
+
+### Lot 2 — LIVRÉ (même branche)
+- `BIOME_3D` recalé en albédos naturels (test : luminance du sol > 25 % pour les 11 biomes)
+  + `groundStyle`, `enclosed`, `relief` ; ambiances recalibrées (`sky` = brume d'extérieur).
+- Sol (`GroundLayer` + `assets/groundTextures.ts`) : lieu clos = dalles dessinées alignées sur
+  la grille (UV plateau) ; extérieur = texture répétable en UV monde partagée par plateau et
+  terrain (aucune couture). Damier et cadre sombre supprimés.
+- Terrain prolongé (`utils/terrain.ts`, pur) : anneau de 2× la grille, plat sur le plateau,
+  relief progressif au-delà, fondu dans la brume/ciel ; roche sombre autour d'un lieu clos.
+  Décor hors plateau seedé (`ScatterLayer.placeOuterScatter`), sauf en ville.
+- Murs en coupe automatiques (`ElementsLayer.tick` + `cutawayNormal`, pur) : murs/portes/
+  fenêtres de bord face caméra abaissés à 14 %, torches murales masquées.
+- Grille tactique seulement en combat (`GroundSpec.showGrid`) ; case survolée marquée
+  partout (`PickingController.onHoverCell`).
+- Lieux clos : plancher ambiant et torches allumées quelle que soit l'ambiance (une
+  bibliothèque « couvert » sans torches tombait dans le noir).
+- Lieu clos décidé PAR SCÈNE, plus par thème : une taverne/un temple sortent en thème
+  `city` avec quatre murs. Le backend pose `layout.interior` (ajout seul, dans
+  `enrich_scene_layout`) ; le frontend retombe sur « murs sur ≥ 3 bords » pour les scènes
+  sauvées avant (`isEnclosedScene`) ; `biomeFor(theme, enclosed)` donne alors un intérieur
+  à plancher de bois (`planks`), sans terrain ni végétation. Fixture « Taverne (thème ville) ».
+- Combat : pas de case survolée (les overlays de déplacement font ce travail) ; relief
+  `city` = 0 (pas de collines pavées).
+
+Vérifié : backend 2127 ✓, frontend 181 ✓, type-check ✓, build ✓, rendu live banc (6 scènes) +
+écran de jeu réel (Vallée aride). Rendu combat (Battlemap) non revu à l'œil. Non mesuré ici : images/seconde (la boucle rAF est suspendue quand le
+panneau navigateur est masqué) — à vérifier sur la machine de dev.
+Reste visible pour les lots suivants : rochers gris Kenney dans le désert (teintes = lot 4),
+bibliothèque vide (lot 4), anneaux de sortie et disque rouge de danger (lot 3). Mineur : la
+lumière d'une torche murale masquée par la coupe continue d'éclairer.

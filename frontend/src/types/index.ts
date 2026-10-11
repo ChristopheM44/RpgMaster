@@ -675,6 +675,8 @@ export interface SceneLayout {
   vegetation_density?: number
   /** Présent juste après un changement de scène : par où le groupe arrive. */
   arrival?: SceneArrival
+  /** Lieu clos (taverne, temple, salle…) décidé par le backend, indépendamment du thème. */
+  interior?: boolean
 }
 
 export interface SceneAmbiance {

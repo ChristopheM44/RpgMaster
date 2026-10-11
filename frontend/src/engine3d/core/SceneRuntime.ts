@@ -81,6 +81,11 @@ export class SceneRuntime implements SceneRuntimeHandle {
       ground: () => this.ground.groundMesh(),
       dims: () => this.dims,
       cellPicking: () => this.cellPickingEnabled,
+      onHoverCell: (cell) => {
+        // Combat : les overlays de déplacement donnent déjà le retour de case.
+        const shown = this.cellPickingEnabled ? null : cell
+        this.ground.setHoverCell(shown, shown ? this.lastCtx?.elevationAt(shown.col, shown.row) ?? 0 : 0)
+      },
     }, callbacks)
 
     this.resize()
@@ -92,7 +97,7 @@ export class SceneRuntime implements SceneRuntimeHandle {
     this.dims = { cols: spec.ground.cols, rows: spec.ground.rows }
     this.cellPickingEnabled = spec.overlay.cellPicking
 
-    const biome = biomeFor(spec.ground.theme)
+    const biome = biomeFor(spec.ground.theme, spec.ground.enclosed)
     const preset = ambiancePreset(spec.ground.ambiance.light)
     // `?? {}` : tolère les specs mockées des tests composants sans le champ.
     const elevationByCell = spec.elevationByCell ?? {}
@@ -110,7 +115,11 @@ export class SceneRuntime implements SceneRuntimeHandle {
     this.lastCtx = ctx
 
     // Fond + fog cohérents : la géométrie se fond dans la couleur de brume.
-    const background = new THREE.Color(biome.fog).lerp(new THREE.Color(this.themeTokens.bg), 0.35)
+    // Lieu clos : brume sombre du biome. Extérieur : ciel de l'ambiance teinté par le biome
+    // (le terrain prolongé se perd à l'horizon au lieu de s'arrêter net).
+    const background = biome.enclosed
+      ? new THREE.Color(biome.fog).lerp(new THREE.Color(this.themeTokens.bg), 0.35)
+      : new THREE.Color(preset.sky).lerp(new THREE.Color(biome.fog), 0.35)
     this.scene.background = background
     const diag = gridDiagonal(this.dims)
     const density = spec.ground.ambiance.fogDensity
@@ -124,7 +133,9 @@ export class SceneRuntime implements SceneRuntimeHandle {
     this.sun.color = new THREE.Color(preset.sunColor)
     this.sun.intensity = preset.sunIntensity
     this.baseExposure = preset.exposure
-    this.baseAmbient = preset.pointLights ? 0.52 : 0
+    // Plancher ambiant : nuit/torches ET tout lieu clos (même « couvert », sans torches,
+    // les murs coupent le ciel et la salle tombait dans le noir).
+    this.baseAmbient = preset.pointLights || biome.enclosed ? 0.5 : 0
     this.applyBrightness()
     this.sun.position.set(diag * 0.55, Math.sin(preset.sunElevation) * diag * 0.9, diag * 0.3)
     this.sun.target.position.set(0, 0, 0)
@@ -289,6 +300,7 @@ export class SceneRuntime implements SceneRuntimeHandle {
     this.tokens.tick(dt)
     this.overlay.tick(dt)
     this.rig.update()
+    this.elements.tick(dt, this.rig.camera.position, this.rig.controls.target)
     this.picking.tick()
     this.renderer.render(this.scene, this.rig.camera)
   }

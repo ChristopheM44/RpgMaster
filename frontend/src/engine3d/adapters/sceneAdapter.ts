@@ -96,6 +96,7 @@ export function buildSceneSpec(input: SceneAdapterInput): SceneSpec {
   })
   const tokens = buildTokens(input, blockedCells)
   ground.holes = stairwellHoleKeys(elements, dims)
+  ground.enclosed = isEnclosedScene(scene, elements, dims)
 
   return {
     ground,
@@ -115,6 +116,26 @@ export function buildSceneSpec(input: SceneAdapterInput): SceneSpec {
     elevationByCell: buildElevationByCell(elements, dims),
     arrival: buildArrivalSpec(scene),
   }
+}
+
+/**
+ * Lieu clos pour CETTE scène : indice backend `interior`, sinon murs sur au moins
+ * trois bords (scènes sauvées avant l'indice). Une taverne en thème « city » est close.
+ */
+export function isEnclosedScene(
+  scene: SceneLayout | null,
+  elements: ElementSpec[],
+  dims: { cols: number; rows: number },
+): boolean {
+  if (typeof scene?.interior === 'boolean') return scene.interior
+  const edges = new Set<string>()
+  for (const element of elements) {
+    if (element.kind !== 'wall' || element.geometry.type !== 'line') continue
+    const { from, to } = element.geometry
+    if (from.row === to.row && (from.row <= 0.05 || from.row >= dims.rows - 0.05)) edges.add(from.row <= 0.05 ? 'n' : 's')
+    if (from.col === to.col && (from.col <= 0.05 || from.col >= dims.cols - 0.05)) edges.add(from.col <= 0.05 ? 'w' : 'e')
+  }
+  return edges.size >= 3
 }
 
 /** Accès d'arrivée posé par le backend après un changement de scène. */

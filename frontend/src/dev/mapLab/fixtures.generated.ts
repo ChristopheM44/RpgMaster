@@ -545,6 +545,7 @@ export const MAP_LAB_FIXTURES = [
       },
       "scene_id": "le_caveau_du_codex",
       "description": "Un caveau voûté où repose le Codex Lunaire, gardé par un mort.",
+      "interior": true,
       "vegetation_density": 0.0,
       "ambiance": {
         "light": "torchlit",
@@ -1594,6 +1595,7 @@ export const MAP_LAB_FIXTURES = [
       },
       "scene_id": "banc_escaliers",
       "description": "Salle de test : un accès par bord.",
+      "interior": true,
       "vegetation_density": 0.0,
       "ambiance": {
         "light": "torchlit",
@@ -2032,6 +2034,432 @@ export const MAP_LAB_FIXTURES = [
             "to": {
               "col": 0.0,
               "row": 7.0
+            }
+          },
+          "blocks_movement": true,
+          "opaque": true,
+          "asset_key": "prop/wall",
+          "height_m": 2.5,
+          "elevation_m": 0.0
+        }
+      ]
+    },
+    "characters": [
+      {
+        "id": "heros",
+        "name": "Thorvald",
+        "char_class": "fighter",
+        "species": "human",
+        "is_ai": false,
+        "hp_current": 12,
+        "hp_max": 12
+      }
+    ]
+  },
+  {
+    "id": "taverne",
+    "title": "Taverne (thème ville)",
+    "source": "synthétique — intérieur en thème city",
+    "scene": {
+      "cols": 12,
+      "rows": 12,
+      "cell_size_m": 1.5,
+      "terrain": "taverne",
+      "scene_theme": "city",
+      "pois": [
+        {
+          "id": "aubergiste",
+          "name": "Maître Odran, l'aubergiste",
+          "kind": "npc",
+          "position": {
+            "col": 8,
+            "row": 4
+          },
+          "icon": "marker"
+        }
+      ],
+      "exits": [
+        {
+          "id": "porte_rue",
+          "label": "Sortir dans la rue",
+          "position": {
+            "col": 6,
+            "row": 11
+          },
+          "leads_to": "place_du_marche",
+          "placement": "edge",
+          "element_id": "element_porte_rue_door"
+        },
+        {
+          "id": "escalier_chambres",
+          "label": "Monter aux chambres",
+          "position": {
+            "col": 0,
+            "row": 3
+          },
+          "leads_to": "chambres",
+          "description": "Un escalier de bois monte à l'étage.",
+          "placement": "edge",
+          "element_id": "element_escalier_chambres_stairs"
+        }
+      ],
+      "party_positions": {
+        "heros": {
+          "col": 6,
+          "row": 8
+        }
+      },
+      "scene_id": "taverne_lys_pale",
+      "description": "La salle commune enfumée de l'Auberge du Lys pâle.",
+      "interior": true,
+      "vegetation_density": 0.05,
+      "ambiance": {
+        "light": "day",
+        "fog_density": 0.15
+      },
+      "elements": [
+        {
+          "id": "wall_east",
+          "name": "Mur est",
+          "kind": "wall",
+          "geometry": {
+            "type": "line",
+            "from": {
+              "col": 12,
+              "row": 0
+            },
+            "to": {
+              "col": 12,
+              "row": 12
+            }
+          },
+          "blocks_movement": true,
+          "opaque": true,
+          "asset_key": "prop/wall",
+          "height_m": 2.5,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "wall_corner_nw",
+          "name": "Angle de mur",
+          "kind": "wall",
+          "geometry": {
+            "type": "rect",
+            "col": 0.0,
+            "row": 0.0,
+            "width": 0.6,
+            "height": 0.6
+          },
+          "blocks_movement": true,
+          "opaque": true,
+          "asset_key": "prop/wall_corner",
+          "height_m": 2.5,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "wall_corner_ne",
+          "name": "Angle de mur",
+          "kind": "wall",
+          "geometry": {
+            "type": "rect",
+            "col": 11.4,
+            "row": 0.0,
+            "width": 0.6,
+            "height": 0.6
+          },
+          "blocks_movement": true,
+          "opaque": true,
+          "asset_key": "prop/wall_corner",
+          "height_m": 2.5,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "wall_corner_se",
+          "name": "Angle de mur",
+          "kind": "wall",
+          "geometry": {
+            "type": "rect",
+            "col": 11.4,
+            "row": 11.4,
+            "width": 0.6,
+            "height": 0.6
+          },
+          "blocks_movement": true,
+          "opaque": true,
+          "asset_key": "prop/wall_corner",
+          "height_m": 2.5,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "wall_corner_sw",
+          "name": "Angle de mur",
+          "kind": "wall",
+          "geometry": {
+            "type": "rect",
+            "col": 0.0,
+            "row": 11.4,
+            "width": 0.6,
+            "height": 0.6
+          },
+          "blocks_movement": true,
+          "opaque": true,
+          "asset_key": "prop/wall_corner",
+          "height_m": 2.5,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "element_porte_rue_door",
+          "name": "Sortir dans la rue",
+          "kind": "door",
+          "geometry": {
+            "type": "rect",
+            "col": 6.0,
+            "row": 11.76,
+            "width": 1.0,
+            "height": 0.24
+          },
+          "description": "place_du_marche",
+          "blocks_movement": false,
+          "opaque": false,
+          "interactive": true,
+          "asset_key": "prop/door",
+          "facing": "south",
+          "vertical_direction": "level",
+          "height_m": 2.5,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "element_escalier_chambres_stairs",
+          "name": "Monter aux chambres",
+          "kind": "stairs",
+          "geometry": {
+            "type": "rect",
+            "col": 0.0,
+            "row": 3.0,
+            "width": 1.0,
+            "height": 1.0
+          },
+          "description": "Un escalier de bois monte à l'étage.",
+          "blocks_movement": false,
+          "opaque": false,
+          "interactive": true,
+          "asset_key": "prop/stairs",
+          "facing": "west",
+          "vertical_direction": "up",
+          "height_m": 0.4,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "window_1",
+          "name": "Fenêtre 1",
+          "kind": "window",
+          "geometry": {
+            "type": "rect",
+            "col": 3.0,
+            "row": 0.0,
+            "width": 1.4,
+            "height": 0.18
+          },
+          "description": "Une ouverture laisse filtrer la lumière extérieure.",
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": true,
+          "height_m": 1.0,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "window_2",
+          "name": "Fenêtre 2",
+          "kind": "window",
+          "geometry": {
+            "type": "rect",
+            "col": 8.64,
+            "row": 0.0,
+            "width": 1.4,
+            "height": 0.18
+          },
+          "description": "Une ouverture laisse filtrer la lumière extérieure.",
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": true,
+          "height_m": 1.0,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "table_centrale",
+          "name": "Table centrale",
+          "kind": "furniture",
+          "geometry": {
+            "type": "rect",
+            "col": 4.75,
+            "row": 5.25,
+            "width": 2.5,
+            "height": 1.5
+          },
+          "description": "Un meuble massif structure l'espace et peut servir de couvert.",
+          "blocks_movement": true,
+          "opaque": false,
+          "asset_key": "prop/table_medium",
+          "height_m": 0.8,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "etagere_murale",
+          "name": "Étagère murale",
+          "kind": "furniture",
+          "geometry": {
+            "type": "rect",
+            "col": 1.0,
+            "row": 4.199999999999999,
+            "width": 0.7,
+            "height": 2.2
+          },
+          "description": "Un élément de décor assez haut pour masquer une partie de la vue.",
+          "blocks_movement": true,
+          "opaque": true,
+          "asset_key": "prop/shelf_large",
+          "height_m": 0.8,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "wall_north",
+          "name": "Mur nord",
+          "kind": "wall",
+          "geometry": {
+            "type": "line",
+            "from": {
+              "col": 0.0,
+              "row": 0.0
+            },
+            "to": {
+              "col": 3.0,
+              "row": 0.0
+            }
+          },
+          "blocks_movement": true,
+          "opaque": true,
+          "asset_key": "prop/wall",
+          "height_m": 2.5,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "wall_north_seg_2",
+          "name": "Mur nord 2",
+          "kind": "wall",
+          "geometry": {
+            "type": "line",
+            "from": {
+              "col": 4.4,
+              "row": 0.0
+            },
+            "to": {
+              "col": 8.64,
+              "row": 0.0
+            }
+          },
+          "blocks_movement": true,
+          "opaque": true,
+          "asset_key": "prop/wall",
+          "height_m": 2.5,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "wall_north_seg_3",
+          "name": "Mur nord 3",
+          "kind": "wall",
+          "geometry": {
+            "type": "line",
+            "from": {
+              "col": 10.04,
+              "row": 0.0
+            },
+            "to": {
+              "col": 12.0,
+              "row": 0.0
+            }
+          },
+          "blocks_movement": true,
+          "opaque": true,
+          "asset_key": "prop/wall",
+          "height_m": 2.5,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "wall_south",
+          "name": "Mur sud",
+          "kind": "wall",
+          "geometry": {
+            "type": "line",
+            "from": {
+              "col": 6.0,
+              "row": 12.0
+            },
+            "to": {
+              "col": 0.0,
+              "row": 12.0
+            }
+          },
+          "blocks_movement": true,
+          "opaque": true,
+          "asset_key": "prop/wall",
+          "height_m": 2.5,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "wall_south_seg_2",
+          "name": "Mur sud 2",
+          "kind": "wall",
+          "geometry": {
+            "type": "line",
+            "from": {
+              "col": 12.0,
+              "row": 12.0
+            },
+            "to": {
+              "col": 7.0,
+              "row": 12.0
+            }
+          },
+          "blocks_movement": true,
+          "opaque": true,
+          "asset_key": "prop/wall",
+          "height_m": 2.5,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "wall_west",
+          "name": "Mur ouest",
+          "kind": "wall",
+          "geometry": {
+            "type": "line",
+            "from": {
+              "col": 0.0,
+              "row": 3.0
+            },
+            "to": {
+              "col": 0.0,
+              "row": 0.0
+            }
+          },
+          "blocks_movement": true,
+          "opaque": true,
+          "asset_key": "prop/wall",
+          "height_m": 2.5,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "wall_west_seg_2",
+          "name": "Mur ouest 2",
+          "kind": "wall",
+          "geometry": {
+            "type": "line",
+            "from": {
+              "col": 0.0,
+              "row": 12.0
+            },
+            "to": {
+              "col": 0.0,
+              "row": 4.0
             }
           },
           "blocks_movement": true,

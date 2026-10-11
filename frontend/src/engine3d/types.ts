@@ -37,6 +37,10 @@ export interface GroundSpec {
   vegetationDensity: number
   /** Cellules "col,row" retirées du sol (trémies d'escaliers descendants). */
   holes?: string[]
+  /** Grille tactique visible (combat). En exploration : seule la case survolée est marquée. */
+  showGrid?: boolean
+  /** Lieu clos pour CETTE scène (taverne en thème city…) — s'ajoute au `enclosed` du biome. */
+  enclosed?: boolean
 }
 
 export interface ElementSpec {
