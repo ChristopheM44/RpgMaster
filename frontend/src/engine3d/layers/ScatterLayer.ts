@@ -9,6 +9,7 @@ import type { ScatterKind } from '../core/ThemeProvider'
 import { buildScatterObject } from '../assets/ProceduralFactory'
 import { SCATTER_MODELS, SCATTER_TARGET_HEIGHT_M } from '../assets/manifest'
 import { disposeGroup, disposeObject } from './GroundLayer'
+import { applyTint } from './ElementsLayer'
 import { cellCenterToWorld, metersToWorld } from '../utils/gridMath'
 import { makePrng, pick, range } from '../utils/seededRandom'
 import { distanceOutsideBoard, terrainHeight, terrainSeed } from '../utils/terrain'
@@ -22,6 +23,8 @@ export class ScatterLayer {
   readonly group = new THREE.Group()
   private buildKey = ''
   private generation = 0
+  /** Matériaux teintés partagés (rochers ensablés) — vidé à chaque reconstruction. */
+  private tintCache = new Map<string, THREE.Material>()
 
   update(ground: GroundSpec, blocked: Set<string>, ctx: EngineCtx): void {
     const key = [
@@ -48,6 +51,7 @@ export class ScatterLayer {
     this.generation += 1
     const generation = this.generation
     disposeGroup(this.group)
+    this.tintCache.clear()
 
     const { cols, rows } = ground
     const rand = makePrng(`${ground.sceneId}|${ground.theme}`)
@@ -152,6 +156,9 @@ export class ScatterLayer {
     void ctx.registry.load(variant).then((model) => {
       if (!model || generation !== this.generation || !container.parent) return
       const instance = ctx.registry.instantiate(model, { targetHeight })
+      if (ctx.biome.rockTint && (kind === 'rock' || kind === 'stone')) {
+        applyTint(instance, ctx.biome.rockTint, this.tintCache)
+      }
       container.remove(procedural)
       disposeObject(procedural)
       container.add(instance)

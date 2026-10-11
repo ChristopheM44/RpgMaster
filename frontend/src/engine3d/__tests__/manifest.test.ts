@@ -5,6 +5,11 @@ import { describe, expect, it } from 'vitest'
 import {
   MODEL_MANIFEST,
   isModelKey,
+  isProceduralPropKey,
+  isPropKey,
+  matchProp,
+  matchTint,
+  normalizeWords,
   modelForClass,
   modelForElement,
   modelForMonster,
@@ -14,6 +19,7 @@ import {
   SCATTER_TARGET_HEIGHT_M,
 } from '../assets/manifest'
 import { BIOME_3D } from '../core/ThemeProvider'
+import { PROCEDURAL_PROP_KEYS, PROP_RULES } from '../assets/propCatalog.generated'
 
 describe('manifest 3D', () => {
   it('toutes les classes D&D (ids bruts ET libellés FR) résolvent un modèle', () => {
@@ -110,9 +116,36 @@ describe('manifest 3D', () => {
 
   it('éléments : un rocher en couvert → modèle de roche, pas des caisses', () => {
     expect(modelForElement('cover', 'Rocher érodé', { x: 1, z: 1 })).toBe('nature/rock_large_a')
-    expect(modelForElement('decor', 'Gros caillou', { x: 1, z: 1 })).toBe('nature/rock_large_a')
-    // Couvert vraiment indéterminé → caisses (repli conservé).
-    expect(modelForElement('cover', 'Empilement bizarre', { x: 1, z: 1 })).toBe('prop/crates_stacked')
+    expect(modelForElement('decor', 'Gros caillou', { x: 1, z: 1 })).toBe('nature/rock_small_a')
+    // Couvert indéterminé → procédural neutre (lot 4 : plus de repli « caisses »).
+    expect(modelForElement('cover', 'Empilement bizarre', { x: 1, z: 1 })).toBeNull()
+  })
+
+  it('lot 4 : les contresens des scènes de test sont corrigés par le catalogue partagé', () => {
+    expect(modelForElement('cover', 'Arbre pétrifié massif', { x: 1, z: 1 })).toBe('nature/tree_dark')
+    expect(modelForElement('decor', 'Fontaine tarie', { x: 1, z: 1 })).toBe('proc/fountain')
+    expect(modelForElement('decor', 'Traces de bottes', { x: 1, z: 1 })).toBe('proc/footprints')
+    expect(modelForElement('furniture', 'Lutrin', { x: 1, z: 1 })).toBe('proc/lectern')
+    expect(matchTint('Arbre pétrifié massif')).toBe('petrified')
+    expect(matchTint('Rochers érodés')).toBe('sand')
+    expect(matchTint('Table')).toBeNull()
+  })
+
+  it('catalogue : mêmes règles de mots que le backend (bornes de mot, accents)', () => {
+    expect(normalizeWords("Coffre d'Or — Étagère!")).toBe(' coffre d or etagere ')
+    expect(matchProp("Coffre d'or")).toBe('prop/chest_gold')
+    expect(matchProp('Litière souillée')).toBeNull()
+    expect(matchProp('Orée du bois')).toBeNull()
+  })
+
+  it('catalogue : chaque clé est un modèle du manifeste ou un prop procédural', () => {
+    for (const rule of PROP_RULES) {
+      expect(isPropKey(rule.assetKey), rule.assetKey).toBe(true)
+    }
+    for (const key of PROCEDURAL_PROP_KEYS) {
+      expect(isProceduralPropKey(key)).toBe(true)
+      expect(isModelKey(key)).toBe(false)
+    }
   })
 
   it('éléments : statues / obélisques (props verticaux)', () => {
@@ -137,12 +170,12 @@ describe('manifest 3D', () => {
     }
   })
 
-  it('éléments : mots-clés FR → props, cover par défaut → caisses, sinon null', () => {
+  it('éléments : mots-clés FR → props, sinon null (procédural neutre)', () => {
     expect(modelForElement('furniture', 'Table centrale', { x: 2, z: 1 })).toBe('prop/table_medium')
     expect(modelForElement('furniture', 'Grande table du banquet', { x: 3, z: 1 })).toBe('prop/table_long')
     expect(modelForElement('furniture', 'Étagère murale', { x: 1, z: 2 })).toBe('prop/shelf_large')
     expect(modelForElement('cover', 'Tonneaux renversés', { x: 1, z: 1 })).toBe('prop/barrel_small')
-    expect(modelForElement('cover', 'Empilement bizarre', { x: 1, z: 1 })).toBe('prop/crates_stacked')
+    expect(modelForElement('cover', 'Empilement bizarre', { x: 1, z: 1 })).toBeNull()
     expect(modelForElement('furniture', 'Machin inconnu', { x: 1, z: 1 })).toBeNull()
     expect(modelForElement('wall', 'Mur', { x: 4, z: 0.2 })).toBe('prop/wall')
   })

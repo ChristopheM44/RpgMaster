@@ -1,7 +1,8 @@
 """Exporte les fixtures du banc d'essai carte (/dev/map-lab, frontend).
 
-Scènes réelles figées depuis la base locale + scènes synthétiques passées par le
-VRAI pipeline backend (normalisation, éléments d'accès, continuité d'arrivée) :
+Scènes réelles figées depuis la base locale (réparées comme au chargement d'une
+session) + scènes synthétiques passées par le VRAI pipeline backend (normalisation,
+éléments d'accès, continuité d'arrivée) :
 
     cd backend && .venv/bin/python scripts/export_map_lab_fixtures.py
 
@@ -21,10 +22,20 @@ BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 
 from app.game.gm_response_executor import GMResponseExecutor  # noqa: E402
-from app.services import scene_continuity  # noqa: E402
+from app.services import map_service, scene_continuity  # noqa: E402
+from app.services.campaign_dossier_service import public_campaign_maps  # noqa: E402
+from app.services.visual_coherence_service import repair_state_visual_coherence  # noqa: E402
 
 DB = BACKEND / "rpgmaster.db"
 OUT = BACKEND.parent / "frontend" / "src" / "dev" / "mapLab" / "fixtures.generated.ts"
+WORLD_OUT = BACKEND.parent / "frontend" / "src" / "dev" / "mapLab" / "worldFixtures.generated.ts"
+
+# Cartes Région/Ville réelles : projection PUBLIQUE (celle que reçoit le joueur).
+REAL_WORLD_MAPS = [
+    ("sanctuaire", "Le Sanctuaire du Crépuscule (critère lot 5)", "f45b6d0d"),
+    ("mirage", "Le Mirage du Sable d'Or", "9ae1144b"),
+    ("nyanzaru", "Chronique importée — Port Nyanzaru", "ef75d65b"),
+]
 
 REAL_SCENES = [
     ("jardin", "Le Jardin pétrifié", "1ab56809-5b6b-4d9a-aee2-914a3f723d84"),
@@ -39,7 +50,11 @@ def _load(conn: sqlite3.Connection, session_id: str) -> tuple[dict, list[dict]]:
     ).fetchone()
     if row is None:
         raise SystemExit(f"session absente de la base : {session_id}")
-    scene = json.loads(row[0])["current_scene"]
+    state_data = json.loads(row[0])
+    # Même réparation qu'au chargement d'une session (session_state enrichi) :
+    # modèles cohérents avec les noms, habillage du lieu (lot 4)…
+    repair_state_visual_coherence(state_data)
+    scene = state_data["current_scene"]
     characters = [
         {
             "id": cid,
@@ -265,6 +280,7 @@ def main() -> None:
             ],
         }
     )
+    _export_world_maps(conn)
     OUT.parent.mkdir(parents=True, exist_ok=True)
     body = json.dumps(fixtures, ensure_ascii=False, indent=2)
     OUT.write_text(
@@ -274,6 +290,163 @@ def main() -> None:
         encoding="utf-8",
     )
     print(f"{len(fixtures)} fixtures → {OUT.relative_to(BACKEND.parent)}")
+
+
+def _dense_region() -> dict:
+    """Région synthétique dense : lieux voisins, noms longs, routes typées et chiffrées."""
+    nodes = [
+        ("havre_gris", "Havre-Gris", "settlement", "visited", 22, 62),
+        ("port_aux_brumes", "Port-aux-Brumes", "settlement", "current", 30, 66),
+        ("foret_murmures", "Forêt des Murmures", "wilderness", "known", 36, 48),
+        ("tour_veilleur", "Tour du Veilleur", "landmark", "visited", 41, 52),
+        ("col_des_vents", "Col des Vents", "landmark", "known", 58, 30),
+        ("mines_de_fer", "Mines de Fer-Noir", "dungeon", "known", 63, 34),
+        ("ruines_aethel", "Ruines d'Aethel", "ruin", "rumored", 74, 22),
+        ("carrefour", "Carrefour des Pendus", "crossroads", "known", 50, 58),
+        (
+            "sanctuaire_lune",
+            "Sanctuaire de la Lune pâle, au-delà des marais",
+            "dungeon",
+            "rumored",
+            80,
+            70,
+        ),
+    ]
+    edges = [
+        ("havre_gris", "port_aux_brumes", "road", "Une demi-journée par la route côtière."),
+        ("port_aux_brumes", "carrefour", "road", "2 jours de marche."),
+        ("carrefour", "tour_veilleur", "path", "1 jour par le sentier."),
+        ("tour_veilleur", "foret_murmures", "path", None),
+        ("carrefour", "col_des_vents", "road", "3 jours, la route monte."),
+        ("col_des_vents", "mines_de_fer", "path", None),
+        ("mines_de_fer", "ruines_aethel", "path", None),
+        ("havre_gris", "sanctuaire_lune", "sea_route", "4 jours de navigation."),
+        ("foret_murmures", "ruines_aethel", "secret", None),
+    ]
+    raw = {
+        "id": "region_dense",
+        "name": "Marches de Brume (synthétique)",
+        "current_node_id": "port_aux_brumes",
+        "nodes": [
+            {"id": i, "name": n, "kind": k, "status": st, "position": {"x": x, "y": y}}
+            for i, n, k, st, x, y in nodes
+        ],
+        "edges": [
+            {"id": f"{a}__{b}", "from": a, "to": b, "kind": kind, "travel_hint": hint}
+            for a, b, kind, hint in edges
+        ]
+        + [{"id": "cache", "from": "tour_veilleur", "to": "mines_de_fer", "hidden": True}],
+    }
+    return map_service.public_region_map(raw)
+
+
+def _dense_city() -> dict:
+    raw = {
+        "id": "ville_dense",
+        "region_node_id": "port_aux_brumes",
+        "name": "Port-aux-Brumes (synthétique)",
+        "current_node_id": "taverne",
+        "nodes": [
+            {
+                "id": "place",
+                "name": "Place du Phare",
+                "kind": "square",
+                "status": "visited",
+                "position": {"x": 50, "y": 52},
+            },
+            {
+                "id": "taverne",
+                "name": "Le Hareng Saur",
+                "kind": "tavern",
+                "status": "current",
+                "position": {"x": 40, "y": 46},
+            },
+            {
+                "id": "temple",
+                "name": "Temple des Marées",
+                "kind": "temple",
+                "status": "known",
+                "position": {"x": 62, "y": 40},
+            },
+            {
+                "id": "docks",
+                "name": "Les Docks",
+                "kind": "docks",
+                "status": "known",
+                "position": {"x": 52, "y": 74},
+            },
+            {
+                "id": "marche",
+                "name": "Quartier des Marchands",
+                "kind": "district",
+                "status": "known",
+                "position": {"x": 30, "y": 60},
+            },
+            {
+                "id": "echoppe",
+                "name": "Échoppe d'Odran",
+                "kind": "shop",
+                "status": "known",
+                "position": {"x": 33, "y": 64},
+            },
+            {
+                "id": "palais",
+                "name": "Palais du Prévôt",
+                "kind": "palace",
+                "status": "rumored",
+                "position": {"x": 68, "y": 28},
+            },
+            {
+                "id": "porte_nord",
+                "name": "Porte du Nord",
+                "kind": "gate",
+                "status": "known",
+                "position": {"x": 52, "y": 18},
+            },
+        ],
+        "edges": [
+            {"id": "e1", "from": "place", "to": "taverne", "kind": "street"},
+            {"id": "e2", "from": "place", "to": "temple", "kind": "street"},
+            {"id": "e3", "from": "place", "to": "docks", "kind": "street"},
+            {"id": "e4", "from": "place", "to": "marche", "kind": "street"},
+            {"id": "e5", "from": "marche", "to": "echoppe", "kind": "alley"},
+            {"id": "e6", "from": "temple", "to": "palais", "kind": "street"},
+            {"id": "e7", "from": "temple", "to": "porte_nord", "kind": "street"},
+        ],
+    }
+    return map_service.public_city_map(raw)
+
+
+def _export_world_maps(conn: sqlite3.Connection) -> None:
+    fixtures = []
+    for fixture_id, title, campaign_prefix in REAL_WORLD_MAPS:
+        row = conn.execute(
+            "select gm_dossier from campaign_dossiers where campaign_id like ?",
+            (f"{campaign_prefix}%",),
+        ).fetchone()
+        if row is None:
+            raise SystemExit(f"campagne absente de la base : {campaign_prefix}")
+        maps = public_campaign_maps(json.loads(row[0]))
+        fixtures.append({"id": fixture_id, "title": title, "source": campaign_prefix, **maps})
+    fixtures.append(
+        {
+            "id": "dense",
+            "title": "Marches de Brume (dense)",
+            "source": "synthétique — collisions, routes typées, échelle",
+            "region_map": _dense_region(),
+            "city_maps": {"ville_dense": _dense_city()},
+            "active_city_id": "ville_dense",
+            "active_dungeon_id": None,
+        }
+    )
+    body = json.dumps(fixtures, ensure_ascii=False, indent=2)
+    WORLD_OUT.write_text(
+        "// FICHIER GÉNÉRÉ — backend/scripts/export_map_lab_fixtures.py. Ne pas éditer.\n"
+        "import type { MapLabWorldFixture } from './types'\n\n"
+        f"export const MAP_LAB_WORLD_FIXTURES = {body} as unknown as MapLabWorldFixture[]\n",
+        encoding="utf-8",
+    )
+    print(f"{len(fixtures)} cartes 2D → {WORLD_OUT.relative_to(BACKEND.parent)}")
 
 
 if __name__ == "__main__":

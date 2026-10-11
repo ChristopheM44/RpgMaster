@@ -139,9 +139,10 @@ export const MAP_LAB_FIXTURES = [
           "blocks_movement": true,
           "opaque": true,
           "interactive": false,
-          "asset_key": "prop/crates_stacked",
+          "asset_key": "nature/tree_dark",
           "height_m": 1.0,
-          "elevation_m": 0.0
+          "elevation_m": 0.0,
+          "tint": "petrified"
         },
         {
           "id": "element_feature_2",
@@ -174,7 +175,7 @@ export const MAP_LAB_FIXTURES = [
           "blocks_movement": true,
           "opaque": true,
           "interactive": false,
-          "asset_key": "prop/barrel_large",
+          "asset_key": "proc/fountain",
           "height_m": 0.6,
           "elevation_m": 0.0
         },
@@ -346,7 +347,8 @@ export const MAP_LAB_FIXTURES = [
           "opaque": false,
           "interactive": true,
           "height_m": 0.6,
-          "elevation_m": 0.0
+          "elevation_m": 0.0,
+          "asset_key": "prop/obelisk"
         },
         {
           "id": "wall_north",
@@ -431,9 +433,166 @@ export const MAP_LAB_FIXTURES = [
           "asset_key": "prop/wall",
           "height_m": 2.5,
           "elevation_m": 0.0
+        },
+        {
+          "id": "dress_1",
+          "name": "Arbre",
+          "kind": "decor",
+          "geometry": {
+            "type": "rect",
+            "col": 10.1,
+            "row": 1.1,
+            "width": 0.8,
+            "height": 0.8
+          },
+          "blocks_movement": true,
+          "opaque": true,
+          "interactive": false,
+          "asset_key": "nature/tree_dark",
+          "tint": "petrified",
+          "height_m": 0.6,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_2",
+          "name": "Arbre",
+          "kind": "decor",
+          "geometry": {
+            "type": "rect",
+            "col": 1.1,
+            "row": 1.1,
+            "width": 0.8,
+            "height": 0.8
+          },
+          "blocks_movement": true,
+          "opaque": true,
+          "interactive": false,
+          "asset_key": "nature/tree_dark",
+          "tint": "petrified",
+          "height_m": 0.6,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_3",
+          "name": "Arbre",
+          "kind": "decor",
+          "geometry": {
+            "type": "rect",
+            "col": 1.1,
+            "row": 10.1,
+            "width": 0.8,
+            "height": 0.8
+          },
+          "blocks_movement": true,
+          "opaque": true,
+          "interactive": false,
+          "asset_key": "nature/tree_dark",
+          "tint": "petrified",
+          "height_m": 0.6,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_4",
+          "name": "Arbre",
+          "kind": "decor",
+          "geometry": {
+            "type": "rect",
+            "col": 10.1,
+            "row": 10.1,
+            "width": 0.8,
+            "height": 0.8
+          },
+          "blocks_movement": true,
+          "opaque": true,
+          "interactive": false,
+          "asset_key": "nature/tree_dark",
+          "tint": "petrified",
+          "height_m": 0.6,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_5",
+          "name": "Buisson",
+          "kind": "decor",
+          "geometry": {
+            "type": "rect",
+            "col": 0.05,
+            "row": 4.05,
+            "width": 0.9,
+            "height": 0.9
+          },
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": false,
+          "asset_key": "nature/bush",
+          "facing": "east",
+          "tint": "petrified",
+          "height_m": 0.6,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_6",
+          "name": "Buisson",
+          "kind": "decor",
+          "geometry": {
+            "type": "rect",
+            "col": 0.05,
+            "row": 7.05,
+            "width": 0.9,
+            "height": 0.9
+          },
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": false,
+          "asset_key": "nature/bush",
+          "facing": "east",
+          "tint": "petrified",
+          "height_m": 0.6,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_7",
+          "name": "Buisson",
+          "kind": "decor",
+          "geometry": {
+            "type": "rect",
+            "col": 11.05,
+            "row": 5.05,
+            "width": 0.9,
+            "height": 0.9
+          },
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": false,
+          "asset_key": "nature/bush",
+          "facing": "west",
+          "tint": "petrified",
+          "height_m": 0.6,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_8",
+          "name": "Buisson",
+          "kind": "decor",
+          "geometry": {
+            "type": "rect",
+            "col": 4.05,
+            "row": 11.05,
+            "width": 0.9,
+            "height": 0.9
+          },
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": false,
+          "asset_key": "nature/bush",
+          "facing": "north",
+          "tint": "petrified",
+          "height_m": 0.6,
+          "elevation_m": 0.0
         }
       ],
-      "scene_id": "scene_f6f69c90c091"
+      "scene_id": "scene_f6f69c90c091",
+      "interior": true
     },
     "characters": [
       {
@@ -705,39 +864,150 @@ export const MAP_LAB_FIXTURES = [
           "elevation_m": 0.0
         },
         {
-          "id": "table_centrale",
-          "name": "Table centrale",
+          "id": "dress_1",
+          "name": "Sarcophage",
           "kind": "furniture",
           "geometry": {
             "type": "rect",
-            "col": 4.75,
-            "row": 5.25,
-            "width": 2.5,
-            "height": 1.5
+            "col": 4.08,
+            "row": 4.08,
+            "width": 0.84,
+            "height": 1.84
           },
-          "description": "Un meuble massif structure l'espace et peut servir de couvert.",
           "blocks_movement": true,
           "opaque": false,
-          "asset_key": "prop/table_medium",
+          "interactive": false,
+          "asset_key": "proc/sarcophagus",
           "height_m": 0.8,
           "elevation_m": 0.0
         },
         {
-          "id": "etagere_murale",
-          "name": "Étagère murale",
+          "id": "dress_2",
+          "name": "Sarcophage",
           "kind": "furniture",
           "geometry": {
             "type": "rect",
-            "col": 1.0,
-            "row": 4.199999999999999,
-            "width": 0.7,
-            "height": 2.2
+            "col": 7.08,
+            "row": 4.08,
+            "width": 0.84,
+            "height": 1.84
           },
-          "description": "Un élément de décor assez haut pour masquer une partie de la vue.",
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": false,
+          "asset_key": "proc/sarcophagus",
+          "height_m": 0.8,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_3",
+          "name": "Sarcophage",
+          "kind": "furniture",
+          "geometry": {
+            "type": "rect",
+            "col": 2.08,
+            "row": 2.08,
+            "width": 0.84,
+            "height": 1.84
+          },
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": false,
+          "asset_key": "proc/sarcophagus",
+          "height_m": 0.8,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_4",
+          "name": "Pilier",
+          "kind": "cover",
+          "geometry": {
+            "type": "rect",
+            "col": 9.08,
+            "row": 7.08,
+            "width": 0.84,
+            "height": 0.84
+          },
           "blocks_movement": true,
           "opaque": true,
-          "asset_key": "prop/shelf_large",
-          "height_m": 0.8,
+          "interactive": false,
+          "asset_key": "prop/pillar",
+          "height_m": 1.0,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_5",
+          "name": "Pilier",
+          "kind": "cover",
+          "geometry": {
+            "type": "rect",
+            "col": 7.08,
+            "row": 2.08,
+            "width": 0.84,
+            "height": 0.84
+          },
+          "blocks_movement": true,
+          "opaque": true,
+          "interactive": false,
+          "asset_key": "prop/pillar",
+          "height_m": 1.0,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_6",
+          "name": "Urne funéraire",
+          "kind": "decor",
+          "geometry": {
+            "type": "rect",
+            "col": 5.05,
+            "row": 11.05,
+            "width": 0.9,
+            "height": 0.9
+          },
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": false,
+          "asset_key": "prop/pot",
+          "facing": "north",
+          "height_m": 0.6,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_7",
+          "name": "Urne funéraire",
+          "kind": "decor",
+          "geometry": {
+            "type": "rect",
+            "col": 4.05,
+            "row": 0.05,
+            "width": 0.9,
+            "height": 0.9
+          },
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": false,
+          "asset_key": "prop/pot",
+          "facing": "south",
+          "height_m": 0.6,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_8",
+          "name": "Urne funéraire",
+          "kind": "decor",
+          "geometry": {
+            "type": "rect",
+            "col": 11.05,
+            "row": 2.05,
+            "width": 0.9,
+            "height": 0.9
+          },
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": false,
+          "asset_key": "prop/pot",
+          "facing": "west",
+          "height_m": 0.6,
           "elevation_m": 0.0
         },
         {
@@ -1060,7 +1330,9 @@ export const MAP_LAB_FIXTURES = [
           "opaque": true,
           "interactive": true,
           "height_m": 1.0,
-          "elevation_m": 0.0
+          "elevation_m": 0.0,
+          "asset_key": "nature/rock_large_a",
+          "tint": "sand"
         },
         {
           "id": "element_sable_traitre",
@@ -1096,9 +1368,12 @@ export const MAP_LAB_FIXTURES = [
           "opaque": false,
           "interactive": true,
           "height_m": 0.6,
-          "elevation_m": 0.0
+          "elevation_m": 0.0,
+          "asset_key": "proc/footprints",
+          "tint": "sand"
         }
-      ]
+      ],
+      "interior": false
     },
     "characters": [
       {
@@ -1275,7 +1550,8 @@ export const MAP_LAB_FIXTURES = [
           "opaque": true,
           "interactive": true,
           "height_m": 1.0,
-          "elevation_m": 0.0
+          "elevation_m": 0.0,
+          "asset_key": "proc/bookcase"
         },
         {
           "id": "element_lutrin",
@@ -1293,7 +1569,8 @@ export const MAP_LAB_FIXTURES = [
           "opaque": false,
           "interactive": true,
           "height_m": 0.8,
-          "elevation_m": 0.0
+          "elevation_m": 0.0,
+          "asset_key": "proc/lectern"
         },
         {
           "id": "wall_north",
@@ -1391,7 +1668,8 @@ export const MAP_LAB_FIXTURES = [
           "opaque": true,
           "interactive": true,
           "height_m": 0.8,
-          "elevation_m": 0.0
+          "elevation_m": 0.0,
+          "asset_key": "prop/chest"
         },
         {
           "id": "wall_corner_nw",
@@ -1460,10 +1738,218 @@ export const MAP_LAB_FIXTURES = [
           "asset_key": "prop/wall_corner",
           "height_m": 2.5,
           "elevation_m": 0.0
+        },
+        {
+          "id": "dress_1",
+          "name": "Rayonnage de livres",
+          "kind": "furniture",
+          "geometry": {
+            "type": "rect",
+            "col": 8.05,
+            "row": 11.35,
+            "width": 1.9,
+            "height": 0.6
+          },
+          "blocks_movement": true,
+          "opaque": true,
+          "interactive": false,
+          "asset_key": "proc/bookcase",
+          "facing": "north",
+          "height_m": 0.8,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_2",
+          "name": "Rayonnage de livres",
+          "kind": "furniture",
+          "geometry": {
+            "type": "rect",
+            "col": 4.05,
+            "row": 0.05,
+            "width": 1.9,
+            "height": 0.6
+          },
+          "blocks_movement": true,
+          "opaque": true,
+          "interactive": false,
+          "asset_key": "proc/bookcase",
+          "facing": "south",
+          "height_m": 0.8,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_3",
+          "name": "Rayonnage de livres",
+          "kind": "furniture",
+          "geometry": {
+            "type": "rect",
+            "col": 0.05,
+            "row": 8.05,
+            "width": 0.6,
+            "height": 1.9
+          },
+          "blocks_movement": true,
+          "opaque": true,
+          "interactive": false,
+          "asset_key": "proc/bookcase",
+          "facing": "east",
+          "height_m": 0.8,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_4",
+          "name": "Rayonnage de livres",
+          "kind": "furniture",
+          "geometry": {
+            "type": "rect",
+            "col": 8.05,
+            "row": 0.05,
+            "width": 1.9,
+            "height": 0.6
+          },
+          "blocks_movement": true,
+          "opaque": true,
+          "interactive": false,
+          "asset_key": "proc/bookcase",
+          "facing": "south",
+          "height_m": 0.8,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_5",
+          "name": "Rayonnage de livres",
+          "kind": "furniture",
+          "geometry": {
+            "type": "rect",
+            "col": 3.05,
+            "row": 11.35,
+            "width": 1.9,
+            "height": 0.6
+          },
+          "blocks_movement": true,
+          "opaque": true,
+          "interactive": false,
+          "asset_key": "proc/bookcase",
+          "facing": "north",
+          "height_m": 0.8,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_6",
+          "name": "Rayonnage de livres",
+          "kind": "furniture",
+          "geometry": {
+            "type": "rect",
+            "col": 0.05,
+            "row": 4.05,
+            "width": 0.6,
+            "height": 1.9
+          },
+          "blocks_movement": true,
+          "opaque": true,
+          "interactive": false,
+          "asset_key": "proc/bookcase",
+          "facing": "east",
+          "height_m": 0.8,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_7",
+          "name": "Table de lecture",
+          "kind": "furniture",
+          "geometry": {
+            "type": "rect",
+            "col": 5.08,
+            "row": 3.08,
+            "width": 1.84,
+            "height": 0.84
+          },
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": false,
+          "asset_key": "prop/table_long",
+          "height_m": 0.8,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_8",
+          "name": "Table de lecture",
+          "kind": "furniture",
+          "geometry": {
+            "type": "rect",
+            "col": 8.08,
+            "row": 6.08,
+            "width": 1.84,
+            "height": 0.84
+          },
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": false,
+          "asset_key": "prop/table_long",
+          "height_m": 0.8,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_9",
+          "name": "Chaise",
+          "kind": "furniture",
+          "geometry": {
+            "type": "rect",
+            "col": 7.2,
+            "row": 3.2,
+            "width": 0.6,
+            "height": 0.6
+          },
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": false,
+          "asset_key": "prop/chair",
+          "facing": "west",
+          "height_m": 0.8,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_10",
+          "name": "Chaise",
+          "kind": "furniture",
+          "geometry": {
+            "type": "rect",
+            "col": 6.2,
+            "row": 2.2,
+            "width": 0.6,
+            "height": 0.6
+          },
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": false,
+          "asset_key": "prop/chair",
+          "facing": "south",
+          "height_m": 0.8,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_11",
+          "name": "Chaise",
+          "kind": "furniture",
+          "geometry": {
+            "type": "rect",
+            "col": 5.2,
+            "row": 4.2,
+            "width": 0.6,
+            "height": 0.6
+          },
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": false,
+          "asset_key": "prop/chair",
+          "facing": "north",
+          "height_m": 0.8,
+          "elevation_m": 0.0
         }
       ],
       "vegetation_density": 0.0,
-      "scene_id": "scene_dd4cda0bb023"
+      "scene_id": "scene_dd4cda0bb023",
+      "interior": true
     },
     "characters": [
       {
@@ -1797,39 +2283,150 @@ export const MAP_LAB_FIXTURES = [
           "elevation_m": 0.0
         },
         {
-          "id": "table_centrale",
-          "name": "Table centrale",
+          "id": "dress_1",
+          "name": "Sarcophage",
           "kind": "furniture",
           "geometry": {
             "type": "rect",
-            "col": 4.75,
-            "row": 5.25,
-            "width": 2.5,
-            "height": 1.5
+            "col": 6.08,
+            "row": 3.08,
+            "width": 0.84,
+            "height": 1.84
           },
-          "description": "Un meuble massif structure l'espace et peut servir de couvert.",
           "blocks_movement": true,
           "opaque": false,
-          "asset_key": "prop/table_medium",
+          "interactive": false,
+          "asset_key": "proc/sarcophagus",
           "height_m": 0.8,
           "elevation_m": 0.0
         },
         {
-          "id": "etagere_murale",
-          "name": "Étagère murale",
+          "id": "dress_2",
+          "name": "Sarcophage",
           "kind": "furniture",
           "geometry": {
             "type": "rect",
-            "col": 1.0,
-            "row": 4.199999999999999,
-            "width": 0.7,
-            "height": 2.2
+            "col": 9.08,
+            "row": 6.08,
+            "width": 0.84,
+            "height": 1.84
           },
-          "description": "Un élément de décor assez haut pour masquer une partie de la vue.",
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": false,
+          "asset_key": "proc/sarcophagus",
+          "height_m": 0.8,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_3",
+          "name": "Sarcophage",
+          "kind": "furniture",
+          "geometry": {
+            "type": "rect",
+            "col": 9.08,
+            "row": 3.08,
+            "width": 0.84,
+            "height": 1.84
+          },
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": false,
+          "asset_key": "proc/sarcophagus",
+          "height_m": 0.8,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_4",
+          "name": "Pilier",
+          "kind": "cover",
+          "geometry": {
+            "type": "rect",
+            "col": 4.08,
+            "row": 6.08,
+            "width": 0.84,
+            "height": 0.84
+          },
           "blocks_movement": true,
           "opaque": true,
-          "asset_key": "prop/shelf_large",
-          "height_m": 0.8,
+          "interactive": false,
+          "asset_key": "prop/pillar",
+          "height_m": 1.0,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_5",
+          "name": "Pilier",
+          "kind": "cover",
+          "geometry": {
+            "type": "rect",
+            "col": 7.08,
+            "row": 9.08,
+            "width": 0.84,
+            "height": 0.84
+          },
+          "blocks_movement": true,
+          "opaque": true,
+          "interactive": false,
+          "asset_key": "prop/pillar",
+          "height_m": 1.0,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_6",
+          "name": "Urne funéraire",
+          "kind": "decor",
+          "geometry": {
+            "type": "rect",
+            "col": 7.05,
+            "row": 11.05,
+            "width": 0.9,
+            "height": 0.9
+          },
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": false,
+          "asset_key": "prop/pot",
+          "facing": "north",
+          "height_m": 0.6,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_7",
+          "name": "Urne funéraire",
+          "kind": "decor",
+          "geometry": {
+            "type": "rect",
+            "col": 0.05,
+            "row": 1.05,
+            "width": 0.9,
+            "height": 0.9
+          },
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": false,
+          "asset_key": "prop/pot",
+          "facing": "east",
+          "height_m": 0.6,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_8",
+          "name": "Urne funéraire",
+          "kind": "decor",
+          "geometry": {
+            "type": "rect",
+            "col": 0.05,
+            "row": 10.05,
+            "width": 0.9,
+            "height": 0.9
+          },
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": false,
+          "asset_key": "prop/pot",
+          "facing": "east",
+          "height_m": 0.6,
           "elevation_m": 0.0
         },
         {
@@ -2286,38 +2883,206 @@ export const MAP_LAB_FIXTURES = [
           "elevation_m": 0.0
         },
         {
-          "id": "table_centrale",
-          "name": "Table centrale",
+          "id": "dress_1",
+          "name": "Tonnelet",
           "kind": "furniture",
           "geometry": {
             "type": "rect",
-            "col": 4.75,
-            "row": 5.25,
-            "width": 2.5,
-            "height": 1.5
+            "col": 0.05,
+            "row": 6.05,
+            "width": 0.9,
+            "height": 0.9
           },
-          "description": "Un meuble massif structure l'espace et peut servir de couvert.",
           "blocks_movement": true,
           "opaque": false,
-          "asset_key": "prop/table_medium",
+          "interactive": false,
+          "asset_key": "prop/keg",
+          "facing": "east",
           "height_m": 0.8,
           "elevation_m": 0.0
         },
         {
-          "id": "etagere_murale",
-          "name": "Étagère murale",
+          "id": "dress_2",
+          "name": "Tonnelet",
           "kind": "furniture",
           "geometry": {
             "type": "rect",
-            "col": 1.0,
-            "row": 4.199999999999999,
-            "width": 0.7,
-            "height": 2.2
+            "col": 1.05,
+            "row": 0.05,
+            "width": 0.9,
+            "height": 0.9
           },
-          "description": "Un élément de décor assez haut pour masquer une partie de la vue.",
           "blocks_movement": true,
-          "opaque": true,
-          "asset_key": "prop/shelf_large",
+          "opaque": false,
+          "interactive": false,
+          "asset_key": "prop/keg",
+          "facing": "south",
+          "height_m": 0.8,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_3",
+          "name": "Tonneau",
+          "kind": "furniture",
+          "geometry": {
+            "type": "rect",
+            "col": 1.1,
+            "row": 10.1,
+            "width": 0.8,
+            "height": 0.8
+          },
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": false,
+          "asset_key": "prop/barrel_small",
+          "height_m": 0.8,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_4",
+          "name": "Tonneau",
+          "kind": "furniture",
+          "geometry": {
+            "type": "rect",
+            "col": 10.1,
+            "row": 10.1,
+            "width": 0.8,
+            "height": 0.8
+          },
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": false,
+          "asset_key": "prop/barrel_small",
+          "height_m": 0.8,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_5",
+          "name": "Table",
+          "kind": "furniture",
+          "geometry": {
+            "type": "rect",
+            "col": 8.08,
+            "row": 2.08,
+            "width": 0.84,
+            "height": 0.84
+          },
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": false,
+          "asset_key": "prop/table_small",
+          "height_m": 0.8,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_6",
+          "name": "Table",
+          "kind": "furniture",
+          "geometry": {
+            "type": "rect",
+            "col": 3.08,
+            "row": 8.08,
+            "width": 0.84,
+            "height": 0.84
+          },
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": false,
+          "asset_key": "prop/table_small",
+          "height_m": 0.8,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_7",
+          "name": "Table",
+          "kind": "furniture",
+          "geometry": {
+            "type": "rect",
+            "col": 2.08,
+            "row": 5.08,
+            "width": 0.84,
+            "height": 0.84
+          },
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": false,
+          "asset_key": "prop/table_small",
+          "height_m": 0.8,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_8",
+          "name": "Tabouret",
+          "kind": "furniture",
+          "geometry": {
+            "type": "rect",
+            "col": 3.2,
+            "row": 7.2,
+            "width": 0.6,
+            "height": 0.6
+          },
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": false,
+          "asset_key": "prop/stool",
+          "facing": "south",
+          "height_m": 0.8,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_9",
+          "name": "Tabouret",
+          "kind": "furniture",
+          "geometry": {
+            "type": "rect",
+            "col": 3.2,
+            "row": 5.2,
+            "width": 0.6,
+            "height": 0.6
+          },
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": false,
+          "asset_key": "prop/stool",
+          "facing": "west",
+          "height_m": 0.8,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_10",
+          "name": "Tabouret",
+          "kind": "furniture",
+          "geometry": {
+            "type": "rect",
+            "col": 3.2,
+            "row": 9.2,
+            "width": 0.6,
+            "height": 0.6
+          },
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": false,
+          "asset_key": "prop/stool",
+          "facing": "north",
+          "height_m": 0.8,
+          "elevation_m": 0.0
+        },
+        {
+          "id": "dress_11",
+          "name": "Tabouret",
+          "kind": "furniture",
+          "geometry": {
+            "type": "rect",
+            "col": 1.2,
+            "row": 5.2,
+            "width": 0.6,
+            "height": 0.6
+          },
+          "blocks_movement": true,
+          "opaque": false,
+          "interactive": false,
+          "asset_key": "prop/stool",
+          "facing": "east",
           "height_m": 0.8,
           "elevation_m": 0.0
         },

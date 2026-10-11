@@ -1,379 +1,316 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+// Carte de Région (refonte lot 5) : plein cadre sur parchemin sombre, pictos par
+// type de lieu, étiquettes anti-collision, routes typées (parcourue / connue /
+// rumeur), brouillard hors des lieux connus, échelle en jours de marche quand les
+// trajets sont chiffrés. Molette = zoom, glisser = déplacer, « Recentrer ».
+import { computed, ref, useId } from 'vue'
 import { useSessionStore } from '../../stores/session'
 import { useGameStore } from '../../stores/game'
 import { resolveMapDecor } from '../../composables/useMapDecor'
-import type { MapNode, NodeStatus, MapDecor, Coastline } from '../../types'
-import { tokens } from '../../types/tokens'
+import { useMapViewport } from '../../composables/useMapViewport'
+import type { MapDecor, MapNode } from '../../types'
+import MapGlyph from './MapGlyph.vue'
+import {
+  edgeState,
+  glyphFor,
+  measureLabel,
+  placeLabels,
+  project,
+  STATUS_PRIORITY,
+  unitsPerDay,
+  visibleEdges,
+  type LabelRequest,
+} from './mapLayout'
 
-withDefaults(defineProps<{
-  width?: number
-  height?: number
-}>(), {
-  width: 640,
-  height: 580,
-})
+const PIN_RADIUS = 15
+const REVEAL_RADIUS_PX = 150
 
 const sessionStore = useSessionStore()
 const gameStore = useGameStore()
+const uid = useId()
 
 const region = computed(() => gameStore.regionMap)
 const nodes = computed<MapNode[]>(() => region.value?.nodes ?? [])
-const edges = computed(() => region.value?.edges ?? [])
+const byId = computed(() => new Map(nodes.value.map((node) => [node.id, node])))
+const edges = computed(() => visibleEdges(region.value?.edges ?? [], byId.value))
 const currentNodeId = computed(() => region.value?.current_node_id)
 const visualAsset = computed(() => region.value?.visual_asset)
-const visualAssetReady = computed(() =>
-  visualAsset.value?.status === 'ready' && Boolean(visualAsset.value.url),
-)
-const visualAssetGenerating = computed(() =>
-  visualAsset.value?.status === 'prompt_ready' || visualAsset.value?.status === 'generating',
+const visualAssetReady = computed(() => visualAsset.value?.status === 'ready' && Boolean(visualAsset.value.url))
+const visualAssetGenerating = computed(
+  () => visualAsset.value?.status === 'prompt_ready' || visualAsset.value?.status === 'generating',
 )
 
-// Corpus pour la détection de biome : IDs + noms de tous les nœuds
-const nodeCorpus = computed(() =>
-  nodes.value.map(n => `${n.id} ${n.name}`).join(' ')
-)
-
-// Décor : depuis le backend ou fallback procédural seedé + biome inféré
 const decor = computed<MapDecor>(() =>
   resolveMapDecor(
     region.value?.decor,
     region.value?.background_seed ?? region.value?.id ?? 'region',
     'region',
-    nodeCorpus.value,
-  )
+    nodes.value.map((n) => `${n.id} ${n.name}`).join(' '),
+  ),
 )
 
-// Polygone fermé de la côte (côté gauche/droite/haut)
-function coastPolygon(coast: Coastline): string {
-  if (!coast.points.length) return ''
-  const pts = coast.points.map(p => `${p.x},${p.y}`).join(' ')
-  return pts
-}
+const root = ref<HTMLElement | null>(null)
+const points = computed(() => nodes.value.map((node) => node.position))
+const resetKey = computed(() => region.value?.id ?? '')
+const viewport = useMapViewport(root, points, resetKey)
+const { width, height, view, isAdjusted } = viewport
 
-function toneByStatus(status: NodeStatus): string {
-  switch (status) {
-    case 'visited':  return tokens.green
-    case 'current':  return tokens.gold
-    case 'rumored':  return tokens.arcane
-    case 'known':    return 'rgba(247,236,208,0.55)'
-    default:          return 'rgba(247,236,208,0.55)'
+const worldTransform = computed(() => `translate(${view.value.tx} ${view.value.ty}) scale(${view.value.scale})`)
+
+const pins = computed(() =>
+  nodes.value.map((node) => ({ node, ...project(view.value, node.position), glyph: glyphFor(node, 'region') })),
+)
+
+const edgePaths = computed(() =>
+  edges.value.map((edge) => {
+    const a = project(view.value, byId.value.get(edge.from)!.position)
+    const b = project(view.value, byId.value.get(edge.to)!.position)
+    // Légère courbe : une route n'est jamais une règle.
+    const mx = (a.x + b.x) / 2 - (b.y - a.y) * 0.08
+    const my = (a.y + b.y) / 2 + (b.x - a.x) * 0.08
+    return { edge, d: `M ${a.x} ${a.y} Q ${mx} ${my} ${b.x} ${b.y}`, state: edgeState(edge, byId.value) }
+  }),
+)
+
+/** Brouillard levé autour des lieux vus ou connus ; une rumeur reste dans la brume. */
+const revealed = computed(() => pins.value.filter((pin) => pin.node.status !== 'rumored'))
+
+const labels = computed(() => {
+  const requests: (LabelRequest & { lines: string[]; node: MapNode })[] = pins.value.map((pin) => {
+    const metrics = measureLabel(pin.node.short_label ?? pin.node.name, { fontPx: 11, maxWidth: 156 })
+    const isHere = pin.node.id === currentNodeId.value
+    return {
+      id: pin.node.id,
+      x: pin.x,
+      y: pin.y,
+      width: Math.max(metrics.width, isHere ? 92 : 0),
+      height: metrics.height + (isHere ? 12 : 0),
+      radius: PIN_RADIUS + 2,
+      priority: STATUS_PRIORITY[pin.node.status] ?? 3,
+      lines: metrics.lines,
+      node: pin.node,
+    }
+  })
+  const placed = placeLabels(requests, { width: width.value, height: height.value })
+  const byRequest = new Map(requests.map((request) => [request.id, request]))
+  return placed.map((label) => ({ ...label, request: byRequest.get(label.id)! }))
+})
+
+/** Barre d'échelle : 1, 2 ou 5 jours selon la place, seulement si les trajets sont chiffrés. */
+const scaleBar = computed(() => {
+  const units = unitsPerDay(edges.value, byId.value)
+  if (!units) return null
+  const perDay = units * view.value.scale
+  const days = [0.5, 1, 2, 5, 10].find((d) => perDay * d >= 60) ?? 10
+  const px = perDay * days
+  if (px > 220) return null
+  return { px, label: days === 0.5 ? '½ journée' : `${days} jour${days > 1 ? 's' : ''} de marche` }
+})
+
+let suppressClick = false
+function onPointerUp(): void {
+  suppressClick = viewport.onPointerUp()
+}
+function select(id: string): void {
+  if (suppressClick) {
+    suppressClick = false
+    return
   }
+  sessionStore.selectEntity(id)
 }
 
-function toneColor(status: NodeStatus): string {
-  switch (status) {
-    case 'visited':  return 'var(--color-green)'
-    case 'current':  return 'var(--color-gold)'
-    case 'rumored':  return 'var(--color-arcane)'
-    case 'known':    return 'var(--color-parchment-dark)'
-    default:          return 'var(--color-parchment-dark)'
-  }
+function isSelected(id: string): boolean {
+  return sessionStore.selectedId === id
+}
+function isHighlighted(id: string): boolean {
+  return sessionStore.highlightedIds.includes(id)
 }
 
-function nodeById(id: string): MapNode | undefined {
-  return nodes.value.find((n) => n.id === id)
-}
+/** Forêts : bosquets de petits conifères (spirale déterministe) plutôt que des disques. */
+const trees = computed(() =>
+  (decor.value.forests ?? []).flatMap((forest) => {
+    const radius = forest.radius ?? 3
+    const count = Math.max(3, Math.min(14, Math.round(radius * radius * 0.9)))
+    return Array.from({ length: count }, (_, i) => {
+      const angle = i * 2.39996
+      const dist = Math.sqrt((i + 0.5) / count) * radius
+      const x = forest.x + Math.cos(angle) * dist
+      const y = forest.y + Math.sin(angle) * dist * 0.8
+      return `${x},${y - 1.7} ${x - 0.75},${y + 0.4} ${x + 0.75},${y + 0.4}`
+    })
+  }),
+)
 
-function edgePath(fromId: string, toId: string): string | null {
-  const a = nodeById(fromId)
-  const b = nodeById(toId)
-  if (!a || !b) return null
-  const midX = (a.position.x + b.position.x) / 2
-  const midY = (a.position.y + b.position.y) / 2 - 4
-  return `M ${a.position.x} ${a.position.y} Q ${midX} ${midY} ${b.position.x} ${b.position.y}`
-}
-
-function isSelected(id: string) { return sessionStore.selectedId === id }
-function isHighlighted(id: string) { return sessionStore.highlightedIds.includes(id) }
-
-function onClick(id: string) { sessionStore.selectEntity(id) }
-
-function pinRadius(n: MapNode) {
-  if (isSelected(n.id) || isHighlighted(n.id)) return 2
-  return 1.5
-}
-
-// Triangles montagne : génère les points SVG (dans le viewBox 0..100)
-function mountainPoints(x: number, y: number, h: number): string {
-  const half = h * 0.6
-  return `${x},${y + half} ${x - half * 0.7},${y + half} ${x},${y - half * 0.5}`
-}
+/** Montagnes : versant éclairé + versant ombré (lumière venant de l'ouest). */
+const mountains = computed(() =>
+  (decor.value.mountains ?? []).map((mountain) => {
+    const h = (mountain.height ?? 5) * 0.6
+    const { x, y } = mountain
+    return {
+      lit: `${x},${y - h * 0.5} ${x - h * 0.85},${y + h} ${x + h * 0.85},${y + h}`,
+      shade: `${x},${y - h * 0.5} ${x + h * 0.15},${y + h} ${x + h * 0.85},${y + h}`,
+    }
+  }),
+)
 </script>
 
 <template>
   <div
-    class="region-map"
-    :style="{ width: `${width}px`, height: `${height}px` }"
+    ref="root"
+    class="wmap wmap--region"
+    @wheel="viewport.onWheel"
+    @pointerdown="viewport.onPointerDown"
+    @pointermove="viewport.onPointerMove"
+    @pointerup="onPointerUp"
+    @pointerleave="onPointerUp"
   >
-    <img
-      v-if="visualAssetReady"
-      class="region-map-image"
-      :src="visualAsset?.url"
-      alt=""
-      draggable="false"
-    />
-    <div v-if="visualAssetGenerating" class="map-gen-badge" :class="`gen-${visualAsset?.status}`">
-      <span class="gen-spinner" />{{ visualAsset?.status === 'generating' ? 'Génération…' : 'En attente…' }}
-    </div>
     <svg
-      v-if="region"
-      viewBox="0 0 100 100"
+      v-if="region && width > 0"
+      class="wmap-svg"
       :width="width"
       :height="height"
-      preserveAspectRatio="none"
-      class="region-map-svg"
+      :viewBox="`0 0 ${width} ${height}`"
+      role="img"
+      :aria-label="`Carte de la région ${region.name}`"
     >
-      <!-- ── Décor de fond ── -->
+      <defs>
+        <radialGradient :id="`${uid}-reveal`">
+          <stop offset="0" stop-color="black" />
+          <stop offset="0.55" stop-color="black" />
+          <stop offset="1" stop-color="white" />
+        </radialGradient>
+        <mask :id="`${uid}-fog`" maskUnits="userSpaceOnUse" x="0" y="0" :width="width" :height="height">
+          <rect x="0" y="0" :width="width" :height="height" fill="white" />
+          <circle
+            v-for="pin in revealed"
+            :key="`reveal-${pin.node.id}`"
+            :cx="pin.x"
+            :cy="pin.y"
+            :r="REVEAL_RADIUS_PX"
+            :fill="`url(#${uid}-reveal)`"
+          />
+        </mask>
+        <filter :id="`${uid}-grain`" x="0" y="0" width="100%" height="100%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="7" />
+          <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 0.92  0 0 0 0 0.75  0 0 0 0.06 0" />
+        </filter>
+      </defs>
 
-      <!-- Côte / mer -->
-      <polygon
-        v-if="decor.coastline && decor.coastline.points.length"
-        :points="coastPolygon(decor.coastline)"
-        fill="rgba(40,80,100,0.30)"
-      />
-      <polyline
-        v-if="decor.coastline && decor.coastline.points.length"
-        :points="coastPolygon(decor.coastline)"
-        fill="none"
-        stroke="rgba(79,216,192,0.25)"
-        stroke-width="0.3"
-      />
+      <!-- Monde (coordonnées 0..100) : image générée et décor sous la MÊME transformation que les lieux. -->
+      <g :transform="worldTransform">
+        <image
+          v-if="visualAssetReady"
+          :href="visualAsset?.url"
+          x="0"
+          y="0"
+          width="100"
+          height="100"
+          preserveAspectRatio="none"
+          class="wmap-asset"
+        />
+        <polygon
+          v-if="decor.coastline && decor.coastline.points.length"
+          class="wmap-sea"
+          :points="decor.coastline.points.map((p) => `${p.x},${p.y}`).join(' ')"
+        />
+        <polygon v-for="(tree, i) in trees" :key="`tree-${i}`" class="wmap-tree" :points="tree" />
+        <g v-for="(mountain, i) in mountains" :key="`mountain-${i}`">
+          <polygon class="wmap-mountain" :points="mountain.lit" />
+          <polygon class="wmap-mountain-shade" :points="mountain.shade" />
+        </g>
+        <path
+          v-if="decor.river"
+          class="wmap-river"
+          :d="decor.river.path"
+          :stroke-width="(decor.river.width ?? 1.5) * 0.8"
+        />
+        <path
+          v-for="(d, i) in decor.decorative_roads ?? []"
+          :key="`trail-${i}`"
+          class="wmap-trail"
+          :d="d"
+          vector-effect="non-scaling-stroke"
+        />
+      </g>
 
-      <!-- Forêts -->
-      <circle
-        v-for="(f, i) in (decor.forests ?? [])"
-        :key="`f${i}`"
-        :cx="f.x"
-        :cy="f.y"
-        :r="f.radius ?? 3"
-        :fill="`rgba(58,90,58,${f.opacity ?? 0.4})`"
-      />
+      <rect class="wmap-grain" x="0" y="0" :width="width" :height="height" :filter="`url(#${uid}-grain)`" />
 
-      <!-- Montagnes -->
-      <polygon
-        v-for="(m, i) in (decor.mountains ?? [])"
-        :key="`m${i}`"
-        :points="mountainPoints(m.x, m.y, m.height ?? 5)"
-        fill="rgba(120,108,90,0.5)"
-      />
+      <!-- Routes du graphe : type (route, sentier, fleuve…) × état (parcourue, connue, rumeur). -->
+      <g class="wmap-edges">
+        <template v-for="item in edgePaths" :key="item.edge.id">
+          <path v-if="item.edge.kind === 'road'" class="wmap-edge-casing" :d="item.d" />
+          <path class="wmap-edge" :class="[`kind-${item.edge.kind}`, `state-${item.state}`]" :d="item.d" />
+        </template>
+      </g>
 
-      <!-- Routes décoratives -->
-      <path
-        v-for="(d, i) in (decor.decorative_roads ?? [])"
-        :key="`dr${i}`"
-        :d="d"
-        stroke="rgba(247,236,208,0.12)"
-        stroke-width="0.4"
-        fill="none"
-        stroke-dasharray="0.8 1.6"
-        stroke-linecap="round"
-      />
+      <rect class="wmap-fog" x="0" y="0" :width="width" :height="height" :mask="`url(#${uid}-fog)`" />
 
-      <!-- Rivière -->
-      <path
-        v-if="decor.river"
-        :d="decor.river.path"
-        :stroke-width="decor.river.width ?? 1.5"
-        stroke="rgba(79,216,192,0.30)"
-        fill="none"
-        stroke-linecap="round"
-      />
-
-      <!-- ── Edges (connexions réelles du graph) ── -->
-      <path
-        v-for="e in edges"
-        :key="e.id"
-        :d="edgePath(e.from, e.to) ?? ''"
-        stroke="rgba(247,236,208,0.22)"
-        stroke-width="0.5"
-        fill="none"
-        stroke-dasharray="0.8 1.6"
-        stroke-linecap="round"
-      />
-
-      <!-- ── Pins (nodes) ── -->
       <g
-        v-for="n in nodes"
-        :key="n.id"
-        style="cursor: pointer"
-        @click="onClick(n.id)"
+        v-for="pin in pins"
+        :key="pin.node.id"
+        class="wmap-node"
+        :class="[
+          `is-${pin.node.status}`,
+          { 'is-selected': isSelected(pin.node.id), 'is-highlighted': isHighlighted(pin.node.id) },
+        ]"
+        :transform="`translate(${pin.x} ${pin.y})`"
+        role="button"
+        :aria-label="pin.node.name"
+        @click.stop="select(pin.node.id)"
       >
-        <!-- Halo "vous êtes ici" -->
-        <circle
-          v-if="n.id === currentNodeId"
-          :cx="n.position.x"
-          :cy="n.position.y"
-          r="4"
-          fill="none"
-          :stroke="toneByStatus(n.status)"
-          stroke-width="0.4"
-          opacity="0.4"
-        />
-        <!-- Pin principal -->
-        <circle
-          :cx="n.position.x"
-          :cy="n.position.y"
-          :r="pinRadius(n)"
-          :fill="toneByStatus(n.status)"
-          :stroke="isSelected(n.id) ? 'var(--color-gold)' : 'rgba(0,0,0,0.6)'"
-          stroke-width="0.4"
-        />
-        <!-- Halo destination (dashed) -->
-        <circle
-          v-if="n.status === 'rumored'"
-          :cx="n.position.x"
-          :cy="n.position.y"
-          r="3"
-          fill="none"
-          :stroke="toneByStatus(n.status)"
-          stroke-width="0.3"
-          stroke-dasharray="0.6 0.6"
+        <circle v-if="pin.node.id === currentNodeId" class="wmap-node-pulse" :r="PIN_RADIUS + 9" />
+        <circle class="wmap-node-disc" :r="PIN_RADIUS" />
+        <MapGlyph :glyph="pin.glyph" :size="20" />
+        <polygon
+          v-if="pin.node.id === currentNodeId"
+          class="wmap-here-marker"
+          :points="`0,${-PIN_RADIUS - 3} -6,${-PIN_RADIUS - 13} 6,${-PIN_RADIUS - 13}`"
         />
       </g>
     </svg>
 
-    <!-- Empty state -->
-    <div v-if="!region" class="region-map-empty">
+    <!-- Étiquettes (DOM, polices du design system), placées sans chevauchement. -->
+    <div
+      v-for="label in labels"
+      :key="`label-${label.id}`"
+      class="wmap-label"
+      :class="[`is-${label.request.node.status}`, { 'is-selected': isSelected(label.id) }]"
+      :style="{ left: `${label.left}px`, top: `${label.top}px`, width: `${label.width}px` }"
+      :title="label.request.node.name"
+    >
+      <span v-if="label.id === currentNodeId" class="wmap-label-kicker">Vous êtes ici</span>
+      <span v-for="(line, i) in label.request.lines" :key="i" class="wmap-label-line">{{ line }}</span>
+    </div>
+
+    <div v-if="!region" class="wmap-empty">
       <span class="rpg-eyebrow">✦ Région</span>
       <p>Aucune région chargée pour cette session.</p>
     </div>
 
-    <!-- Labels HTML overlay -->
-    <div
-      v-for="n in nodes"
-      :key="n.id"
-      class="region-map-label"
-      :style="{
-        left: `${n.position.x / 100 * width}px`,
-        top: `${n.position.y / 100 * height + 8}px`,
-        color: isSelected(n.id) ? 'var(--color-gold)' : toneColor(n.status),
-      }"
-    >
-      {{ n.short_label ?? n.name }}
-      <div v-if="n.id === currentNodeId" class="region-map-here">▼ vous</div>
-    </div>
-
-    <div v-if="region" class="region-map-coord">{{ region.name }}</div>
-    <div v-if="region" class="region-map-north">N ↑</div>
+    <template v-if="region">
+      <div class="wmap-title"><span class="rpg-sparkle">✦</span>{{ region.name }}</div>
+      <div class="wmap-tools">
+        <div v-if="visualAssetGenerating" class="wmap-badge">
+          <span class="wmap-spinner" />{{ visualAsset?.status === 'generating' ? 'Génération…' : 'En attente…' }}
+        </div>
+        <button v-if="isAdjusted" type="button" class="wmap-tool" @click="viewport.recenter()">◎ Recentrer</button>
+      </div>
+      <div class="wmap-legend">
+        <span class="wmap-key is-current">Vous</span>
+        <span class="wmap-key is-visited">Visité</span>
+        <span class="wmap-key is-known">Connu</span>
+        <span class="wmap-key is-rumored">Rumeur</span>
+        <span v-if="scaleBar" class="wmap-scale">
+          <i :style="{ width: `${scaleBar.px}px` }" />{{ scaleBar.label }}
+        </span>
+      </div>
+      <svg class="wmap-compass" viewBox="-20 -20 40 40" width="40" height="40" aria-label="Nord en haut">
+        <path class="wmap-compass-needle" d="M0 -15 4 0 0 3 -4 0Z" />
+        <path class="wmap-compass-tail" d="M0 15 4 0 0 3 -4 0Z" />
+        <text y="-17" text-anchor="middle">N</text>
+      </svg>
+    </template>
   </div>
 </template>
 
-<style scoped>
-.region-map {
-  position: relative;
-  border-radius: 10px;
-  border: 1px solid var(--color-border-strong);
-  background: linear-gradient(135deg, #18221c 0%, #0c1410 100%);
-  overflow: hidden;
-  box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.7), 0 6px 28px rgba(0, 0, 0, 0.5);
-  flex-shrink: 0;
-}
-
-.region-map-svg {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-}
-
-.region-map-image {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0.72;
-}
-
-.region-map-empty {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: var(--color-text-muted);
-  font-family: var(--font-serif);
-  font-size: 13px;
-  font-style: italic;
-}
-
-.region-map-label {
-  position: absolute;
-  transform: translate(-50%, 0);
-  font-family: var(--font-display);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.6px;
-  text-align: center;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
-  pointer-events: none;
-  white-space: nowrap;
-}
-
-.region-map-here {
-  font-size: 7px;
-  color: var(--color-gold);
-  font-family: var(--font-mono);
-  font-weight: 700;
-  letter-spacing: 1px;
-  margin-top: 1px;
-}
-
-.region-map-coord {
-  position: absolute;
-  top: 8px;
-  left: 12px;
-  font-size: 9px;
-  color: var(--color-text-dim);
-  font-family: var(--font-mono);
-}
-
-.region-map-north {
-  position: absolute;
-  bottom: 8px;
-  right: 12px;
-  font-size: 9px;
-  color: var(--color-text-muted);
-  font-family: var(--font-mono);
-}
-
-.map-gen-badge {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 6;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 6px;
-  background: var(--color-bg-elev);
-  border: 1px solid var(--color-border-strong);
-  color: var(--color-text-muted);
-  font: 500 10px/1 var(--font-display);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  pointer-events: none;
-}
-
-.map-gen-badge.gen-generating {
-  color: var(--color-ember);
-  border-color: var(--color-ember);
-}
-
-.gen-spinner {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border: 2px solid var(--color-border);
-  border-top-color: currentColor;
-  border-radius: 50%;
-  animation: gen-spin 0.8s linear infinite;
-}
-
-@keyframes gen-spin {
-  to { transform: rotate(360deg); }
-}
-</style>
+<style src="./worldMap.css"></style>

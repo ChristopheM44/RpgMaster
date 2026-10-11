@@ -722,6 +722,8 @@ export interface SceneElement {
   facts?: string[]
   /** Hints 3D optionnels (mètres) — défauts par kind si absents. */
   asset_key?: string
+  /** Teinte de matière (pétrifié, calciné…) — cf. backend prop_catalog. */
+  tint?: string
   height_m?: number
   elevation_m?: number
   facing?: SceneElementFacing

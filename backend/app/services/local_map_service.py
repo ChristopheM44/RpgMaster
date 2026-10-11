@@ -8,6 +8,8 @@ from collections.abc import Iterable
 from math import ceil, floor
 from typing import Any
 
+from app.engine import prop_catalog, scene_dressing
+
 SCENE_ELEMENT_KINDS = {
     "wall",
     "door",
@@ -59,7 +61,11 @@ SCENE_ASSET_KEYS = {
     "nature/rock_large_b",
     "nature/rock_small_a",
     "nature/rock_small_b",
+    *prop_catalog.catalog_asset_keys(),
+    *prop_catalog.PROCEDURAL_PROP_KEYS,
 }
+# Teintes de matière comprises par le rendu (cf. ``prop_catalog.TINT_RULES``).
+SCENE_ELEMENT_TINTS = {tint for tint, _ in prop_catalog.TINT_RULES}
 
 # Défauts 3D optionnels — mêmes valeurs que le fallback client
 # (frontend/src/engine3d/adapters/sceneAdapter.ts) pour rester cohérent.
@@ -289,6 +295,9 @@ def normalize_scene_element(raw: Any, cols: int, rows: int) -> dict[str, Any] | 
     asset_key = normalize_asset_key(raw.get("asset_key"))
     if asset_key:
         element["asset_key"] = asset_key
+    tint = _clean_text(raw.get("tint"), max_len=24).lower()
+    if tint in SCENE_ELEMENT_TINTS:
+        element["tint"] = tint
     height_m = _parse_optional_float(raw.get("height_m"))
     if height_m is not None:
         element["height_m"] = round(
@@ -387,11 +396,13 @@ def enrich_scene_layout(
     layout: dict[str, Any],
     *,
     time_of_day: str | None = None,
+    dress: bool = True,
 ) -> dict[str, Any]:
     """Add deterministic local-map elements where the GM supplied only POIs/exits.
 
     ``time_of_day`` (journal wording, free-form) only drives the default
-    ambiance light when the GM did not provide a valid one.
+    ambiance light when the GM did not provide a valid one. ``dress=False``
+    skips the place dressing (combat in progress: its obstacles are frozen).
     """
     cols = int(layout.get("cols") or 12)
     rows = int(layout.get("rows") or 12)
@@ -412,13 +423,18 @@ def enrich_scene_layout(
         _add_boundary_walls(by_id, cols, rows)
         _add_exit_access_elements(by_id, layout, cols, rows, interior=True)
         _add_windows(by_id, layout, cols, rows)
+        if dress:
+            _add_place_dressing(by_id, layout, cols, rows, interior=True)
         _add_default_furniture(by_id, layout, cols, rows)
     else:
         _add_exit_access_elements(by_id, layout, cols, rows, interior=False)
         if _is_plaza_scene(layout):
             _add_plaza_elements(by_id, layout, cols, rows)
+        if dress:
+            _add_place_dressing(by_id, layout, cols, rows, interior=False)
 
     _add_poi_elements(by_id, layout, cols, rows)
+    _apply_semantic_props(by_id)
     _strip_unrevealed_subterranean_access(by_id, layout)
     _carve_wall_openings(by_id)
     for element in by_id.values():
@@ -809,6 +825,61 @@ def _add_default_furniture(
         )
 
 
+def _add_place_dressing(
+    by_id: dict[str, dict[str, Any]],
+    layout: dict[str, Any],
+    cols: int,
+    rows: int,
+    *,
+    interior: bool,
+) -> None:
+    """Mobilier du type de lieu (rayonnages d'une bibliothèque…), cf. ``scene_dressing``."""
+    occupied: set[tuple[int, int]] = set()
+    access: set[tuple[int, int]] = set()
+    blocking: set[tuple[int, int]] = set()
+    for element in by_id.values():
+        cells = {(cell["col"], cell["row"]) for cell in element_grid_cells(element, cols, rows)}
+        occupied |= cells
+        if element.get("kind") in {"door", "stairs", "window"}:
+            access |= cells
+        if element.get("blocks_movement"):
+            blocking |= cells
+    snapshot = {**layout, "elements": list(by_id.values())}
+    for element in scene_dressing.dress_scene(
+        snapshot,
+        interior=interior,
+        occupied=occupied,
+        access_cells=access,
+        blocking=blocking,
+    ):
+        by_id.setdefault(element["id"], element)
+
+
+def _apply_semantic_props(by_id: dict[str, dict[str, Any]]) -> None:
+    """Le modèle d'un meuble/couvert/décor découle de son NOM (catalogue partagé).
+
+    Corrige aussi les scènes déjà sauvegardées (appelé au rechargement via
+    ``repair_state_visual_coherence``) : un ancien tirage au hasard du pack de
+    thème (« Arbre pétrifié » → caisses) est remplacé, ou retiré s'il n'est pas
+    étayé par le nom — un rendu procédural neutre vaut mieux qu'un contresens.
+    """
+    for element in by_id.values():
+        if element.get("kind") not in prop_catalog.CATALOG_ELEMENT_KINDS:
+            continue
+        if str(element.get("id") or "").startswith(scene_dressing.DRESSING_ID_PREFIX):
+            continue  # habillage : modèle choisi par la recette du lieu
+        name = str(element.get("name") or "")
+        matched = prop_catalog.match_prop(name)
+        if matched:
+            element["asset_key"] = matched
+        else:
+            element.pop("asset_key", None)
+        if "tint" not in element:
+            tint = prop_catalog.match_tint(f"{name} {element.get('description') or ''}")
+            if tint:
+                element["tint"] = tint
+
+
 def _add_poi_elements(
     by_id: dict[str, dict[str, Any]],
     layout: dict[str, Any],
@@ -879,19 +950,8 @@ def _default_asset_for_poi_element(poi: dict[str, Any], element_kind: str) -> di
         if any(word in corpus for word in ("murale", "applique", "wall", "mounted")):
             return {"asset_key": "prop/torch_mounted"}
         return {"asset_key": "prop/torch_lit"}
-    if element_kind == "furniture":
-        if any(word in corpus for word in ("or", "doré", "dore", "trésor", "tresor")):
-            return {"asset_key": "prop/chest_gold"}
-        return {"asset_key": "prop/chest"}
-    if element_kind == "cover":
-        if any(word in corpus for word in ("pilier", "colonne", "pillar")):
-            return {"asset_key": "prop/pillar"}
-        if any(word in corpus for word in ("gravat", "débris", "debris", "éboulis", "eboulis")):
-            return {"asset_key": "prop/rubble_large"}
-        if any(word in corpus for word in ("tonneau", "baril", "barrel")):
-            return {"asset_key": "prop/barrel_large"}
-        return {"asset_key": "prop/crates_stacked"}
-    return {}
+    matched = prop_catalog.match_prop(str(poi.get("name") or ""))
+    return {"asset_key": matched} if matched else {}
 
 
 def _normalize_exits(

@@ -3,13 +3,15 @@
 // Anneau de sélection doré sous l'élément sélectionné (pas de rebuild au clic).
 
 import * as THREE from 'three'
-import type { ElementSpec } from '../types'
+import type { ElementSpec, ElementTint } from '../types'
 import type { LoadedModel } from '../assets/AssetRegistry'
 import type { EngineCtx } from '../core/context'
-import { buildProceduralElement } from '../assets/ProceduralFactory'
-import { modelForElement, MODEL_MANIFEST, PROP_TARGET_HEIGHT_M } from '../assets/manifest'
+import { buildProceduralElement, proceduralPropKeyFor } from '../assets/ProceduralFactory'
+import { isModelKey, modelForElement, MODEL_MANIFEST, PROP_MIN_HEIGHT_M, PROP_TARGET_HEIGHT_M } from '../assets/manifest'
+import { TINT_RECIPES } from '../core/ThemeProvider'
 import { disposeGroup, disposeObject } from './GroundLayer'
 import { gridPointToWorld, metersToWorld } from '../utils/gridMath'
+import { hashSeed } from '../utils/seededRandom'
 
 const MAX_POINT_LIGHTS = 6
 const WALL_SEGMENT_OVERLAP = 0.025
@@ -21,6 +23,7 @@ const CUTAWAY_SCALE = 0.14
 /** Seuil cos(angle) normale/caméra au-delà duquel un mur de bord est coupé. */
 const CUTAWAY_FACING = 0.3
 const CUTAWAY_KINDS = new Set(['wall', 'door', 'window'])
+const TALL_WALL_PROPS = new Set(['proc/bookcase', 'prop/shelf_large', 'prop/shelf_small'])
 
 interface ElementEntry {
   container: THREE.Group
@@ -105,6 +108,7 @@ export class ElementsLayer {
         dims: ctx.dims,
         cellSizeM: ctx.cellSizeM,
         tokens: ctx.tokens,
+        groundColor: ctx.biome.ground,
       })
       container.add(procedural)
       if (spec.inspectable) {
@@ -147,13 +151,19 @@ export class ElementsLayer {
     // creusée dans le sol) dépend de facing/verticalDirection, ce qu'un modèle
     // unique (stairs.glb, toujours montant) ne sait pas rendre.
     if (spec.kind === 'stairs') return
+    // Prop procédural nommé (fontaine, autel…) : déjà dessiné, pas de GLB.
+    if (proceduralPropKeyFor(spec)) return
     const placement = elementPlacementWorld(spec, ctx)
     const modelKey = spec.modelKey ?? modelForElement(spec.kind, spec.name, placement.footprint)
-    if (!modelKey) return
+    // Seules les clés du manifeste se chargent (un `proc/*` est déjà dessiné).
+    if (!isModelKey(modelKey)) return
 
     void ctx.registry.load(modelKey).then((model) => {
       if (!model || generation !== this.generation || !this.entries.has(spec.id)) return
       const instance = instantiateElementModel(model, modelKey, spec, placement, ctx)
+      // Texture d'atlas retirée seulement pour la végétation : une statue ou des
+      // gravats déjà en pierre gardent leur texture, simplement teintée.
+      if (spec.tint) applyTint(instance, spec.tint, undefined, modelKey.startsWith('nature/'))
       if (spec.subtle) applySubtle(instance)
       container.remove(procedural)
       disposeObject(procedural)
@@ -196,11 +206,14 @@ export class ElementsLayer {
  * Les éléments intérieurs ne sont jamais coupés. Pur : testé sans WebGL.
  */
 export function cutawayNormal(
-  spec: Pick<ElementSpec, 'kind' | 'geometry'>,
+  spec: Pick<ElementSpec, 'kind' | 'geometry'> & Partial<Pick<ElementSpec, 'facing' | 'modelKey'>>,
   dims: { cols: number; rows: number },
 ): { x: number; z: number; hide: boolean } | null {
   const hide = spec.kind === 'light'
-  if (!CUTAWAY_KINDS.has(spec.kind) && !hide) return null
+  // Rayonnage plaqué contre un mur côté caméra : abaissé avec le mur (sinon il
+  // masque la pièce de dos).
+  const tallWallProp = Boolean(spec.facing && spec.modelKey && TALL_WALL_PROPS.has(spec.modelKey))
+  if (!CUTAWAY_KINDS.has(spec.kind) && !hide && !tallWallProp) return null
   const geometry = spec.geometry
   let cx: number
   let cz: number
@@ -313,17 +326,35 @@ export function instantiateElementModel(
   }
 
   const intrinsicHeightM = PROP_TARGET_HEIGHT_M[modelKey]
+  // Meuble tourné d'un quart de tour (rayonnage contre un mur est/ouest) : l'empreinte
+  // monde se lit dans les axes du modèle.
+  let rotationY = placement.rotationY
+  // Meuble non orienté : on aligne le grand côté du modèle sur celui de l'empreinte
+  // (table_long et lits KayKit sont longs sur Z ; posés en travers ils deviendraient
+  // minuscules une fois ajustés).
+  if (!spec.facing && intrinsicHeightM == null && placement.rotationY === 0) {
+    const straight = Math.min(placement.footprint.x / model.size.x, placement.footprint.z / model.size.z)
+    const turned = Math.min(placement.footprint.z / model.size.x, placement.footprint.x / model.size.z)
+    if (turned > straight * 1.15) rotationY = Math.PI / 2
+  }
+  // Meuble tourné d'un quart de tour (rayonnage contre un mur est/ouest) : l'empreinte
+  // monde se lit dans les axes du modèle.
+  const quarterTurn = Math.abs(Math.sin(rotationY)) > 0.5
+  const localFootprint = quarterTurn
+    ? { x: placement.footprint.z, z: placement.footprint.x }
+    : placement.footprint
+  const capM = Math.max(spec.heightM, 0.4, PROP_MIN_HEIGHT_M[modelKey] ?? 0) * 1.6
   const instance = ctx.registry.instantiate(
     model,
     intrinsicHeightM != null
       ? { targetHeight: metersToWorld(intrinsicHeightM, ctx.cellSizeM) }
       : {
-          footprint: placement.footprint,
-          maxHeight: metersToWorld(Math.max(spec.heightM, 0.4) * 1.6, ctx.cellSizeM),
+          footprint: localFootprint,
+          maxHeight: metersToWorld(capM, ctx.cellSizeM),
         },
   )
   instance.position.set(placement.center.x, elevation, placement.center.z)
-  instance.rotation.y = placement.rotationY + rotationOffsetFor(modelKey)
+  instance.rotation.y = rotationY + rotationOffsetFor(modelKey)
   return instance
 }
 
@@ -390,7 +421,21 @@ function instantiateModelNonUniform(
 
 function rectElementRotationY(spec: ElementSpec, footprint: { x: number; z: number }): number {
   if (spec.kind === 'door' || spec.kind === 'window') return wallAxisRotationY(spec.facing, footprint)
+  if (spec.facing && ORIENTED_PROP_KINDS.has(spec.kind)) return FACING_ROTATION_Y[spec.facing] ?? 0
   return 0
+}
+
+/**
+ * Meuble orienté (rayonnage contre un mur, chaise vers la table) : la face avant
+ * des modèles KayKit regarde +Z (= sud, les lignes croissent vers le sud).
+ */
+const ORIENTED_PROP_KINDS = new Set(['furniture', 'cover', 'decor'])
+
+const FACING_ROTATION_Y: Partial<Record<NonNullable<ElementSpec['facing']>, number>> = {
+  south: 0,
+  north: Math.PI,
+  east: Math.PI / 2,
+  west: -Math.PI / 2,
 }
 
 export function wallAxisRotationY(
@@ -446,6 +491,44 @@ function rectElementCenterWorld(spec: ElementSpec, ctx: EngineCtx): { x: number;
   }
 
   return center
+}
+
+/**
+ * Teinte de matière (arbre pétrifié, bois calciné…) : réutilise un modèle sous un
+ * autre matériau. Matériaux CLONÉS par instance (les clones GLTF partagent les
+ * leurs : teinter en place griserait tous les rochers de la scène).
+ */
+export function applyTint(
+  root: THREE.Object3D,
+  tint: ElementTint,
+  cache?: Map<string, THREE.Material>,
+  allowReplaceMap = true,
+): void {
+  const recipe = TINT_RECIPES[tint]
+  const target = new THREE.Color(recipe.color)
+  root.traverse((node) => {
+    const mesh = node as THREE.Mesh
+    if (!mesh.isMesh || !mesh.material) return
+    const tintOne = (material: THREE.Material): THREE.Material => {
+      // Cache optionnel (scatter : des dizaines de rochers) : un clone par matériau source.
+      const cacheKey = `${material.uuid}|${tint}`
+      const cached = cache?.get(cacheKey)
+      if (cached) return cached
+      const cloned = material.clone() as THREE.MeshStandardMaterial
+      if (recipe.replaceMap && allowReplaceMap && cloned.map) {
+        // Nuance stable par sous-matériau (tronc/feuillage) pour garder du volume.
+        cloned.map = null
+        if (cloned.color) cloned.color.set(target).multiplyScalar(0.9 + 0.2 * ((hashSeed(material.name) % 100) / 100))
+      } else if (cloned.color) {
+        cloned.color.lerp(target, recipe.amount)
+      }
+      if (recipe.roughness != null && 'roughness' in cloned) cloned.roughness = recipe.roughness
+      cloned.needsUpdate = true
+      cache?.set(cacheKey, cloned)
+      return cloned
+    }
+    mesh.material = Array.isArray(mesh.material) ? mesh.material.map(tintOne) : tintOne(mesh.material)
+  })
 }
 
 function applySubtle(root: THREE.Object3D): void {

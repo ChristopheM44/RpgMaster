@@ -9,6 +9,9 @@ import type {
   SceneTheme,
 } from '../types'
 
+/** Teinte de matière d'un modèle (miroir de TINT_RULES, backend prop_catalog). */
+export type ElementTint = 'petrified' | 'charred' | 'frost' | 'moss' | 'sand' | 'deadwood'
+
 export interface GridDims {
   cols: number
   rows: number
@@ -56,8 +59,10 @@ export interface ElementSpec {
   interactive: boolean
   inspectable: boolean
   selected: boolean
-  /** Hint public validé côté manifest ; null → heuristique/fallback procédural. */
+  /** Hint public validé côté manifest (GLB ou `proc/*`) ; null → heuristique/fallback procédural. */
   modelKey: string | null
+  /** Teinte de matière appliquée au modèle (arbre pétrifié, bois calciné…). */
+  tint: ElementTint | null
   /** Direction cardinale vers laquelle l'accès ou élément mural s'ouvre. */
   facing: SceneElementFacing | null
   /** Sens vertical d'un escalier quand il est emprunté vers `facing`. */

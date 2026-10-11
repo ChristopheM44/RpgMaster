@@ -1,12 +1,12 @@
-"""Packs de thèmes — palette d'assets et d'ambiance par défaut pour ``scene_builder``.
+"""Packs de thèmes — libellés et ambiance par défaut pour ``scene_builder``.
 
 Aucune I/O. Chaque pack couvre une valeur de ``SceneThemeName``
 (cf. ``app.schemas.scene_spec`` / ``app.game.scene_theme.SCENE_THEMES``) et fournit
-des ``asset_key`` valides selon ``SCENE_ASSET_KEYS``
-(``app.services.local_map_service``) — la variété de flore d'ambiance (arbres,
-buissons, fleurs...) est gérée côté frontend par ``BIOME_3D`` /
-``ScatterKind`` à partir de ``scene_theme`` + ``vegetation_density``, donc les
-packs n'ont pas besoin de référencer ces assets de scatter.
+les libellés par défaut des features injectées. Le modèle 3D d'une feature découle
+de son NOM via ``app.engine.prop_catalog`` (plus de tirage au hasard dans le pack :
+« Arbre pétrifié » ne devient plus des caisses) ; les libellés ci-dessous doivent
+donc tous être reconnus par le catalogue (test dédié). La flore d'ambiance (arbres,
+buissons, fleurs...) est gérée côté frontend par ``BIOME_3D`` / ``ScatterKind``.
 
 ``ambiance`` et ``vegetation_density`` sont des MIROIRS de
 ``_THEME_FOG_DENSITY`` / ``_THEME_VEGETATION_DENSITY``
@@ -20,12 +20,9 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class ThemePack:
-    """Palette d'assets et d'ambiance par défaut pour un thème de scène."""
+    """Libellés de features et ambiance par défaut pour un thème de scène."""
 
     terrain: str
-    cover_assets: tuple[str, ...]
-    hazard_assets: tuple[str, ...]
-    decor_assets: tuple[str, ...]
     cover_label: str
     hazard_label: str
     decor_label: str
@@ -36,9 +33,6 @@ class ThemePack:
 THEME_PACKS: dict[str, ThemePack] = {
     "dungeon": ThemePack(
         terrain="stone",
-        cover_assets=("prop/pillar", "prop/rubble_large", "prop/crates_stacked"),
-        hazard_assets=(),
-        decor_assets=("prop/barrel_large", "prop/shelf_small", "prop/statue"),
         cover_label="Bloc de pierre effondré",
         hazard_label="Dalle suspecte",
         decor_label="Débris épars",
@@ -47,9 +41,6 @@ THEME_PACKS: dict[str, ThemePack] = {
     ),
     "cave": ThemePack(
         terrain="stone",
-        cover_assets=("prop/rubble_large", "nature/rock_large_a", "nature/rock_large_b"),
-        hazard_assets=(),
-        decor_assets=("nature/rock_small_a", "nature/rock_small_b", "prop/obelisk"),
         cover_label="Bloc rocheux effondré",
         hazard_label="Faille suspecte",
         decor_label="Éboulis de pierre",
@@ -58,9 +49,6 @@ THEME_PACKS: dict[str, ThemePack] = {
     ),
     "forest": ThemePack(
         terrain="grass",
-        cover_assets=("nature/rock_large_a", "nature/rock_large_b"),
-        hazard_assets=(),
-        decor_assets=("nature/rock_small_a", "nature/rock_small_b", "prop/campfire"),
         cover_label="Tronc renversé",
         hazard_label="Fourré de ronces",
         decor_label="Souche moussue",
@@ -69,9 +57,6 @@ THEME_PACKS: dict[str, ThemePack] = {
     ),
     "plains": ThemePack(
         terrain="grass",
-        cover_assets=("nature/rock_large_a", "nature/rock_large_b"),
-        hazard_assets=(),
-        decor_assets=("nature/rock_small_a", "nature/rock_small_b", "prop/tent"),
         cover_label="Talus herbeux",
         hazard_label="Terrier dissimulé",
         decor_label="Pierre isolée",
@@ -80,9 +65,6 @@ THEME_PACKS: dict[str, ThemePack] = {
     ),
     "mountain": ThemePack(
         terrain="rock",
-        cover_assets=("nature/rock_large_a", "nature/rock_large_b"),
-        hazard_assets=(),
-        decor_assets=("nature/rock_small_a", "nature/rock_small_b"),
         cover_label="Bloc erratique",
         hazard_label="Pierrier instable",
         decor_label="Cairn de pierres",
@@ -91,9 +73,6 @@ THEME_PACKS: dict[str, ThemePack] = {
     ),
     "rocky": ThemePack(
         terrain="rock",
-        cover_assets=("nature/rock_large_a", "nature/rock_large_b"),
-        hazard_assets=(),
-        decor_assets=("nature/rock_small_a", "nature/rock_small_b"),
         cover_label="Affleurement rocheux",
         hazard_label="Crevasse étroite",
         decor_label="Roche éclatée",
@@ -102,9 +81,6 @@ THEME_PACKS: dict[str, ThemePack] = {
     ),
     "desert": ThemePack(
         terrain="sand",
-        cover_assets=("nature/rock_large_a", "nature/rock_large_b"),
-        hazard_assets=(),
-        decor_assets=("nature/rock_small_a", "nature/rock_small_b"),
         cover_label="Dune affaissée",
         hazard_label="Sable mouvant",
         decor_label="Roche érodée",
@@ -113,9 +89,6 @@ THEME_PACKS: dict[str, ThemePack] = {
     ),
     "beach": ThemePack(
         terrain="sand",
-        cover_assets=("nature/rock_large_a", "nature/rock_large_b"),
-        hazard_assets=(),
-        decor_assets=("nature/rock_small_a", "nature/rock_small_b"),
         cover_label="Rocher couvert d'algues",
         hazard_label="Bassin de marée",
         decor_label="Bois flotté",
@@ -124,9 +97,6 @@ THEME_PACKS: dict[str, ThemePack] = {
     ),
     "coastal": ThemePack(
         terrain="rock",
-        cover_assets=("nature/rock_large_a", "nature/rock_large_b"),
-        hazard_assets=(),
-        decor_assets=("nature/rock_small_a", "nature/rock_small_b"),
         cover_label="Bloc de falaise",
         hazard_label="Embruns glissants",
         decor_label="Galets épars",
@@ -135,9 +105,6 @@ THEME_PACKS: dict[str, ThemePack] = {
     ),
     "swamp": ThemePack(
         terrain="mud",
-        cover_assets=("nature/rock_large_a", "nature/rock_large_b"),
-        hazard_assets=(),
-        decor_assets=("nature/rock_small_a", "nature/rock_small_b"),
         cover_label="Souche immergée",
         hazard_label="Vasière profonde",
         decor_label="Roseaux flétris",
@@ -146,9 +113,6 @@ THEME_PACKS: dict[str, ThemePack] = {
     ),
     "city": ThemePack(
         terrain="stone",
-        cover_assets=("prop/crates_stacked", "prop/barrel_large"),
-        hazard_assets=(),
-        decor_assets=("prop/barrel_small", "prop/crates_stacked", "prop/statue"),
         cover_label="Étal renversé",
         hazard_label="Pavé descellé",
         decor_label="Caisses de marchandises",
@@ -157,9 +121,6 @@ THEME_PACKS: dict[str, ThemePack] = {
     ),
     "wilderness": ThemePack(
         terrain="grass",
-        cover_assets=("nature/rock_large_a", "nature/rock_large_b"),
-        hazard_assets=(),
-        decor_assets=("nature/rock_small_a", "nature/rock_small_b"),
         cover_label="Rocher affleurant",
         hazard_label="Fourré de ronces",
         decor_label="Pierre moussue",
@@ -168,9 +129,6 @@ THEME_PACKS: dict[str, ThemePack] = {
     ),
     "default": ThemePack(
         terrain="ground",
-        cover_assets=("prop/crates_stacked", "prop/barrel_large"),
-        hazard_assets=(),
-        decor_assets=("prop/crates_stacked", "prop/barrel_small"),
         cover_label="Amas de débris",
         hazard_label="Zone instable",
         decor_label="Détritus",

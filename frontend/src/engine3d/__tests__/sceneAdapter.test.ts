@@ -282,4 +282,24 @@ describe('sceneAdapter.buildSceneSpec', () => {
     })
     expect(generating.ground.visualAssetUrl).toBeNull()
   })
+
+  it('lot 4 : teinte déduite du nom pour le mobilier seulement — « Mur de pierre » reste un mur', () => {
+    const rect = { type: 'rect' as const, col: 2, row: 2, width: 1, height: 1 }
+    const scene = {
+      cols: 8,
+      rows: 8,
+      pois: [],
+      exits: [],
+      elements: [
+        { id: 'w', name: 'Mur de pierre', kind: 'wall', geometry: rect },
+        { id: 't', name: 'Arbre pétrifié', kind: 'cover', geometry: { ...rect, col: 4 } },
+        { id: 'x', name: 'Souche', kind: 'decor', geometry: { ...rect, col: 6 }, tint: 'moss' },
+      ],
+    } as unknown as SceneLayout
+    const spec = buildSceneSpec({ scene, heroes: [], pois: [], selectedId: null, highlightedIds: [] })
+    const byId = Object.fromEntries(spec.elements.map((element) => [element.id, element]))
+    expect(byId.w?.tint).toBeNull()
+    expect(byId.t?.tint).toBe('petrified')
+    expect(byId.x?.tint).toBe('moss')
+  })
 })

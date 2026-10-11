@@ -17,17 +17,18 @@ from app.engine.scene_primitives import asset_element as _asset_element
 from app.engine.scene_primitives import ellipse as _ellipse
 from app.engine.scene_primitives import rect as _rect
 from app.engine.scene_primitives import seed_int as _seed_int
-from app.engine.theme_packs import THEME_PACKS
 
 DungeonRoomKind = Literal["gateway", "chamber", "vault", "lair", "snare", "passage"]
 DungeonSize = Literal["small", "medium", "large"]
 
-# Dressing générique (pilier, gravats, caisses, tonneaux) délégué au pack "dungeon" —
-# les pièces narratives propres à chaque DungeonRoomKind (escalier, coffre, autel...)
-# restent définies localement dans _room_elements().
-_DUNGEON_PACK = THEME_PACKS["dungeon"]
-_COVER_PILLAR, _COVER_RUBBLE, _COVER_CRATES = _DUNGEON_PACK.cover_assets
-_DECOR_BARREL = _DUNGEON_PACK.decor_assets[0]
+# Dressing générique (pilier, gravats, caisses, tonneaux) : clés fixes cohérentes
+# avec les noms des éléments (« Pilier de garde », « Caisses empilées »…, cf.
+# ``prop_catalog``) ; les pièces narratives propres à chaque DungeonRoomKind
+# (escalier, coffre, autel...) restent définies localement dans _room_elements().
+_COVER_PILLAR = "prop/pillar"
+_COVER_RUBBLE = "prop/rubble_large"
+_COVER_CRATES = "prop/crates_stacked"
+_DECOR_BARREL = "prop/barrel_large"
 
 _ROOM_COUNTS: dict[str, int] = {"small": 5, "medium": 8, "large": 12}
 _ROOM_LABELS: dict[str, str] = {

@@ -3,7 +3,7 @@
 // LocalMapCanvas en palettes 3D (sol, grille, fog, lumières, scatter).
 
 import type { SceneTheme } from '../../types'
-import type { AmbianceLight } from '../types'
+import type { AmbianceLight, ElementTint } from '../types'
 
 export interface ThemeTokens {
   bg: string
@@ -110,6 +110,21 @@ export type ScatterKind =
 /** Rendu du sol : dalles alignées sur la grille (intérieur), pavés, ou matière naturelle. */
 export type GroundStyle = 'flagstone' | 'planks' | 'cobble' | 'cave' | 'grass' | 'forest' | 'sand' | 'rock' | 'mud'
 
+/**
+ * Teintes de matière (refonte lot 4) : un même modèle devient arbre pétrifié, bois
+ * calciné, rocher ensablé… Albédos naturels (couleurs de rendu 3D, pas l'UI).
+ */
+export const TINT_RECIPES: Record<ElementTint, { color: string; amount: number; roughness?: number; replaceMap?: boolean }> = {
+  // replaceMap : la texture d'atlas (écorce brune, feuillage vert) est retirée — un
+  // arbre pétrifié est de PIERRE, pas un arbre brun assombri.
+  petrified: { color: '#a29d93', amount: 1, roughness: 1, replaceMap: true },
+  charred: { color: '#2e2925', amount: 1, roughness: 1, replaceMap: true },
+  frost: { color: '#d4e6ef', amount: 0.7, roughness: 0.55, replaceMap: true },
+  moss: { color: '#5d7a3c', amount: 0.45 },
+  sand: { color: '#c9ad80', amount: 1, roughness: 1, replaceMap: true },
+  deadwood: { color: '#6f604f', amount: 0.6 },
+}
+
 export interface Biome3D {
   /**
    * Albédo NATUREL du sol (sable clair, herbe, dalles). Avant 2026-10 ces valeurs
@@ -132,6 +147,8 @@ export interface Biome3D {
   scatter: ScatterKind[]
   /** Torches d'angle façon battlemap SVG (dungeon/cave). */
   cornerTorches: boolean
+  /** Teinte des rochers de décor (les rochers KayKit sont gris : ensablés au désert). */
+  rockTint?: ElementTint
 }
 
 export const BIOME_3D: Record<SceneTheme, Biome3D> = {
@@ -143,7 +160,7 @@ export const BIOME_3D: Record<SceneTheme, Biome3D> = {
   beach: {
     ground: '#d9c493', groundAccent: '#c2a774', groundStyle: 'sand', enclosed: false, relief: 0.6,
     grid: '#5a4a30', gridOpacity: 0.18, fog: '#b8c8cc',
-    scatter: ['tree_palm', 'rock', 'grass'], cornerTorches: false,
+    scatter: ['tree_palm', 'rock', 'grass'], cornerTorches: false, rockTint: 'sand',
   },
   coastal: {
     ground: '#9a9483', groundAccent: '#7f7a6b', groundStyle: 'rock', enclosed: false, relief: 1.2,
@@ -188,7 +205,7 @@ export const BIOME_3D: Record<SceneTheme, Biome3D> = {
   desert: {
     ground: '#dcc396', groundAccent: '#c4a57a', groundStyle: 'sand', enclosed: false, relief: 1.8,
     grid: '#5a4024', gridOpacity: 0.18, fog: '#e2cfa8',
-    scatter: ['cactus', 'rock', 'stone'], cornerTorches: false,
+    scatter: ['cactus', 'rock', 'stone'], cornerTorches: false, rockTint: 'sand',
   },
 }
 

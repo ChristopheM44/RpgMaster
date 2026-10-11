@@ -3,7 +3,9 @@
 // le fallback procédural prend le relais (invariant testé).
 
 import type { ScatterKind } from '../core/ThemeProvider'
+import type { ElementTint } from '../types'
 import { hashSeed } from '../utils/seededRandom'
+import { CATALOG_ELEMENT_KINDS, PROCEDURAL_PROP_KEYS, PROP_RULES, TINT_RULES } from './propCatalog.generated'
 
 export interface ModelDef {
   /** Chemin relatif sous public/models/. */
@@ -174,43 +176,69 @@ export function modelForMonster(corpus: string | null | undefined): string | nul
 }
 
 // ─── Éléments : kind + nom → prop ────────────────────────────────────────────
+// Catalogue sémantique PARTAGÉ avec le backend (source : backend/app/engine/
+// prop_catalog.py, généré dans propCatalog.generated.ts). Le backend écrit déjà
+// l'asset_key correspondant au nom (y compris pour les scènes sauvegardées, au
+// rechargement) ; cette résolution sert de repli quand aucun asset_key n'est fourni.
+
+const PROCEDURAL_KEYS = new Set<string>(PROCEDURAL_PROP_KEYS)
+const ELEMENT_TINTS = new Set<string>(TINT_RULES.map(([tint]) => tint))
 
 export function isModelKey(key: string | null | undefined): key is string {
   return typeof key === 'string' && MODEL_MANIFEST[key] != null
 }
 
-const FURNITURE_KEYWORDS: [RegExp, string][] = [
-  [/table|étal|etal|comptoir|bureau|autel|[ée]tabli/i, 'prop/table_medium'],
-  [/banc|chaise|chair|fauteuil|tr[ôo]ne|si[èe]ge/i, 'prop/chair'],
-  [/tabouret|stool/i, 'prop/stool'],
-  [/tonneau|baril|barrel|f[ûu]t|baquet/i, 'prop/barrel_small'],
-  [/keg|tonnelet/i, 'prop/keg'],
-  [/caisse|crate|cageot|caisson/i, 'prop/crates_stacked'],
-  [/coffre.*(or\b|dor[ée]|tr[ée]sor|royal|pr[ée]cieux)|coffre.fort|chest.*(gold|treasure)/i, 'prop/chest_gold'],
-  [/coffre|chest|malle|coffret/i, 'prop/chest'],
-  [/étag|etag|biblioth|shelf|rayonnage|armoire|pr[ée]sentoir|vaisselier|buffet|placard/i, 'prop/shelf_large'],
-  [/lit|bed|couchette|paillasse|grabat|matelas/i, 'prop/bed_frame'],
-  [/pilier|colonne|pillar|column|poteau/i, 'prop/pillar'],
-  [/feu de camp|foyer|bivouac|brasier/i, 'prop/campfire'],
-  [/tente|pavillon|abri|chapiteau|campement/i, 'prop/tent'],
-  [/jarre|vase|amphore|urne|poterie|cruche|\bpot\b/i, 'prop/pot'],
-  [/statue|idole|effigie|buste|gisant|monument/i, 'prop/statue'],
-  [/ob[ée]lisque|st[èe]le|menhir|monolithe/i, 'prop/obelisk'],
-  // Rocher/pierre AVANT le repli `cover → caisses` : sinon un rocher en couvert
-  // tombait sur l'empilement de caisses en bois (bug constaté en jeu).
-  [/rocher|rocaille|caillou|boulder|stalagmite|stalactite|[ée]rod|formation rocheuse/i, 'nature/rock_large_a'],
-  [/gravat|débris|debris|rubble|éboulis|eboulis/i, 'prop/rubble_large'],
-]
+/** Clé dessinée par ProceduralFactory (fontaine, autel, sarcophage…), pas un GLB. */
+export function isProceduralPropKey(key: string | null | undefined): key is string {
+  return typeof key === 'string' && PROCEDURAL_KEYS.has(key)
+}
+
+/** Clé d'asset acceptée par le moteur : modèle du manifeste ou prop procédural. */
+export function isPropKey(key: string | null | undefined): key is string {
+  return isModelKey(key) || isProceduralPropKey(key)
+}
+
+export function isElementTint(value: unknown): value is ElementTint {
+  return typeof value === 'string' && ELEMENT_TINTS.has(value)
+}
+
+/** Texte désaccentué, minuscule, mots séparés par une espace, bordé d'espaces (miroir Python). */
+export function normalizeWords(text: string | null | undefined): string {
+  const stripped = (text ?? '').toLowerCase().normalize('NFD').replace(/\p{M}+/gu, '')
+  return ` ${stripped.replace(/[^a-z0-9]+/g, ' ').trim()} `
+}
+
+function hasKeyword(words: string, keywords: readonly string[]): boolean {
+  return keywords.some((keyword) => words.includes(` ${keyword}`))
+}
+
+/** Clé d'asset du premier mot-clé reconnu dans le nom, sinon null (miroir de match_prop). */
+export function matchProp(text: string | null | undefined): string | null {
+  const words = normalizeWords(text)
+  for (const rule of PROP_RULES) {
+    if (hasKeyword(words, rule.any) && (rule.requires.length === 0 || hasKeyword(words, rule.requires))) {
+      return rule.assetKey
+    }
+  }
+  return null
+}
+
+/** Teinte de matière évoquée par le texte (pétrifié, calciné…), sinon null (miroir de match_tint). */
+export function matchTint(text: string | null | undefined): ElementTint | null {
+  const words = normalizeWords(text)
+  for (const [tint, keywords] of TINT_RULES) {
+    if (hasKeyword(words, keywords) && isElementTint(tint)) return tint
+  }
+  return null
+}
 
 export function modelForElement(kind: string, name: string, footprint: { x: number; z: number }): string | null {
   if (kind === 'wall') return /angle|corner|coin/i.test(name) ? 'prop/wall_corner' : 'prop/wall'
   if (kind === 'door') return 'prop/door'
-  if (kind === 'furniture' || kind === 'cover' || kind === 'decor') {
-    for (const [pattern, key] of FURNITURE_KEYWORDS) {
-      if (pattern.test(name)) return refineByFootprint(key, footprint)
-    }
-    if (kind === 'cover') return 'prop/crates_stacked'
-    return null
+  if (CATALOG_ELEMENT_KINDS.includes(kind)) {
+    const key = matchProp(name)
+    // Pas de correspondance → procédural neutre (plus de repli « couvert = caisses »).
+    return key ? refineByFootprint(key, footprint) : null
   }
   if (kind === 'light') {
     if (/feu de camp|foyer|bivouac|brasier/i.test(name)) return 'prop/campfire'
@@ -223,7 +251,7 @@ export function modelForElement(kind: string, name: string, footprint: { x: numb
 }
 
 /** Variante de prop selon l'empreinte — active table_small / barrel_large / shelf_small. */
-function refineByFootprint(key: string, footprint: { x: number; z: number }): string {
+export function refineByFootprint(key: string, footprint: { x: number; z: number }): string {
   const span = Math.max(footprint.x, footprint.z)
   if (key === 'prop/table_medium') {
     if (span >= 2.2) return 'prop/table_long'
@@ -244,6 +272,26 @@ function refineByFootprint(key: string, footprint: { x: number; z: number }): st
 export const PROP_TARGET_HEIGHT_M: Record<string, number> = {
   'prop/statue': 2.2,
   'prop/obelisk': 2.8,
+  // Végétation posée comme élément (arbre pétrifié, buisson…) : hauteur réelle,
+  // sinon le plafond du kind `decor` (0,6 m) en ferait des bonsaïs.
+  'nature/tree_dark': 3.4,
+  'nature/tree_pine_a': 3.4,
+  'nature/tree_palm_tall': 3.2,
+  'nature/cactus_tall': 1.5,
+  'nature/bush': 0.9,
+  'nature/grass_large': 0.6,
+  'nature/stump': 0.55,
+}
+
+/**
+ * Hauteur minimale (mètres) admise pour un meuble ajusté à l'empreinte : le plafond
+ * `maxHeight` dérive du kind (mobilier 0,8 m) et écraserait un rayonnage ou un pilier.
+ */
+export const PROP_MIN_HEIGHT_M: Record<string, number> = {
+  'prop/shelf_large': 2.2,
+  'prop/shelf_small': 1.8,
+  'prop/pillar': 2.8,
+  'prop/tent': 2.2,
 }
 
 // ─── Scatter : kind → variantes de modèles ───────────────────────────────────

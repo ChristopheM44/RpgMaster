@@ -12,11 +12,15 @@ import type {
   SceneTheme,
 } from '../../types'
 import type { AmbianceLight, ArrivalSpec, ElementSpec, GroundSpec, SceneSpec, TokenSpec } from '../types'
-import { isModelKey, modelForClass, modelForMonster, modelForNpc } from '../assets/manifest'
+import { isElementTint, isPropKey, matchTint, modelForClass, modelForMonster, modelForNpc } from '../assets/manifest'
+import { CATALOG_ELEMENT_KINDS } from '../assets/propCatalog.generated'
 import { resolveTokenOverlaps } from './tokenCollision'
 import { exitIndicator, poiRoleFor } from './indicators'
 import { isStairwell, resolveStairsFacing, stairwellCells, stairwellHoleKeys, stairwellSurfaceM } from './stairs'
 import { rectCells } from '../utils/gridMath'
+
+/** Kinds habillés par le catalogue sémantique (teinte déduite du nom). */
+const PROP_ELEMENT_KINDS = new Set(CATALOG_ELEMENT_KINDS)
 
 // Mêmes valeurs que local_map_service (backend) — défauts par kind en mètres.
 export const DEFAULT_HEIGHT_M: Record<string, number> = {
@@ -213,7 +217,12 @@ export function buildElementSpecs(
       interactive,
       inspectable: isElementInspectable(element, interactive),
       selected: element.id === options.selectedElementId,
-      modelKey: isModelKey(element.asset_key) ? element.asset_key : null,
+      modelKey: isPropKey(element.asset_key) ? element.asset_key : null,
+      // Repli sur le nom pour mobilier/couvert/décor seulement (miroir du backend) :
+      // un « Mur de pierre » n'est pas « pétrifié ».
+      tint: isElementTint(element.tint)
+        ? element.tint
+        : PROP_ELEMENT_KINDS.has(element.kind) ? matchTint(element.name) : null,
       // Escalier : un accès de bord mène vers son bord ; sans facing → bord le plus proche.
       facing: element.kind === 'stairs'
         ? resolveStairsFacing(normalizeFacing(element.facing), element.geometry, options.dims)

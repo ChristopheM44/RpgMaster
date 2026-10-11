@@ -20,11 +20,25 @@ import {
 } from '../adapters/stairs'
 import type { SceneElementFacing } from '../../types'
 import { hazardTextures } from './groundTextures'
+import { isProceduralPropKey, matchProp } from './manifest'
+import { buildProceduralProp } from './proceduralProps'
 
 export interface ElementBuildCtx {
   dims: GridDims
   cellSizeM: number
   tokens: ThemeTokens
+  /** Albédo du sol du biome (butte, dune). */
+  groundColor?: string
+}
+
+const PROP_KINDS = new Set(['furniture', 'cover', 'decor'])
+
+/** Clé `proc/*` d'un élément : hint explicite, sinon nom reconnu par le catalogue. */
+export function proceduralPropKeyFor(spec: Pick<ElementSpec, 'kind' | 'name' | 'modelKey'>): string | null {
+  if (isProceduralPropKey(spec.modelKey)) return spec.modelKey
+  if (spec.modelKey || !PROP_KINDS.has(spec.kind)) return null
+  const matched = matchProp(spec.name)
+  return isProceduralPropKey(matched) ? matched : null
 }
 
 // ─── Helpers matériaux ───────────────────────────────────────────────────────
@@ -128,6 +142,21 @@ export function buildProceduralElement(spec: ElementSpec, ctx: ElementBuildCtx):
   const group = new THREE.Group()
   const subtle = spec.subtle
   const tokens = ctx.tokens
+
+  // Objet nommé sans GLB (fontaine, autel, sarcophage…) : dessiné à l'échelle réelle.
+  const propKey = proceduralPropKeyFor(spec)
+  const prop = propKey
+    ? buildProceduralProp(propKey, spec, { x: foot.sizeX, z: foot.sizeZ }, elevation, {
+        cellSizeM: ctx.cellSizeM,
+        tokens,
+        groundColor: ctx.groundColor,
+      })
+    : null
+  if (prop) {
+    group.add(prop)
+    group.position.set(foot.x, 0, foot.z)
+    return group
+  }
 
   const addVolume = (material: THREE.MeshStandardMaterial, volumeHeight = height, inset = 1): THREE.Mesh => {
     const mesh = isEllipse(spec)
@@ -259,7 +288,9 @@ export function buildProceduralElement(spec: ElementSpec, ctx: ElementBuildCtx):
     }
     case 'decor':
     default: {
-      addVolume(makeMaterial('#6a6254', subtle, { roughness: 0.9 }), Math.min(height, 0.8))
+      // Décor non reconnu : dalle basse neutre (une caisse d'0,8 m pour « Roseaux »
+      // ou « Traces » serait un contresens ; le nom s'affiche au survol).
+      addVolume(makeMaterial('#6a6254', subtle, { roughness: 0.9 }), Math.min(height, metersToWorld(0.25, ctx.cellSizeM)), 0.8)
       break
     }
   }

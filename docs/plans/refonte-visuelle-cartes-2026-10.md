@@ -239,7 +239,7 @@ Reste visible pour les lots suivants : rochers gris Kenney dans le désert (tein
 bibliothèque vide (lot 4), anneaux de sortie et disque rouge de danger (lot 3). Mineur : la
 lumière d'une torche murale masquée par la coupe continue d'éclairer.
 
-### Lot 3 — LIVRÉ (même branche, non commité)
+### Lot 3 — LIVRÉ (commité `da8bbd5`)
 - Étiquettes DOM projetées (`engine3d/layers/LabelLayer.ts`, styles `.e3d-*` non scopés
   dans `Scene3DCanvas.vue`) : remplacent les nameplates canvas. Noms colorés par rôle
   (or vous, arcane IA, teal PNJ/allié, sang ennemi) + PV ; repères `✦/▣/◆ titre` ;
@@ -257,3 +257,69 @@ lumière d'une torche murale masquée par la coupe continue d'éclairer.
 Vérifié : frontend 188 ✓, type-check ✓, build ✓, rendu live banc (Jardin, Désert, Caveau),
 clic sur bannière → sélection de la sortie. Non fait : test « 3 joueurs sans légende »
 (critère humain) et revue à l'œil d'un vrai combat.
+
+### Lot 4 — LIVRÉ (même branche, non commité)
+- **Catalogue sémantique unique** `backend/app/engine/prop_catalog.py` (nom → modèle, nom →
+  teinte), mots entiers désaccentués ; exporté vers le frontend par
+  `backend/scripts/export_prop_catalog.py` → `engine3d/assets/propCatalog.generated.ts`
+  (test de fraîcheur). Spécifique avant générique (coffre d'or > coffre ; arbre mort/pétrifié >
+  tronc > arbre ; éboulis > rocher > pierre). Pas de correspondance → **pas d'`asset_key`**.
+- `scene_builder._pick_asset` choisit par le **nom** (plus de tirage au hasard) ; les packs de
+  thème ne portent plus de listes d'assets (libellés seulement, tous reconnus — testé) ;
+  `_default_asset_for_poi_element` sans repli « couvert = caisses ».
+- **Scènes déjà sauvegardées corrigées au chargement** : `enrich_scene_layout` (appelé par
+  `repair_state_visual_coherence` au `session_state` enrichi) remplace l'asset par celui du nom,
+  ou le retire s'il n'est pas étayé (« Arbre pétrifié » → arbre nu pétrifié, « Fontaine tarie »
+  → fontaine sèche, « Traces de bottes » → empreintes au sol). Vérifié sur la session réelle
+  Bibliothèque (persisté en base au chargement).
+- **Props procéduraux nommés** (`engine3d/assets/proceduralProps.ts`, clés `proc/*`) : fontaine
+  (sèche si tarie), puits, autel, sarcophage, enclume, lutrin, **rayonnage de livres** (le
+  `shelf_large` KayKit est une planche murale de 45 cm, pas une bibliothèque), butte, traces.
+- **Teintes de matière** (`tint` : petrified, charred, frost, moss, sand, deadwood) : matériaux
+  clonés par instance (cache partagé pour le décor semé), texture d'atlas retirée pour les
+  teintes fortes (un arbre pétrifié est de pierre). Rochers ensablés au désert (`rockTint`).
+- **Habillage par type de lieu** `backend/app/engine/scene_dressing.py` : bibliothèque,
+  taverne, temple, crypte, forge, réserve, dortoir, chambre, salle du trône, serre ; campement et
+  marché en extérieur. Détection pondérée (description > repères/mobilier > sorties : une porte
+  « de la bibliothèque » dans un couloir ne suffit pas). Pièces murales plaquées et tournées vers
+  la pièce, chaises/tabourets autour des tables, aucune pièce sur/à côté d'une sortie, d'un
+  repère ou du groupe, **connexité préservée** (une pièce qui coupe un passage est abandonnée),
+  ids `dress_*` idempotents, lieu déjà meublé laissé tel quel. Bloquant (cohérent avec le
+  déplacement backend et le combat).
+- Moteur : meubles orientés par `facing`, grand côté du modèle aligné sur l'empreinte
+  (`table_long`/lits KayKit sont longs sur Z), hauteur intrinsèque pour la végétation posée
+  comme élément, rayonnages côté caméra abaissés avec les murs en coupe.
+- Banc : les scènes réelles passent par la même réparation qu'au chargement.
+
+Vérifié : backend 2196 ✓, frontend 204 ✓, type-check ✓, build ✓ ; rendu live banc (Jardin :
+arbres et buissons de pierre, fontaine ; Bibliothèque : rayonnages garnis, tables de lecture ;
+Désert : rochers ensablés ; Taverne). Hors lot : créatures (pack Quaternius), toujours séparé.
+Limite : un nom inconnu du catalogue reste procédural neutre (bloc ou dalle basse).
+
+### Lot 5 — LIVRÉ (même branche, non commité)
+- Région et Ville **plein cadre** (taille réelle du conteneur, plus de 640×580 figé), échelle
+  **uniforme** (fin du `preserveAspectRatio="none"` qui étirait la carte) ; image générée et
+  décor sous la même transformation que les lieux. Molette = zoom, glisser = déplacer,
+  « Recentrer ». Module pur `components/exploration/mapLayout.ts` + `useMapViewport`.
+- **Étiquettes anti-collision** (8 positions autour du picto, priorité lieu courant > visités >
+  connus > rumeurs, 2 lignes max + ellipse, nom complet en infobulle).
+- **Pictos par type** (`MapGlyph.vue`, 26 pictos) : le nom précise le kind en région
+  (« Port… » → ancre, « Sanctuaire » → temple, « Mines » → pioche…), le kind en ville.
+- **Routes typées** (route, sentier, fleuve, voie maritime, passage secret) × état (parcourue,
+  connue, rumeur) ; routes cachées jamais rendues. **Brouillard** hors des lieux vus ou connus
+  (une rumeur reste dans la brume, sans information de plus). **Échelle en jours de marche**
+  seulement si des trajets sont chiffrés (`travel_hint`) — jamais inventée. Rose des vents,
+  légende des statuts, repère « Vous êtes ici ».
+- Ville : quartiers en aplats, rues pavées (bordure, chaussée, axe), bâtiments en médaillons
+  avec picto, pion du groupe, **sorties de ville fléchées** vers le bord du cadre.
+- Banc : section « Cartes 2D » (Sanctuaire, Mirage, Port Nyanzaru = projections publiques
+  réelles ; « Marches de Brume » synthétique dense avec routes chiffrées et route cachée).
+- Pas d'extension backend du typage des nœuds : kinds existants + mots du nom suffisent (un
+  nouveau Literal ferait rejeter des nœuds existants).
+
+Vérifié : critère « aucune étiquette chevauchante sur la région Sanctuaire » — mesuré en live
+(`getBoundingClientRect`, 0 chevauchement étiquette/étiquette, étiquette/picto, hors cadre) et en
+test unitaire à 3 tailles de cadre ; idem région et ville denses. Vrai écran de jeu : la région
+remplit la colonne (479×576). Constat données : la région Sanctuaire a deux lieux au statut
+« current » (le marqueur suit `current_node_id`) — incohérence backend préexistante, non traitée.
+
