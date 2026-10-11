@@ -9,7 +9,7 @@ import { CameraRig } from './CameraRig'
 import type { EngineCtx } from './context'
 import { PickingController } from './PickingController'
 import { ambiancePreset, biomeFor, resolveThemeTokens, type ThemeTokens } from './ThemeProvider'
-import { TweenGroup } from './tween'
+import { easeInOut, TweenGroup, type Tween } from './tween'
 import { ElementsLayer } from '../layers/ElementsLayer'
 import { GroundLayer } from '../layers/GroundLayer'
 import { OverlayLayer } from '../layers/OverlayLayer'
@@ -48,6 +48,7 @@ export class SceneRuntime implements SceneRuntimeHandle {
   private cellPickingEnabled = false
   private frameKey = ''
   private lastCtx: EngineCtx | null = null
+  private cameraTween: Tween | null = null
 
   constructor(private canvas: HTMLCanvasElement, callbacks: RuntimeCallbacks = {}) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
@@ -138,6 +139,9 @@ export class SceneRuntime implements SceneRuntimeHandle {
 
     const frameKey = `${spec.ground.sceneId}|${this.dims.cols}x${this.dims.rows}`
     if (frameKey !== this.frameKey) {
+      // Nouvelle scène : jetons recréés à leurs nouvelles cases (un même héros
+      // ne doit pas « finir » sa marche vers la sortie de la scène précédente).
+      if (this.frameKey) this.tokens.dispose()
       this.frameKey = frameKey
       this.rig.frameGrid(this.dims)
     }
@@ -167,6 +171,60 @@ export class SceneRuntime implements SceneRuntimeHandle {
 
   setZoomPreset(preset: ZoomPreset): void {
     this.rig.setZoomPreset(preset)
+  }
+
+  focusCell(col: number, row: number, durationS = 0.9): Promise<void> {
+    const from = this.rig.pose()
+    const world = cellCenterToWorld(col, row, this.dims)
+    const target = new THREE.Vector3(world.x, 0, world.z)
+    const position = target.clone().add(from.position.clone().sub(from.target).multiplyScalar(0.55))
+    return this.animatePose(from, { target, position }, durationS)
+  }
+
+  arriveAt(col: number, row: number, durationS = 1.0): void {
+    const end = this.rig.pose()
+    const world = cellCenterToWorld(col, row, this.dims)
+    const target = new THREE.Vector3(world.x, 0, world.z)
+    const start = {
+      target,
+      position: target.clone().add(end.position.clone().sub(end.target).multiplyScalar(0.5)),
+    }
+    this.rig.setPose(start.target, start.position)
+    void this.animatePose(start, end, durationS)
+  }
+
+  /** Interpole cible + position caméra via la boucle de tweens (résolu à la fin ou à l'annulation). */
+  private animatePose(
+    from: { target: THREE.Vector3; position: THREE.Vector3 },
+    to: { target: THREE.Vector3; position: THREE.Vector3 },
+    durationS: number,
+  ): Promise<void> {
+    if (this.cameraTween) this.tweens.cancel(this.cameraTween)
+    return new Promise((resolve) => {
+      let elapsed = 0
+      let done = false
+      const finish = (): void => {
+        if (done) return
+        done = true
+        if (this.cameraTween === tween) this.cameraTween = null
+        resolve()
+      }
+      const tween: Tween = {
+        update: (dt) => {
+          elapsed += dt
+          const k = easeInOut(Math.min(1, elapsed / Math.max(0.01, durationS)))
+          this.rig.setPose(
+            from.target.clone().lerp(to.target, k),
+            from.position.clone().lerp(to.position, k),
+          )
+          if (k >= 1) finish()
+          return k >= 1
+        },
+        cancel: finish,
+      }
+      this.cameraTween = tween
+      this.tweens.add(tween)
+    })
   }
 
   setBrightness(value: number): void {

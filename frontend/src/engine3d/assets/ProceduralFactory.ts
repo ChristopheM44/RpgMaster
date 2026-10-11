@@ -8,6 +8,17 @@ import type { ElementSpec, GridDims } from '../types'
 import type { ScatterKind, ThemeTokens } from '../core/ThemeProvider'
 import { gridPointToWorld, metersToWorld } from '../utils/gridMath'
 import { pick, range, type Prng } from '../utils/seededRandom'
+import {
+  cellBounds,
+  FACING_VECTOR,
+  inferStairsFacing,
+  isStairwell,
+  RISING_STAIRS_MIN_RISE_M,
+  RISING_STAIRS_STEPS,
+  stairwellDepthM,
+  STAIRWELL_STEPS,
+} from '../adapters/stairs'
+import type { SceneElementFacing } from '../../types'
 
 export interface ElementBuildCtx {
   dims: GridDims
@@ -234,24 +245,9 @@ export function buildProceduralElement(spec: ElementSpec, ctx: ElementBuildCtx):
       break
     }
     case 'stairs': {
-      const steps = 4
-      const along = foot.sizeX >= foot.sizeZ ? 'x' : 'z'
-      const material = makeMaterial('#4a4258', subtle, { emissive: tokens.arcane, emissiveIntensity: 0.06 })
-      for (let i = 0; i < steps; i++) {
-        const stepHeight = (height / steps) * (i + 1)
-        const sizeX = along === 'x' ? foot.sizeX / steps : foot.sizeX
-        const sizeZ = along === 'z' ? foot.sizeZ / steps : foot.sizeZ
-        const step = new THREE.Mesh(new THREE.BoxGeometry(sizeX, stepHeight, sizeZ), material)
-        const offset = (i + 0.5) / steps - 0.5
-        step.position.set(
-          along === 'x' ? offset * foot.sizeX : 0,
-          elevation + stepHeight / 2,
-          along === 'z' ? offset * foot.sizeZ : 0,
-        )
-        step.castShadow = true
-        step.receiveShadow = true
-        group.add(step)
-      }
+      const facing = spec.facing ?? inferStairsFacing(spec.geometry, ctx.dims)
+      if (isStairwell(spec)) buildStairwell(group, spec, ctx, foot, facing)
+      else buildRisingStairs(group, spec, ctx, foot, facing, elevation)
       break
     }
     case 'terrain': {
@@ -269,6 +265,122 @@ export function buildProceduralElement(spec: ElementSpec, ctx: ElementBuildCtx):
   group.position.set(foot.x, 0, foot.z)
   group.rotation.y = foot.rotationY
   return group
+}
+
+// ─── Escaliers ───────────────────────────────────────────────────────────────
+// Positions exprimées relativement au centre `foot` (le groupe y est placé).
+
+const STAIR_STONE = '#8b8379'
+
+/** Volée qui MONTE vers `facing` ; palier au-delà du bord. */
+function buildRisingStairs(
+  group: THREE.Group,
+  spec: ElementSpec,
+  ctx: ElementBuildCtx,
+  foot: Footprint,
+  facing: SceneElementFacing,
+  elevation: number,
+): void {
+  const dir = FACING_VECTOR[facing]
+  const alongZ = dir.z !== 0
+  const along = alongZ ? foot.sizeZ / 0.94 : foot.sizeX / 0.94
+  const across = (alongZ ? foot.sizeX : foot.sizeZ)
+  const rise = metersToWorld(Math.max(spec.heightM, RISING_STAIRS_MIN_RISE_M), ctx.cellSizeM)
+  const steps = RISING_STAIRS_STEPS
+  const depth = along / steps
+  const material = makeMaterial(STAIR_STONE, spec.subtle, { roughness: 0.9 })
+  const box = (w: number, h: number, d: number): THREE.BoxGeometry =>
+    new THREE.BoxGeometry(alongZ ? w : d, h, alongZ ? d : w)
+
+  for (let i = 0; i < steps; i++) {
+    const h = (rise / steps) * (i + 1)
+    const offset = -along / 2 + depth * (i + 0.5)
+    const step = new THREE.Mesh(box(across, h, depth), material)
+    step.position.set(dir.x * offset, elevation + h / 2, dir.z * offset)
+    step.castShadow = true
+    step.receiveShadow = true
+    group.add(step)
+  }
+  // Palier qui traverse l'ouverture du mur : l'escalier continue hors de la carte.
+  const landing = new THREE.Mesh(box(across, rise, 0.5), material)
+  landing.position.set(dir.x * (along / 2 + 0.25), elevation + rise / 2, dir.z * (along / 2 + 0.25))
+  landing.receiveShadow = true
+  group.add(landing)
+}
+
+/**
+ * Trémie : les cellules sont retirées du sol (GroundLayer), les marches
+ * s'enfoncent vers `facing`, parois et margelle bordent l'ouverture, le fond
+ * se perd dans le noir.
+ */
+function buildStairwell(
+  group: THREE.Group,
+  spec: ElementSpec,
+  ctx: ElementBuildCtx,
+  foot: Footprint,
+  facing: SceneElementFacing,
+): void {
+  const dir = FACING_VECTOR[facing]
+  const alongZ = dir.z !== 0
+  const { c0, r0, c1, r1 } = cellBounds(spec.geometry, ctx.dims)
+  const center = gridPointToWorld((c0 + c1) / 2, (r0 + r1) / 2, ctx.dims)
+  const cx = center.x - foot.x
+  const cz = center.z - foot.z
+  const along = alongZ ? r1 - r0 : c1 - c0
+  const across = alongZ ? c1 - c0 : r1 - r0
+  const depthTotal = metersToWorld(stairwellDepthM({ geometry: spec.geometry, facing }, ctx.dims), ctx.cellSizeM)
+  const steps = STAIRWELL_STEPS
+  const depth = along / steps
+  const drop = depthTotal / steps
+  const box = (w: number, h: number, d: number): THREE.BoxGeometry =>
+    new THREE.BoxGeometry(alongZ ? w : d, h, alongZ ? d : w)
+  const at = (offset: number, y: number, lateral = 0): [number, number, number] => [
+    cx + dir.x * offset + (alongZ ? lateral : 0),
+    y,
+    cz + dir.z * offset + (alongZ ? 0 : lateral),
+  ]
+  const stone = new THREE.Color(STAIR_STONE)
+  const night = new THREE.Color('#07060a')
+
+  for (let i = 0; i < steps; i++) {
+    const top = -drop * (i + 1)
+    // Assombrissement progressif modéré : la profondeur se lit sans noyer les marches.
+    const tone = stone.clone().lerp(night, 0.12 * (i + 1))
+    const step = new THREE.Mesh(
+      box(across - 0.04, drop * 2, depth),
+      makeMaterial(`#${tone.getHexString()}`, spec.subtle, { roughness: 0.95 }),
+    )
+    step.position.set(...at(-along / 2 + depth * (i + 0.5), top - drop))
+    step.receiveShadow = true
+    group.add(step)
+  }
+
+  const wallHeight = depthTotal + drop * 2
+  const wallMaterial = makeMaterial('#2b2630', spec.subtle, { roughness: 1 })
+  for (const side of [-1, 1]) {
+    const wall = new THREE.Mesh(box(0.06, wallHeight, along), wallMaterial)
+    wall.position.set(...at(0, -wallHeight / 2, side * (across / 2 - 0.03)))
+    group.add(wall)
+  }
+  const back = new THREE.Mesh(box(across, wallHeight, 0.06), wallMaterial)
+  back.position.set(...at(-along / 2 + 0.03, -wallHeight / 2))
+  group.add(back)
+  // Au-delà de la dernière marche : pierre sombre (le passage file sous le bord).
+  const beyond = new THREE.Mesh(box(across, wallHeight, 0.04), makeMaterial('#1c1822', spec.subtle, { roughness: 1 }))
+  beyond.position.set(...at(along / 2 - 0.02, -wallHeight / 2))
+  group.add(beyond)
+
+  const rimMaterial = makeMaterial('#a39a8c', spec.subtle, { roughness: 0.85 })
+  for (const side of [-1, 1]) {
+    const rim = new THREE.Mesh(box(0.08, 0.05, along), rimMaterial)
+    rim.position.set(...at(0, 0.02, side * (across / 2)))
+    rim.castShadow = true
+    group.add(rim)
+  }
+  const backRim = new THREE.Mesh(box(across + 0.08, 0.05, 0.08), rimMaterial)
+  backRim.position.set(...at(-along / 2, 0.02))
+  backRim.castShadow = true
+  group.add(backRim)
 }
 
 function terrainColor(terrainType: string | null, tokens: ThemeTokens): { hex: string; opacity: number; y: number } {

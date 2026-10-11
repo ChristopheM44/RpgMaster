@@ -19,6 +19,8 @@ const { runtimeMock, harness } = vi.hoisted(() => {
     setZoomPreset: vi.fn(),
     setRunning: vi.fn(),
     setBrightness: vi.fn(),
+    focusCell: vi.fn(() => Promise.resolve()),
+    arriveAt: vi.fn(),
     resize: vi.fn(),
     dispose: vi.fn(),
   }

@@ -13,13 +13,14 @@ export interface GroundCtx {
 
 export class GroundLayer {
   readonly group = new THREE.Group()
+  /** Plan de picking plein (invisible) : les cellules de trémie restent cliquables. */
   private plane: THREE.Mesh | null = null
   private buildKey = ''
   private textureUrl: string | null = null
   private assetPlane: THREE.Mesh | null = null
 
   update(spec: GroundSpec, ctx: GroundCtx): void {
-    const key = `${spec.cols}x${spec.rows}|${spec.theme}`
+    const key = `${spec.cols}x${spec.rows}|${spec.theme}|${(spec.holes ?? []).join(';')}`
     if (key !== this.buildKey) {
       this.rebuild(spec, ctx)
       this.buildKey = key
@@ -27,6 +28,8 @@ export class GroundLayer {
     }
     this.syncVisualAsset(spec)
   }
+
+  private holes = new Set<string>()
 
   groundMesh(): THREE.Object3D | null {
     return this.plane
@@ -43,15 +46,24 @@ export class GroundLayer {
 
   private rebuild(spec: GroundSpec, ctx: GroundCtx): void {
     this.dispose()
+    this.holes = new Set(spec.holes ?? [])
     const { cols, rows } = spec
     const biome = ctx.biome
+    const holes = new Set(spec.holes ?? [])
+
+    // Sol visible : une dalle par cellule, sans les trémies (escaliers descendants).
+    const floor = new THREE.Mesh(
+      buildCellGridGeometry(cols, rows, holes),
+      new THREE.MeshStandardMaterial({ color: new THREE.Color(biome.ground), roughness: 0.98 }),
+    )
+    floor.receiveShadow = true
+    this.group.add(floor)
 
     const plane = new THREE.Mesh(
       new THREE.PlaneGeometry(cols, rows),
-      new THREE.MeshStandardMaterial({ color: new THREE.Color(biome.ground), roughness: 0.98 }),
+      new THREE.MeshBasicMaterial({ visible: false }),
     )
     plane.rotation.x = -Math.PI / 2
-    plane.receiveShadow = true
     this.plane = plane
     this.group.add(plane)
 
@@ -72,7 +84,7 @@ export class GroundLayer {
     let index = 0
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
-        if ((col + row) % 2 !== 0) continue
+        if ((col + row) % 2 !== 0 || holes.has(`${col},${row}`)) continue
         matrix.compose(
           new THREE.Vector3(col + 0.5 - cols / 2, 0.001, row + 0.5 - rows / 2),
           rotation,
@@ -125,6 +137,16 @@ export class GroundLayer {
       bar.receiveShadow = true
       this.group.add(bar)
     }
+
+    // Jupe sous le plateau : ce qui est creusé sous le sol (trémies) ne
+    // dépasse plus en blocs noirs quand on regarde le plateau de côté.
+    const skirtMaterial = new THREE.MeshBasicMaterial({ color: new THREE.Color(ctx.tokens.bg) })
+    const skirtDepth = 2.2
+    for (const [sizeX, sizeZ, x, z] of frames) {
+      const skirt = new THREE.Mesh(new THREE.BoxGeometry(sizeX, skirtDepth, sizeZ), skirtMaterial)
+      skirt.position.set(x, -skirtDepth / 2 - 0.02, z)
+      this.group.add(skirt)
+    }
   }
 
   /** Texture IA (visual_asset ready) en surimpression du sol, chargée lazy. */
@@ -146,10 +168,9 @@ export class GroundLayer {
       }
       texture.colorSpace = THREE.SRGBColorSpace
       const plane = new THREE.Mesh(
-        new THREE.PlaneGeometry(spec.cols, spec.rows),
+        buildCellGridGeometry(spec.cols, spec.rows, this.holes),
         new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: 0.85 }),
       )
-      plane.rotation.x = -Math.PI / 2
       plane.position.y = 0.002
       this.assetPlane = plane
       this.group.add(plane)
@@ -157,6 +178,38 @@ export class GroundLayer {
       // Échec de chargement : la carte structurée reste valide sans image.
     })
   }
+}
+
+/**
+ * Sol en dalles (une quad par cellule, plan XZ, normales +Y), UV continus sur
+ * toute la grille — les cellules de `holes` ("col,row") sont omises.
+ */
+export function buildCellGridGeometry(cols: number, rows: number, holes: Set<string>): THREE.BufferGeometry {
+  const positions: number[] = []
+  const normals: number[] = []
+  const uvs: number[] = []
+  const indices: number[] = []
+  let vertex = 0
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      if (holes.has(`${col},${row}`)) continue
+      const x0 = col - cols / 2
+      const z0 = row - rows / 2
+      for (const [dx, dz] of [[0, 0], [1, 0], [1, 1], [0, 1]] as const) {
+        positions.push(x0 + dx, 0, z0 + dz)
+        normals.push(0, 1, 0)
+        uvs.push((col + dx) / cols, 1 - (row + dz) / rows)
+      }
+      indices.push(vertex, vertex + 3, vertex + 1, vertex + 1, vertex + 3, vertex + 2)
+      vertex += 4
+    }
+  }
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3))
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2))
+  geometry.setIndex(indices)
+  return geometry
 }
 
 export function disposeObject(object: THREE.Object3D): void {

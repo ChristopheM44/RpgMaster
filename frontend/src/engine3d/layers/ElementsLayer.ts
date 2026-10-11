@@ -14,7 +14,7 @@ import { gridPointToWorld, metersToWorld } from '../utils/gridMath'
 const MAX_POINT_LIGHTS = 6
 const WALL_SEGMENT_OVERLAP = 0.025
 const ACCESS_THICKNESS_WORLD = 0.3
-const WALL_ACCESS_KINDS = new Set(['door', 'window', 'stairs'])
+const WALL_ACCESS_KINDS = new Set(['door', 'window'])
 
 interface ElementEntry {
   container: THREE.Group
@@ -101,6 +101,10 @@ export class ElementsLayer {
     generation: number,
     ctx: EngineCtx,
   ): void {
+    // Escaliers : toujours procéduraux — le sens (montée vers un mur, trémie
+    // creusée dans le sol) dépend de facing/verticalDirection, ce qu'un modèle
+    // unique (stairs.glb, toujours montant) ne sait pas rendre.
+    if (spec.kind === 'stairs') return
     const placement = elementPlacementWorld(spec, ctx)
     const modelKey = spec.modelKey ?? modelForElement(spec.kind, spec.name, placement.footprint)
     if (!modelKey) return
@@ -216,12 +220,6 @@ export function instantiateElementModel(
     instance.rotation.y = placement.rotationY + rotationOffsetFor(modelKey)
     return instance
   }
-  if (modelKey === 'prop/stairs') {
-    const instance = instantiateStairsModel(model, placement)
-    instance.position.set(placement.center.x, elevation, placement.center.z)
-    instance.rotation.y = placement.rotationY + rotationOffsetFor(modelKey)
-    return instance
-  }
   if (modelKey === 'prop/wall_corner') {
     const instance = instantiateWallCornerModel(model, spec, placement, ctx)
     instance.position.set(placement.center.x, elevation, placement.center.z)
@@ -268,17 +266,6 @@ function instantiateWallAccessModel(
   })
 }
 
-function instantiateStairsModel(model: LoadedModel, placement: ElementPlacement): THREE.Group {
-  const scaleX = placement.footprint.x / model.size.x
-  const scaleZ = placement.footprint.z / model.size.z
-  const scaleY = Math.min(scaleX, scaleZ)
-  return instantiateModelNonUniform(model, {
-    x: scaleX,
-    y: scaleY,
-    z: scaleZ,
-  })
-}
-
 function instantiateWallCornerModel(
   model: LoadedModel,
   spec: ElementSpec,
@@ -317,7 +304,6 @@ function instantiateModelNonUniform(
 }
 
 function rectElementRotationY(spec: ElementSpec, footprint: { x: number; z: number }): number {
-  if (spec.kind === 'stairs') return stairsRotationY(spec.facing, spec.verticalDirection, footprint)
   if (spec.kind === 'door' || spec.kind === 'window') return wallAxisRotationY(spec.facing, footprint)
   return 0
 }
@@ -329,45 +315,6 @@ export function wallAxisRotationY(
   if (facing === 'east' || facing === 'west') return -Math.PI / 2
   if (facing === 'north' || facing === 'south') return 0
   return footprint.z > footprint.x ? -Math.PI / 2 : 0
-}
-
-export function stairsRotationY(
-  facing: ElementSpec['facing'],
-  verticalDirection: ElementSpec['verticalDirection'],
-  footprint: { x: number; z: number },
-): number {
-  if (!facing) return footprint.z > footprint.x ? -Math.PI / 2 : 0
-  const visualFacing = verticalDirection === 'down' ? oppositeFacing(facing) : facing
-  return plusZRotationToFacing(visualFacing)
-}
-
-function plusZRotationToFacing(facing: NonNullable<ElementSpec['facing']>): number {
-  switch (facing) {
-    case 'north':
-      return Math.PI
-    case 'east':
-      return Math.PI / 2
-    case 'west':
-      return -Math.PI / 2
-    case 'south':
-    default:
-      return 0
-  }
-}
-
-function oppositeFacing(
-  facing: NonNullable<ElementSpec['facing']>,
-): NonNullable<ElementSpec['facing']> {
-  switch (facing) {
-    case 'north':
-      return 'south'
-    case 'south':
-      return 'north'
-    case 'east':
-      return 'west'
-    case 'west':
-      return 'east'
-  }
 }
 
 function cornerRotationY(spec: ElementSpec, ctx: EngineCtx): number {

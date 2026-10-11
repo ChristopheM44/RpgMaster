@@ -35,6 +35,8 @@ export interface GroundSpec {
   visualAssetUrl: string | null
   ambiance: AmbianceSpec
   vegetationDensity: number
+  /** Cellules "col,row" retirées du sol (trémies d'escaliers descendants). */
+  holes?: string[]
 }
 
 export interface ElementSpec {
@@ -118,8 +120,23 @@ export interface SceneSpec {
   overlay: OverlaySpec
   /** Cellules "col,row" interdites au scatter (occupées par éléments/tokens). */
   scatterBlockedCells: string[]
-  /** Hauteur de surface en MÈTRES par cellule "col,row" (stairs/terrain surélevés). */
+  /** Hauteur de surface en MÈTRES par cellule "col,row" (stairs/terrain ; négative dans une trémie). */
   elevationByCell: Record<string, number>
+  /** Accès par lequel le groupe vient d'arriver (transition de scène), sinon null. */
+  arrival?: ArrivalSpec | null
+}
+
+export interface ArrivalSpec {
+  exitId: string
+  col: number
+  row: number
+  facing: SceneElementFacing | null
+  verticalDirection: SceneElementVerticalDirection
+  fromSceneId: string
+  /** Sortie empruntée dans la scène précédente (pour le travelling de départ). */
+  viaExitId: string | null
+  /** Libellé de l'accès d'arrivée (bandeau « Vous arrivez… »). */
+  label: string
 }
 
 export type PickResult =
@@ -141,6 +158,10 @@ export interface SceneRuntimeHandle {
   projectCell(col: number, row: number): { x: number; y: number } | null
   projectToken(id: string): { x: number; y: number } | null
   setZoomPreset(preset: ZoomPreset): void
+  /** Travelling vers une cellule (départ par une sortie) ; résolu en fin d'animation. */
+  focusCell(col: number, row: number, durationS?: number): Promise<void>
+  /** Après un changement de scène : part de l'accès d'arrivée et recule jusqu'au cadrage normal. */
+  arriveAt(col: number, row: number, durationS?: number): void
   setRunning(running: boolean): void
   /** Multiplicateur de luminosité piloté par l'UI (exposition + plancher ambiant). */
   setBrightness(value: number): void

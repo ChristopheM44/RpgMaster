@@ -196,57 +196,40 @@ _EXPLICIT_SUBTERRANEAN_ACCESS_WORDS = {
     "entree souterraine",
     "sous-sol",
 }
-_STAIRS_ACCESS_WORDS = (
-    "trappe",
-    "égout",
-    "egout",
-    "échelle",
-    "echelle",
-    "escalier",
-    "stair",
-    "stairs",
-    "puits",
-    "cave",
-    "sous-sol",
-    "souterrain",
+# Inférence d'accès/orientation : mots ENTIERS uniquement (regex \b). Avant
+# 2026-10, des sous-chaînes faisaient lire « c'est » / « reste » comme l'est,
+# « haut/bas » comme nord/sud et « bassin » comme une descente.
+_STAIRS_ACCESS_RE = re.compile(
+    r"\b(?:trappes?|[ée]gouts?|[ée]chelles?|escaliers?|stairs?|stairway|staircase|"
+    r"puits|caves?|sous-sol|souterrains?|souterraines?|marches)\b"
 )
-_DOOR_ACCESS_WORDS = (
-    "porte",
-    "portail",
-    "gate",
-    "door",
-    "grille",
-    "entrée",
-    "entree",
-    "ouverture",
+_DOOR_ACCESS_RE = re.compile(
+    r"\b(?:portes?|portails?|gates?|doors?|grilles?|entr[ée]es?|ouvertures?)\b"
 )
-_UP_ACCESS_WORDS = (
-    "monte",
-    "montée",
-    "montee",
-    "remonte",
-    "remontée",
-    "remontee",
-    "surface",
-    "ascend",
-    "upward",
-    "upstairs",
+# Verbes de déplacement vertical : prioritaires sur les lieux (« remonter … par
+# les égouts » monte). Le premier verbe rencontré l'emporte.
+_UP_VERB_RE = re.compile(
+    r"\b(?:re)?mont(?:e|es|er|ent|ons|ez|ant|ée|ee|ées|ees)\b|\bgravi\w*|\bgrimp\w*"
+    r"|\bascen\w*|\bupstairs?\b|\bupwards?\b|\bvers le haut\b|\ben haut\b"
 )
-_DOWN_ACCESS_WORDS = (
-    "descend",
-    "descente",
-    "descendre",
-    "bas",
-    "down",
-    "downward",
-    "downstairs",
-    "égout",
-    "egout",
-    "cave",
-    "sous-sol",
-    "souterrain",
-    "puits",
-    "trappe",
+_DOWN_VERB_RE = re.compile(
+    r"\b(?:re)?descen\w*|\bdownstairs?\b|\bdownwards?\b|\bvers le bas\b|\ben bas\b"
+    r"|\bplong\w*|\bs['’]enfonc\w*"
+)
+_UP_PLACE_RE = re.compile(
+    r"\b(?:surface|[ée]tages?|greniers?|toits?|remparts?|sommets?|clochers?|mezzanine|balcons?)\b"
+)
+_DOWN_PLACE_RE = re.compile(
+    r"\b(?:sous-sol|caves?|caveaux?|celliers?|souterrains?|souterraines?|[ée]gouts?|cryptes?|"
+    r"puits|trappes?|cachots?|oubliettes?|profondeurs?|catacombes?|abysses?)\b"
+)
+# Points cardinaux en mots entiers. « est » n'est cardinal que sous la forme
+# « l'est » / « plein est » : « la porte est ouverte » ne désigne pas l'est.
+_CARDINAL_RES: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("west", re.compile(r"\b(?:ouest|west|occidental(?:e|es|s)?)\b")),
+    ("east", re.compile(r"\b(?:east|oriental(?:e|es|s)?)\b|\bl['’]est\b|\bplein est\b")),
+    ("north", re.compile(r"\b(?:nord|north|septentrional(?:e|es|s)?)\b")),
+    ("south", re.compile(r"\b(?:sud|south|m[ée]ridional(?:e|es|s)?)\b")),
 )
 
 
@@ -697,9 +680,7 @@ def _exit_needs_access_element(exit_: dict[str, Any], corpus: str, *, interior: 
         return True
     if interior:
         return True
-    return _exit_access_kind(corpus) == "stairs" or any(
-        word in corpus for word in _DOOR_ACCESS_WORDS
-    )
+    return _exit_access_kind(corpus) == "stairs" or bool(_DOOR_ACCESS_RE.search(corpus))
 
 
 def _apply_exit_access_defaults(
@@ -994,47 +975,80 @@ def _ensure_embedded_exit_element(
 
 
 def _exit_access_kind(corpus: str) -> str:
-    if any(word in corpus for word in _STAIRS_ACCESS_WORDS):
+    if _STAIRS_ACCESS_RE.search(corpus):
         return "stairs"
     return "door"
 
 
-def _infer_vertical_direction(corpus: str) -> str:
-    if any(word in corpus for word in _DOWN_ACCESS_WORDS):
-        return "down"
-    if any(word in corpus for word in _UP_ACCESS_WORDS):
+def infer_vertical_direction(corpus: str) -> str:
+    """Sens vertical d'un accès d'après son texte : verbes d'abord, puis lieux."""
+    return _first_match_direction(corpus, _UP_VERB_RE, _DOWN_VERB_RE) or (
+        _first_match_direction(corpus, _UP_PLACE_RE, _DOWN_PLACE_RE) or "level"
+    )
+
+
+_infer_vertical_direction = infer_vertical_direction
+
+
+def _first_match_direction(corpus: str, up: re.Pattern[str], down: re.Pattern[str]) -> str | None:
+    up_match = up.search(corpus)
+    down_match = down.search(corpus)
+    if up_match and down_match:
+        return "up" if up_match.start() < down_match.start() else "down"
+    if up_match:
         return "up"
-    return "level"
+    if down_match:
+        return "down"
+    return None
 
 
-def _infer_exit_facing(exit_: dict[str, Any], cols: int, rows: int) -> str | None:
+def cardinal_from_text(corpus: str) -> str | None:
+    for facing, pattern in _CARDINAL_RES:
+        if pattern.search(corpus):
+            return facing
+    return None
+
+
+def border_facings(pos: dict[str, Any], cols: int, rows: int) -> list[str]:
+    """Bords touchés par une case (0, 1 ou 2 pour un coin) — nord/sud d'abord."""
+    try:
+        col = int(pos.get("col", -1))
+        row = int(pos.get("row", -1))
+    except (TypeError, ValueError):
+        return []
+    facings: list[str] = []
+    if row <= 0:
+        facings.append("north")
+    if row >= rows - 1:
+        facings.append("south")
+    if col <= 0:
+        facings.append("west")
+    if col >= cols - 1:
+        facings.append("east")
+    return facings
+
+
+def infer_exit_facing(exit_: dict[str, Any], cols: int, rows: int) -> str | None:
+    """Bord vers lequel une sortie s'ouvre.
+
+    Ordre : valeur explicite, puis POSITION (une sortie de bord s'ouvre sur son
+    bord ; le texte ne sert qu'à départager un coin), puis texte cardinal.
+    """
     explicit = _clean_text(exit_.get("facing"), max_len=16).lower()
     if explicit in SCENE_ELEMENT_FACINGS:
         return explicit
 
     corpus = _exit_corpus(exit_)
-    if any(word in corpus for word in ("ouest", "west", "gauche")):
-        return "west"
-    if any(word in corpus for word in ("est", "east", "droite")):
-        return "east"
-    if any(word in corpus for word in ("nord", "north", "haut")):
-        return "north"
-    if any(word in corpus for word in ("sud", "south", "bas")):
-        return "south"
-
     pos = exit_.get("position")
-    if not isinstance(pos, dict):
-        return None
-    col = _clamp_float(pos.get("col"), 0.0, float(cols - 1), 0.0)
-    row = _clamp_float(pos.get("row"), 0.0, float(rows - 1), 0.0)
-    distances = [
-        (row, "north"),
-        (cols - 1 - col, "east"),
-        (rows - 1 - row, "south"),
-        (col, "west"),
-    ]
-    distance, facing = min(distances, key=lambda item: item[0])
-    return facing if distance <= 0.001 else None
+    if isinstance(pos, dict):
+        candidates = border_facings(pos, cols, rows)
+        if candidates:
+            from_text = cardinal_from_text(corpus)
+            return from_text if from_text in candidates else candidates[0]
+    return cardinal_from_text(corpus)
+
+
+_infer_exit_facing = infer_exit_facing
 
 
 def _access_geometry(
@@ -1114,13 +1128,14 @@ def _edge_exit_position(
     if _is_border_position({"col": col, "row": row}, cols, rows):
         return {"col": col, "row": row}
 
-    if any(word in corpus for word in ("ouest", "west", "gauche")):
+    facing = cardinal_from_text(corpus)
+    if facing == "west":
         return {"col": 0, "row": row}
-    if any(word in corpus for word in ("est", "east", "droite")):
+    if facing == "east":
         return {"col": cols - 1, "row": row}
-    if any(word in corpus for word in ("nord", "north", "haut")):
+    if facing == "north":
         return {"col": col, "row": 0}
-    if any(word in corpus for word in ("sud", "south", "bas")):
+    if facing == "south":
         return {"col": col, "row": rows - 1}
 
     distances = [

@@ -3,7 +3,15 @@
 // (chunk séparé), ResizeObserver, pause hors écran, perte de contexte WebGL.
 // Les overlays HTML (tooltip, badges, panneaux) passent par le <slot>.
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
-import type { GridPoint, PickResult, SceneRuntimeHandle, SceneSpec, ZoomPreset } from '../../engine3d/types'
+import type {
+  ArrivalSpec,
+  GridPoint,
+  PickResult,
+  SceneRuntimeHandle,
+  SceneSpec,
+  ZoomPreset,
+} from '../../engine3d/types'
+import { chebyshevLine } from '../../engine3d/utils/gridMath'
 
 const props = defineProps<{
   spec: SceneSpec | null
@@ -46,7 +54,7 @@ async function boot(): Promise<void> {
     })
     loading.value = false
     runtime.value.setBrightness(brightness.value)
-    if (props.spec) runtime.value.update(props.spec)
+    if (props.spec) applySpec(props.spec)
     runtime.value.resize()
   } catch (error) {
     // WebGL indisponible (vieux GPU, jsdom…) : on reste sur l'écran d'attente.
@@ -81,8 +89,94 @@ function onContextLost(event: Event): void {
   }, 250)
 }
 
+// ─── Transitions de scène ────────────────────────────────────────────────────
+// Changement de scene_id : le groupe marche vers la sortie empruntée pendant un
+// travelling, fondu au noir, reconstruction, puis la caméra part de l'accès
+// d'arrivée et recule (continuité posée par le backend : spec.arrival).
+const FADE_MS = 260
+const fading = ref(false)
+const arrivalBanner = ref<ArrivalSpec | null>(null)
+let appliedSceneId: string | null = null
+let appliedSpec: SceneSpec | null = null
+let transitioning = false
+let queuedSpec: SceneSpec | null = null
+let bannerTimer: ReturnType<typeof setTimeout> | null = null
+
+function prefersReducedMotion(): boolean {
+  try {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  } catch {
+    return false
+  }
+}
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+function applySpec(spec: SceneSpec): void {
+  const rt = runtime.value
+  if (!rt) return
+  if (transitioning) {
+    queuedSpec = spec
+    return
+  }
+  const sceneId = spec.ground.sceneId
+  if (appliedSceneId !== null && sceneId !== appliedSceneId) {
+    void runTransition(rt, spec)
+    return
+  }
+  appliedSceneId = sceneId
+  appliedSpec = spec
+  rt.update(spec)
+}
+
+async function runTransition(rt: SceneRuntimeHandle, spec: SceneSpec): Promise<void> {
+  transitioning = true
+  const reduced = prefersReducedMotion()
+  const previous = appliedSpec
+  const viaId = spec.arrival?.viaExitId
+  const via = viaId ? previous?.tokens.find((token) => token.id === viaId) : undefined
+  if (!reduced && previous && via && rt.focusCell) {
+    for (const hero of previous.tokens.filter((token) => token.kind === 'hero')) {
+      rt.moveToken(hero.id, chebyshevLine({ col: hero.col, row: hero.row }, { col: via.col, row: via.row }))
+    }
+    // Garde-fou : la boucle rAF est en pause hors écran, la promesse ne se résoudrait pas.
+    await Promise.race([rt.focusCell(via.col, via.row, 0.9), wait(1400)])
+  }
+  fading.value = true
+  await wait(FADE_MS)
+  if (disposed || runtime.value !== rt) {
+    transitioning = false
+    return
+  }
+  appliedSceneId = spec.ground.sceneId
+  appliedSpec = spec
+  rt.update(spec)
+  if (spec.arrival && !reduced) rt.arriveAt?.(spec.arrival.col, spec.arrival.row, 1.0)
+  fading.value = false
+  showArrivalBanner(spec.arrival ?? null)
+  await wait(FADE_MS)
+  transitioning = false
+  if (queuedSpec) {
+    const next = queuedSpec
+    queuedSpec = null
+    applySpec(next)
+  }
+}
+
+function showArrivalBanner(arrival: ArrivalSpec | null): void {
+  if (bannerTimer) clearTimeout(bannerTimer)
+  arrivalBanner.value = arrival
+  if (arrival) bannerTimer = setTimeout(() => { arrivalBanner.value = null }, 4500)
+}
+
+const ARRIVAL_DIRECTION: Record<ArrivalSpec['verticalDirection'], { icon: string; text: string }> = {
+  up: { icon: '↑', text: "Au pied d'un escalier qui remonte d'où vous venez" },
+  down: { icon: '↓', text: "En haut d'un escalier qui redescend d'où vous venez" },
+  level: { icon: '↩', text: 'Le chemin par lequel vous êtes arrivés' },
+}
+
 watch(() => props.spec, (spec) => {
-  if (spec) runtime.value?.update(spec)
+  if (spec) applySpec(spec)
 })
 
 watch(brightness, (value) => {
@@ -96,6 +190,7 @@ watch(brightness, (value) => {
 
 onBeforeUnmount(() => {
   disposed = true
+  if (bannerTimer) clearTimeout(bannerTimer)
   canvas.value?.removeEventListener('webglcontextlost', onContextLost)
   resizeObserver?.disconnect()
   intersectionObserver?.disconnect()
@@ -152,6 +247,21 @@ defineExpose({ moveToken, projectToken, projectCell, setZoomPreset })
         />
       </label>
     </template>
+
+    <!-- Bandeau d'arrivée (transition de scène) — teal = accès d'arrivée. -->
+    <Transition name="scene3d-arrival">
+      <div v-if="arrivalBanner" class="scene3d-arrival" role="status">
+        <span class="scene3d-arrival-dir" aria-hidden="true">
+          {{ ARRIVAL_DIRECTION[arrivalBanner.verticalDirection].icon }}
+        </span>
+        <span class="scene3d-arrival-text">
+          <span class="scene3d-arrival-kicker">Arrivée · {{ arrivalBanner.label }}</span>
+          <span>{{ ARRIVAL_DIRECTION[arrivalBanner.verticalDirection].text }}</span>
+        </span>
+      </div>
+    </Transition>
+
+    <div class="scene3d-fade" :class="{ active: fading }" aria-hidden="true" />
 
     <slot />
   </div>
@@ -256,6 +366,84 @@ defineExpose({ moveToken, projectToken, projectCell, setZoomPreset })
   font-size: 11px;
   line-height: 1;
   color: var(--color-gold);
+}
+
+.scene3d-fade {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  background: var(--color-bg);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 260ms ease;
+}
+
+.scene3d-fade.active {
+  opacity: 1;
+}
+
+.scene3d-arrival {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  z-index: 8;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 32px);
+  padding: 8px 14px 8px 9px;
+  background: rgba(14, 13, 20, 0.9);
+  border: 1px solid var(--color-border-strong);
+  border-left: 3px solid var(--color-teal);
+  border-radius: 8px;
+  color: var(--color-parchment);
+  font: 400 13px/1.35 var(--font-serif);
+  pointer-events: none;
+}
+
+.scene3d-arrival-dir {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: var(--color-teal);
+  color: var(--color-bg);
+  font: 700 15px/1 var(--font-body);
+}
+
+.scene3d-arrival-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.scene3d-arrival-kicker {
+  font: 700 10px/1.4 var(--font-display);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-teal);
+}
+
+.scene3d-arrival-enter-active,
+.scene3d-arrival-leave-active {
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+
+.scene3d-arrival-enter-from,
+.scene3d-arrival-leave-to {
+  opacity: 0;
+  transform: translate(-50%, 8px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scene3d-fade,
+  .scene3d-arrival-enter-active,
+  .scene3d-arrival-leave-active {
+    transition: none;
+  }
 }
 
 .scene3d-brightness-range {

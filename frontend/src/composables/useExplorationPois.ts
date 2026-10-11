@@ -4,7 +4,7 @@
 import { computed } from 'vue'
 import { useGameStore } from '../stores/game'
 import type { ExPoi } from '../fixtures/exploration'
-import type { PointOfInterest, SceneExit } from '../types'
+import type { PointOfInterest, SceneExit, SceneLayout } from '../types'
 import {
   iconForExit,
   iconForPoi,
@@ -162,19 +162,19 @@ function adaptExit(e: SceneExit): ExPoi {
   }
 }
 
+/** POIs visibles + sorties d'une scène au format ExPoi (pur : réutilisé par /dev/map-lab). */
+export function adaptScenePois(scene: SceneLayout | null): ExPoi[] {
+  if (!scene) return []
+  const adaptedPois = (scene.pois ?? [])
+    .filter((poi) => poi.visibility !== 'hidden' || poi.discovered === true)
+    .map(adaptPoi)
+  return [...adaptedPois, ...(scene.exits ?? []).map(adaptExit)]
+}
+
 export function useExplorationPois() {
   const gameStore = useGameStore()
 
-  const pois = computed<ExPoi[]>(() => {
-    const scene = gameStore.currentScene
-    if (!scene) return []
-    const adaptedPois = (scene.pois ?? [])
-      .filter((poi) => poi.visibility !== 'hidden' || poi.discovered === true)
-      .map(adaptPoi)
-    const exits = scene.exits ?? []
-    const adaptedExits = exits.map(adaptExit)
-    return [...adaptedPois, ...adaptedExits]
-  })
+  const pois = computed<ExPoi[]>(() => adaptScenePois(gameStore.currentScene))
 
   const reperes = computed(() => pois.value.filter((p) => p.kind !== 'sortie'))
   const sorties = computed(() => pois.value.filter((p) => p.kind === 'sortie'))

@@ -11,9 +11,10 @@ import type {
   SceneLayout,
   SceneTheme,
 } from '../../types'
-import type { AmbianceLight, ElementSpec, GroundSpec, SceneSpec, TokenSpec } from '../types'
+import type { AmbianceLight, ArrivalSpec, ElementSpec, GroundSpec, SceneSpec, TokenSpec } from '../types'
 import { isModelKey, modelForClass, modelForMonster, modelForNpc } from '../assets/manifest'
 import { resolveTokenOverlaps } from './tokenCollision'
+import { isStairwell, resolveStairsFacing, stairwellCells, stairwellHoleKeys, stairwellSurfaceM } from './stairs'
 import { rectCells } from '../utils/gridMath'
 
 // Mêmes valeurs que local_map_service (backend) — défauts par kind en mètres.
@@ -94,6 +95,7 @@ export function buildSceneSpec(input: SceneAdapterInput): SceneSpec {
     selectedElementId: resolveSelectedElementId(input, scene?.elements ?? []),
   })
   const tokens = buildTokens(input, blockedCells)
+  ground.holes = stairwellHoleKeys(elements, dims)
 
   return {
     ground,
@@ -111,6 +113,25 @@ export function buildSceneSpec(input: SceneAdapterInput): SceneSpec {
     },
     scatterBlockedCells: [...blockedCells],
     elevationByCell: buildElevationByCell(elements, dims),
+    arrival: buildArrivalSpec(scene),
+  }
+}
+
+/** Accès d'arrivée posé par le backend après un changement de scène. */
+export function buildArrivalSpec(scene: SceneLayout | null): ArrivalSpec | null {
+  const arrival = scene?.arrival
+  if (!scene || !arrival?.exit_id) return null
+  const exit = scene.exits?.find((item) => item.id === arrival.exit_id)
+  if (!exit) return null
+  return {
+    exitId: exit.id,
+    col: exit.position.col,
+    row: exit.position.row,
+    facing: normalizeFacing(arrival.facing ?? exit.facing),
+    verticalDirection: normalizeVerticalDirection(arrival.vertical_direction) ?? 'level',
+    fromSceneId: arrival.from_scene_id,
+    viaExitId: arrival.via_exit_id || null,
+    label: exit.label,
   }
 }
 
@@ -171,7 +192,10 @@ export function buildElementSpecs(
       inspectable: isElementInspectable(element, interactive),
       selected: element.id === options.selectedElementId,
       modelKey: isModelKey(element.asset_key) ? element.asset_key : null,
-      facing: normalizeFacing(element.facing),
+      // Escalier : un accès de bord mène vers son bord ; sans facing → bord le plus proche.
+      facing: element.kind === 'stairs'
+        ? resolveStairsFacing(normalizeFacing(element.facing), element.geometry, options.dims)
+        : normalizeFacing(element.facing),
       verticalDirection: normalizeVerticalDirection(element.vertical_direction),
     }
   })
@@ -183,14 +207,21 @@ export function buildElementSpecs(
  * Hauteur de surface par cellule (MÈTRES) — seuls `stairs` et `terrain`
  * portent un token (on marche sur le DESSUS : elevation_m + height_m).
  * Conflit multi-éléments → max. Carte creuse : le terrain plat par défaut
- * (0.02 m) reste hors carte — seuil à 0.05 m.
+ * (0.02 m) reste hors carte — seuil à 0.05 m. Exception : une trémie
+ * (escalier descendant) place le jeton SOUS le sol, sur la première marche.
  */
 export function buildElevationByCell(
   elements: ElementSpec[],
   dims: { cols: number; rows: number },
 ): Record<string, number> {
   const byCell: Record<string, number> = {}
+  const stairwell = new Map<string, number>()
   for (const element of elements) {
+    if (isStairwell(element)) {
+      const surfaceM = stairwellSurfaceM(element, dims)
+      for (const cell of stairwellCells(element, dims)) stairwell.set(`${cell.col},${cell.row}`, surfaceM)
+      continue
+    }
     if (element.kind !== 'stairs' && element.kind !== 'terrain') continue
     const surfaceM = element.elevationM + element.heightM
     if (surfaceM <= 0.05) continue
@@ -199,6 +230,7 @@ export function buildElevationByCell(
       byCell[key] = Math.max(byCell[key] ?? 0, surfaceM)
     }
   }
+  for (const [key, surfaceM] of stairwell) byCell[key] = surfaceM
   return byCell
 }
 

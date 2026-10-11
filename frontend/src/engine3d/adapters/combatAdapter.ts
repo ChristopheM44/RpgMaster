@@ -7,6 +7,7 @@ import type { CombatantState, GridConfig, GridPosition, SceneLayout, SceneTheme 
 import type { GridPoint, SceneSpec, TokenSpec } from '../types'
 import { modelForClass, modelForMonster, modelForNpc } from '../assets/manifest'
 import { buildElementSpecs, buildElevationByCell, buildGroundSpec, TONE_HEX } from './sceneAdapter'
+import { stairwellHoleKeys } from './stairs'
 import { resolveTokenOverlaps } from './tokenCollision'
 
 export interface CombatPoiInput {
@@ -95,6 +96,7 @@ export function buildCombatSpec(input: CombatAdapterInput): SceneSpec {
     linkedElementIds,
     selectedElementId: input.selectedElementId,
   })
+  ground.holes = stairwellHoleKeys(elements, dims)
 
   const tokens: TokenSpec[] = []
   if (input.isExploration) {

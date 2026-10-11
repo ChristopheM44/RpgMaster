@@ -38,7 +38,12 @@ from app.models.character import Character
 from app.schemas.campaign_content import normalize_content_id
 from app.schemas.equipment import validate_equipment_item
 from app.schemas.scene_spec import SceneSpec
-from app.services import campaign_dossier_service, local_map_service, map_service
+from app.services import (
+    campaign_dossier_service,
+    local_map_service,
+    map_service,
+    scene_continuity,
+)
 from app.services.biome import infer_region_biome
 from app.services.currency_service import currency_service
 from app.services.equipment_service import EquipmentService
@@ -1106,6 +1111,20 @@ class GMResponseExecutor:
         journal = active.state_data.get("adventure_journal")
         journal = journal if isinstance(journal, dict) else {}
         time_of_day = journal.get("time_of_day")
+        old_scene = active.state_data.get("current_scene")
+        # Continuité spatiale (point unique pour les 4 producteurs de carte) :
+        # sortie retour sur le bord opposé, sens vertical inversé — avant la
+        # normalisation, qui en dérive les éléments d'accès (porte/escalier).
+        raw_layout = params.get("scene") or params.get("layout") or params
+        arrival = (
+            scene_continuity.prepare_arrival(
+                old_scene,
+                raw_layout,
+                active.state_data.get(scene_continuity.PENDING_DEPARTURE_KEY),
+            )
+            if isinstance(raw_layout, dict)
+            else None
+        )
         layout = self._normalize_scene_layout(
             params,
             time_of_day=str(time_of_day) if time_of_day else None,
@@ -1113,6 +1132,19 @@ class GMResponseExecutor:
         if not layout:
             logger.warning("scene_layout ignore : params invalides - %s", params)
             return
+        old_scene_id = old_scene.get("scene_id") if isinstance(old_scene, dict) else None
+        if arrival or layout.get("scene_id") != old_scene_id:
+            # Départ consommé, ou périmé : un changement de scène sans lien avec
+            # la sortie mémorisée ne doit pas la réutiliser plus tard.
+            active.state_data.pop(scene_continuity.PENDING_DEPARTURE_KEY, None)
+        if arrival:
+            characters = active.state_data.get("characters")
+            scene_continuity.finalize_arrival(
+                layout,
+                arrival,
+                old_scene,
+                party_ids=list(characters) if isinstance(characters, dict) else None,
+            )
 
         from app.game.scene_state_service import (
             carry_accompanying_npcs,
@@ -1120,7 +1152,6 @@ class GMResponseExecutor:
             reconcile_scene_npcs,
         )
 
-        old_scene = active.state_data.get("current_scene")
         enrich_scene_poi_mechanics(layout)
         # Carry party-accompanying NPCs (a guide/escort) into the new place before
         # the absence filter runs, so a travel transition can't silently drop them.
@@ -2262,6 +2293,21 @@ class GMResponseExecutor:
             placement = cls._clean_optional_text(exit_data.get("placement"), max_len=24)
             if placement in {"edge", "embedded"}:
                 normalized_exit["placement"] = placement
+            # Orientation explicite (LLM ou continuité d'arrivée) : conservée pour
+            # que l'élément d'accès (porte/escalier) soit posé dans le bon sens.
+            facing = (cls._clean_optional_text(exit_data.get("facing"), max_len=16) or "").lower()
+            if facing in local_map_service.SCENE_ELEMENT_FACINGS:
+                normalized_exit["facing"] = facing
+            vertical = (
+                cls._clean_optional_text(exit_data.get("vertical_direction"), max_len=16) or ""
+            ).lower()
+            if vertical in local_map_service.SCENE_ELEMENT_VERTICAL_DIRECTIONS:
+                normalized_exit["vertical_direction"] = vertical
+            access_kind = (
+                cls._clean_optional_text(exit_data.get("kind"), max_len=16) or ""
+            ).lower()
+            if access_kind in {"stairs", "door"}:
+                normalized_exit["kind"] = access_kind
             if isinstance(exit_data.get("active"), bool):
                 normalized_exit["active"] = exit_data["active"]
             layout["exits"].append(normalized_exit)
