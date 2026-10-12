@@ -10,11 +10,11 @@ from typing import Any
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from app.agents.schemas import AgentContext, AgentResponse
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
 _PROMPTS_DIR = Path(__file__).parent / "prompts"
-_FORMAT_MESSAGES_WINDOW = 25  # Portée conversationnelle élargie (était 10)
 
 
 class BaseAgent(ABC):
@@ -124,14 +124,28 @@ class BaseAgent(ABC):
 
     @staticmethod
     def _format_messages(messages: list | None) -> str:
-        """Formate les N derniers messages en texte pour les templates Jinja2."""
+        """Formate l'historique récent en texte pour les templates Jinja2.
+
+        Fenêtre pilotée par un budget de caractères (``context_history_char_budget``) :
+        on remonte depuis le message le plus récent tant que le budget le permet,
+        plafonné à ``max_context_messages`` et jamais sous
+        ``context_history_min_messages``. Partagé MJ / compagnons IA.
+        """
         if not messages:
             return "(aucun message récent)"
+        budget = settings.context_history_char_budget
+        floor = settings.context_history_min_messages
         lines: list[str] = []
-        for msg in messages[-_FORMAT_MESSAGES_WINDOW:]:
+        used = 0
+        for msg in reversed(messages[-settings.max_context_messages :]):
             speaker = getattr(msg, "speaker", "?")
             content = getattr(msg, "content", "")
-            lines.append(f"[{speaker}] {content}")
+            line = f"[{speaker}] {content}"
+            if len(lines) >= floor and used + len(line) > budget:
+                break
+            lines.append(line)
+            used += len(line) + 1
+        lines.reverse()
         return "\n".join(lines)
 
     def _build_messages(

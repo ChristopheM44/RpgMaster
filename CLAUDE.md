@@ -51,7 +51,9 @@ Copier `.env.example` vers `backend/.env`.
 | `VOICE_PROVIDER` | `local` | `local` \| `hybrid` \| `realtime` — cf. section Personas |
 | `OPENAI_REALTIME_API_KEY` | `` | Requise pour `hybrid`/`realtime` et endpoint `/ws/dialogue/*` |
 | `OPENAI_REALTIME_MODEL` | `gpt-4o-realtime-preview` | Modèle Realtime API |
-| `MAX_CONTEXT_MESSAGES` | `50` | Fenêtre glissante de contexte LLM (valeur délibérée, cf. `config.py`) |
+| `MAX_CONTEXT_MESSAGES` | `50` | Messages chargés pour le contexte LLM = **plafond** de la fenêtre (valeur délibérée, cf. `config.py`) |
+| `CONTEXT_HISTORY_CHAR_BUDGET` | `16000` | Budget en caractères de l'historique injecté (MJ + compagnons), du plus récent au plus ancien |
+| `CONTEXT_HISTORY_MIN_MESSAGES` | `12` | Plancher : ce nombre de messages récents est toujours injecté, même au-delà du budget |
 | `LIVE_PERSONA_ENRICHMENT` | `true` | Enrichissement LLM « stub-then-enrich » des PNJ introduits en jeu (tâche de fond) ; `false` pour déploiements sans LLM |
 | `TTS_ASYNC` | `true` | |
 

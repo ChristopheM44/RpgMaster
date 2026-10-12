@@ -1176,40 +1176,116 @@ async def test_canon_synthesis_preserves_recorded_revealed_secret(async_client, 
 
 
 # ---------------------------------------------------------------------------
-# A6 — Reset canon initial aligné entre les deux compilateurs
+# Canon session 1 — reset UNE fois au démarrage (remplace le reset à la lecture A6)
 # ---------------------------------------------------------------------------
 
 
+async def _seed_canon(async_client, campaign_id: str, summary: str, fact: str) -> None:
+    synth = await async_client.post(
+        f"/api/campaigns/{campaign_id}/synthesize-canon",
+        json={
+            "game_state": {"canon_event": {"rolling_summary": summary, "established_fact": fact}},
+            "recent_messages": [],
+        },
+    )
+    assert synth.status_code == 200
+
+
+async def _start_initial_session(async_client, session_id: str) -> None:
+    char_resp = await async_client.post(
+        "/api/characters/",
+        json={**BASE_CHARACTER, "session_id": session_id},
+    )
+    assert char_resp.status_code == 201
+    start = await async_client.post(f"/api/game/{session_id}/start", json={})
+    assert start.status_code == 200
+
+
 @pytest.mark.asyncio
-async def test_gm_prompt_context_resets_canon_on_initial_session(async_client, db_session):
-    """build_gm_prompt_context vide played_canon sur la session initiale, comme
-    le compilateur public — pas de canon semé par la forge côté MJ non plus."""
+async def test_gm_prompt_context_drops_pre_play_canon_after_initial_start(async_client, db_session):
+    """Le canon antérieur au démarrage de la session 1 n'atteint pas le MJ."""
     forged = await _forge_and_validate(async_client)
     campaign_id = forged["campaign_id"]
     session_id = forged["session_id"]  # session initiale (session_ids[0])
 
-    # Semer un canon "déjà joué" via synthèse, comme une session antérieure.
-    await async_client.post(
-        f"/api/campaigns/{campaign_id}/synthesize-canon",
-        json={
-            "game_state": {
-                "canon_event": {
-                    "rolling_summary": "Résumé d'une session précédente.",
-                    "established_fact": "Fait contaminant.",
-                }
-            },
-            "recent_messages": [],
-        },
+    await _seed_canon(async_client, campaign_id, "Résumé d'une session précédente.", "Fait X.")
+    await _start_initial_session(async_client, session_id)
+
+    private_context = await campaign_dossier_service.build_gm_prompt_context(
+        session_id, db_session, None
+    )
+    played = private_context.get("played_canon", {})
+    assert played.get("rolling_summary", "") == ""
+    assert played.get("established_facts", []) == []
+    assert "session précédente" not in json.dumps(private_context, ensure_ascii=False).lower()
+
+
+@pytest.mark.asyncio
+async def test_gm_prompt_context_keeps_canon_acquired_during_initial_session(
+    async_client, db_session
+):
+    """Un one-shot se joue entièrement en session 1 : ce qui y est acquis
+    (faits, promesses, secrets révélés) doit rester visible du MJ."""
+    forged = await _forge_and_validate(async_client)
+    campaign_id = forged["campaign_id"]
+    session_id = forged["session_id"]
+
+    await _start_initial_session(async_client, session_id)
+    await _seed_canon(
+        async_client,
+        campaign_id,
+        "Le groupe a promis à Mira de retrouver son frère.",
+        "Promesse faite à Mira.",
+    )
+    await campaign_dossier_service.record_revealed_secret(
+        campaign_id, "Le prévôt couvre les contrebandiers.", db_session
     )
 
     private_context = await campaign_dossier_service.build_gm_prompt_context(
         session_id, db_session, None
     )
-    # played_canon ne doit pas resurgir côté MJ sur la session initiale.
-    played = private_context.get("played_canon", {})
-    assert played.get("rolling_summary", "") == ""
-    assert played.get("established_facts", []) == []
-    assert "session précédente" not in json.dumps(private_context, ensure_ascii=False).lower()
+    played = private_context["played_canon"]
+    assert "Promesse faite à Mira." in played["established_facts"]
+    assert "Le prévôt couvre les contrebandiers." in played["revealed_secrets"]
+    assert "Mira" in played["rolling_summary"]
+
+
+@pytest.mark.asyncio
+async def test_reload_mid_initial_session_keeps_played_canon(async_client, db_session):
+    """Recompiler le contexte public en cours de session 1 (reload) ne vide plus
+    le canon acquis — le reset n'a lieu qu'au démarrage."""
+    forged = await _forge_and_validate(async_client)
+    campaign_id = forged["campaign_id"]
+    session_id = forged["session_id"]
+
+    await _start_initial_session(async_client, session_id)
+    await _seed_canon(async_client, campaign_id, "Le pont nord est tombé.", "Pont nord détruit.")
+
+    context = await campaign_dossier_service.compile_campaign_context_for_session(
+        session_id, db_session
+    )
+    assert "Pont nord détruit." in context["played_canon"]["established_facts"]
+    assert context["continuity"]["played_summary"] == "Le pont nord est tombé."
+
+
+@pytest.mark.asyncio
+async def test_legacy_forge_draft_never_seeds_played_canon(async_client, db_session):
+    """Une forge ne sait pas ce qui sera joué : un played_canon généré est ignoré."""
+
+    class SeedingForgeAgent(DummyForgeAgent):
+        async def forge_dossier(self, campaign, brief, options, import_sources):
+            data = await super().forge_dossier(campaign, brief, options, import_sources)
+            data["played_canon"] = {
+                "established_facts": ["Fait inventé par la forge."],
+                "rolling_summary": "Le groupe a déjà vaincu le boss.",
+            }
+            return data
+
+    campaign = await _create_campaign(async_client)
+    dossier = await campaign_dossier_service.forge_draft(
+        campaign["id"], {"title": "Brumes"}, {}, db_session, agent=SeedingForgeAgent()
+    )
+    assert dossier.played_canon == campaign_dossier_service.empty_played_canon()
 
 
 class TestObjectiveEndpointSeeding:
@@ -1416,3 +1492,50 @@ def test_cap_forged_monsters_leaves_in_band_boss_untouched() -> None:
     # ogre = CR 2 ; pour un groupe niveau 1 (plafond 3) il reste tel quel.
     campaign_dossier_service._cap_forged_monsters_to_party_level(gm_dossier, 1)
     assert gm_dossier["custom_monsters"][0]["base_srd_id"] == "ogre"
+
+
+# ---------------------------------------------------------------------------
+# Synthèse du canon — échanges récents transmis (lot narratif 1a)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_session_canon_synthesis_receives_persisted_exchanges(
+    async_client, db_session, monkeypatch
+):
+    """recent_messages=None → la synthèse reçoit les derniers échanges persistés
+    (action du joueur + narration), pas une transcription vide."""
+    from app.models.message import MessageRole
+    from app.services.message_service import persist_narration
+
+    forged = await _forge_and_validate(async_client)
+    session_id = forged["session_id"]
+    captured: list[list[dict]] = []
+
+    class RecordingForgeAgent(DummyForgeAgent):
+        async def synthesize_canon(self, *args, recent_messages, **kwargs):
+            captured.append(recent_messages)
+            return await super().synthesize_canon(*args, recent_messages=recent_messages, **kwargs)
+
+    monkeypatch.setattr(campaign_dossier_service, "CampaignForgeAgent", RecordingForgeAgent)
+
+    await persist_narration(
+        session_id,
+        "Je promets à Mira de retrouver son frère.",
+        "Aldric",
+        db_session,
+        role=MessageRole.PLAYER,
+    )
+    await persist_narration(
+        session_id, "Mira serre ta main, en larmes.", "Maître du Jeu", db_session
+    )
+
+    await campaign_dossier_service.synthesize_canon_for_session(
+        session_id, {"canon_event": {}}, None, db_session
+    )
+
+    assert captured, "la synthèse LLM n'a pas été appelée"
+    contents = [msg["content"] for msg in captured[0]]
+    assert "Je promets à Mira de retrouver son frère." in contents
+    assert contents[-1] == "Mira serre ta main, en larmes."
+    assert captured[0][0]["speaker"]

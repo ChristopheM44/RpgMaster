@@ -268,6 +268,7 @@ MJ = denylist, compagnon/joueur = allowlist (cf. 2.3). Robuste aujourd'hui, mais
 `compile_campaign_context_for_session` remet le canon à vide pour la session initiale (`:760-762`) ; `build_gm_prompt_context` **non** → en session 1, le MJ peut voir un `played_canon` semé par la forge alors que la vue publique est vide. Bénin mais incohérent.
 
 **Statut** : ✅ corrigé (A6, 2026-05-31) — `build_gm_prompt_context` applique le même reset `_is_initial_campaign_session`.
+**Révisé (2026-10-12, lot narratif 1a)** : le reset à la **lecture** masquait aussi au MJ tout le canon acquis **pendant** la session 1 (donc toute la mémoire durable d'un one-shot). Remplacé par un reset **unique au démarrage** : `reset_canon_for_initial_session_start` (appelé par `start_game`, seul passage LOBBY → jeu) vide `played_canon` + `played_summary` en DB ; les deux compilateurs lisent désormais le canon tel quel ; `forge_draft` legacy n'enregistre plus de `played_canon` généré.
 
 ---
 
@@ -282,7 +283,7 @@ MJ = denylist, compagnon/joueur = allowlist (cf. 2.3). Robuste aujourd'hui, mais
 - **A2.** Test d'invariant : aucun champ secret (`_gm_prompt_context`, `gm_scene_state`, `secrets`, `motivations.hidden`, `hook`, `quest_hooks`) dans `companion_visible_game_state()` **ni** `build_session_state_payload()`. Toute régression future est attrapée par un test unique.
 
 ### Priorité 3 — Canon joué à écriture disciplinée (🟠) — ✅ FAIT
-- **A3.** Re-vérification : la double-écriture (miroir + DB) existait **déjà** pour `granted_unique_items` et `revealed_secrets` (A5). Le résidu réel = reload d'un blob périmé → garde loot fail-unsafe (re-don d'objet unique). Corrigé par `SessionManager._reconcile_guard_lists_from_dossier` : **union-merge** des listes-gardes DB→miroir à `open_session`. Strictement borné (2 listes append-only, union uniquement, jamais les champs de synthèse, no-op sans dossier) — l'option « recompiler au reload » a été **écartée** car `compile_campaign_context_for_session` applique le reset session-initiale qui **viderait** un canon de mi-session-1 déjà commité en DB. Autorité par champ documentée en §2.6.
+- **A3.** Re-vérification : la double-écriture (miroir + DB) existait **déjà** pour `granted_unique_items` et `revealed_secrets` (A5). Le résidu réel = reload d'un blob périmé → garde loot fail-unsafe (re-don d'objet unique). Corrigé par `SessionManager._reconcile_guard_lists_from_dossier` : **union-merge** des listes-gardes DB→miroir à `open_session`. Strictement borné (2 listes append-only, union uniquement, jamais les champs de synthèse, no-op sans dossier) — l'option « recompiler au reload » a été **écartée** car `compile_campaign_context_for_session` applique le reset session-initiale qui **viderait** un canon de mi-session-1 déjà commité en DB. *(2026-10-12 : ce reset à la lecture n'existe plus — cf. §3.6 révisé ; l'argument ne tient plus, la décision reste valable.)* Autorité par champ documentée en §2.6.
 - **Tests** : `tests/test_game/test_guard_list_reconcile.py` (prouvé : échoue sans le fix, passe avec — pas de re-don après reload périmé).
 
 ### Priorité 4 — Unifier l'identité PNJ (🟠, structurel) — ✅ FAIT
@@ -294,8 +295,8 @@ MJ = denylist, compagnon/joueur = allowlist (cf. 2.3). Robuste aujourd'hui, mais
 - **Tests** : `test_gm_loot_actions.py` (handler + double écriture + idempotence), `test_campaign_dossier.py` (record + survie à la synthèse).
 
 ### Priorité 6 — Hygiène (🟡) — ✅ FAIT
-- **A6.** `build_gm_prompt_context` applique le même `_is_initial_campaign_session` → `empty_played_canon()` que le compilateur public : sur la session initiale, le `played_canon` semé par la forge ne resurgit plus côté MJ. `gm_dossier` (secrets/arc/fronts/PNJ) intact → aucun contexte de planification perdu.
-- **Test** : `test_campaign_dossier.py::test_gm_prompt_context_resets_canon_on_initial_session`.
+- **A6** *(remplacé 2026-10-12 par un reset unique au démarrage de la session 1, cf. §3.6)*. `build_gm_prompt_context` appliquait le même `_is_initial_campaign_session` → `empty_played_canon()` que le compilateur public : sur la session initiale, le `played_canon` semé par la forge ne resurgit plus côté MJ. `gm_dossier` (secrets/arc/fronts/PNJ) intact → aucun contexte de planification perdu.
+- **Test** : `test_campaign_dossier.py::test_gm_prompt_context_drops_pre_play_canon_after_initial_start` + `…keeps_canon_acquired_during_initial_session` + `test_reload_mid_initial_session_keeps_played_canon`.
 
 ---
 

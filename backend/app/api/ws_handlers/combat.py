@@ -1004,7 +1004,7 @@ async def handle_combat_end(
         await campaign_dossier_service.synthesize_canon_for_session(
             session_id,
             active.state_data,
-            [{"speaker": "Maître du Jeu", "content": victory_text}],
+            None,  # persisted tail, victory narration included
             db,
         )
     except Exception as exc:
