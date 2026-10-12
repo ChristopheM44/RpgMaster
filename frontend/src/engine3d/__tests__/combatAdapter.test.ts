@@ -186,4 +186,8 @@ describe('combatAdapter.buildCombatSpec', () => {
     const gob = spec.tokens.find((token) => token.id === 'gob')
     expect(gob).toMatchObject({ kind: 'npc', accent: '#e84545', modelKey: 'monster/skeleton_minion' })
   })
+
+  it('grille tactique affichée en combat', () => {
+    expect(buildCombatSpec(makeInput()).ground.showGrid).toBe(true)
+  })
 })

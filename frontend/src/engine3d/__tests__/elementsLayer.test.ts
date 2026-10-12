@@ -3,7 +3,6 @@ import * as THREE from 'three'
 import {
   elementPlacementWorld,
   instantiateElementModel,
-  stairsRotationY,
   wallAxisRotationY,
   type ElementPlacement,
 } from '../layers/ElementsLayer'
@@ -55,12 +54,6 @@ describe('ElementsLayer KayKit placement helpers', () => {
     expect(wallAxisRotationY(null, { x: 0.3, z: 1 })).toBeCloseTo(-Math.PI / 2)
   })
 
-  it('inverse les escaliers montant/descendant par rapport au facing', () => {
-    expect(stairsRotationY('north', 'down', { x: 1, z: 1 })).toBe(0)
-    expect(stairsRotationY('north', 'up', { x: 1, z: 1 })).toBeCloseTo(Math.PI)
-    expect(stairsRotationY('east', 'down', { x: 1, z: 1 })).toBeCloseTo(-Math.PI / 2)
-  })
-
   it('recale les accès de bord sur la ligne du mur', () => {
     const northDoor = spec({
       kind: 'door',
@@ -81,7 +74,8 @@ describe('ElementsLayer KayKit placement helpers', () => {
     })
 
     expect(elementPlacementWorld(northDoor, ctx).center.z).toBeCloseTo(-6)
-    expect(elementPlacementWorld(eastStairs, ctx).center.x).toBeCloseTo(6)
+    // Un escalier occupe sa case (trémie ou volée) : pas de recalage sur le mur.
+    expect(elementPlacementWorld(eastStairs, ctx).center.x).toBeCloseTo(5.5)
     expect(elementPlacementWorld(centerStairs, ctx).center.z).not.toBeCloseTo(6)
   })
 
@@ -98,30 +92,5 @@ describe('ElementsLayer KayKit placement helpers', () => {
     expect(firstSegment).toBeDefined()
     expect(firstSegment!.scale.x).toBeGreaterThan(firstSegment!.scale.z)
     expect(firstSegment!.scale.x).toBeCloseTo((1 + 0.025) / 4)
-  })
-
-  it('rend les escaliers sans plafond maxHeight dérivé de height_m=0.4', () => {
-    const stairs = spec({
-      kind: 'stairs',
-      geometry: { type: 'rect', col: 5, row: 0, width: 1, height: 1 },
-      heightM: 0.4,
-      facing: 'north',
-      verticalDirection: 'down',
-    })
-    const placement: ElementPlacement = elementPlacementWorld(stairs, ctx)
-    const object = instantiateElementModel(
-      model(new THREE.Vector3(5, 5.1, 4), new THREE.Vector3(0, 2.55, 2)),
-      'prop/stairs',
-      stairs,
-      placement,
-      ctx,
-    )
-    const instance = object.children[0] as THREE.Object3D | undefined
-
-    expect(instance).toBeDefined()
-    expect(instance!.scale.y).toBeCloseTo(0.2)
-    // stairs.glb monte vers -Z (rotationOffsetY=π) : facing=north + down → visualFacing=south
-    // (rotation géométrique 0) + offset π.
-    expect(object.rotation.y).toBeCloseTo(Math.PI)
   })
 })

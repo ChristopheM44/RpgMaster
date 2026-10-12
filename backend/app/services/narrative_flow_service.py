@@ -38,6 +38,7 @@ from app.game.social_scene_state import (
 from app.game.travel_detection import TravelIntent, detect_travel_intent, travel_intent_as_dict
 from app.game.visible_events import clean_dialogue_text, publish_visible_entry
 from app.services.message_service import load_recent_messages, persist_narration
+from app.services.scene_continuity import forget_departure, remember_departure
 
 logger = logging.getLogger(__name__)
 
@@ -203,6 +204,15 @@ class NarrativeFlowService:
                             confidence="explicit",
                         )
                         break
+        if travel_intent.is_travel:
+            remember_departure(
+                active.state_data,
+                destination_node_id=travel_intent.destination_node_id,
+                exit_id=exit_id,
+            )
+        else:
+            # Une action sans voyage périme la sortie mémorisée au tour précédent.
+            forget_departure(active.state_data)
         trigger_character_id = getattr(action, "character_id", None)
         target_ids = list(detection.target_ids)
         if detection.audience in {"party", "mixed"}:

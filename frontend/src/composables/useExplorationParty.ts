@@ -42,7 +42,11 @@ function tokenOf(name: string): string {
   return trimmed.charAt(0).toUpperCase()
 }
 
-function characterToHero(c: Character, position: GridPosition | undefined, myId: string | undefined): ExHero {
+export function characterToHero(
+  c: Pick<Character, 'id' | 'name' | 'char_class' | 'species' | 'is_ai' | 'hp_current' | 'hp_max'>,
+  position: GridPosition | undefined,
+  myId: string | undefined,
+): ExHero {
   const isMe = c.id === myId
   const color = isMe ? COLOR_ME : c.is_ai ? COLOR_AI : COLOR_ALLY
   return {

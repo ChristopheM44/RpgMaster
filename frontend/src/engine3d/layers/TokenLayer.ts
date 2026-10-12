@@ -1,13 +1,15 @@
-// Tokens : héros/combattants (modèle de classe ou pion, nameplate + barre HP,
-// anneaux d'état), POI (billboard d'icône + anneau tone), sorties (anneau
-// lumineux). Sync par diff d'id — les déplacements sont tweenés (anim Walk).
+// Tokens : héros/combattants (modèle de classe ou pion, anneaux d'état), POI
+// (losange flottant relié au sol ; un danger se lit au sol, sans losange),
+// sorties (chevrons animés vers le bord). Les NOMS, repères et bannières de
+// sortie sont des étiquettes DOM (LabelLayer). Sync par diff d'id — les
+// déplacements sont tweenés (anim Walk).
 
 import * as THREE from 'three'
 import type { GridPoint, TokenSpec } from '../types'
 import type { EngineCtx } from '../core/context'
-import { buildPawn } from '../assets/ProceduralFactory'
+import { addHazardDecal, buildPawn } from '../assets/ProceduralFactory'
 import { disposeObject } from './GroundLayer'
-import { loadIconTexture } from '../utils/iconTexture'
+import { FACING_VECTOR } from '../adapters/stairs'
 import { cellCenterToWorld, metersToWorld } from '../utils/gridMath'
 import { tweenPath, type Tween } from '../core/tween'
 
@@ -22,9 +24,11 @@ interface TokenVisual {
   mixer: THREE.AnimationMixer | null
   idle: THREE.AnimationAction | null
   walk: THREE.AnimationAction | null
-  plate: THREE.Sprite | null
-  plateKey: string
-  iconSprite: THREE.Sprite | null
+  /** Losange de POI (rotation + flottement) ou chevrons de sortie (vague). */
+  marker: THREE.Object3D | null
+  chevrons: THREE.Mesh[]
+  /** Bords de décalque de danger à faire tourner. */
+  spinners: THREE.Object3D[]
   rings: Partial<Record<'base' | 'state' | 'active' | 'target', THREE.Mesh>>
   headY: number
   bobPhase: number
@@ -109,9 +113,15 @@ export class TokenLayer {
     this.time += dt
     for (const visual of this.visuals.values()) {
       visual.mixer?.update(dt)
-      if (visual.spec.kind === 'poi' && visual.iconSprite) {
-        visual.iconSprite.position.y = visual.headY + Math.sin(this.time * 2 + visual.bobPhase) * 0.05
+      if (visual.spec.kind === 'poi' && visual.marker) {
+        visual.marker.rotation.y = this.time * 1.1 + visual.bobPhase
+        visual.marker.position.y = visual.headY + Math.sin(this.time * 2 + visual.bobPhase) * 0.05
       }
+      for (const spinner of visual.spinners) spinner.rotation.z = this.time * 0.25
+      visual.chevrons.forEach((chevron, index) => {
+        ;(chevron.material as THREE.MeshBasicMaterial).opacity =
+          0.2 + 0.7 * Math.max(0, Math.sin(this.time * 3 - index * 0.9))
+      })
       const target = visual.rings.target
       if (target?.visible) {
         const pulse = 1 + Math.sin(this.time * 5) * 0.06
@@ -153,9 +163,9 @@ export class TokenLayer {
       mixer: null,
       idle: null,
       walk: null,
-      plate: null,
-      plateKey: '',
-      iconSprite: null,
+      marker: null,
+      chevrons: [],
+      spinners: [],
       rings: {},
       headY: 1,
       bobPhase: Math.random() * Math.PI * 2,
@@ -171,6 +181,9 @@ export class TokenLayer {
       this.buildExit(visual, spec, ctx)
     }
 
+    container.traverse((node) => {
+      if (node.userData.hazardRing) visual.spinners.push(node)
+    })
     this.group.add(container)
     this.visuals.set(spec.id, visual)
     this.applyState(visual, spec, ctx)
@@ -186,7 +199,14 @@ export class TokenLayer {
     visual.rings.state = this.addRing(visual.container, 0.46, 0.55, '#ffffff', 0.85, false)
     visual.rings.active = this.addRing(visual.container, 0.58, 0.66, '#f0c764', 0.9, false)
     visual.rings.target = this.addRing(visual.container, 0.7, 0.79, '#e84545', 0.7, false)
-    this.refreshPlate(visual, spec, ctx)
+    // Voile coloré sous le socle : le rôle se lit même de loin (vocabulaire lot 3).
+    const glow = new THREE.Mesh(
+      new THREE.CircleGeometry(0.34, 32),
+      new THREE.MeshBasicMaterial({ color: spec.accent, transparent: true, opacity: 0.16, depthWrite: false }),
+    )
+    glow.rotation.x = -Math.PI / 2
+    glow.position.y = 0.015
+    visual.container.add(glow)
 
     if (spec.modelKey) {
       void ctx.registry.load(spec.modelKey).then((model) => {
@@ -213,48 +233,89 @@ export class TokenLayer {
   }
 
   private buildPoi(visual: TokenVisual, spec: TokenSpec, ctx: EngineCtx): void {
-    visual.headY = 1.05
-    visual.rings.base = this.addRing(visual.container, 0.2, 0.27, spec.accent, 0.8)
-    visual.rings.state = this.addRing(visual.container, 0.32, 0.4, '#ffffff', 0.85, false)
-
-    const sprite = makeSprite(makeGlyphTexture('✦', spec.accent))
-    sprite.scale.set(0.62, 0.62, 1)
-    sprite.position.y = visual.headY
-    visual.iconSprite = sprite
-    visual.container.add(sprite)
-    if (spec.iconId) {
-      void loadIconTexture(spec.iconId).then((texture) => {
-        if (!texture || !this.visuals.has(spec.id) || !visual.iconSprite) return
-        const material = visual.iconSprite.material as THREE.SpriteMaterial
-        material.map?.dispose()
-        material.map = texture
-        material.needsUpdate = true
-      })
+    visual.container.rotation.y = 0
+    if (spec.poiRole === 'hazard') {
+      // Un danger se lit AU SOL. S'il est déjà porté par un élément (décalque),
+      // le jeton reste invisible ; sinon on pose un petit décalque ici.
+      visual.headY = 0.3
+      visual.rings.state = this.addRing(visual.container, 0.46, 0.54, '#ffffff', 0.85, false)
+      if (!spec.hasElement) addHazardDecal(visual.container, 0.95, 0.95, spec.id, ctx.tokens)
+      return
     }
+    // Losange flottant relié au sol : « il y a quelque chose à examiner ici ».
+    const height = 1.15
+    visual.headY = height
+    const color = new THREE.Color(spec.accent)
+    const gem = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.15, 0),
+      new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.85, roughness: 0.35, metalness: 0.2 }),
+    )
+    gem.scale.y = 1.45
+    gem.position.y = height
+    visual.marker = gem
+    visual.container.add(gem)
+    const beam = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.01, 0.01, height - 0.2, 6),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.35, depthWrite: false }),
+    )
+    beam.position.y = (height - 0.2) / 2
+    visual.container.add(beam)
+    const spot = new THREE.Mesh(
+      new THREE.CircleGeometry(0.22, 24),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.3, depthWrite: false }),
+    )
+    spot.rotation.x = -Math.PI / 2
+    spot.position.y = 0.015
+    visual.container.add(spot)
+    visual.rings.state = this.addRing(visual.container, 0.3, 0.38, '#ffffff', 0.85, false)
   }
 
   private buildExit(visual: TokenVisual, spec: TokenSpec, ctx: EngineCtx): void {
-    visual.headY = 0.6
-    const color = spec.exitActive ? '#f0c764' : '#4fd8c0'
-    const ring = this.addRing(visual.container, 0.3, 0.42, color, 0.9)
-    ;(ring.material as THREE.MeshBasicMaterial).side = THREE.DoubleSide
-    visual.rings.base = ring
-    visual.rings.state = this.addRing(visual.container, 0.48, 0.56, '#ffffff', 0.85, false)
-
-    const sprite = makeSprite(makeGlyphTexture('⬈', color))
-    sprite.scale.set(0.5, 0.5, 1)
-    sprite.position.y = 0.55
-    visual.iconSprite = sprite
-    visual.container.add(sprite)
-    if (spec.iconId) {
-      void loadIconTexture(spec.iconId).then((texture) => {
-        if (!texture || !this.visuals.has(spec.id) || !visual.iconSprite) return
-        const material = visual.iconSprite.material as THREE.SpriteMaterial
-        material.map?.dispose()
-        material.map = texture
-        material.needsUpdate = true
-      })
+    visual.headY = 0.9
+    visual.container.rotation.y = 0
+    // Chevrons au sol vers le bord de sortie : « par ici on quitte la scène ».
+    const facing = spec.exitFacing ? FACING_VECTOR[spec.exitFacing] : { x: 0, z: -1 }
+    const shape = new THREE.Shape()
+    shape.moveTo(-0.22, -0.1)
+    shape.lineTo(0, 0.1)
+    shape.lineTo(0.22, -0.1)
+    shape.lineTo(0.22, -0.02)
+    shape.lineTo(0, 0.18)
+    shape.lineTo(-0.22, -0.02)
+    shape.closePath()
+    const geometry = new THREE.ShapeGeometry(shape)
+    const color = exitColor(spec, ctx)
+    for (let index = 0; index < 3; index++) {
+      const chevron = new THREE.Mesh(
+        geometry,
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide }),
+      )
+      chevron.rotation.x = -Math.PI / 2
+      chevron.rotation.z = Math.atan2(-facing.x, -facing.z)
+      chevron.position.set(facing.x * (index - 1) * 0.28, 0.03, facing.z * (index - 1) * 0.28)
+      visual.chevrons.push(chevron)
+      visual.container.add(chevron)
+      // Ombre sombre sous chaque chevron : lisible sur sol clair (sable, dalles).
+      const shadow = new THREE.Mesh(
+        geometry,
+        new THREE.MeshBasicMaterial({ color: '#0e0d14', transparent: true, opacity: 0.45, depthWrite: false }),
+      )
+      shadow.rotation.copy(chevron.rotation)
+      shadow.position.copy(chevron.position).setY(0.025)
+      shadow.position.x += 0.02
+      shadow.position.z += 0.03
+      shadow.scale.setScalar(1.18)
+      visual.container.add(shadow)
     }
+    // Disque invisible : zone de clic/survol généreuse sur la case.
+    const hit = new THREE.Mesh(
+      new THREE.CircleGeometry(0.45, 16),
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
+    )
+    hit.rotation.x = -Math.PI / 2
+    hit.position.y = 0.02
+    visual.container.add(hit)
+    visual.rings.state = this.addRing(visual.container, 0.46, 0.54, '#ffffff', 0.85, false)
   }
 
   // ─── Mise à jour ───────────────────────────────────────────────────────────
@@ -290,13 +351,11 @@ export class TokenLayer {
       }
     }
     if (spec.kind === 'hero' || spec.kind === 'combatant' || spec.kind === 'npc') {
-      this.refreshPlate(visual, spec, ctx)
       this.applyDefeated(visual, spec)
     }
-    if (spec.kind === 'exit' && rings.base) {
-      (rings.base.material as THREE.MeshBasicMaterial).color = new THREE.Color(
-        spec.exitActive ? ctx.tokens.gold : ctx.tokens.teal,
-      )
+    if (spec.kind === 'exit') {
+      const color = exitColor(spec, ctx)
+      for (const chevron of visual.chevrons) (chevron.material as THREE.MeshBasicMaterial).color.set(color)
     }
   }
 
@@ -313,26 +372,6 @@ export class TokenLayer {
       visual.body.position.y = 0
       visual.idle?.play()
       setOpacity(visual.body, 1)
-    }
-  }
-
-  private refreshPlate(visual: TokenVisual, spec: TokenSpec, ctx: EngineCtx): void {
-    const key = `${spec.name}|${spec.hpRatio?.toFixed(2) ?? 'x'}|${spec.accent}`
-    if (key === visual.plateKey) return
-    visual.plateKey = key
-
-    const texture = makePlateTexture(spec.name, spec.hpRatio, spec.accent, ctx)
-    if (!texture) return
-    if (!visual.plate) {
-      visual.plate = makeSprite(texture)
-      visual.plate.scale.set(1.5, 0.42, 1)
-      visual.plate.position.y = visual.headY + 0.3
-      visual.container.add(visual.plate)
-    } else {
-      const material = visual.plate.material as THREE.SpriteMaterial
-      material.map?.dispose()
-      material.map = texture
-      material.needsUpdate = true
     }
   }
 
@@ -382,104 +421,9 @@ export class TokenLayer {
   }
 }
 
-// ─── Sprites & textures canvas ───────────────────────────────────────────────
-
-function makeSprite(texture: THREE.Texture | null): THREE.Sprite {
-  const material = new THREE.SpriteMaterial({
-    map: texture ?? undefined,
-    transparent: true,
-    depthWrite: false,
-  })
-  return new THREE.Sprite(material)
-}
-
-function canvas2d(width: number, height: number): CanvasRenderingContext2D | null {
-  if (typeof document === 'undefined') return null
-  const canvas = document.createElement('canvas')
-  canvas.width = width
-  canvas.height = height
-  return canvas.getContext('2d')
-}
-
-function makeGlyphTexture(glyph: string, colorHex: string): THREE.Texture | null {
-  const ctx = canvas2d(96, 96)
-  if (!ctx) return null
-  ctx.font = '64px serif'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillStyle = colorHex
-  ctx.fillText(glyph, 48, 52)
-  const texture = new THREE.CanvasTexture(ctx.canvas)
-  texture.colorSpace = THREE.SRGBColorSpace
-  return texture
-}
-
-/** Nameplate : nom (Cinzel) + barre de HP, façon HeroToken SVG. */
-function makePlateTexture(
-  name: string,
-  hpRatio: number | null,
-  accent: string,
-  ctx: EngineCtx,
-): THREE.Texture | null {
-  const context = canvas2d(320, 90)
-  if (!context) return null
-
-  context.font = '700 34px Cinzel, Georgia, serif'
-  context.textAlign = 'center'
-  const label = name.length > 16 ? `${name.slice(0, 15)}…` : name
-  const textWidth = Math.min(300, context.measureText(label).width + 36)
-  const x0 = (320 - textWidth) / 2
-
-  context.fillStyle = 'rgba(14, 13, 20, 0.78)'
-  roundRect(context, x0, 6, textWidth, 50, 10)
-  context.fill()
-  context.strokeStyle = 'rgba(255, 235, 180, 0.22)'
-  context.lineWidth = 2
-  roundRect(context, x0, 6, textWidth, 50, 10)
-  context.stroke()
-
-  context.fillStyle = ctx.tokens.parchment
-  context.fillText(label, 160, 44)
-
-  if (hpRatio !== null) {
-    const barWidth = 150
-    const barX = (320 - barWidth) / 2
-    context.fillStyle = 'rgba(0, 0, 0, 0.72)'
-    roundRect(context, barX, 64, barWidth, 14, 7)
-    context.fill()
-    const ratio = Math.max(0, Math.min(1, hpRatio))
-    context.fillStyle = ratio > 0.5 ? ctx.tokens.green : ratio > 0.25 ? ctx.tokens.gold : ctx.tokens.blood
-    if (ratio > 0) {
-      roundRect(context, barX + 2, 66, Math.max(6, (barWidth - 4) * ratio), 10, 5)
-      context.fill()
-    }
-  } else {
-    context.fillStyle = accent
-    context.beginPath()
-    context.arc(160, 70, 5, 0, Math.PI * 2)
-    context.fill()
-  }
-
-  const texture = new THREE.CanvasTexture(context.canvas)
-  texture.colorSpace = THREE.SRGBColorSpace
-  return texture
-}
-
-function roundRect(
-  context: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  radius: number,
-): void {
-  context.beginPath()
-  context.moveTo(x + radius, y)
-  context.arcTo(x + width, y, x + width, y + height, radius)
-  context.arcTo(x + width, y + height, x, y + height, radius)
-  context.arcTo(x, y + height, x, y, radius)
-  context.arcTo(x, y, x + width, y, radius)
-  context.closePath()
+/** Or = sortie empruntable ; teal = accès d'arrivée ou sortie inactive. */
+function exitColor(spec: TokenSpec, ctx: EngineCtx): string {
+  return spec.arrival || !spec.exitActive ? ctx.tokens.teal : ctx.tokens.gold
 }
 
 function findClip(clips: THREE.AnimationClip[], pattern: RegExp): THREE.AnimationClip | null {

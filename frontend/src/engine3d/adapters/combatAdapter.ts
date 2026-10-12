@@ -6,7 +6,9 @@
 import type { CombatantState, GridConfig, GridPosition, SceneLayout, SceneTheme } from '../../types'
 import type { GridPoint, SceneSpec, TokenSpec } from '../types'
 import { modelForClass, modelForMonster, modelForNpc } from '../assets/manifest'
-import { buildElementSpecs, buildElevationByCell, buildGroundSpec, TONE_HEX } from './sceneAdapter'
+import { buildElementSpecs, buildElevationByCell, buildGroundSpec, isEnclosedScene, TONE_HEX } from './sceneAdapter'
+import { stairwellHoleKeys } from './stairs'
+import { exitIndicator, poiRoleFor } from './indicators'
 import { resolveTokenOverlaps } from './tokenCollision'
 
 export interface CombatPoiInput {
@@ -95,6 +97,9 @@ export function buildCombatSpec(input: CombatAdapterInput): SceneSpec {
     linkedElementIds,
     selectedElementId: input.selectedElementId,
   })
+  ground.holes = stairwellHoleKeys(elements, dims)
+  ground.showGrid = true
+  ground.enclosed = isEnclosedScene(scene ?? null, elements, dims)
 
   const tokens: TokenSpec[] = []
   if (input.isExploration) {
@@ -109,6 +114,7 @@ export function buildCombatSpec(input: CombatAdapterInput): SceneSpec {
         accent: marker.isMe ? TONE_HEX.gold ?? '#f0c764' : marker.isAi ? TONE_HEX.arcane ?? '#c090ff' : TONE_HEX.teal ?? '#4fd8c0',
         modelKey: modelForClass(input.classById[marker.id]),
         selected: input.selectedCombatantId === marker.id,
+        role: marker.isMe ? 'you' : marker.isAi ? 'ai' : 'ally',
       }))
     }
   } else {
@@ -134,6 +140,7 @@ export function buildCombatSpec(input: CombatAdapterInput): SceneSpec {
         modelKey: isEnemy ? modelForMonster(poi.name) : modelForNpc(poi.name),
         initials: poi.name.slice(0, 2).toUpperCase(),
         selected: input.selectedCombatantId === poi.id,
+        role: isEnemy ? 'enemy' : 'npc',
       }))
       continue
     }
@@ -145,10 +152,18 @@ export function buildCombatSpec(input: CombatAdapterInput): SceneSpec {
       row: poi.row,
       accent: TONE_HEX[poi.tone] ?? '#4fd8c0',
       iconId: poi.iconId,
+      poiRole: poiRoleFor(poi.role ?? ''),
+      hasElement: Boolean(poi.elementId && elements.some((element) => element.id === poi.elementId)),
     }))
   }
   for (const exit of input.exits) {
     blockedCells.add(`${exit.col},${exit.row}`)
+    const indicator = exitIndicator(
+      exit.col,
+      exit.row,
+      exit.elementId ? elements.find((element) => element.id === exit.elementId) : undefined,
+      dims,
+    )
     tokens.push(baseToken({
       id: exit.id,
       kind: 'exit',
@@ -158,6 +173,9 @@ export function buildCombatSpec(input: CombatAdapterInput): SceneSpec {
       accent: exit.active ? TONE_HEX.gold ?? '#f0c764' : TONE_HEX.teal ?? '#4fd8c0',
       iconId: exit.iconId,
       exitActive: exit.active,
+      exitDirection: indicator.direction,
+      exitFacing: indicator.facing,
+      arrival: scene?.arrival?.exit_id === exit.id,
     }))
   }
 
@@ -219,6 +237,7 @@ function combatantToken(combatant: CombatantState, input: CombatAdapterInput): T
     : modelForClass(input.classById[combatant.id])
 
   return baseToken({
+    role: isMonster ? 'enemy' : combatant.is_ai ? 'ai' : combatant.id === input.myCharacterId ? 'you' : 'ally',
     id: combatant.id,
     kind: 'combatant',
     name: combatant.name,

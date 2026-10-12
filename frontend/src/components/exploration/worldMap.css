@@ -1,0 +1,456 @@
+/* Cartes Région / Ville (refonte lot 5) — styles partagés, préfixe .wmap-.
+   Parchemin sombre, tokens du design system uniquement (aucun hex en dur). */
+
+.wmap {
+  --wmap-current: var(--color-gold);
+  --wmap-visited: var(--color-green);
+  --wmap-known: var(--color-parchment-dark);
+  --wmap-rumored: var(--color-arcane);
+  --wmap-tone: var(--wmap-known);
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 260px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border-strong);
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 45%,
+      color-mix(in srgb, var(--color-gold-deep) 16%, var(--color-bg-elev)) 0%,
+      color-mix(in srgb, var(--color-gold-deep) 7%, var(--color-bg-elev)) 55%,
+      var(--color-bg) 100%);
+  box-shadow: inset 0 0 90px color-mix(in srgb, var(--color-bg) 85%, transparent);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.wmap:active {
+  cursor: grabbing;
+}
+
+.wmap-svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+/* ── Monde ─────────────────────────────────────────────────────────────── */
+
+.wmap-asset {
+  opacity: 0.55;
+}
+
+.wmap-sea {
+  fill: color-mix(in srgb, var(--color-teal) 12%, transparent);
+  stroke: color-mix(in srgb, var(--color-teal) 35%, transparent);
+  stroke-width: 0.35;
+}
+
+.wmap-forest {
+  fill: color-mix(in srgb, var(--color-green) 14%, transparent);
+  stroke: color-mix(in srgb, var(--color-green) 22%, transparent);
+  stroke-width: 0.25;
+  stroke-dasharray: 0.6 0.5;
+}
+
+.wmap-tree {
+  fill: color-mix(in srgb, var(--color-green) 26%, var(--color-bg-elev));
+  stroke: color-mix(in srgb, var(--color-green) 40%, transparent);
+  stroke-width: 0.12;
+}
+
+.wmap-mountain {
+  fill: color-mix(in srgb, var(--color-parchment) 14%, var(--color-bg-elev));
+  stroke: color-mix(in srgb, var(--color-parchment) 30%, transparent);
+  stroke-width: 0.2;
+  stroke-linejoin: round;
+}
+
+.wmap-mountain-shade {
+  fill: color-mix(in srgb, var(--color-bg) 55%, transparent);
+}
+
+.wmap-river {
+  fill: none;
+  stroke: color-mix(in srgb, var(--color-teal) 40%, transparent);
+  stroke-linecap: round;
+}
+
+.wmap-trail {
+  fill: none;
+  stroke: color-mix(in srgb, var(--color-parchment) 10%, transparent);
+  stroke-width: 1;
+  stroke-dasharray: 2 5;
+}
+
+.wmap-grain {
+  pointer-events: none;
+}
+
+.wmap-fog {
+  fill: color-mix(in srgb, var(--color-bg) 62%, transparent);
+  pointer-events: none;
+}
+
+/* ── Routes : type × état ──────────────────────────────────────────────── */
+
+.wmap-edge,
+.wmap-edge-casing {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.wmap-edge-casing {
+  stroke: color-mix(in srgb, var(--color-bg) 70%, transparent);
+  stroke-width: 6;
+}
+
+.wmap-edge {
+  stroke-width: 2.4;
+}
+
+.wmap-edge.kind-path { stroke-width: 1.8; stroke-dasharray: 7 5; }
+.wmap-edge.kind-river { stroke-width: 3; stroke: color-mix(in srgb, var(--color-teal) 70%, transparent) !important; }
+.wmap-edge.kind-sea_route { stroke-width: 2; stroke-dasharray: 1 6; stroke: color-mix(in srgb, var(--color-teal) 80%, transparent) !important; }
+.wmap-edge.kind-secret { stroke-width: 1.4; stroke-dasharray: 1 5; }
+
+.wmap-edge.state-traveled { stroke: color-mix(in srgb, var(--wmap-current) 80%, transparent); }
+.wmap-edge.state-known { stroke: color-mix(in srgb, var(--color-parchment) 45%, transparent); }
+.wmap-edge.state-rumored { stroke: color-mix(in srgb, var(--wmap-rumored) 60%, transparent); stroke-dasharray: 2 6; }
+
+/* Ville : rues pavées (bordure sombre + chaussée claire), ruelles. */
+.wmap-street-casing {
+  fill: none;
+  stroke: color-mix(in srgb, var(--color-bg) 75%, transparent);
+  stroke-linecap: round;
+  stroke-width: 14;
+}
+
+.wmap-street {
+  fill: none;
+  stroke: color-mix(in srgb, var(--color-parchment) 16%, var(--color-bg-elev));
+  stroke-linecap: round;
+  stroke-width: 9;
+}
+
+.wmap-street.kind-alley { stroke-width: 4; }
+.wmap-street-casing.kind-alley { stroke-width: 8; }
+.wmap-street.state-traveled { stroke: color-mix(in srgb, var(--wmap-current) 22%, var(--color-bg-elev)); }
+.wmap-street-dash {
+  fill: none;
+  stroke: color-mix(in srgb, var(--color-parchment) 20%, transparent);
+  stroke-width: 1;
+  stroke-dasharray: 3 7;
+}
+
+/* ── Lieux ─────────────────────────────────────────────────────────────── */
+
+.wmap-node {
+  --wmap-tone: var(--wmap-known);
+  color: var(--wmap-tone);
+  cursor: pointer;
+}
+
+.wmap-node.is-current { --wmap-tone: var(--wmap-current); }
+.wmap-node.is-visited { --wmap-tone: var(--wmap-visited); }
+.wmap-node.is-rumored { --wmap-tone: var(--wmap-rumored); }
+
+.wmap-node-disc {
+  fill: var(--color-bg-elev);
+  stroke: var(--wmap-tone);
+  stroke-width: 1.6;
+  transition: stroke-width 120ms ease;
+}
+
+.wmap-building {
+  fill: color-mix(in srgb, var(--wmap-tone) 10%, var(--color-bg-elev));
+  stroke: var(--wmap-tone);
+  stroke-width: 1.4;
+}
+
+.wmap-node.is-rumored .wmap-node-disc,
+.wmap-node.is-rumored .wmap-building {
+  stroke-dasharray: 3 3;
+  fill: color-mix(in srgb, var(--color-bg-elev) 70%, transparent);
+}
+
+.wmap-node:hover .wmap-node-disc,
+.wmap-node:hover .wmap-building,
+.wmap-node.is-highlighted .wmap-node-disc,
+.wmap-node.is-highlighted .wmap-building {
+  stroke-width: 2.4;
+}
+
+.wmap-node.is-selected .wmap-node-disc,
+.wmap-node.is-selected .wmap-building {
+  stroke: var(--color-gold);
+  stroke-width: 2.8;
+}
+
+.wmap-node-pulse {
+  fill: none;
+  stroke: var(--wmap-current);
+  stroke-width: 1.2;
+  opacity: 0.5;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: wmap-pulse 2.4s ease-out infinite;
+}
+
+.wmap-here-marker {
+  fill: var(--wmap-current);
+  stroke: var(--color-bg);
+  stroke-width: 1;
+}
+
+.wmap-district.is-current { --wmap-tone: var(--wmap-current); }
+.wmap-district.is-visited { --wmap-tone: var(--wmap-visited); }
+.wmap-district.is-rumored { --wmap-tone: var(--wmap-rumored); }
+
+.wmap-district {
+  fill: color-mix(in srgb, var(--wmap-tone) 7%, transparent);
+  stroke: color-mix(in srgb, var(--wmap-tone) 35%, transparent);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+
+.wmap-district-name {
+  fill: color-mix(in srgb, var(--wmap-tone) 45%, transparent);
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.wmap-exit-arrow {
+  fill: none;
+  stroke: var(--color-gold);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 5 4;
+}
+
+.wmap-exit-head {
+  fill: var(--color-gold);
+}
+
+.wmap-party {
+  fill: var(--color-gold);
+  stroke: var(--color-bg);
+  stroke-width: 1.2;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--color-ember) 70%, transparent));
+}
+
+@keyframes wmap-pulse {
+  0% { transform: scale(0.8); opacity: 0.7; }
+  100% { transform: scale(1.35); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wmap-node-pulse { animation: none; }
+}
+
+/* ── Étiquettes (DOM) ──────────────────────────────────────────────────── */
+
+.wmap-label {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--color-bg) 72%, transparent);
+  color: var(--color-parchment-dark);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  line-height: 14px;
+  text-align: center;
+  text-shadow: 0 1px 2px var(--color-bg);
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 2;
+}
+
+.wmap-label.is-current { color: var(--wmap-current); }
+.wmap-label.is-visited { color: var(--color-parchment); }
+.wmap-label.is-rumored { color: var(--wmap-rumored); font-style: italic; font-weight: 500; }
+.wmap-label.is-selected { box-shadow: 0 0 0 1px var(--color-gold); }
+
+.wmap-label-kicker {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  line-height: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-ember);
+}
+
+.wmap-label-line {
+  display: block;
+}
+
+/* ── Habillage du cadre ────────────────────────────────────────────────── */
+
+.wmap-title {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--color-bg) 70%, transparent);
+  border: 1px solid var(--color-border);
+  color: var(--color-parchment);
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.wmap-tools {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  display: flex;
+  gap: 8px;
+  z-index: 3;
+}
+
+.wmap-tool {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border-strong);
+  background: color-mix(in srgb, var(--color-bg) 75%, transparent);
+  color: var(--color-parchment-dark);
+  font: 500 11px/1.2 var(--font-body);
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+
+.wmap-tool:hover {
+  color: var(--color-gold);
+  border-color: var(--color-gold);
+}
+
+.wmap-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--color-bg-elev);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text-muted);
+  font: 500 10px/1 var(--font-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.wmap-spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--color-border);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: wmap-spin 0.8s linear infinite;
+}
+
+@keyframes wmap-spin {
+  to { transform: rotate(360deg); }
+}
+
+.wmap-legend {
+  position: absolute;
+  left: 12px;
+  bottom: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--color-bg) 70%, transparent);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font: 500 10px/1.2 var(--font-body);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.wmap-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.wmap-key::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--wmap-known);
+}
+
+.wmap-key.is-current::before { border-color: var(--wmap-current); background: var(--wmap-current); }
+.wmap-key.is-visited::before { border-color: var(--wmap-visited); }
+.wmap-key.is-rumored::before { border-color: var(--wmap-rumored); border-style: dashed; }
+
+.wmap-key-exit {
+  color: var(--color-gold);
+}
+
+.wmap-scale {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  color: var(--color-parchment-dark);
+}
+
+.wmap-scale i {
+  display: inline-block;
+  height: 5px;
+  border: 1px solid var(--color-parchment-dark);
+  border-top: none;
+}
+
+.wmap-compass {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.wmap-compass-needle { fill: var(--color-gold); }
+.wmap-compass-tail { fill: var(--color-text-dim); }
+.wmap-compass text {
+  fill: var(--color-parchment-dark);
+  font: 600 7px var(--font-display);
+}
+
+.wmap-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--color-text-muted);
+  font-family: var(--font-serif);
+  font-size: 13px;
+  font-style: italic;
+  cursor: default;
+}

@@ -13,6 +13,7 @@ import itertools
 import random
 from typing import Any
 
+from app.engine.prop_catalog import match_prop
 from app.engine.scene_primitives import asset_element, ellipse, rect, seed_int
 from app.engine.tactical_grid import GridPosition, nearest_free_cell
 from app.engine.theme_packs import ThemePack, resolve_theme_pack
@@ -173,8 +174,9 @@ def _zone_to_cell(zone: SceneZone, rng: random.Random) -> GridPosition:
     return GridPosition(col=col, row=row)
 
 
-def _pick_asset(assets: tuple[str, ...], rng: random.Random) -> str:
-    return rng.choice(assets) if assets else ""
+def _pick_asset(name: str) -> str:
+    """Modèle reconnu par le NOM de la feature ; sinon rien (procédural neutre)."""
+    return match_prop(name) or ""
 
 
 # Interactions par défaut injectées sur les POI générés (pas de coordonnées,
@@ -238,7 +240,7 @@ def _place_feature(
                 feature.name,
                 "decor",
                 rect(cell.col + 0.1, cell.row + 0.1, 0.8, 0.8),
-                _pick_asset(pack.decor_assets, rng),
+                _pick_asset(feature.name),
             )
         )
         return
@@ -261,7 +263,7 @@ def _place_feature(
                 feature.name,
                 "cover",
                 rect(cell.col + 0.1, cell.row + 0.1, 0.8, 0.8),
-                _pick_asset(pack.cover_assets, rng),
+                _pick_asset(feature.name),
             )
         )
         poi["element_id"] = element_id
@@ -273,7 +275,7 @@ def _place_feature(
                 feature.name,
                 "hazard",
                 ellipse(cell.col + 0.5, cell.row + 0.5, 0.5, 0.5),
-                _pick_asset(pack.hazard_assets, rng),
+                "",
                 blocks_movement=False,
                 opaque=False,
                 interactive=True,

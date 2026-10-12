@@ -11,10 +11,16 @@ import type {
   SceneLayout,
   SceneTheme,
 } from '../../types'
-import type { AmbianceLight, ElementSpec, GroundSpec, SceneSpec, TokenSpec } from '../types'
-import { isModelKey, modelForClass, modelForMonster, modelForNpc } from '../assets/manifest'
+import type { AmbianceLight, ArrivalSpec, ElementSpec, GroundSpec, SceneSpec, TokenSpec } from '../types'
+import { isElementTint, isPropKey, matchTint, modelForClass, modelForMonster, modelForNpc } from '../assets/manifest'
+import { CATALOG_ELEMENT_KINDS } from '../assets/propCatalog.generated'
 import { resolveTokenOverlaps } from './tokenCollision'
+import { exitIndicator, poiRoleFor } from './indicators'
+import { isStairwell, resolveStairsFacing, stairwellCells, stairwellHoleKeys, stairwellSurfaceM } from './stairs'
 import { rectCells } from '../utils/gridMath'
+
+/** Kinds habillés par le catalogue sémantique (teinte déduite du nom). */
+const PROP_ELEMENT_KINDS = new Set(CATALOG_ELEMENT_KINDS)
 
 // Mêmes valeurs que local_map_service (backend) — défauts par kind en mètres.
 export const DEFAULT_HEIGHT_M: Record<string, number> = {
@@ -93,7 +99,9 @@ export function buildSceneSpec(input: SceneAdapterInput): SceneSpec {
     linkedElementIds,
     selectedElementId: resolveSelectedElementId(input, scene?.elements ?? []),
   })
-  const tokens = buildTokens(input, blockedCells)
+  const tokens = buildTokens(input, blockedCells, elements, dims)
+  ground.holes = stairwellHoleKeys(elements, dims)
+  ground.enclosed = isEnclosedScene(scene, elements, dims)
 
   return {
     ground,
@@ -111,6 +119,45 @@ export function buildSceneSpec(input: SceneAdapterInput): SceneSpec {
     },
     scatterBlockedCells: [...blockedCells],
     elevationByCell: buildElevationByCell(elements, dims),
+    arrival: buildArrivalSpec(scene),
+  }
+}
+
+/**
+ * Lieu clos pour CETTE scène : indice backend `interior`, sinon murs sur au moins
+ * trois bords (scènes sauvées avant l'indice). Une taverne en thème « city » est close.
+ */
+export function isEnclosedScene(
+  scene: SceneLayout | null,
+  elements: ElementSpec[],
+  dims: { cols: number; rows: number },
+): boolean {
+  if (typeof scene?.interior === 'boolean') return scene.interior
+  const edges = new Set<string>()
+  for (const element of elements) {
+    if (element.kind !== 'wall' || element.geometry.type !== 'line') continue
+    const { from, to } = element.geometry
+    if (from.row === to.row && (from.row <= 0.05 || from.row >= dims.rows - 0.05)) edges.add(from.row <= 0.05 ? 'n' : 's')
+    if (from.col === to.col && (from.col <= 0.05 || from.col >= dims.cols - 0.05)) edges.add(from.col <= 0.05 ? 'w' : 'e')
+  }
+  return edges.size >= 3
+}
+
+/** Accès d'arrivée posé par le backend après un changement de scène. */
+export function buildArrivalSpec(scene: SceneLayout | null): ArrivalSpec | null {
+  const arrival = scene?.arrival
+  if (!scene || !arrival?.exit_id) return null
+  const exit = scene.exits?.find((item) => item.id === arrival.exit_id)
+  if (!exit) return null
+  return {
+    exitId: exit.id,
+    col: exit.position.col,
+    row: exit.position.row,
+    facing: normalizeFacing(arrival.facing ?? exit.facing),
+    verticalDirection: normalizeVerticalDirection(arrival.vertical_direction) ?? 'level',
+    fromSceneId: arrival.from_scene_id,
+    viaExitId: arrival.via_exit_id || null,
+    label: exit.label,
   }
 }
 
@@ -170,8 +217,16 @@ export function buildElementSpecs(
       interactive,
       inspectable: isElementInspectable(element, interactive),
       selected: element.id === options.selectedElementId,
-      modelKey: isModelKey(element.asset_key) ? element.asset_key : null,
-      facing: normalizeFacing(element.facing),
+      modelKey: isPropKey(element.asset_key) ? element.asset_key : null,
+      // Repli sur le nom pour mobilier/couvert/décor seulement (miroir du backend) :
+      // un « Mur de pierre » n'est pas « pétrifié ».
+      tint: isElementTint(element.tint)
+        ? element.tint
+        : PROP_ELEMENT_KINDS.has(element.kind) ? matchTint(element.name) : null,
+      // Escalier : un accès de bord mène vers son bord ; sans facing → bord le plus proche.
+      facing: element.kind === 'stairs'
+        ? resolveStairsFacing(normalizeFacing(element.facing), element.geometry, options.dims)
+        : normalizeFacing(element.facing),
       verticalDirection: normalizeVerticalDirection(element.vertical_direction),
     }
   })
@@ -183,14 +238,21 @@ export function buildElementSpecs(
  * Hauteur de surface par cellule (MÈTRES) — seuls `stairs` et `terrain`
  * portent un token (on marche sur le DESSUS : elevation_m + height_m).
  * Conflit multi-éléments → max. Carte creuse : le terrain plat par défaut
- * (0.02 m) reste hors carte — seuil à 0.05 m.
+ * (0.02 m) reste hors carte — seuil à 0.05 m. Exception : une trémie
+ * (escalier descendant) place le jeton SOUS le sol, sur la première marche.
  */
 export function buildElevationByCell(
   elements: ElementSpec[],
   dims: { cols: number; rows: number },
 ): Record<string, number> {
   const byCell: Record<string, number> = {}
+  const stairwell = new Map<string, number>()
   for (const element of elements) {
+    if (isStairwell(element)) {
+      const surfaceM = stairwellSurfaceM(element, dims)
+      for (const cell of stairwellCells(element, dims)) stairwell.set(`${cell.col},${cell.row}`, surfaceM)
+      continue
+    }
     if (element.kind !== 'stairs' && element.kind !== 'terrain') continue
     const surfaceM = element.elevationM + element.heightM
     if (surfaceM <= 0.05) continue
@@ -199,6 +261,7 @@ export function buildElevationByCell(
       byCell[key] = Math.max(byCell[key] ?? 0, surfaceM)
     }
   }
+  for (const [key, surfaceM] of stairwell) byCell[key] = surfaceM
   return byCell
 }
 
@@ -217,8 +280,15 @@ function resolveSelectedElementId(input: SceneAdapterInput, elements: SceneEleme
   return elements.some((element) => element.id === input.selectedId) ? input.selectedId : null
 }
 
-function buildTokens(input: SceneAdapterInput, blockedCells: Set<string>): TokenSpec[] {
+function buildTokens(
+  input: SceneAdapterInput,
+  blockedCells: Set<string>,
+  elements: ElementSpec[],
+  dims: { cols: number; rows: number },
+): TokenSpec[] {
   const tokens: TokenSpec[] = []
+  const elementsById = new Map(elements.map((element) => [element.id, element]))
+  const arrivalExitId = input.scene?.arrival?.exit_id ?? null
 
   for (const hero of input.heroes) {
     blockedCells.add(`${hero.x},${hero.y}`)
@@ -239,6 +309,7 @@ function buildTokens(input: SceneAdapterInput, blockedCells: Set<string>): Token
       defeated: false,
       iconId: null,
       exitActive: false,
+      role: hero.isMe ? 'you' : hero.ai ? 'ai' : 'ally',
     })
   }
 
@@ -266,6 +337,7 @@ function buildTokens(input: SceneAdapterInput, blockedCells: Set<string>): Token
         defeated: false,
         iconId: null,
         exitActive: false,
+        role: isEnemy ? 'enemy' : 'npc',
       })
       continue
     }
@@ -287,6 +359,12 @@ function buildTokens(input: SceneAdapterInput, blockedCells: Set<string>): Token
       defeated: false,
       iconId: poi.iconId ?? null,
       exitActive: isExit ? poi.active !== false : false,
+      ...(isExit
+        ? (() => {
+          const indicator = exitIndicator(poi.x, poi.y, poi.elementId ? elementsById.get(poi.elementId) : undefined, dims)
+          return { exitDirection: indicator.direction, exitFacing: indicator.facing, arrival: poi.id === arrivalExitId }
+        })()
+        : { poiRole: poiRoleFor(poi.kind), hasElement: Boolean(poi.elementId && elementsById.has(poi.elementId)) }),
     })
   }
 

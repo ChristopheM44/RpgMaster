@@ -238,10 +238,8 @@ def test_build_scene_variety_across_seeds_for_same_theme() -> None:
     assert len(layouts) > 1
 
 
-def test_dungeon_theme_pack_assets_match_dungeon_generator_expectations() -> None:
-    """Piste B.3 — le pack 'dungeon' reste la source des asset_key du donjon procédural."""
+def test_dungeon_theme_pack_ambiance_matches_dungeon_generator_expectations() -> None:
+    """Piste B.3 — le pack 'dungeon' fixe l'ambiance du donjon procédural."""
     pack = THEME_PACKS["dungeon"]
-    assert pack.cover_assets == ("prop/pillar", "prop/rubble_large", "prop/crates_stacked")
-    assert pack.decor_assets[0] == "prop/barrel_large"
     assert pack.ambiance == {"light": "torchlit", "fog_density": 0.25}
     assert pack.vegetation_density == 0.0

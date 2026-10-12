@@ -646,3 +646,28 @@ def test_enrich_only_adds_3d_keys_to_legacy_persisted_scene() -> None:
         } == legacy_element
         assert new_element_keys <= set(new_element)
     assert new_scene_keys <= set(reenriched)
+
+
+def test_enrich_marks_interior_independently_of_theme() -> None:
+    tavern = {
+        "cols": 12,
+        "rows": 12,
+        "terrain": "taverne",
+        "scene_theme": "city",
+        "description": "Une taverne enfumée",
+        "pois": [],
+        "exits": [],
+    }
+    enrich_scene_layout(tavern)
+    assert tavern["interior"] is True
+
+    road = {
+        "cols": 12,
+        "rows": 12,
+        "terrain": "route",
+        "scene_theme": "plains",
+        "pois": [],
+        "exits": [],
+    }
+    enrich_scene_layout(road)
+    assert road["interior"] is False

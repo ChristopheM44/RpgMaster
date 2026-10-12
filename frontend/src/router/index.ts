@@ -56,6 +56,10 @@ const router = createRouter({
       component: () => import('../views/MonstersView.vue'),
       meta: { title: 'Bestiaire' },
     },
+    // Banc d'essai carte : dev uniquement (absent du build de production).
+    ...(import.meta.env.DEV
+      ? [{ path: '/dev/map-lab', name: 'map-lab', component: () => import('../views/dev/MapLabView.vue') }]
+      : []),
   ],
 })
 

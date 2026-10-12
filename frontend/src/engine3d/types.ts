@@ -9,6 +9,9 @@ import type {
   SceneTheme,
 } from '../types'
 
+/** Teinte de matière d'un modèle (miroir de TINT_RULES, backend prop_catalog). */
+export type ElementTint = 'petrified' | 'charred' | 'frost' | 'moss' | 'sand' | 'deadwood'
+
 export interface GridDims {
   cols: number
   rows: number
@@ -35,6 +38,12 @@ export interface GroundSpec {
   visualAssetUrl: string | null
   ambiance: AmbianceSpec
   vegetationDensity: number
+  /** Cellules "col,row" retirées du sol (trémies d'escaliers descendants). */
+  holes?: string[]
+  /** Grille tactique visible (combat). En exploration : seule la case survolée est marquée. */
+  showGrid?: boolean
+  /** Lieu clos pour CETTE scène (taverne en thème city…) — s'ajoute au `enclosed` du biome. */
+  enclosed?: boolean
 }
 
 export interface ElementSpec {
@@ -50,8 +59,10 @@ export interface ElementSpec {
   interactive: boolean
   inspectable: boolean
   selected: boolean
-  /** Hint public validé côté manifest ; null → heuristique/fallback procédural. */
+  /** Hint public validé côté manifest (GLB ou `proc/*`) ; null → heuristique/fallback procédural. */
   modelKey: string | null
+  /** Teinte de matière appliquée au modèle (arbre pétrifié, bois calciné…). */
+  tint: ElementTint | null
   /** Direction cardinale vers laquelle l'accès ou élément mural s'ouvre. */
   facing: SceneElementFacing | null
   /** Sens vertical d'un escalier quand il est emprunté vers `facing`. */
@@ -86,7 +97,26 @@ export interface TokenSpec {
   /** Offsets monde sub-cellule (anti-chevauchement) — voir tokenCollision.ts. */
   offsetX?: number
   offsetZ?: number
+  /**
+   * Rôle visuel (vocabulaire d'indicateurs, lot 3) : couleur du socle et de
+   * l'étiquette. you = or, ai = arcane, ally/npc = teal, enemy = sang.
+   */
+  role?: TokenRole
+  /** POI : nature du repère (un danger se lit au sol, sans losange). */
+  poiRole?: PoiRole
+  /** POI danger : un élément de décor porte déjà le décalque au sol. */
+  hasElement?: boolean
+  /** Sortie : voyager, monter ou descendre (bannière + chevrons). */
+  exitDirection?: ExitDirection
+  /** Sortie : direction monde des chevrons (bord vers lequel on sort). */
+  exitFacing?: SceneElementFacing | null
+  /** Sortie : accès par lequel le groupe vient d'arriver (teinte teal). */
+  arrival?: boolean
 }
+
+export type TokenRole = 'you' | 'ai' | 'ally' | 'npc' | 'enemy'
+export type PoiRole = 'clue' | 'loot' | 'hazard' | 'cover' | 'point'
+export type ExitDirection = 'travel' | 'up' | 'down'
 
 export interface ZoneSpec {
   id: string
@@ -118,8 +148,23 @@ export interface SceneSpec {
   overlay: OverlaySpec
   /** Cellules "col,row" interdites au scatter (occupées par éléments/tokens). */
   scatterBlockedCells: string[]
-  /** Hauteur de surface en MÈTRES par cellule "col,row" (stairs/terrain surélevés). */
+  /** Hauteur de surface en MÈTRES par cellule "col,row" (stairs/terrain ; négative dans une trémie). */
   elevationByCell: Record<string, number>
+  /** Accès par lequel le groupe vient d'arriver (transition de scène), sinon null. */
+  arrival?: ArrivalSpec | null
+}
+
+export interface ArrivalSpec {
+  exitId: string
+  col: number
+  row: number
+  facing: SceneElementFacing | null
+  verticalDirection: SceneElementVerticalDirection
+  fromSceneId: string
+  /** Sortie empruntée dans la scène précédente (pour le travelling de départ). */
+  viaExitId: string | null
+  /** Libellé de l'accès d'arrivée (bandeau « Vous arrivez… »). */
+  label: string
 }
 
 export type PickResult =
@@ -141,9 +186,15 @@ export interface SceneRuntimeHandle {
   projectCell(col: number, row: number): { x: number; y: number } | null
   projectToken(id: string): { x: number; y: number } | null
   setZoomPreset(preset: ZoomPreset): void
+  /** Travelling vers une cellule (départ par une sortie) ; résolu en fin d'animation. */
+  focusCell(col: number, row: number, durationS?: number): Promise<void>
+  /** Après un changement de scène : part de l'accès d'arrivée et recule jusqu'au cadrage normal. */
+  arriveAt(col: number, row: number, durationS?: number): void
   setRunning(running: boolean): void
   /** Multiplicateur de luminosité piloté par l'UI (exposition + plancher ambiant). */
   setBrightness(value: number): void
+  /** Conteneur DOM des étiquettes projetées (noms, repères, bannières de sortie). */
+  attachLabels?(root: HTMLElement | null): void
   resize(): void
   dispose(): void
 }

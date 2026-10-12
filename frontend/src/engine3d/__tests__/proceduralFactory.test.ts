@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
-import { buildPawn, buildProceduralElement, buildScatterObject } from '../assets/ProceduralFactory'
+import { buildPawn, buildProceduralElement, buildScatterObject, proceduralPropKeyFor } from '../assets/ProceduralFactory'
+import { PROCEDURAL_PROP_KEYS } from '../assets/propCatalog.generated'
+import { applyTint } from '../layers/ElementsLayer'
 import { resolveThemeTokens, BIOME_3D, type ScatterKind } from '../core/ThemeProvider'
 import { makePrng } from '../utils/seededRandom'
 import type { ElementSpec } from '../types'
@@ -22,6 +24,7 @@ function spec(kind: string, geometry: ElementSpec['geometry']): ElementSpec {
     inspectable: true,
     selected: false,
     modelKey: null,
+    tint: null,
     facing: null,
     verticalDirection: null,
   }
@@ -67,5 +70,40 @@ describe('ProceduralFactory', () => {
       const object = buildScatterObject(kind, rand, tokens)
       expect(object.children.length, kind).toBeGreaterThan(0)
     }
+  })
+
+  it('lot 4 : chaque prop procédural nommé (fontaine, autel…) est dessiné', () => {
+    for (const key of PROCEDURAL_PROP_KEYS) {
+      const object = buildProceduralElement(
+        { ...spec('decor', { type: 'rect', col: 2, row: 2, width: 1, height: 2 }), modelKey: key },
+        ctx,
+      )
+      let meshes = 0
+      object.traverse((node) => { if ((node as THREE.Mesh).isMesh) meshes += 1 })
+      expect(meshes, key).toBeGreaterThan(0)
+    }
+  })
+
+  it('lot 4 : le nom suffit à choisir le prop procédural, un hint GLB explicite prime', () => {
+    const fountain = { ...spec('decor', { type: 'rect', col: 2, row: 2, width: 1, height: 1 }), name: 'Fontaine tarie' }
+    expect(proceduralPropKeyFor(fountain)).toBe('proc/fountain')
+    expect(proceduralPropKeyFor({ ...fountain, modelKey: 'prop/pot' })).toBeNull()
+    expect(proceduralPropKeyFor({ ...fountain, kind: 'wall' })).toBeNull()
+  })
+
+  it('lot 4 : la teinte clone les matériaux (ne grise pas les autres instances)', () => {
+    const shared = new THREE.MeshStandardMaterial({ color: '#336633' })
+    const a = new THREE.Mesh(new THREE.BoxGeometry(), shared)
+    const b = new THREE.Mesh(new THREE.BoxGeometry(), shared)
+    applyTint(a, 'petrified')
+    expect(a.material).not.toBe(shared)
+    expect(b.material).toBe(shared)
+    expect(shared.color.getHexString()).toBe('336633')
+    const cache = new Map<string, THREE.Material>()
+    const c = new THREE.Mesh(new THREE.BoxGeometry(), shared)
+    const d = new THREE.Mesh(new THREE.BoxGeometry(), shared)
+    applyTint(c, 'sand', cache)
+    applyTint(d, 'sand', cache)
+    expect(c.material).toBe(d.material)
   })
 })

@@ -8,6 +8,8 @@ from collections.abc import Iterable
 from math import ceil, floor
 from typing import Any
 
+from app.engine import prop_catalog, scene_dressing
+
 SCENE_ELEMENT_KINDS = {
     "wall",
     "door",
@@ -59,7 +61,11 @@ SCENE_ASSET_KEYS = {
     "nature/rock_large_b",
     "nature/rock_small_a",
     "nature/rock_small_b",
+    *prop_catalog.catalog_asset_keys(),
+    *prop_catalog.PROCEDURAL_PROP_KEYS,
 }
+# Teintes de matière comprises par le rendu (cf. ``prop_catalog.TINT_RULES``).
+SCENE_ELEMENT_TINTS = {tint for tint, _ in prop_catalog.TINT_RULES}
 
 # Défauts 3D optionnels — mêmes valeurs que le fallback client
 # (frontend/src/engine3d/adapters/sceneAdapter.ts) pour rester cohérent.
@@ -196,57 +202,40 @@ _EXPLICIT_SUBTERRANEAN_ACCESS_WORDS = {
     "entree souterraine",
     "sous-sol",
 }
-_STAIRS_ACCESS_WORDS = (
-    "trappe",
-    "égout",
-    "egout",
-    "échelle",
-    "echelle",
-    "escalier",
-    "stair",
-    "stairs",
-    "puits",
-    "cave",
-    "sous-sol",
-    "souterrain",
+# Inférence d'accès/orientation : mots ENTIERS uniquement (regex \b). Avant
+# 2026-10, des sous-chaînes faisaient lire « c'est » / « reste » comme l'est,
+# « haut/bas » comme nord/sud et « bassin » comme une descente.
+_STAIRS_ACCESS_RE = re.compile(
+    r"\b(?:trappes?|[ée]gouts?|[ée]chelles?|escaliers?|stairs?|stairway|staircase|"
+    r"puits|caves?|sous-sol|souterrains?|souterraines?|marches)\b"
 )
-_DOOR_ACCESS_WORDS = (
-    "porte",
-    "portail",
-    "gate",
-    "door",
-    "grille",
-    "entrée",
-    "entree",
-    "ouverture",
+_DOOR_ACCESS_RE = re.compile(
+    r"\b(?:portes?|portails?|gates?|doors?|grilles?|entr[ée]es?|ouvertures?)\b"
 )
-_UP_ACCESS_WORDS = (
-    "monte",
-    "montée",
-    "montee",
-    "remonte",
-    "remontée",
-    "remontee",
-    "surface",
-    "ascend",
-    "upward",
-    "upstairs",
+# Verbes de déplacement vertical : prioritaires sur les lieux (« remonter … par
+# les égouts » monte). Le premier verbe rencontré l'emporte.
+_UP_VERB_RE = re.compile(
+    r"\b(?:re)?mont(?:e|es|er|ent|ons|ez|ant|ée|ee|ées|ees)\b|\bgravi\w*|\bgrimp\w*"
+    r"|\bascen\w*|\bupstairs?\b|\bupwards?\b|\bvers le haut\b|\ben haut\b"
 )
-_DOWN_ACCESS_WORDS = (
-    "descend",
-    "descente",
-    "descendre",
-    "bas",
-    "down",
-    "downward",
-    "downstairs",
-    "égout",
-    "egout",
-    "cave",
-    "sous-sol",
-    "souterrain",
-    "puits",
-    "trappe",
+_DOWN_VERB_RE = re.compile(
+    r"\b(?:re)?descen\w*|\bdownstairs?\b|\bdownwards?\b|\bvers le bas\b|\ben bas\b"
+    r"|\bplong\w*|\bs['’]enfonc\w*"
+)
+_UP_PLACE_RE = re.compile(
+    r"\b(?:surface|[ée]tages?|greniers?|toits?|remparts?|sommets?|clochers?|mezzanine|balcons?)\b"
+)
+_DOWN_PLACE_RE = re.compile(
+    r"\b(?:sous-sol|caves?|caveaux?|celliers?|souterrains?|souterraines?|[ée]gouts?|cryptes?|"
+    r"puits|trappes?|cachots?|oubliettes?|profondeurs?|catacombes?|abysses?)\b"
+)
+# Points cardinaux en mots entiers. « est » n'est cardinal que sous la forme
+# « l'est » / « plein est » : « la porte est ouverte » ne désigne pas l'est.
+_CARDINAL_RES: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("west", re.compile(r"\b(?:ouest|west|occidental(?:e|es|s)?)\b")),
+    ("east", re.compile(r"\b(?:east|oriental(?:e|es|s)?)\b|\bl['’]est\b|\bplein est\b")),
+    ("north", re.compile(r"\b(?:nord|north|septentrional(?:e|es|s)?)\b")),
+    ("south", re.compile(r"\b(?:sud|south|m[ée]ridional(?:e|es|s)?)\b")),
 )
 
 
@@ -306,6 +295,9 @@ def normalize_scene_element(raw: Any, cols: int, rows: int) -> dict[str, Any] | 
     asset_key = normalize_asset_key(raw.get("asset_key"))
     if asset_key:
         element["asset_key"] = asset_key
+    tint = _clean_text(raw.get("tint"), max_len=24).lower()
+    if tint in SCENE_ELEMENT_TINTS:
+        element["tint"] = tint
     height_m = _parse_optional_float(raw.get("height_m"))
     if height_m is not None:
         element["height_m"] = round(
@@ -404,11 +396,13 @@ def enrich_scene_layout(
     layout: dict[str, Any],
     *,
     time_of_day: str | None = None,
+    dress: bool = True,
 ) -> dict[str, Any]:
     """Add deterministic local-map elements where the GM supplied only POIs/exits.
 
     ``time_of_day`` (journal wording, free-form) only drives the default
-    ambiance light when the GM did not provide a valid one.
+    ambiance light when the GM did not provide a valid one. ``dress=False``
+    skips the place dressing (combat in progress: its obstacles are frozen).
     """
     cols = int(layout.get("cols") or 12)
     rows = int(layout.get("rows") or 12)
@@ -422,17 +416,25 @@ def enrich_scene_layout(
     _normalize_exits(layout, by_id, cols, rows)
 
     interior = _is_interior_scene(layout)
+    # Indice de rendu (ajout seul) : le frontend traite le lieu comme clos (sol
+    # intérieur, brume sombre, torches) même si le thème est « city » (taverne…).
+    layout["interior"] = interior
     if interior:
         _add_boundary_walls(by_id, cols, rows)
         _add_exit_access_elements(by_id, layout, cols, rows, interior=True)
         _add_windows(by_id, layout, cols, rows)
+        if dress:
+            _add_place_dressing(by_id, layout, cols, rows, interior=True)
         _add_default_furniture(by_id, layout, cols, rows)
     else:
         _add_exit_access_elements(by_id, layout, cols, rows, interior=False)
         if _is_plaza_scene(layout):
             _add_plaza_elements(by_id, layout, cols, rows)
+        if dress:
+            _add_place_dressing(by_id, layout, cols, rows, interior=False)
 
     _add_poi_elements(by_id, layout, cols, rows)
+    _apply_semantic_props(by_id)
     _strip_unrevealed_subterranean_access(by_id, layout)
     _carve_wall_openings(by_id)
     for element in by_id.values():
@@ -697,9 +699,7 @@ def _exit_needs_access_element(exit_: dict[str, Any], corpus: str, *, interior: 
         return True
     if interior:
         return True
-    return _exit_access_kind(corpus) == "stairs" or any(
-        word in corpus for word in _DOOR_ACCESS_WORDS
-    )
+    return _exit_access_kind(corpus) == "stairs" or bool(_DOOR_ACCESS_RE.search(corpus))
 
 
 def _apply_exit_access_defaults(
@@ -825,6 +825,61 @@ def _add_default_furniture(
         )
 
 
+def _add_place_dressing(
+    by_id: dict[str, dict[str, Any]],
+    layout: dict[str, Any],
+    cols: int,
+    rows: int,
+    *,
+    interior: bool,
+) -> None:
+    """Mobilier du type de lieu (rayonnages d'une bibliothèque…), cf. ``scene_dressing``."""
+    occupied: set[tuple[int, int]] = set()
+    access: set[tuple[int, int]] = set()
+    blocking: set[tuple[int, int]] = set()
+    for element in by_id.values():
+        cells = {(cell["col"], cell["row"]) for cell in element_grid_cells(element, cols, rows)}
+        occupied |= cells
+        if element.get("kind") in {"door", "stairs", "window"}:
+            access |= cells
+        if element.get("blocks_movement"):
+            blocking |= cells
+    snapshot = {**layout, "elements": list(by_id.values())}
+    for element in scene_dressing.dress_scene(
+        snapshot,
+        interior=interior,
+        occupied=occupied,
+        access_cells=access,
+        blocking=blocking,
+    ):
+        by_id.setdefault(element["id"], element)
+
+
+def _apply_semantic_props(by_id: dict[str, dict[str, Any]]) -> None:
+    """Le modèle d'un meuble/couvert/décor découle de son NOM (catalogue partagé).
+
+    Corrige aussi les scènes déjà sauvegardées (appelé au rechargement via
+    ``repair_state_visual_coherence``) : un ancien tirage au hasard du pack de
+    thème (« Arbre pétrifié » → caisses) est remplacé, ou retiré s'il n'est pas
+    étayé par le nom — un rendu procédural neutre vaut mieux qu'un contresens.
+    """
+    for element in by_id.values():
+        if element.get("kind") not in prop_catalog.CATALOG_ELEMENT_KINDS:
+            continue
+        if str(element.get("id") or "").startswith(scene_dressing.DRESSING_ID_PREFIX):
+            continue  # habillage : modèle choisi par la recette du lieu
+        name = str(element.get("name") or "")
+        matched = prop_catalog.match_prop(name)
+        if matched:
+            element["asset_key"] = matched
+        else:
+            element.pop("asset_key", None)
+        if "tint" not in element:
+            tint = prop_catalog.match_tint(f"{name} {element.get('description') or ''}")
+            if tint:
+                element["tint"] = tint
+
+
 def _add_poi_elements(
     by_id: dict[str, dict[str, Any]],
     layout: dict[str, Any],
@@ -895,19 +950,8 @@ def _default_asset_for_poi_element(poi: dict[str, Any], element_kind: str) -> di
         if any(word in corpus for word in ("murale", "applique", "wall", "mounted")):
             return {"asset_key": "prop/torch_mounted"}
         return {"asset_key": "prop/torch_lit"}
-    if element_kind == "furniture":
-        if any(word in corpus for word in ("or", "doré", "dore", "trésor", "tresor")):
-            return {"asset_key": "prop/chest_gold"}
-        return {"asset_key": "prop/chest"}
-    if element_kind == "cover":
-        if any(word in corpus for word in ("pilier", "colonne", "pillar")):
-            return {"asset_key": "prop/pillar"}
-        if any(word in corpus for word in ("gravat", "débris", "debris", "éboulis", "eboulis")):
-            return {"asset_key": "prop/rubble_large"}
-        if any(word in corpus for word in ("tonneau", "baril", "barrel")):
-            return {"asset_key": "prop/barrel_large"}
-        return {"asset_key": "prop/crates_stacked"}
-    return {}
+    matched = prop_catalog.match_prop(str(poi.get("name") or ""))
+    return {"asset_key": matched} if matched else {}
 
 
 def _normalize_exits(
@@ -994,47 +1038,80 @@ def _ensure_embedded_exit_element(
 
 
 def _exit_access_kind(corpus: str) -> str:
-    if any(word in corpus for word in _STAIRS_ACCESS_WORDS):
+    if _STAIRS_ACCESS_RE.search(corpus):
         return "stairs"
     return "door"
 
 
-def _infer_vertical_direction(corpus: str) -> str:
-    if any(word in corpus for word in _DOWN_ACCESS_WORDS):
-        return "down"
-    if any(word in corpus for word in _UP_ACCESS_WORDS):
+def infer_vertical_direction(corpus: str) -> str:
+    """Sens vertical d'un accès d'après son texte : verbes d'abord, puis lieux."""
+    return _first_match_direction(corpus, _UP_VERB_RE, _DOWN_VERB_RE) or (
+        _first_match_direction(corpus, _UP_PLACE_RE, _DOWN_PLACE_RE) or "level"
+    )
+
+
+_infer_vertical_direction = infer_vertical_direction
+
+
+def _first_match_direction(corpus: str, up: re.Pattern[str], down: re.Pattern[str]) -> str | None:
+    up_match = up.search(corpus)
+    down_match = down.search(corpus)
+    if up_match and down_match:
+        return "up" if up_match.start() < down_match.start() else "down"
+    if up_match:
         return "up"
-    return "level"
+    if down_match:
+        return "down"
+    return None
 
 
-def _infer_exit_facing(exit_: dict[str, Any], cols: int, rows: int) -> str | None:
+def cardinal_from_text(corpus: str) -> str | None:
+    for facing, pattern in _CARDINAL_RES:
+        if pattern.search(corpus):
+            return facing
+    return None
+
+
+def border_facings(pos: dict[str, Any], cols: int, rows: int) -> list[str]:
+    """Bords touchés par une case (0, 1 ou 2 pour un coin) — nord/sud d'abord."""
+    try:
+        col = int(pos.get("col", -1))
+        row = int(pos.get("row", -1))
+    except (TypeError, ValueError):
+        return []
+    facings: list[str] = []
+    if row <= 0:
+        facings.append("north")
+    if row >= rows - 1:
+        facings.append("south")
+    if col <= 0:
+        facings.append("west")
+    if col >= cols - 1:
+        facings.append("east")
+    return facings
+
+
+def infer_exit_facing(exit_: dict[str, Any], cols: int, rows: int) -> str | None:
+    """Bord vers lequel une sortie s'ouvre.
+
+    Ordre : valeur explicite, puis POSITION (une sortie de bord s'ouvre sur son
+    bord ; le texte ne sert qu'à départager un coin), puis texte cardinal.
+    """
     explicit = _clean_text(exit_.get("facing"), max_len=16).lower()
     if explicit in SCENE_ELEMENT_FACINGS:
         return explicit
 
     corpus = _exit_corpus(exit_)
-    if any(word in corpus for word in ("ouest", "west", "gauche")):
-        return "west"
-    if any(word in corpus for word in ("est", "east", "droite")):
-        return "east"
-    if any(word in corpus for word in ("nord", "north", "haut")):
-        return "north"
-    if any(word in corpus for word in ("sud", "south", "bas")):
-        return "south"
-
     pos = exit_.get("position")
-    if not isinstance(pos, dict):
-        return None
-    col = _clamp_float(pos.get("col"), 0.0, float(cols - 1), 0.0)
-    row = _clamp_float(pos.get("row"), 0.0, float(rows - 1), 0.0)
-    distances = [
-        (row, "north"),
-        (cols - 1 - col, "east"),
-        (rows - 1 - row, "south"),
-        (col, "west"),
-    ]
-    distance, facing = min(distances, key=lambda item: item[0])
-    return facing if distance <= 0.001 else None
+    if isinstance(pos, dict):
+        candidates = border_facings(pos, cols, rows)
+        if candidates:
+            from_text = cardinal_from_text(corpus)
+            return from_text if from_text in candidates else candidates[0]
+    return cardinal_from_text(corpus)
+
+
+_infer_exit_facing = infer_exit_facing
 
 
 def _access_geometry(
@@ -1114,13 +1191,14 @@ def _edge_exit_position(
     if _is_border_position({"col": col, "row": row}, cols, rows):
         return {"col": col, "row": row}
 
-    if any(word in corpus for word in ("ouest", "west", "gauche")):
+    facing = cardinal_from_text(corpus)
+    if facing == "west":
         return {"col": 0, "row": row}
-    if any(word in corpus for word in ("est", "east", "droite")):
+    if facing == "east":
         return {"col": cols - 1, "row": row}
-    if any(word in corpus for word in ("nord", "north", "haut")):
+    if facing == "north":
         return {"col": col, "row": 0}
-    if any(word in corpus for word in ("sud", "south", "bas")):
+    if facing == "south":
         return {"col": col, "row": rows - 1}
 
     distances = [

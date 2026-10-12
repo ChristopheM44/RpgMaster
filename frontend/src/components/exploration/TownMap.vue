@@ -1,18 +1,30 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+// Plan de Ville (refonte lot 5) : quartiers en aplats, rues pavées, bâtiments
+// nommés avec picto, position du groupe, sorties de ville fléchées vers le bord.
+// Même cadre que la Région (plein cadre, zoom/déplacement, étiquettes sans
+// chevauchement).
+import { computed, ref } from 'vue'
 import { useSessionStore } from '../../stores/session'
 import { useGameStore } from '../../stores/game'
 import { resolveMapDecor } from '../../composables/useMapDecor'
-import type { MapNode, NodeStatus, CityNodeKind, MapDecor } from '../../types'
-import { tokens } from '../../types/tokens'
+import { useMapViewport } from '../../composables/useMapViewport'
+import type { MapDecor, MapNode } from '../../types'
+import MapGlyph from './MapGlyph.vue'
+import {
+  edgeState,
+  glyphFor,
+  measureLabel,
+  placeLabels,
+  project,
+  STATUS_PRIORITY,
+  visibleEdges,
+  type LabelRequest,
+  type Point,
+} from './mapLayout'
 
-const props = withDefaults(defineProps<{
-  width?: number
-  height?: number
-}>(), {
-  width: 640,
-  height: 580,
-})
+const BUILDING_HALF = 15
+const SQUARE_RADIUS = 18
+const DISTRICT_RADIUS = { x: 13, y: 9 } // unités carte
 
 const sessionStore = useSessionStore()
 const gameStore = useGameStore()
@@ -21,378 +33,264 @@ const city = computed(() => {
   const id = gameStore.activeCityId
   return id ? gameStore.cityMaps[id] : undefined
 })
-
 const nodes = computed<MapNode[]>(() => city.value?.nodes ?? [])
-const edges = computed(() => city.value?.edges ?? [])
+const byId = computed(() => new Map(nodes.value.map((node) => [node.id, node])))
+const edges = computed(() => visibleEdges(city.value?.edges ?? [], byId.value))
 const currentNodeId = computed(() => city.value?.current_node_id)
 const visualAsset = computed(() => city.value?.visual_asset)
-const visualAssetReady = computed(() =>
-  visualAsset.value?.status === 'ready' && Boolean(visualAsset.value.url),
-)
-const visualAssetGenerating = computed(() =>
-  visualAsset.value?.status === 'prompt_ready' || visualAsset.value?.status === 'generating',
+const visualAssetReady = computed(() => visualAsset.value?.status === 'ready' && Boolean(visualAsset.value.url))
+const visualAssetGenerating = computed(
+  () => visualAsset.value?.status === 'prompt_ready' || visualAsset.value?.status === 'generating',
 )
 
-// Décor : backend ou fallback procédural
 const decor = computed<MapDecor>(() =>
-  resolveMapDecor(
-    city.value?.decor,
-    city.value?.background_seed ?? city.value?.id ?? 'city',
-    'city',
-  )
+  resolveMapDecor(city.value?.decor, city.value?.background_seed ?? city.value?.id ?? 'city', 'city'),
 )
 
-// ── Dimensions bâtiment selon le kind ────────────────────────────────────────
-// Coordonnées exprimées en unités viewBox 0..100.
-// w×h sont des demi-dimensions : le rect est centré sur position.
-function buildingSize(kind: string): { w: number; h: number } {
-  switch (kind as CityNodeKind) {
-    case 'palace':   return { w: 8, h: 5 }
-    case 'district': return { w: 10, h: 7 }
-    case 'tavern':   return { w: 7, h: 4 }
-    case 'temple':   return { w: 5, h: 3 }
-    case 'shop':     return { w: 4, h: 2.5 }
-    case 'docks':    return { w: 9, h: 3.5 }
-    case 'gate':     return { w: 3, h: 5 }
-    case 'square':   return { w: 6, h: 6 }
-    case 'building': return { w: 6, h: 3.5 }
-    default:          return { w: 5, h: 3 }
-  }
-}
+const root = ref<HTMLElement | null>(null)
+const points = computed(() => nodes.value.map((node) => node.position))
+const resetKey = computed(() => city.value?.id ?? '')
+const viewport = useMapViewport(root, points, resetKey, { padding: 90, minSpan: 36 })
+const { width, height, view, isAdjusted } = viewport
 
-function toneByStatus(status: NodeStatus): string {
-  switch (status) {
-    case 'visited':  return tokens.green
-    case 'current':  return tokens.gold
-    case 'rumored':  return tokens.arcane
-    case 'known':    return 'rgba(247,236,208,0.55)'
-    default:          return 'rgba(247,236,208,0.55)'
-  }
-}
+const worldTransform = computed(() => `translate(${view.value.tx} ${view.value.ty}) scale(${view.value.scale})`)
 
-function toneColor(status: NodeStatus): string {
-  switch (status) {
-    case 'visited':  return 'var(--color-green)'
-    case 'current':  return 'var(--color-gold)'
-    case 'rumored':  return 'var(--color-arcane)'
-    case 'known':    return 'var(--color-parchment-dark)'
-    default:          return 'var(--color-parchment-dark)'
-  }
-}
+const districts = computed(() => nodes.value.filter((node) => node.kind === 'district'))
 
-function nodeById(id: string): MapNode | undefined {
-  return nodes.value.find((n) => n.id === id)
-}
+const places = computed(() =>
+  nodes.value.map((node) => ({
+    node,
+    ...project(view.value, node.position),
+    glyph: glyphFor(node, 'city'),
+    shape: node.kind === 'square' ? 'square' : node.kind === 'district' ? 'district' : 'building',
+  })),
+)
 
-function edgePath(fromId: string, toId: string): string | null {
-  const a = nodeById(fromId)
-  const b = nodeById(toId)
-  if (!a || !b) return null
-  return `M ${a.position.x} ${a.position.y} L ${b.position.x} ${b.position.y}`
-}
+const streets = computed(() =>
+  edges.value.map((edge) => {
+    const a = project(view.value, byId.value.get(edge.from)!.position)
+    const b = project(view.value, byId.value.get(edge.to)!.position)
+    return { edge, d: `M ${a.x} ${a.y} L ${b.x} ${b.y}`, state: edgeState(edge, byId.value) }
+  }),
+)
 
-function isSelected(id: string) { return sessionStore.selectedId === id }
-function isHighlighted(id: string) { return sessionStore.highlightedIds.includes(id) }
-
-function onClick(id: string) { sessionStore.selectEntity(id) }
-
-function nodeFill(n: MapNode) {
-  const tone = toneByStatus(n.status)
-  if (isSelected(n.id)) return `${tone}40`
-  if (isHighlighted(n.id)) return `${tone}25`
-  return 'rgba(40,32,24,0.7)'
-}
-
-function nodeStroke(n: MapNode) {
-  if (isSelected(n.id)) return 'var(--color-gold)'
-  if (isHighlighted(n.id)) return 'var(--color-ember)'
-  return toneByStatus(n.status)
-}
-
-function pinByKind(kind: string): string {
-  switch (kind as CityNodeKind) {
-    case 'tavern':   return '★'
-    case 'shop':     return '✦'
-    case 'temple':   return '✺'
-    case 'palace':   return '◇'
-    case 'docks':    return '◈'
-    case 'gate':     return '◊'
-    case 'square':   return '◉'
-    case 'building': return '◇'
-    default:          return '◆'
-  }
-}
-
-// Position HTML du marqueur "Vous" = node courante
-const youPosition = computed(() => {
-  if (!currentNodeId.value) return null
-  const n = nodeById(currentNodeId.value)
-  if (!n) return null
-  return {
-    left: `${n.position.x / 100 * props.width}px`,
-    top: `${n.position.y / 100 * props.height - 28}px`,
-  }
+/** Sortie de ville : flèche de la porte vers le bord du cadre le plus proche de sa direction. */
+const exits = computed(() => {
+  if (!nodes.value.length || width.value <= 0) return []
+  const center: Point = project(view.value, {
+    x: nodes.value.reduce((sum, node) => sum + node.position.x, 0) / nodes.value.length,
+    y: nodes.value.reduce((sum, node) => sum + node.position.y, 0) / nodes.value.length,
+  })
+  return places.value
+    .filter((place) => place.node.kind === 'gate')
+    .map((place) => {
+      let dx = place.x - center.x
+      let dy = place.y - center.y
+      const length = Math.hypot(dx, dy) || 1
+      dx /= length
+      dy /= length
+      if (length < 2) {
+        dx = 1
+        dy = 0
+      }
+      const margin = 36
+      const tx = dx > 0 ? (width.value - margin - place.x) / dx : dx < 0 ? (margin - place.x) / dx : Infinity
+      const ty = dy > 0 ? (height.value - margin - place.y) / dy : dy < 0 ? (margin - place.y) / dy : Infinity
+      const reach = Math.max(BUILDING_HALF + 24, Math.min(tx, ty))
+      const start = { x: place.x + dx * (BUILDING_HALF + 6), y: place.y + dy * (BUILDING_HALF + 6) }
+      const end = { x: place.x + dx * reach, y: place.y + dy * reach }
+      const angle = (Math.atan2(dy, dx) * 180) / Math.PI
+      return { id: place.node.id, start, end, angle }
+    })
 })
+
+const labels = computed(() => {
+  const requests: (LabelRequest & { lines: string[]; node: MapNode })[] = places.value.map((place) => {
+    const metrics = measureLabel(place.node.short_label ?? place.node.name, { fontPx: 11, maxWidth: 150 })
+    const isHere = place.node.id === currentNodeId.value
+    return {
+      id: place.node.id,
+      x: place.x,
+      y: place.y,
+      width: Math.max(metrics.width, isHere ? 92 : 0),
+      height: metrics.height + (isHere ? 12 : 0),
+      radius: place.shape === 'square' ? SQUARE_RADIUS + 2 : BUILDING_HALF + 4,
+      priority: STATUS_PRIORITY[place.node.status] ?? 3,
+      lines: metrics.lines,
+      node: place.node,
+    }
+  })
+  const placed = placeLabels(requests, { width: width.value, height: height.value })
+  const byRequest = new Map(requests.map((request) => [request.id, request]))
+  return placed.map((label) => ({ ...label, request: byRequest.get(label.id)! }))
+})
+
+const party = computed(() => places.value.find((place) => place.node.id === currentNodeId.value) ?? null)
+
+let suppressClick = false
+function onPointerUp(): void {
+  suppressClick = viewport.onPointerUp()
+}
+function select(id: string): void {
+  if (suppressClick) {
+    suppressClick = false
+    return
+  }
+  sessionStore.selectEntity(id)
+}
+
+function isSelected(id: string): boolean {
+  return sessionStore.selectedId === id
+}
+function isHighlighted(id: string): boolean {
+  return sessionStore.highlightedIds.includes(id)
+}
 </script>
 
 <template>
   <div
-    class="town-map"
-    :style="{ width: `${width}px`, height: `${height}px` }"
+    ref="root"
+    class="wmap wmap--city"
+    @wheel="viewport.onWheel"
+    @pointerdown="viewport.onPointerDown"
+    @pointermove="viewport.onPointerMove"
+    @pointerup="onPointerUp"
+    @pointerleave="onPointerUp"
   >
-    <img
-      v-if="visualAssetReady"
-      class="town-map-image"
-      :src="visualAsset?.url"
-      alt=""
-      draggable="false"
-    />
-    <div v-if="visualAssetGenerating" class="map-gen-badge" :class="`gen-${visualAsset?.status}`">
-      <span class="gen-spinner" />{{ visualAsset?.status === 'generating' ? 'Génération…' : 'En attente…' }}
-    </div>
     <svg
-      v-if="city"
-      viewBox="0 0 100 100"
+      v-if="city && width > 0"
+      class="wmap-svg"
       :width="width"
       :height="height"
-      preserveAspectRatio="none"
-      class="town-map-svg"
+      :viewBox="`0 0 ${width} ${height}`"
+      role="img"
+      :aria-label="`Plan de ${city.name}`"
     >
-      <defs>
-        <linearGradient id="townBg" x1="0" x2="1" y1="0" y2="1">
-          <stop offset="0%"  stop-color="#2a2218" />
-          <stop offset="100%" stop-color="#14110c" />
-        </linearGradient>
-      </defs>
-      <rect x="0" y="0" width="100" height="100" fill="url(#townBg)" />
-
-      <!-- ── Décor de fond ── -->
-
-      <!-- Forêts périphériques -->
-      <circle
-        v-for="(f, i) in (decor.forests ?? [])"
-        :key="`f${i}`"
-        :cx="f.x"
-        :cy="f.y"
-        :r="f.radius ?? 3"
-        :fill="`rgba(58,90,58,${f.opacity ?? 0.4})`"
-      />
-
-      <!-- Rivière -->
-      <path
-        v-if="decor.river"
-        :d="decor.river.path"
-        :stroke-width="decor.river.width ?? 1.5"
-        stroke="rgba(79,216,192,0.25)"
-        fill="none"
-        stroke-linecap="round"
-      />
-
-      <!-- Routes décoratives (arrière-plan, sous les edges réels) -->
-      <path
-        v-for="(d, i) in (decor.decorative_roads ?? [])"
-        :key="`dr${i}`"
-        :d="d"
-        stroke="rgba(247,236,208,0.12)"
-        stroke-width="1.8"
-        stroke-linecap="round"
-        fill="none"
-        stroke-dasharray="0.5 1.5"
-      />
-
-      <!-- ── Edges (rues/chemins réels) ── -->
-      <path
-        v-for="e in edges"
-        :key="e.id"
-        :d="edgePath(e.from, e.to) ?? ''"
-        stroke="rgba(247,236,208,0.22)"
-        stroke-width="1.2"
-        fill="none"
-        stroke-dasharray="0.5 1.5"
-        stroke-linecap="round"
-      />
-
-      <!-- ── Bâtiments ── -->
-      <g
-        v-for="n in nodes"
-        :key="n.id"
-        style="cursor: pointer"
-        @click="onClick(n.id)"
-      >
-        <rect
-          :x="n.position.x - buildingSize(n.kind).w / 2"
-          :y="n.position.y - buildingSize(n.kind).h / 2"
-          :width="buildingSize(n.kind).w"
-          :height="buildingSize(n.kind).h"
-          rx="0.6"
-          :fill="nodeFill(n)"
-          :stroke="nodeStroke(n)"
-          :stroke-width="isSelected(n.id) ? 0.5 : 0.25"
+      <g :transform="worldTransform">
+        <image
+          v-if="visualAssetReady"
+          :href="visualAsset?.url"
+          x="0"
+          y="0"
+          width="100"
+          height="100"
+          preserveAspectRatio="none"
+          class="wmap-asset"
         />
-        <text
-          :x="n.position.x"
-          :y="n.position.y + 0.4"
-          text-anchor="middle"
-          :fill="toneByStatus(n.status)"
-          font-size="2.2"
-          font-family="Cinzel, serif"
-          font-weight="700"
-        >{{ n.icon ?? pinByKind(n.kind) }}</text>
+        <circle
+          v-for="(forest, i) in decor.forests ?? []"
+          :key="`forest-${i}`"
+          class="wmap-forest"
+          :cx="forest.x"
+          :cy="forest.y"
+          :r="forest.radius ?? 3"
+        />
+        <path v-if="decor.river" class="wmap-river" :d="decor.river.path" :stroke-width="(decor.river.width ?? 1.5) * 0.8" />
+        <!-- Quartiers : aplats sous les rues. -->
+        <ellipse
+          v-for="district in districts"
+          :key="`district-${district.id}`"
+          class="wmap-district"
+          :class="`is-${district.status}`"
+          :cx="district.position.x"
+          :cy="district.position.y"
+          :rx="DISTRICT_RADIUS.x"
+          :ry="DISTRICT_RADIUS.y"
+          vector-effect="non-scaling-stroke"
+        />
+      </g>
+
+      <!-- Rues : bordure sombre, chaussée, axe pointillé. -->
+      <g class="wmap-streets">
+        <path
+          v-for="item in streets"
+          :key="`casing-${item.edge.id}`"
+          class="wmap-street-casing"
+          :class="`kind-${item.edge.kind}`"
+          :d="item.d"
+        />
+        <template v-for="item in streets" :key="item.edge.id">
+          <path class="wmap-street" :class="[`kind-${item.edge.kind}`, `state-${item.state}`]" :d="item.d" />
+          <path v-if="item.edge.kind !== 'alley'" class="wmap-street-dash" :d="item.d" />
+        </template>
+      </g>
+
+      <!-- Sorties de ville : flèche vers le bord, vers la région. -->
+      <g v-for="exit in exits" :key="`exit-${exit.id}`">
+        <path class="wmap-exit-arrow" :d="`M ${exit.start.x} ${exit.start.y} L ${exit.end.x} ${exit.end.y}`" />
+        <polygon
+          class="wmap-exit-head"
+          points="0,0 -11,-6 -11,6"
+          :transform="`translate(${exit.end.x} ${exit.end.y}) rotate(${exit.angle})`"
+        />
+      </g>
+
+      <g
+        v-for="place in places"
+        :key="place.node.id"
+        class="wmap-node"
+        :class="[
+          `is-${place.node.status}`,
+          { 'is-selected': isSelected(place.node.id), 'is-highlighted': isHighlighted(place.node.id) },
+        ]"
+        :transform="`translate(${place.x} ${place.y})`"
+        role="button"
+        :aria-label="place.node.name"
+        @click.stop="select(place.node.id)"
+      >
+        <circle v-if="place.shape === 'square'" class="wmap-building" :r="SQUARE_RADIUS" />
+        <circle v-else-if="place.shape === 'district'" class="wmap-node-disc" :r="BUILDING_HALF - 2" />
+        <rect
+          v-else
+          class="wmap-building"
+          :x="-BUILDING_HALF"
+          :y="-BUILDING_HALF"
+          :width="BUILDING_HALF * 2"
+          :height="BUILDING_HALF * 2"
+          rx="5"
+        />
+        <MapGlyph :glyph="place.glyph" :size="place.shape === 'district' ? 15 : 18" />
+      </g>
+
+      <!-- Position du groupe : pion doré au-dessus du lieu courant. -->
+      <g v-if="party" :transform="`translate(${party.x + BUILDING_HALF + 4} ${party.y - BUILDING_HALF - 6})`">
+        <path class="wmap-party" d="M0 -14a4.5 4.5 0 1 1 0.01 0Zm-7 16c0-6 3-9 7-9s7 3 7 9Z" />
       </g>
     </svg>
 
-    <!-- Empty state -->
-    <div v-if="!city" class="town-map-empty">
+    <div
+      v-for="label in labels"
+      :key="`label-${label.id}`"
+      class="wmap-label"
+      :class="[`is-${label.request.node.status}`, { 'is-selected': isSelected(label.id) }]"
+      :style="{ left: `${label.left}px`, top: `${label.top}px`, width: `${label.width}px` }"
+      :title="label.request.node.name"
+    >
+      <span v-if="label.id === currentNodeId" class="wmap-label-kicker">Vous êtes ici</span>
+      <span v-for="(line, i) in label.request.lines" :key="i" class="wmap-label-line">{{ line }}</span>
+    </div>
+
+    <div v-if="!city" class="wmap-empty">
       <span class="rpg-eyebrow">✦ Ville</span>
       <p>Aucune carte de ville chargée pour cette session.</p>
     </div>
 
-    <!-- Labels HTML overlay -->
-    <div
-      v-for="n in nodes"
-      :key="n.id"
-      class="town-map-label"
-      :style="{
-        left: `${n.position.x / 100 * width}px`,
-        top: `${(n.position.y + buildingSize(n.kind).h / 2) / 100 * height + 4}px`,
-        color: isSelected(n.id) ? 'var(--color-gold)' : toneColor(n.status),
-      }"
-    >{{ n.short_label ?? n.name }}</div>
-
-    <!-- Position du groupe (sur la node courante) -->
-    <div v-if="youPosition" class="town-map-here" :style="youPosition">
-      <span class="town-map-here-icon">👥</span>
-      <span class="town-map-here-label">Vous</span>
-    </div>
-
-    <!-- Coords overlay -->
-    <div v-if="city" class="town-map-coord">{{ city.name }} · plan</div>
+    <template v-if="city">
+      <div class="wmap-title"><span class="rpg-sparkle">✦</span>{{ city.name }}</div>
+      <div class="wmap-tools">
+        <div v-if="visualAssetGenerating" class="wmap-badge">
+          <span class="wmap-spinner" />{{ visualAsset?.status === 'generating' ? 'Génération…' : 'En attente…' }}
+        </div>
+        <button v-if="isAdjusted" type="button" class="wmap-tool" @click="viewport.recenter()">◎ Recentrer</button>
+      </div>
+      <div class="wmap-legend">
+        <span class="wmap-key is-current">Vous</span>
+        <span class="wmap-key is-visited">Visité</span>
+        <span class="wmap-key is-known">Connu</span>
+        <span v-if="exits.length" class="wmap-key-exit">⇢ Sortie de ville</span>
+      </div>
+    </template>
   </div>
 </template>
 
-<style scoped>
-.town-map {
-  position: relative;
-  border-radius: 10px;
-  border: 1px solid var(--color-border-strong);
-  background: linear-gradient(135deg, #2a2218 0%, #14110c 100%);
-  overflow: hidden;
-  box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.7), 0 6px 28px rgba(0, 0, 0, 0.5);
-  flex-shrink: 0;
-}
-
-.town-map-image {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0.7;
-}
-
-.town-map-svg {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-}
-
-.town-map-empty {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: var(--color-text-muted);
-  font-family: var(--font-serif);
-  font-size: 13px;
-  font-style: italic;
-}
-
-.town-map-label {
-  position: absolute;
-  transform: translate(-50%, 0);
-  font-family: var(--font-display);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.6px;
-  text-align: center;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
-  pointer-events: none;
-  white-space: nowrap;
-}
-
-.town-map-here {
-  position: absolute;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  transform: translate(-50%, 0);
-  pointer-events: none;
-}
-
-.town-map-here-icon {
-  font-size: 18px;
-  filter: drop-shadow(0 0 8px rgba(255, 130, 71, 0.7));
-}
-
-.town-map-here-label {
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  color: var(--color-ember);
-  text-transform: uppercase;
-  background: rgba(14, 13, 20, 0.85);
-  padding: 1px 6px;
-  border-radius: 3px;
-}
-
-.town-map-coord {
-  position: absolute;
-  top: 8px;
-  left: 12px;
-  font-size: 9px;
-  color: var(--color-text-dim);
-  font-family: var(--font-mono);
-}
-
-.map-gen-badge {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 6;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 6px;
-  background: var(--color-bg-elev);
-  border: 1px solid var(--color-border-strong);
-  color: var(--color-text-muted);
-  font: 500 10px/1 var(--font-display);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  pointer-events: none;
-}
-
-.map-gen-badge.gen-generating {
-  color: var(--color-ember);
-  border-color: var(--color-ember);
-}
-
-.gen-spinner {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border: 2px solid var(--color-border);
-  border-top-color: currentColor;
-  border-radius: 50%;
-  animation: gen-spin 0.8s linear infinite;
-}
-
-@keyframes gen-spin {
-  to { transform: rotate(360deg); }
-}
-</style>
+<style src="./worldMap.css"></style>

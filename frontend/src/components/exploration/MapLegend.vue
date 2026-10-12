@@ -39,6 +39,11 @@ function onClick(id: string) {
   sessionStore.selectEntity(id)
 }
 
+/** Libellés en clair dans la légende (plus de codes E1/L12) — tronqués pour tenir. */
+function shortTitle(title: string): string {
+  return title.length > 22 ? `${title.slice(0, 21)}…` : title
+}
+
 function poiSymbol(kind: string) {
   switch (kind) {
     case 'npc': return '◉'
@@ -86,11 +91,11 @@ function poiSymbol(kind: string) {
         :key="p.id"
         class="map-legend-chip"
         :class="{ 'is-highlighted': isHighlighted(p.id) }"
-        :title="p.title"
+        :title="`${p.title} · case ${p.label}`"
         @mouseenter="onHover(p.id)"
         @mouseleave="onHover(null)"
         @click="onClick(p.id)"
-      >{{ p.iconSymbol ?? poiSymbol(p.kind) }} {{ p.label }}</div>
+      >{{ p.iconSymbol ?? poiSymbol(p.kind) }} {{ shortTitle(p.title) }}</div>
     </div>
 
     <span v-if="pois.length" class="map-legend-divider" />
@@ -120,7 +125,7 @@ function poiSymbol(kind: string) {
         @mouseenter="onHover(e.id)"
         @mouseleave="onHover(null)"
         @click="onClick(e.id)"
-      >↦ {{ e.label }}</div>
+      >→ {{ shortTitle(e.title) }}</div>
     </div>
   </div>
 </template>
@@ -191,9 +196,9 @@ function poiSymbol(kind: string) {
   border-radius: 4px;
   background: rgba(0, 0, 0, 0.3);
   border: 1px solid var(--color-border);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 700;
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 600;
   color: var(--color-text-muted);
   cursor: pointer;
   transition: border-color 120ms, color 120ms, background 120ms;

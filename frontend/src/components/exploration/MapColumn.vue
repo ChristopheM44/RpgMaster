@@ -108,8 +108,8 @@ function toggleCarnet() {
     <!-- Canvas -->
     <div class="map-canvas">
       <SceneMap v-if="sessionStore.mapScope === 'scene'" />
-      <TownMap v-else-if="sessionStore.mapScope === 'ville'" :width="640" :height="580" />
-      <RegionMap v-else :width="640" :height="580" />
+      <TownMap v-else-if="sessionStore.mapScope === 'ville'" />
+      <RegionMap v-else />
 
       <!-- Inspector -->
       <SelectionInspector

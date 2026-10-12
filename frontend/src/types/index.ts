@@ -625,6 +625,19 @@ export interface SceneExit {
   element_id?: string
   placement?: 'edge' | 'embedded'
   active?: boolean
+  facing?: SceneElementFacing
+  vertical_direction?: SceneElementVerticalDirection
+}
+
+/** Continuité d'arrivée posée par le backend (scene_continuity) au changement de scène. */
+export interface SceneArrival {
+  /** Sortie de CETTE scène par laquelle le groupe arrive. */
+  exit_id: string
+  from_scene_id: string
+  /** Sortie empruntée dans la scène précédente. */
+  via_exit_id?: string
+  facing?: SceneElementFacing | null
+  vertical_direction?: SceneElementVerticalDirection
 }
 
 export type SceneTheme =
@@ -660,6 +673,10 @@ export interface SceneLayout {
   /** Hints 3D optionnels émis par le MJ (défauts sûrs côté client et backend). */
   ambiance?: SceneAmbiance
   vegetation_density?: number
+  /** Présent juste après un changement de scène : par où le groupe arrive. */
+  arrival?: SceneArrival
+  /** Lieu clos (taverne, temple, salle…) décidé par le backend, indépendamment du thème. */
+  interior?: boolean
 }
 
 export interface SceneAmbiance {
@@ -705,6 +722,8 @@ export interface SceneElement {
   facts?: string[]
   /** Hints 3D optionnels (mètres) — défauts par kind si absents. */
   asset_key?: string
+  /** Teinte de matière (pétrifié, calciné…) — cf. backend prop_catalog. */
+  tint?: string
   height_m?: number
   elevation_m?: number
   facing?: SceneElementFacing

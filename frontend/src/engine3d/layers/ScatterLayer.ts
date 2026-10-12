@@ -9,24 +9,31 @@ import type { ScatterKind } from '../core/ThemeProvider'
 import { buildScatterObject } from '../assets/ProceduralFactory'
 import { SCATTER_MODELS, SCATTER_TARGET_HEIGHT_M } from '../assets/manifest'
 import { disposeGroup, disposeObject } from './GroundLayer'
+import { applyTint } from './ElementsLayer'
 import { cellCenterToWorld, metersToWorld } from '../utils/gridMath'
 import { makePrng, pick, range } from '../utils/seededRandom'
+import { distanceOutsideBoard, terrainHeight, terrainSeed } from '../utils/terrain'
 
 const MAX_SCATTER = 56
 const MAX_TORCH_LIGHTS = 4
+/** Décor du terrain prolongé (hors plateau) : le monde continue au-delà de la grille. */
+const MAX_OUTER_SCATTER = 110
 
 export class ScatterLayer {
   readonly group = new THREE.Group()
   private buildKey = ''
   private generation = 0
+  /** Matériaux teintés partagés (rochers ensablés) — vidé à chaque reconstruction. */
+  private tintCache = new Map<string, THREE.Material>()
 
   update(ground: GroundSpec, blocked: Set<string>, ctx: EngineCtx): void {
     const key = [
       ground.sceneId,
       ground.theme,
+      ctx.biome.enclosed ? 'enclosed' : 'open',
       ground.vegetationDensity.toFixed(2),
       `${ground.cols}x${ground.rows}`,
-      ctx.ambiance.pointLights ? 'pl' : 'no-pl',
+      ctx.ambiance.pointLights || ctx.biome.enclosed ? 'pl' : 'no-pl',
       [...blocked].sort().join(';'),
     ].join('|')
     if (key === this.buildKey) return
@@ -44,6 +51,7 @@ export class ScatterLayer {
     this.generation += 1
     const generation = this.generation
     disposeGroup(this.group)
+    this.tintCache.clear()
 
     const { cols, rows } = ground
     const rand = makePrng(`${ground.sceneId}|${ground.theme}`)
@@ -73,26 +81,67 @@ export class ScatterLayer {
         if (rand() > 0.3 + 0.7 * cell.edge) continue
         used.add(cellId)
         placed += 1
-        this.placeScatter(pick(rand, biome.scatter), cell, ground, rand, generation, ctx)
+        const center = cellCenterToWorld(cell.col, cell.row, ctx.dims)
+        this.placeScatter(
+          pick(rand, biome.scatter),
+          { x: center.x + range(rand, -0.32, 0.32), y: 0, z: center.z + range(rand, -0.32, 0.32) },
+          range(rand, 0.75, 1.3),
+          ground,
+          rand,
+          generation,
+          ctx,
+        )
       }
+    }
+
+    // Ville : pas de caisses semées dans la campagne (décor urbain hors plateau = lot 4).
+    if (!biome.enclosed && biome.groundStyle !== 'cobble' && biome.scatter.length > 0) {
+      this.placeOuterScatter(ground, generation, ctx)
     }
 
     if (biome.cornerTorches) this.placeCornerTorches(ground, blocked, ctx)
   }
 
+  /** Végétation/rochers sur le relief autour du plateau, plus denses vers l'horizon. */
+  private placeOuterScatter(ground: GroundSpec, generation: number, ctx: EngineCtx): void {
+    const rand = makePrng(`${ground.sceneId}|outer`)
+    const halfW = ground.cols / 2
+    const halfH = ground.rows / 2
+    const margin = Math.max(ground.cols, ground.rows) * 1.6
+    const terrain = { halfW, halfH, relief: ctx.biome.relief, seed: terrainSeed(ground.sceneId) }
+    const count = Math.round(MAX_OUTER_SCATTER * Math.max(0.3, Math.min(1, ground.vegetationDensity + 0.25)))
+    let placed = 0
+    for (let attempt = 0; attempt < count * 6 && placed < count; attempt++) {
+      const x = range(rand, -halfW - margin, halfW + margin)
+      const z = range(rand, -halfH - margin, halfH + margin)
+      const outside = distanceOutsideBoard(x, z, halfW, halfH)
+      // Bord du plateau dégagé (lisibilité), densité croissante avec la distance.
+      if (outside < 0.8 || rand() > Math.min(1, outside / 6)) continue
+      placed += 1
+      this.placeScatter(
+        pick(rand, ctx.biome.scatter),
+        { x, y: terrainHeight(x, z, terrain) - 0.03, z },
+        range(rand, 0.8, 1.7),
+        ground,
+        rand,
+        generation,
+        ctx,
+      )
+    }
+  }
+
   private placeScatter(
     kind: ScatterKind,
-    cell: { col: number; row: number },
+    at: { x: number; y: number; z: number },
+    scaleJitter: number,
     ground: GroundSpec,
     rand: ReturnType<typeof makePrng>,
     generation: number,
     ctx: EngineCtx,
   ): void {
     const container = new THREE.Group()
-    const center = cellCenterToWorld(cell.col, cell.row, ctx.dims)
-    container.position.set(center.x + range(rand, -0.32, 0.32), 0, center.z + range(rand, -0.32, 0.32))
+    container.position.set(at.x, at.y, at.z)
     container.rotation.y = range(rand, 0, Math.PI * 2)
-    const scaleJitter = range(rand, 0.75, 1.3)
 
     const procedural = buildScatterObject(kind, rand, ctx.tokens)
     procedural.scale.setScalar(scaleJitter)
@@ -107,6 +156,9 @@ export class ScatterLayer {
     void ctx.registry.load(variant).then((model) => {
       if (!model || generation !== this.generation || !container.parent) return
       const instance = ctx.registry.instantiate(model, { targetHeight })
+      if (ctx.biome.rockTint && (kind === 'rock' || kind === 'stone')) {
+        applyTint(instance, ctx.biome.rockTint, this.tintCache)
+      }
       container.remove(procedural)
       disposeObject(procedural)
       container.add(instance)
@@ -134,7 +186,7 @@ export class ScatterLayer {
       container.add(procedural)
       this.group.add(container)
 
-      if (ctx.ambiance.pointLights && lights < MAX_TORCH_LIGHTS) {
+      if ((ctx.ambiance.pointLights || ctx.biome.enclosed) && lights < MAX_TORCH_LIGHTS) {
         // Portée allongée (~16 m ≈ 11 cellules) pour traverser une salle entière :
         // à 8 m les torches d'angle mouraient avant le centre. Chute plus douce.
         const light = new THREE.PointLight(

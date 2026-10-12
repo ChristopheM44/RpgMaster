@@ -59,6 +59,19 @@ export class CameraRig {
     this.controls.update()
   }
 
+  /** Pose courante de la caméra (copies). */
+  pose(): { target: THREE.Vector3; position: THREE.Vector3 } {
+    return { target: this.controls.target.clone(), position: this.camera.position.clone() }
+  }
+
+  /** Place la caméra (travellings de transition) — la cible reste bornée à la grille. */
+  setPose(target: THREE.Vector3, position: THREE.Vector3): void {
+    this.controls.target.copy(target)
+    this.camera.position.copy(position)
+    this.camera.lookAt(this.controls.target)
+    this.controls.update()
+  }
+
   dispose(): void {
     this.controls.dispose()
   }

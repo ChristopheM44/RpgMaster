@@ -4,7 +4,7 @@
 // hiérarchie depuis le mesh touché. Le sol renvoie une cellule si cellPicking.
 
 import * as THREE from 'three'
-import type { GridDims, PickResult, RuntimeCallbacks } from '../types'
+import type { GridDims, GridPoint, PickResult, RuntimeCallbacks } from '../types'
 import { worldToCell } from '../utils/gridMath'
 
 export interface PickSources {
@@ -12,6 +12,8 @@ export interface PickSources {
   ground(): THREE.Object3D | null
   dims(): GridDims
   cellPicking(): boolean
+  /** Case sous le pointeur (indépendant de cellPicking) — repère de survol. */
+  onHoverCell?(cell: GridPoint | null): void
 }
 
 const CLICK_MAX_DRIFT_PX = 6
@@ -48,6 +50,7 @@ export class PickingController {
     const onLeave = () => {
       this.pendingHover = null
       this.emitHover(null, { x: 0, y: 0 })
+      this.sources.onHoverCell?.(null)
     }
     canvas.addEventListener('pointermove', onMove)
     canvas.addEventListener('pointerdown', onDown)
@@ -67,6 +70,7 @@ export class PickingController {
     const at = this.pendingHover
     this.pendingHover = null
     this.emitHover(this.raycast(at), at)
+    if (this.sources.onHoverCell) this.sources.onHoverCell(this.groundCell(at))
   }
 
   dispose(): void {
@@ -103,17 +107,26 @@ export class PickingController {
     }
 
     if (this.sources.cellPicking()) {
-      const ground = this.sources.ground()
-      if (ground) {
-        const groundHits = this.raycaster.intersectObject(ground, false)
-        const point = groundHits[0]?.point
-        if (point) {
-          const cell = worldToCell(point.x, point.z, this.sources.dims())
-          if (cell) return { type: 'cell', col: cell.col, row: cell.row }
-        }
-      }
+      const cell = this.groundCellFromRay()
+      if (cell) return { type: 'cell', col: cell.col, row: cell.row }
     }
     return null
+  }
+
+  private groundCell(at: { x: number; y: number }): GridPoint | null {
+    const rect = this.canvas.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) return null
+    this.pointerNdc.set((at.x / rect.width) * 2 - 1, -(at.y / rect.height) * 2 + 1)
+    this.raycaster.setFromCamera(this.pointerNdc, this.camera)
+    return this.groundCellFromRay()
+  }
+
+  /** Cellule du plan de sol touchée par le rayon courant. */
+  private groundCellFromRay(): GridPoint | null {
+    const ground = this.sources.ground()
+    if (!ground) return null
+    const point = this.raycaster.intersectObject(ground, false)[0]?.point
+    return point ? worldToCell(point.x, point.z, this.sources.dims()) : null
   }
 }
 

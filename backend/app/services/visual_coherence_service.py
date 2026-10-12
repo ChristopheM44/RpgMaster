@@ -67,6 +67,9 @@ def repair_state_visual_coherence(state_data: dict[str, Any]) -> bool:
     local_map_service.enrich_scene_layout(
         scene,
         time_of_day=str(time_of_day) if time_of_day else None,
+        # Combat en cours (positions de grille présentes) : ses obstacles sont figés
+        # au début du combat, on n'ajoute pas de mobilier sous les combattants.
+        dress=not state_data.get("grid_positions"),
     )
     if scene != before_scene:
         changed = True
