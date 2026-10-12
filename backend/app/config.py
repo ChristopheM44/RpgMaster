@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     # Game
     default_language: str = "fr"
     max_context_messages: int = 50
+    # Budget (caractères) de l'historique récent injecté dans les prompts MJ/compagnons :
+    # les messages les plus récents sont pris jusqu'à ce budget, sans dépasser
+    # max_context_messages et jamais moins que context_history_min_messages.
+    # ~400 car./message en jeu réel → ~40 messages typiques (≈4-5k tokens).
+    context_history_char_budget: int = 16000
+    context_history_min_messages: int = 12
     max_player_action_chars: int = 4000
     ws_event_queue_size: int = 256
     tts_async: bool = True

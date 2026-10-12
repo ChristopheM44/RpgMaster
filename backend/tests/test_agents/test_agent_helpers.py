@@ -13,6 +13,7 @@ import pytest
 
 from app.agents.base_agent import BaseAgent
 from app.agents.schemas import AgentContext, AgentResponse
+from app.config import settings
 
 # ---------------------------------------------------------------------------
 # Stub concret (BaseAgent est abstract)
@@ -105,15 +106,37 @@ class TestFormatMessages:
         assert "[Aria] J'entre prudemment." in result
         assert result.index("[MJ]") < result.index("[Aria]")
 
-    def test_window_keeps_last_25_only(self, agent: _StubAgent) -> None:
-        # Fenêtre = 25 messages — on en génère 30 : seuls les 25 derniers sont inclus.
-        msgs = [MagicMock(speaker="P", content=f"msg{i:03d}") for i in range(30)]
+    def test_short_messages_capped_by_max_context_messages(
+        self, agent: _StubAgent, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(settings, "max_context_messages", 30)
+        monkeypatch.setattr(settings, "context_history_char_budget", 16000)
+        msgs = [MagicMock(speaker="P", content=f"msg{i:03d}") for i in range(40)]
         result = agent._format_messages(msgs)
-        # Les 25 derniers (indices 5–29) sont inclus ; les 5 premiers non.
-        for i in range(5, 30):
+        # Messages courts : le budget n'est pas atteint, seul le plafond (30) s'applique.
+        for i in range(10, 40):
             assert f"msg{i:03d}" in result
-        for i in range(0, 5):
+        for i in range(0, 10):
             assert f"msg{i:03d}" not in result
+
+    def test_long_messages_cut_by_char_budget_keeping_newest(
+        self, agent: _StubAgent, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(settings, "context_history_char_budget", 5000)
+        monkeypatch.setattr(settings, "context_history_min_messages", 2)
+        msgs = [MagicMock(speaker="MJ", content=f"n{i:02d} " + "x" * 1000) for i in range(20)]
+        result = agent._format_messages(msgs)
+        assert len(result) <= 5000
+        kept = [i for i in range(20) if f"n{i:02d} " in result]
+        assert kept == list(range(16, 20))  # les plus récents, ordre chronologique
+        assert result.index("n16") < result.index("n19")
+
+    def test_min_messages_floor_overrides_budget(self, agent: _StubAgent, monkeypatch) -> None:
+        monkeypatch.setattr(settings, "context_history_char_budget", 100)
+        monkeypatch.setattr(settings, "context_history_min_messages", 3)
+        msgs = [MagicMock(speaker="MJ", content=f"n{i} " + "x" * 500) for i in range(6)]
+        result = agent._format_messages(msgs)
+        assert [i for i in range(6) if f"n{i} " in result] == [3, 4, 5]
 
 
 # ---------------------------------------------------------------------------
