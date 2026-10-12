@@ -1637,6 +1637,9 @@ async def start_game(
 
         from app.services import campaign_dossier_service
 
+        # Session 1 only: drop any pre-play canon once, before compiling the context
+        # and before the opening narration can record anything.
+        await campaign_dossier_service.reset_canon_for_initial_session_start(session_id, db)
         campaign_context = await campaign_dossier_service.compile_campaign_context_for_session(
             session_id,
             db,

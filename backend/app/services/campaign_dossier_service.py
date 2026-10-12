@@ -207,7 +207,8 @@ async def forge_draft(
         contract,
     )
     _apply_dungeon_only_option(gm_dossier, contract, campaign, options)
-    played_canon = sanitize_played_canon(generated.get("played_canon", {}))
+    # A forge cannot know what will be played: never trust a generated played_canon.
+    played_canon = empty_played_canon()
     active_chapter_id = str(generated.get("active_chapter_id") or "").strip()
     if not active_chapter_id:
         active_chapter_id = _first_chapter_id(contract, gm_dossier)
@@ -845,10 +846,10 @@ async def compile_campaign_context_for_session(
 
     contract = sanitize_player_contract(dossier.player_contract or {}, campaign, brief={})
     gm_dossier = sanitize_gm_dossier(dossier.gm_dossier or {}, campaign, contract)
+    # Pre-play canon was wiped once by ``reset_canon_for_initial_session_start``
+    # when session 1 started: everything read here was actually played,
+    # including mid-session 1 (a reload must not erase it).
     canon = sanitize_played_canon(dossier.played_canon or {})
-    if _is_initial_campaign_session(campaign, session_id):
-        canon = empty_played_canon()
-        contract["played_summary"] = ""
     active_chapter = _active_chapter_for_context(
         gm_dossier,
         contract,
@@ -906,13 +907,9 @@ async def build_gm_prompt_context(
 
     contract = sanitize_player_contract(dossier.player_contract or {}, campaign, brief={})
     gm_dossier = sanitize_gm_dossier(dossier.gm_dossier or {}, campaign, contract)
+    # No read-time reset (supersedes A6): pre-play canon is wiped once at
+    # session-1 start, so canon acquired during session 1 reaches the GM.
     canon = sanitize_played_canon(dossier.played_canon or {})
-    # Align with compile_campaign_context_for_session (A6): on the initial
-    # campaign session nothing has been played yet, so the forge-seeded
-    # played_canon must read empty for the GM too — not just the public view.
-    # gm_dossier (secrets/arc/fronts/NPCs) is untouched, so no planning context is lost.
-    if _is_initial_campaign_session(campaign, session_id):
-        canon = empty_played_canon()
     active_chapter = _private_active_chapter_for_context(
         gm_dossier,
         contract,
@@ -960,6 +957,29 @@ def _is_initial_campaign_session(campaign: Campaign, session_id: str) -> bool:
         and session_ids[0] == session_id
         and int(campaign.current_session_index or 0) == 0
     )
+
+
+async def reset_canon_for_initial_session_start(session_id: str, db: AsyncSession) -> bool:
+    """Wipe any pre-play canon when the campaign's first session starts.
+
+    Called once by ``start_game`` (the only LOBBY → play transition), before the
+    campaign context is compiled and before the opening narration can write canon.
+    Whatever a forge or a stale run left in ``played_canon`` is discarded here, so
+    readers need no read-time reset — and canon acquired *during* session 1 stays
+    visible to the GM and survives a reload. Returns True when a reset ran.
+    """
+    campaign = await campaign_for_session(session_id, db)
+    if campaign is None or not _is_initial_campaign_session(campaign, session_id):
+        return False
+    dossier = await get_dossier(campaign.id, db)
+    if dossier is None:
+        return False
+    # New objects, never in-place mutation: JSON columns are not change-tracked.
+    dossier.played_canon = empty_played_canon()
+    if (dossier.player_contract or {}).get("played_summary"):
+        dossier.player_contract = {**dossier.player_contract, "played_summary": ""}
+    await db.flush()
+    return True
 
 
 def response_for_draft(dossier: CampaignDossier) -> dict[str, Any]:
