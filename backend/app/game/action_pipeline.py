@@ -583,10 +583,12 @@ class ActionPipeline:
             try:
                 from app.services import campaign_dossier_service
 
+                # None → the service loads the exchanges just persisted
+                # (player action + narration), not an empty transcript.
                 await campaign_dossier_service.synthesize_canon_for_session(
                     request.session_id,
                     active.state_data,
-                    [],
+                    None,
                     actual_db,
                 )
             except Exception as exc:

@@ -517,12 +517,41 @@ async def synthesize_canon(
     return dossier
 
 
+# Exchanges given to the canon synthesis: enough to carry the meaning of the
+# decision that marked canon dirty (action, narration, replies), kept short
+# because the synthesis runs inline in the player's turn.
+_CANON_SYNTHESIS_MESSAGE_TAIL = 10
+_CANON_SYNTHESIS_MESSAGE_CHARS = 1200
+
+
+async def _recent_exchanges_for_synthesis(
+    session_id: str, db: AsyncSession
+) -> list[dict[str, Any]]:
+    from app.services.message_service import load_recent_messages
+
+    messages = await load_recent_messages(session_id, db, limit=_CANON_SYNTHESIS_MESSAGE_TAIL)
+    return [
+        {
+            "speaker": getattr(msg, "speaker", "") or "?",
+            "content": _text(getattr(msg, "content", ""), _CANON_SYNTHESIS_MESSAGE_CHARS),
+        }
+        for msg in messages
+        if getattr(msg, "content", "")
+    ]
+
+
 async def synthesize_canon_for_session(
     session_id: str,
     game_state: dict[str, Any],
-    recent_messages: list[dict[str, Any]],
+    recent_messages: list[dict[str, Any]] | None,
     db: AsyncSession,
 ) -> CampaignDossier | None:
+    """Synthesize played canon for the session's campaign.
+
+    ``recent_messages=None`` loads the latest persisted exchanges, so the
+    synthesis sees the conversation that gave a decision or relation its meaning
+    — call it after the narration of the turn has been persisted.
+    """
     campaign = await campaign_for_session(session_id, db)
     if campaign is None:
         return None
@@ -531,6 +560,8 @@ async def synthesize_canon_for_session(
         return await get_dossier(campaign.id, db)
     _SYNTHESIS_IN_FLIGHT.add(key)
     try:
+        if recent_messages is None:
+            recent_messages = await _recent_exchanges_for_synthesis(session_id, db)
         dossier = await synthesize_canon(campaign.id, game_state, recent_messages, db)
         context = game_state.get("campaign_context")
         if isinstance(context, dict):

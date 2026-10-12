@@ -485,7 +485,7 @@ class ActionResolver:
                 await campaign_dossier_service.synthesize_canon_for_session(
                     session_id,
                     active.state_data,
-                    [],
+                    None,  # load the persisted dialogue exchanges
                     db,
                 )
             except Exception as exc:

@@ -1492,3 +1492,50 @@ def test_cap_forged_monsters_leaves_in_band_boss_untouched() -> None:
     # ogre = CR 2 ; pour un groupe niveau 1 (plafond 3) il reste tel quel.
     campaign_dossier_service._cap_forged_monsters_to_party_level(gm_dossier, 1)
     assert gm_dossier["custom_monsters"][0]["base_srd_id"] == "ogre"
+
+
+# ---------------------------------------------------------------------------
+# Synthèse du canon — échanges récents transmis (lot narratif 1a)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_session_canon_synthesis_receives_persisted_exchanges(
+    async_client, db_session, monkeypatch
+):
+    """recent_messages=None → la synthèse reçoit les derniers échanges persistés
+    (action du joueur + narration), pas une transcription vide."""
+    from app.models.message import MessageRole
+    from app.services.message_service import persist_narration
+
+    forged = await _forge_and_validate(async_client)
+    session_id = forged["session_id"]
+    captured: list[list[dict]] = []
+
+    class RecordingForgeAgent(DummyForgeAgent):
+        async def synthesize_canon(self, *args, recent_messages, **kwargs):
+            captured.append(recent_messages)
+            return await super().synthesize_canon(*args, recent_messages=recent_messages, **kwargs)
+
+    monkeypatch.setattr(campaign_dossier_service, "CampaignForgeAgent", RecordingForgeAgent)
+
+    await persist_narration(
+        session_id,
+        "Je promets à Mira de retrouver son frère.",
+        "Aldric",
+        db_session,
+        role=MessageRole.PLAYER,
+    )
+    await persist_narration(
+        session_id, "Mira serre ta main, en larmes.", "Maître du Jeu", db_session
+    )
+
+    await campaign_dossier_service.synthesize_canon_for_session(
+        session_id, {"canon_event": {}}, None, db_session
+    )
+
+    assert captured, "la synthèse LLM n'a pas été appelée"
+    contents = [msg["content"] for msg in captured[0]]
+    assert "Je promets à Mira de retrouver son frère." in contents
+    assert contents[-1] == "Mira serre ta main, en larmes."
+    assert captured[0][0]["speaker"]
